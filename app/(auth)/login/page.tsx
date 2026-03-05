@@ -1,95 +1,247 @@
+"use client";
+
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { login, signup } from "./actions";
+import { Coffee } from "lucide-react";
+
+// The validation schema
+const loginSchema = z.object({
+  email: z.string().email({ message: "Invalid email address" }),
+  password: z
+    .string()
+    .min(6, { message: "Password must be at least 6 characters" }),
+});
+
+const signupSchema = loginSchema.extend({
+  firstName: z.string().min(2, { message: "First name is required" }),
+  lastName: z.string().min(2, { message: "Last name is required" }),
+  // Validate Colombian phone starting with +57
+  phone: z.string().regex(/^(\+57)?\s?\d{10}$/, {
+    message: "Invalid format. E.g: +57 3001234567",
+  }),
+  // Validate Cedula length
+  cedula: z
+    .string()
+    .regex(/^\d{8,10}$/, { message: "Cédula must be 8-10 digits" }),
+});
 
 export default function LoginPage() {
+  const [isLogin, setIsLogin] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const schema = isLogin ? loginSchema : signupSchema;
+
+  type FormValues = z.infer<typeof signupSchema>;
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    reset,
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema) as any,
+    defaultValues: {
+      email: "",
+      password: "",
+      firstName: "",
+      lastName: "",
+      phone: "",
+      cedula: "",
+    },
+  });
+
+  const onSubmit = async (data: any) => {
+    setErrorMsg("");
+    try {
+      const formData = new FormData();
+      Object.entries(data).forEach(([key, value]) => {
+        if (value) formData.append(key, value as string);
+      });
+
+      // Call standard server actions
+      if (isLogin) {
+        await login(formData);
+      } else {
+        await signup(formData);
+      }
+    } catch (e: any) {
+      setErrorMsg("An unexpected error occurred.");
+    }
+  };
+
+  const toggleMode = () => {
+    setIsLogin(!isLogin);
+    reset();
+    setErrorMsg("");
+  };
+
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="max-w-md w-full p-8 bg-white rounded-xl shadow-lg">
-        <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
-          Welcome Back
-        </h1>
-
-        <form className="space-y-4">
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-            />
+    <main className="min-h-screen flex items-center justify-center bg-background p-4 font-sans text-foreground">
+      <div className="max-w-md w-full p-8 bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100">
+        {/* Logo & Headline */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-16 h-16 bg-foreground rounded-full flex items-center justify-center mb-4">
+            {/* Themed dark icon representation */}
+            <Coffee className="w-8 h-8 text-background" strokeWidth={1.5} />
           </div>
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-            />
+          <h1 className="text-4xl font-serif text-center mb-2 text-foreground">
+            Amantti
+          </h1>
+          <p className="text-sm text-foreground/70 text-center font-medium tracking-wide uppercase">
+            {isLogin ? "Welcome Back" : "Create an Account"}
+          </p>
+        </div>
+
+        {errorMsg && (
+          <div className="mb-6 p-3 bg-red-50 text-red-800 text-sm rounded-md border border-red-200">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Auth Form */}
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-5"
+          suppressHydrationWarning
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground/80 mb-1">
+                Email
+              </label>
+              <input
+                {...register("email")}
+                type="email"
+                suppressHydrationWarning
+                className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
+                placeholder="hello@example.com"
+              />
+              {errors.email?.message && (
+                <p className="mt-1.5 text-sm text-red-600 font-medium">
+                  {String(errors.email.message)}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground/80 mb-1">
+                Password
+              </label>
+              <input
+                {...register("password")}
+                type="password"
+                suppressHydrationWarning
+                className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
+                placeholder="••••••••"
+              />
+              {errors.password?.message && (
+                <p className="mt-1.5 text-sm text-red-600 font-medium">
+                  {String(errors.password.message)}
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="flex gap-4 pt-4">
+          {/* Signup Only Fields */}
+          {!isLogin && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">
+                    First Name
+                  </label>
+                  <input
+                    {...register("firstName")}
+                    className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
+                  />
+                  {errors.firstName?.message && (
+                    <p className="mt-1.5 text-sm text-red-600 font-medium">
+                      {String(errors.firstName.message)}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">
+                    Last Name
+                  </label>
+                  <input
+                    {...register("lastName")}
+                    className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
+                  />
+                  {errors.lastName?.message && (
+                    <p className="mt-1.5 text-sm text-red-600 font-medium">
+                      {String(errors.lastName.message)}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">
+                  Phone Number
+                </label>
+                <div className="relative border border-gray-200 bg-white/80 rounded-lg flex items-center focus-within:ring-1 focus-within:ring-foreground focus-within:border-foreground transition-all">
+                  <span className="pl-4 text-foreground/60 text-sm font-medium">
+                    +57
+                  </span>
+                  <input
+                    {...register("phone")}
+                    placeholder="300 123 4567"
+                    className="block w-full bg-transparent pl-2 pr-4 py-2.5 text-foreground placeholder:text-gray-400 focus:outline-none"
+                  />
+                </div>
+                {errors.phone?.message && (
+                  <p className="mt-1.5 text-sm text-red-600 font-medium">
+                    {String(errors.phone.message)}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">
+                  Cédula
+                </label>
+                <input
+                  {...register("cedula")}
+                  placeholder="10293847"
+                  className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
+                />
+                {errors.cedula?.message && (
+                  <p className="mt-1.5 text-sm text-red-600 font-medium">
+                    {String(errors.cedula.message)}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="pt-2">
             <button
-              formAction={login}
-              className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              type="submit"
+              disabled={isSubmitting}
+              suppressHydrationWarning
+              className="w-full rounded-lg bg-foreground px-4 py-3 text-sm font-semibold text-background shadow-lg hover:bg-foreground/90 focus:outline-none focus:ring-2 focus:ring-foreground focus:ring-offset-2 disabled:opacity-50 transition-all font-serif tracking-wide"
             >
-              Log in
-            </button>
-            <button
-              formAction={signup}
-              className="flex-1 rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-600"
-            >
-              Sign up
+              {isSubmitting ? "Please wait..." : isLogin ? "Log In" : "Sign Up"}
             </button>
           </div>
         </form>
 
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-white px-2 text-gray-500">
-                Or continue with
-              </span>
-            </div>
-          </div>
-          <div className="mt-6 flex gap-4">
-            <button className="flex w-full items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
-              <span className="sr-only">Sign in with Google</span>
-              <svg className="h-5 w-5" aria-hidden="true" viewBox="0 0 24 24">
-                <path
-                  d="M12.0003 4.75C13.7703 4.75 15.3553 5.36002 16.6053 6.54998L20.0303 3.125C17.9502 1.19 15.2353 0 12.0003 0C7.31028 0 3.25527 2.69 1.28027 6.60998L5.27028 9.70498C6.21525 6.86002 8.87028 4.75 12.0003 4.75Z"
-                  fill="#EA4335"
-                />
-                <path
-                  d="M23.49 12.275C23.49 11.49 23.415 10.73 23.3 10H12V14.51H18.47C18.18 15.99 17.34 17.25 16.08 18.1L19.945 21.1C22.2 19.01 23.49 15.92 23.49 12.275Z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M5.26498 14.2949C5.02498 13.5699 4.88501 12.7999 4.88501 11.9999C4.88501 11.1999 5.01998 10.4299 5.26498 9.7049L1.275 6.60986C0.46 8.22986 0 10.0599 0 11.9999C0 13.9399 0.46 15.7699 1.28 17.3899L5.26498 14.2949Z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12.0004 24.0001C15.2404 24.0001 17.9654 22.935 19.9454 21.095L16.0804 18.095C15.0054 18.82 13.6204 19.245 12.0004 19.245C8.8704 19.245 6.21537 17.135 5.26538 14.29L1.27539 17.385C3.25539 21.31 7.3104 24.0001 12.0004 24.0001Z"
-                  fill="#34A853"
-                />
-              </svg>
+        <div className="mt-8 text-center sm:text-sm">
+          <p className="text-foreground/70">
+            {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
+            <button
+              onClick={toggleMode}
+              type="button"
+              suppressHydrationWarning
+              className="font-semibold text-foreground hover:underline focus:outline-none transition-all"
+            >
+              {isLogin ? "Sign up" : "Log in"}
             </button>
-          </div>
+          </p>
         </div>
       </div>
     </main>
