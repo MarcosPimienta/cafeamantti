@@ -1,148 +1,292 @@
 import Link from "next/link";
-import { Coffee, MapPin, Leaf, CheckCircle2 } from "lucide-react";
+import {
+  ShoppingCart,
+  Calendar,
+  CalendarClock,
+  CalendarDays,
+  Facebook,
+  Twitter,
+  Youtube,
+  Instagram,
+} from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col bg-background font-sans text-foreground">
+    <div className="flex min-h-screen flex-col bg-background font-sans text-foreground overflow-x-hidden">
       {/* Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-foreground/10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Coffee className="w-6 h-6" strokeWidth={1.5} />
-            <span className="font-serif text-xl font-medium tracking-tight">
-              Amantti
+      <header className="sticky top-0 z-50 w-full border-b border-foreground/5 bg-background/95 backdrop-blur">
+        <div className="container mx-auto px-6 h-20 flex items-center justify-between">
+          <Link href="/" className="flex items-center">
+            <span className="font-bodoni italic text-3xl font-bold tracking-tight">
+              amantti
             </span>
           </Link>
-          <nav className="flex items-center gap-6">
+          <nav className="hidden md:flex items-center gap-8">
+            <Link
+              href="#historia"
+              className="text-sm font-medium text-foreground/80 hover:text-foreground"
+            >
+              Nuestra Historia
+            </Link>
+            <Link
+              href="#suscripciones"
+              className="text-sm font-medium text-foreground/80 hover:text-foreground"
+            >
+              Suscripciones
+            </Link>
             <Link
               href="/shop"
-              className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
+              className="text-sm font-medium text-foreground/80 hover:text-foreground"
             >
-              Shop
+              Tienda
             </Link>
             <Link
               href="/login"
-              className="text-sm font-medium px-4 py-2 rounded-full border border-foreground/20 hover:bg-foreground/5 transition-colors"
+              className="text-sm font-medium text-foreground/80 hover:text-foreground"
             >
-              Log In
+              Mi Cuenta
             </Link>
+            <button
+              suppressHydrationWarning
+              className="relative p-2 hover:bg-foreground/5 rounded-full transition-colors"
+              aria-label="Cart"
+            >
+              <ShoppingCart
+                className="w-5 h-5 text-foreground/80"
+                strokeWidth={2}
+              />
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C59F59] text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">
+                0
+              </span>
+            </button>
           </nav>
         </div>
       </header>
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative px-4 py-32 md:py-48 flex items-center justify-center overflow-hidden">
-          {/* Subtle background decoration */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-foreground/5 via-background to-background -z-10" />
+        <section className="relative w-full h-[500px] flex items-center overflow-hidden">
+          {/* Background Image Placeholder */}
+          <div
+            className="absolute inset-0 bg-zinc-800 bg-cover bg-center bg-no-repeat z-0"
+            style={{ backgroundImage: "url('/images/hero-bg.jpg')" }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent z-10" />
 
-          <div className="container mx-auto text-center max-w-4xl">
-            <h1 className="text-5xl md:text-7xl font-serif tracking-tight mb-6 leading-tight fade-in slide-in-from-bottom-4 animate-in duration-700">
-              The True Essence of <br />
-              <span className="italic text-foreground/80">
-                Colombian Coffee
-              </span>
-            </h1>
-            <p className="text-lg md:text-xl text-foreground/70 mb-10 max-w-2xl mx-auto font-medium fade-in slide-in-from-bottom-5 animate-in duration-700 delay-150 fill-mode-forwards opacity-0">
-              Sourced sustainably from the high altitudes of the Andes. Roasted
-              to perfection. Delivered fresh to your door.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 fade-in slide-in-from-bottom-6 animate-in duration-700 delay-300 fill-mode-forwards opacity-0">
-              <Link
-                href="/shop"
-                className="w-full sm:w-auto px-8 py-3.5 bg-foreground text-background rounded-full font-medium hover:bg-foreground/90 transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-foreground focus:ring-offset-2"
+          <div className="container mx-auto px-8 relative z-20">
+            <div className="max-w-2xl">
+              <h1 className="text-6xl md:text-8xl font-bodoni italic text-white mb-2 leading-none">
+                amantti.
+              </h1>
+              <p className="text-2xl md:text-3xl text-white/90 mb-8 font-light tracking-wide">
+                Pasión y tradición en cada taza.
+              </p>
+              <button
+                suppressHydrationWarning
+                className="px-8 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white text-lg font-medium rounded-md transition-all shadow-lg"
               >
-                Shop Now
-              </Link>
-              <Link
-                href="#our-story"
-                className="w-full sm:w-auto px-8 py-3.5 bg-transparent border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-all focus:outline-none focus:ring-2 focus:ring-foreground focus:ring-offset-2"
-              >
-                Our Story
-              </Link>
+                Suscríbete Ahora
+              </button>
             </div>
           </div>
         </section>
 
-        {/* Features Grid */}
-        <section
-          className="py-24 bg-foreground/[0.02] border-y border-foreground/10"
-          id="our-story"
-        >
-          <div className="container mx-auto px-4 max-w-6xl">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl font-serif mb-4">Why Amantti?</h2>
-              <p className="text-foreground/60 max-w-xl mx-auto">
-                We believe that every cup tells a story. From the soil it was
-                grown in to the hands that picked it.
-              </p>
-            </div>
+        {/* Subscription Builder Section */}
+        <section className="py-20 bg-background relative" id="suscripciones">
+          <div className="container mx-auto px-6 max-w-6xl relative z-10">
+            <h2 className="text-4xl font-serif text-foreground mb-12">
+              Crea Tu Experiencia de Café
+            </h2>
 
-            <div className="grid md:grid-cols-3 gap-12">
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 rounded-full bg-background border border-foreground/10 flex items-center justify-center mb-6 shadow-sm">
-                  <MapPin
-                    className="w-6 h-6 text-foreground/80"
-                    strokeWidth={1.5}
-                  />
+            <div className="grid lg:grid-cols-3 gap-12 lg:gap-8 border-b border-foreground/10 pb-16">
+              {/* Step 1: Coffee */}
+              <div className="flex flex-col">
+                <h3 className="text-xl font-medium mb-6">1. Elige Tu Café</h3>
+                <div className="border-2 border-[#C59F59] rounded-2xl p-6 bg-white shadow-sm flex flex-col relative overflow-hidden">
+                  <div className="w-full h-64 bg-zinc-100 rounded-xl mb-6 flex items-center justify-center overflow-hidden">
+                    {/* Placeholder for coffee bag */}
+                    <div className="w-32 h-48 bg-[#2d2a26] rounded-md shadow-inner flex flex-col items-center justify-center text-white/50 text-xs text-center p-4">
+                      <span className="font-bodoni italic text-lg mb-2 text-[#C59F59]">
+                        amantti
+                      </span>
+                      Premium Blend
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mb-6 text-sm">
+                    <div className="grid grid-cols-[80px_1fr] gap-2">
+                      <span className="font-bold">Variety</span>
+                      <span className="text-foreground/80">
+                        Caturro & Tabbi
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[80px_1fr] gap-2">
+                      <span className="font-bold">Profile</span>
+                      <span className="text-foreground/80">
+                        Caramelo, Panela
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[80px_1fr] gap-2">
+                      <span className="font-bold">Altitude</span>
+                      <span className="text-foreground/80">1800 mts</span>
+                    </div>
+                    <div className="grid grid-cols-[80px_1fr] gap-2">
+                      <span className="font-bold">Notes</span>
+                      <span className="text-foreground/80 leading-tight">
+                        Sweet Caramel, Sugar Cane, Chocolate and Orange
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto flex gap-4 pt-4 border-t border-foreground/10 justify-center">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="grind"
+                        className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
+                        defaultChecked
+                        suppressHydrationWarning
+                      />
+                      <span className="text-sm font-medium">Grano</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="grind"
+                        className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
+                        suppressHydrationWarning
+                      />
+                      <span className="text-sm font-medium">Molido</span>
+                    </label>
+                  </div>
                 </div>
-                <h3 className="text-xl font-serif mb-3">Single Origin</h3>
-                <p className="text-foreground/70 leading-relaxed text-sm">
-                  Sourced exclusively from small-holder farms in specific
-                  microclimates to ensure distinct, memorable flavor profiles.
-                </p>
               </div>
 
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 rounded-full bg-background border border-foreground/10 flex items-center justify-center mb-6 shadow-sm">
-                  <CheckCircle2
-                    className="w-6 h-6 text-foreground/80"
-                    strokeWidth={1.5}
-                  />
+              {/* Step 2: Frequency */}
+              <div className="flex flex-col">
+                <h3 className="text-xl font-medium mb-6">
+                  2. Frecuencia de Entrega
+                </h3>
+                <div className="flex flex-col sm:flex-row lg:flex-col gap-4">
+                  {/* Option 1 */}
+                  <button
+                    suppressHydrationWarning
+                    className="flex-1 lg:flex-none flex flex-col items-center justify-center p-6 border border-foreground/20 rounded-xl hover:border-[#C59F59] transition-all bg-white"
+                  >
+                    <Calendar
+                      className="w-10 h-10 text-foreground/70 mb-3"
+                      strokeWidth={1.5}
+                    />
+                    <span className="font-medium text-sm">Semanal</span>
+                  </button>
+
+                  {/* Option 2 (Selected) */}
+                  <button
+                    suppressHydrationWarning
+                    className="flex-1 lg:flex-none flex flex-col items-center justify-center p-6 border-2 border-[#C59F59] rounded-xl bg-[#C59F59]/5 relative overflow-hidden transition-all shadow-sm"
+                  >
+                    <CalendarClock
+                      className="w-10 h-10 text-[#C59F59] mb-3"
+                      strokeWidth={1.5}
+                    />
+                    <span className="font-medium text-sm">Quincenal</span>
+                    <span className="text-[10px] text-foreground/60 mt-1">
+                      (Recomendado)
+                    </span>
+                  </button>
+
+                  {/* Option 3 */}
+                  <button
+                    suppressHydrationWarning
+                    className="flex-1 lg:flex-none flex flex-col items-center justify-center p-6 border border-foreground/20 rounded-xl hover:border-[#C59F59] transition-all bg-white"
+                  >
+                    <CalendarDays
+                      className="w-10 h-10 text-foreground/70 mb-3"
+                      strokeWidth={1.5}
+                    />
+                    <span className="font-medium text-sm">Mensual</span>
+                  </button>
                 </div>
-                <h3 className="text-xl font-serif mb-3">Artisan Roasted</h3>
-                <p className="text-foreground/70 leading-relaxed text-sm">
-                  Carefully roasted in small batches to highlight the natural
-                  sweetness and complex acidity intrinsic to Colombian beans.
-                </p>
               </div>
 
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 rounded-full bg-background border border-foreground/10 flex items-center justify-center mb-6 shadow-sm">
-                  <Leaf
-                    className="w-6 h-6 text-foreground/80"
-                    strokeWidth={1.5}
-                  />
+              {/* Step 3: Summary */}
+              <div className="flex flex-col">
+                <h3 className="text-xl font-medium mb-6">
+                  3. Resumen de Suscripción
+                </h3>
+                <div className="border border-foreground/20 rounded-2xl p-8 bg-[#fbf9f4] shadow-sm flex flex-col h-full min-h-[300px]">
+                  <div className="mb-8">
+                    <h4 className="font-bold text-lg mb-1">
+                      Café Premium - Molido
+                    </h4>
+                    <p className="text-foreground/70 text-sm mb-6">
+                      Entrega Quincenal
+                    </p>
+
+                    <div className="flex justify-between items-center text-sm border-t border-foreground/10 pt-4 mb-2">
+                      <span className="text-foreground/80">
+                        Precio por envío:
+                      </span>
+                      <span className="font-bold text-base">$X.XX</span>
+                    </div>
+                  </div>
+
+                  <button
+                    suppressHydrationWarning
+                    className="w-full py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all shadow-md mt-auto text-lg flex items-center justify-center gap-2"
+                  >
+                    Completar Suscripción
+                  </button>
                 </div>
-                <h3 className="text-xl font-serif mb-3">Fair Trade</h3>
-                <p className="text-foreground/70 leading-relaxed text-sm">
-                  We pay premium prices directly to farmers, empowering local
-                  communities and fostering sustainable agricultural practices.
-                </p>
               </div>
             </div>
           </div>
+
+          {/* Decorative Plant Graphics (Bottom Left/Right placeholders) */}
+          <div
+            className="absolute bottom-0 left-0 opacity-20 pointer-events-none w-80 h-80 bg-no-repeat bg-bottom bg-contain"
+            style={{ backgroundImage: "url('/images/branch-left.png')" }}
+          />
+          <div
+            className="absolute bottom-0 right-0 opacity-20 pointer-events-none w-80 h-80 bg-no-repeat bg-bottom bg-contain"
+            style={{ backgroundImage: "url('/images/branch-right.png')" }}
+          />
         </section>
       </main>
 
       {/* Footer */}
-      <footer className="bg-background py-12 border-t border-foreground/10">
-        <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <Coffee className="w-5 h-5 text-foreground/60" strokeWidth={1.5} />
-            <span className="font-serif font-medium text-foreground/80">
-              Amantti
-            </span>
-          </div>
-          <p className="text-sm text-foreground/60">
-            © {new Date().getFullYear()} Amantti Coffee. All rights reserved.
-          </p>
-          <div className="flex gap-4 text-sm font-medium text-foreground/60">
-            <Link href="#" className="hover:text-foreground transition-colors">
-              Privacy
+      <footer className="bg-background py-8 border-t border-foreground/10 relative z-20">
+        <div className="container mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex gap-4">
+            <Link
+              href="#"
+              className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
+            >
+              <Facebook className="w-4 h-4" />
             </Link>
-            <Link href="#" className="hover:text-foreground transition-colors">
-              Terms
+            <Link
+              href="#"
+              className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
+            >
+              <Twitter className="w-4 h-4" />
+            </Link>
+            <Link
+              href="#"
+              className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
+            >
+              <Youtube className="w-4 h-4" />
+            </Link>
+            <Link
+              href="#"
+              className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
+            >
+              <Instagram className="w-4 h-4" />
+            </Link>
+          </div>
+
+          <div className="text-sm font-medium text-foreground/60 hover:text-foreground transition-colors">
+            <Link href="https://instagram.com/cafeamantti" target="_blank">
+              @cafeamantti
             </Link>
           </div>
         </div>

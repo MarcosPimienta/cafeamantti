@@ -3,14 +3,17 @@
 :root {
   --background: #fdfbf7;
   --foreground: #2c2a29;
+  --gold: #C59F59;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-gold: var(--gold);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-serif: var(--font-playfair);
+  --font-bodoni: var(--font-bodoni);
 }
 
 /* @media (prefers-color-scheme: dark) {
