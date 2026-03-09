@@ -71,7 +71,7 @@ export default function Home() {
             className="absolute inset-0 bg-zinc-800 bg-cover bg-center bg-no-repeat z-0"
             style={{ backgroundImage: "url('/images/Chemex&Cup.png')" }}
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent z-10" />
+          <div className="absolute inset-0 bg-gradient-to-r to-transparent z-10" />
 
           <div className="container mx-auto px-8 relative z-20">
             <div className="max-w-2xl">
