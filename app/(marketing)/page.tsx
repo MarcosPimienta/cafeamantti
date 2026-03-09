@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   ShoppingCart,
   Calendar,
@@ -103,14 +104,13 @@ export default function Home() {
               <div className="flex flex-col">
                 <h3 className="text-xl font-medium mb-6">1. Elige Tu Café</h3>
                 <div className="border-2 border-[#C59F59] rounded-2xl p-6 bg-white shadow-sm flex flex-col relative overflow-hidden">
-                  <div className="w-full h-64 bg-zinc-100 rounded-xl mb-6 flex items-center justify-center overflow-hidden">
-                    {/* Placeholder for coffee bag */}
-                    <div className="w-32 h-48 bg-[#2d2a26] rounded-md shadow-inner flex flex-col items-center justify-center text-white/50 text-xs text-center p-4">
-                      <span className="font-bodoni italic text-lg mb-2 text-[#C59F59]">
-                        amantti
-                      </span>
-                      Premium Blend
-                    </div>
+                  <div className="w-full h-64 bg-zinc-100 rounded-xl mb-6 flex items-center justify-center overflow-hidden relative">
+                    <Image
+                      src="/images/Amantti_Coffee_Bag.png"
+                      alt="Amantti Premium Blend Coffee Bag"
+                      fill
+                      className="object-contain p-4"
+                    />
                   </div>
 
                   <div className="space-y-2 mb-6 text-sm">
