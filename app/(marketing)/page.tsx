@@ -123,7 +123,7 @@ export default function Home() {
                     <div className="grid grid-cols-[80px_1fr] gap-2">
                       <span className="font-bold">Profile</span>
                       <span className="text-foreground/80">
-                        Caramelo, Panela
+                        Caramel, Panela
                       </span>
                     </div>
                     <div className="grid grid-cols-[80px_1fr] gap-2">
@@ -147,7 +147,7 @@ export default function Home() {
                         defaultChecked
                         suppressHydrationWarning
                       />
-                      <span className="text-sm font-medium">Grano</span>
+                      <span className="text-sm font-medium">Grain</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -156,7 +156,7 @@ export default function Home() {
                         className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
                         suppressHydrationWarning
                       />
-                      <span className="text-sm font-medium">Molido</span>
+                      <span className="text-sm font-medium">Grinded</span>
                     </label>
                   </div>
                 </div>
@@ -165,7 +165,7 @@ export default function Home() {
               {/* Step 2: Frequency */}
               <div className="flex flex-col">
                 <h3 className="text-xl font-medium mb-6">
-                  2. Frecuencia de Entrega
+                  2. Delivery Frequency
                 </h3>
                 <div className="flex flex-col sm:flex-row lg:flex-col gap-4">
                   {/* Option 1 */}
@@ -177,7 +177,7 @@ export default function Home() {
                       className="w-10 h-10 text-foreground/70 mb-3"
                       strokeWidth={1.5}
                     />
-                    <span className="font-medium text-sm">Semanal</span>
+                    <span className="font-medium text-sm">Weekly</span>
                   </button>
 
                   {/* Option 2 (Selected) */}
@@ -189,9 +189,9 @@ export default function Home() {
                       className="w-10 h-10 text-[#C59F59] mb-3"
                       strokeWidth={1.5}
                     />
-                    <span className="font-medium text-sm">Quincenal</span>
+                    <span className="font-medium text-sm">Bi-Weekly</span>
                     <span className="text-[10px] text-foreground/60 mt-1">
-                      (Recomendado)
+                      (Recommended)
                     </span>
                   </button>
 
@@ -204,7 +204,7 @@ export default function Home() {
                       className="w-10 h-10 text-foreground/70 mb-3"
                       strokeWidth={1.5}
                     />
-                    <span className="font-medium text-sm">Mensual</span>
+                    <span className="font-medium text-sm">Monthly</span>
                   </button>
                 </div>
               </div>
@@ -212,20 +212,20 @@ export default function Home() {
               {/* Step 3: Summary */}
               <div className="flex flex-col">
                 <h3 className="text-xl font-medium mb-6">
-                  3. Resumen de Suscripción
+                  3. Subscription Summary
                 </h3>
                 <div className="border border-foreground/20 rounded-2xl p-8 bg-[#fbf9f4] shadow-sm flex flex-col h-full min-h-[300px]">
                   <div className="mb-8">
                     <h4 className="font-bold text-lg mb-1">
-                      Café Premium - Molido
+                      Premium Coffee - Ground
                     </h4>
                     <p className="text-foreground/70 text-sm mb-6">
-                      Entrega Quincenal
+                      Bi-Weekly Delivery
                     </p>
 
                     <div className="flex justify-between items-center text-sm border-t border-foreground/10 pt-4 mb-2">
                       <span className="text-foreground/80">
-                        Precio por envío:
+                        Price per shipment:
                       </span>
                       <span className="font-bold text-base">$X.XX</span>
                     </div>
@@ -235,7 +235,7 @@ export default function Home() {
                     suppressHydrationWarning
                     className="w-full py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all shadow-md mt-auto text-lg flex items-center justify-center gap-2"
                   >
-                    Completar Suscripción
+                    Complete Subscription
                   </button>
                 </div>
               </div>
