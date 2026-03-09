@@ -69,7 +69,7 @@ export default function Home() {
           {/* Background Image Placeholder */}
           <div
             className="absolute inset-0 bg-zinc-800 bg-cover bg-center bg-no-repeat z-0"
-            style={{ backgroundImage: "url('/images/hero-bg.jpg')" }}
+            style={{ backgroundImage: "url('/images/Chemex&Cup.png')" }}
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent z-10" />
 
