@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
+import { useState } from "react";
 import {
   ShoppingCart,
   Calendar,
@@ -12,6 +15,9 @@ import {
 } from "lucide-react";
 
 export default function Home() {
+  const [grind, setGrind] = useState("Grain");
+  const [frequency, setFrequency] = useState("Bi-Weekly");
+
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans text-foreground overflow-x-hidden">
       {/* Navigation */}
@@ -143,8 +149,10 @@ export default function Home() {
                       <input
                         type="radio"
                         name="grind"
+                        value="Grain"
+                        checked={grind === "Grain"}
+                        onChange={() => setGrind("Grain")}
                         className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
-                        defaultChecked
                         suppressHydrationWarning
                       />
                       <span className="text-sm font-medium">Grain</span>
@@ -153,6 +161,9 @@ export default function Home() {
                       <input
                         type="radio"
                         name="grind"
+                        value="Grinded"
+                        checked={grind === "Grinded"}
+                        onChange={() => setGrind("Grinded")}
                         className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
                         suppressHydrationWarning
                       />
@@ -170,23 +181,25 @@ export default function Home() {
                 <div className="flex flex-col sm:flex-row lg:flex-col gap-4">
                   {/* Option 1 */}
                   <button
+                    onClick={() => setFrequency("Weekly")}
                     suppressHydrationWarning
-                    className="flex-1 lg:flex-none flex flex-col items-center justify-center p-6 border border-foreground/20 rounded-xl hover:border-[#C59F59] transition-all bg-white"
+                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "Weekly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
                   >
                     <Calendar
-                      className="w-10 h-10 text-foreground/70 mb-3"
+                      className={`w-10 h-10 mb-3 ${frequency === "Weekly" ? "text-[#C59F59]" : "text-foreground/70"}`}
                       strokeWidth={1.5}
                     />
                     <span className="font-medium text-sm">Weekly</span>
                   </button>
 
-                  {/* Option 2 (Selected) */}
+                  {/* Option 2 */}
                   <button
+                    onClick={() => setFrequency("Bi-Weekly")}
                     suppressHydrationWarning
-                    className="flex-1 lg:flex-none flex flex-col items-center justify-center p-6 border-2 border-[#C59F59] rounded-xl bg-[#C59F59]/5 relative overflow-hidden transition-all shadow-sm"
+                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "Bi-Weekly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
                   >
                     <CalendarClock
-                      className="w-10 h-10 text-[#C59F59] mb-3"
+                      className={`w-10 h-10 mb-3 ${frequency === "Bi-Weekly" ? "text-[#C59F59]" : "text-foreground/70"}`}
                       strokeWidth={1.5}
                     />
                     <span className="font-medium text-sm">Bi-Weekly</span>
@@ -197,11 +210,12 @@ export default function Home() {
 
                   {/* Option 3 */}
                   <button
+                    onClick={() => setFrequency("Monthly")}
                     suppressHydrationWarning
-                    className="flex-1 lg:flex-none flex flex-col items-center justify-center p-6 border border-foreground/20 rounded-xl hover:border-[#C59F59] transition-all bg-white"
+                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "Monthly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
                   >
                     <CalendarDays
-                      className="w-10 h-10 text-foreground/70 mb-3"
+                      className={`w-10 h-10 mb-3 ${frequency === "Monthly" ? "text-[#C59F59]" : "text-foreground/70"}`}
                       strokeWidth={1.5}
                     />
                     <span className="font-medium text-sm">Monthly</span>
@@ -217,10 +231,10 @@ export default function Home() {
                 <div className="border border-foreground/20 rounded-2xl p-8 bg-[#fbf9f4] shadow-sm flex flex-col h-full min-h-[300px]">
                   <div className="mb-8">
                     <h4 className="font-bold text-lg mb-1">
-                      Premium Coffee - Ground
+                      Premium Coffee - {grind === "Grain" ? "Whole Bean" : "Ground"}
                     </h4>
                     <p className="text-foreground/70 text-sm mb-6">
-                      Bi-Weekly Delivery
+                      {frequency} Delivery
                     </p>
 
                     <div className="flex justify-between items-center text-sm border-t border-foreground/10 pt-4 mb-2">
