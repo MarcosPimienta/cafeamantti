@@ -405,114 +405,128 @@ export default function Home() {
           />
         </section>
 
-        {/* Contact Form Section */}
-        <section className="py-24 bg-[#f7f4ef] relative" id="contacto">
-          <div className="container mx-auto px-6 max-w-4xl">
-            <div className="text-center mb-14">
-              <h2 className="text-4xl md:text-5xl font-serif text-foreground mb-6">
-                {t("contact.title")}
-              </h2>
-              <p className="text-foreground/60 text-lg max-w-2xl mx-auto leading-relaxed">
-                {t("contact.subtitle")}
-              </p>
+        {/* Contact Form Section - Split Layout */}
+        <section className="bg-[#f7f4ef] w-full" id="contacto">
+          <div className="flex flex-col lg:flex-row w-full min-h-[800px]">
+            {/* Left Side - Image */}
+            <div className="relative w-full lg:w-1/2 min-h-[400px] lg:min-h-full">
+              <Image
+                src="/images/Chemex&Cup.png"
+                alt="Amantti Coffee Experience"
+                fill
+                className="object-cover"
+                priority
+              />
             </div>
 
-            <form
-              onSubmit={(e) => e.preventDefault()}
-              className="bg-white rounded-2xl shadow-lg p-8 md:p-12 space-y-6"
-            >
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-2">
-                    {t("contact.name")}
-                  </label>
-                  <input
-                    type="text"
-                    suppressHydrationWarning
-                    className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
-                    placeholder={t("contact.name")}
-                  />
+            {/* Right Side - Form */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-16 lg:p-24">
+              <div className="w-full max-w-xl">
+                <div className="mb-12">
+                  <h2 className="text-4xl md:text-5xl font-serif text-foreground mb-4">
+                    {t("contact.title")}
+                  </h2>
+                  <p className="text-foreground/60 text-lg leading-relaxed">
+                    {t("contact.subtitle")}
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-2">
-                    {t("contact.email")}
-                  </label>
-                  <input
-                    type="email"
-                    suppressHydrationWarning
-                    className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
-                    placeholder={t("contact.email")}
-                  />
-                </div>
-              </div>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-2">
-                    {t("contact.business")}
-                  </label>
-                  <input
-                    type="text"
-                    suppressHydrationWarning
-                    className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
-                    placeholder={t("contact.business")}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-2">
-                    {t("contact.service")}
-                  </label>
-                  <select
-                    suppressHydrationWarning
-                    className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm text-foreground/80"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      {t("contact.serviceDefault")}
-                    </option>
-                    <option value="barismo">{t("contact.serviceBarismo")}</option>
-                    <option value="maintenance">{t("contact.serviceMaintenance")}</option>
-                    <option value="support">{t("contact.serviceSupport")}</option>
-                    <option value="all">{t("contact.serviceAll")}</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-2">
-                  {t("contact.message")}
-                </label>
-                <textarea
-                  rows={4}
-                  suppressHydrationWarning
-                  className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm resize-none"
-                  placeholder={t("contact.messagePlaceholder")}
-                />
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
-                <button
-                  type="submit"
-                  suppressHydrationWarning
-                  className="w-full sm:w-auto px-8 py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all shadow-md text-lg flex items-center justify-center gap-2"
+                <form
+                  onSubmit={(e) => e.preventDefault()}
+                  className="space-y-6"
                 >
-                  <Send className="w-5 h-5" strokeWidth={2} />
-                  {t("contact.submit")}
-                </button>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-2">
+                        {t("contact.name")}
+                      </label>
+                      <input
+                        type="text"
+                        suppressHydrationWarning
+                        className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
+                        placeholder={t("contact.name")}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-2">
+                        {t("contact.email")}
+                      </label>
+                      <input
+                        type="email"
+                        suppressHydrationWarning
+                        className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
+                        placeholder={t("contact.email")}
+                      />
+                    </div>
+                  </div>
 
-                <span className="text-foreground/40 text-sm hidden sm:block">—</span>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-2">
+                        {t("contact.business")}
+                      </label>
+                      <input
+                        type="text"
+                        suppressHydrationWarning
+                        className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
+                        placeholder={t("contact.business")}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-2">
+                        {t("contact.service")}
+                      </label>
+                      <select
+                        suppressHydrationWarning
+                        className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm text-foreground/80"
+                        defaultValue=""
+                      >
+                        <option value="" disabled>
+                          {t("contact.serviceDefault")}
+                        </option>
+                        <option value="barismo">{t("contact.serviceBarismo")}</option>
+                        <option value="maintenance">{t("contact.serviceMaintenance")}</option>
+                        <option value="support">{t("contact.serviceSupport")}</option>
+                        <option value="all">{t("contact.serviceAll")}</option>
+                      </select>
+                    </div>
+                  </div>
 
-                <a
-                  href="https://wa.me/573332843078"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto px-6 py-4 bg-[#25D366] hover:bg-[#1fb855] text-white font-medium rounded-xl transition-all shadow-md text-lg flex items-center justify-center gap-2"
-                >
-                  <MessageCircle className="w-5 h-5" strokeWidth={2} />
-                  {t("contact.whatsapp")}
-                </a>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground/80 mb-2">
+                      {t("contact.message")}
+                    </label>
+                    <textarea
+                      rows={4}
+                      suppressHydrationWarning
+                      className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm resize-none"
+                      placeholder={t("contact.messagePlaceholder")}
+                    />
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
+                    <button
+                      type="submit"
+                      suppressHydrationWarning
+                      className="w-full sm:w-auto px-8 py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all shadow-md hover:shadow-lg text-lg flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-5 h-5" strokeWidth={2} />
+                      {t("contact.submit")}
+                    </button>
+
+                    <a
+                      href="https://wa.me/573332843078"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full sm:w-auto px-6 py-4 bg-[#25D366] hover:bg-[#1fb855] text-white font-medium rounded-xl transition-all shadow-md hover:shadow-lg text-lg flex items-center justify-center gap-2"
+                    >
+                      <MessageCircle className="w-5 h-5" strokeWidth={2} />
+                      {t("contact.whatsapp")}
+                    </a>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
           </div>
         </section>
       </main>
