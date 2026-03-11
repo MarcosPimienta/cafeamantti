@@ -150,42 +150,75 @@ export default function Home() {
 
             <div className="grid md:grid-cols-3 gap-8">
               {/* Barismo Training */}
-              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
-                <div className="w-14 h-14 rounded-xl bg-[#C59F59]/15 flex items-center justify-center mb-6 group-hover:bg-[#C59F59]/25 transition-colors">
-                  <Coffee className="w-7 h-7 text-[#C59F59]" strokeWidth={1.5} />
+              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
+                <div className="relative w-full h-48 overflow-hidden">
+                  <Image
+                    src="/images/Guy_Barism.png"
+                    alt="Barismo Training"
+                    fill
+                    className="object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-transparent" />
+                  <div className="absolute bottom-3 right-3 w-10 h-10 rounded-lg bg-[#C59F59]/90 flex items-center justify-center">
+                    <Coffee className="w-5 h-5 text-white" strokeWidth={1.5} />
+                  </div>
                 </div>
-                <h3 className="text-xl font-semibold mb-3">
-                  {t("services.barismoTitle")}
-                </h3>
-                <p className="text-white/60 leading-relaxed text-sm">
-                  {t("services.barismoDesc")}
-                </p>
+                <div className="p-8 pt-5">
+                  <h3 className="text-xl font-semibold mb-3">
+                    {t("services.barismoTitle")}
+                  </h3>
+                  <p className="text-white/60 leading-relaxed text-sm">
+                    {t("services.barismoDesc")}
+                  </p>
+                </div>
               </div>
 
               {/* Equipment Maintenance */}
-              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
-                <div className="w-14 h-14 rounded-xl bg-[#C59F59]/15 flex items-center justify-center mb-6 group-hover:bg-[#C59F59]/25 transition-colors">
-                  <Wrench className="w-7 h-7 text-[#C59F59]" strokeWidth={1.5} />
+              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
+                <div className="relative w-full h-48 overflow-hidden">
+                  <Image
+                    src="/images/Guy_Repairing.png"
+                    alt="Equipment Maintenance"
+                    fill
+                    className="object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-transparent" />
+                  <div className="absolute bottom-3 right-3 w-10 h-10 rounded-lg bg-[#C59F59]/90 flex items-center justify-center">
+                    <Wrench className="w-5 h-5 text-white" strokeWidth={1.5} />
+                  </div>
                 </div>
-                <h3 className="text-xl font-semibold mb-3">
-                  {t("services.maintenanceTitle")}
-                </h3>
-                <p className="text-white/60 leading-relaxed text-sm">
-                  {t("services.maintenanceDesc")}
-                </p>
+                <div className="p-8 pt-5">
+                  <h3 className="text-xl font-semibold mb-3">
+                    {t("services.maintenanceTitle")}
+                  </h3>
+                  <p className="text-white/60 leading-relaxed text-sm">
+                    {t("services.maintenanceDesc")}
+                  </p>
+                </div>
               </div>
 
               {/* Ongoing Support */}
-              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
-                <div className="w-14 h-14 rounded-xl bg-[#C59F59]/15 flex items-center justify-center mb-6 group-hover:bg-[#C59F59]/25 transition-colors">
-                  <Headset className="w-7 h-7 text-[#C59F59]" strokeWidth={1.5} />
+              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
+                <div className="relative w-full h-48 overflow-hidden">
+                  <Image
+                    src="/images/Guy_Explains.png"
+                    alt="Ongoing Support"
+                    fill
+                    className="object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-transparent" />
+                  <div className="absolute bottom-3 right-3 w-10 h-10 rounded-lg bg-[#C59F59]/90 flex items-center justify-center">
+                    <Headset className="w-5 h-5 text-white" strokeWidth={1.5} />
+                  </div>
                 </div>
-                <h3 className="text-xl font-semibold mb-3">
-                  {t("services.supportTitle")}
-                </h3>
-                <p className="text-white/60 leading-relaxed text-sm">
-                  {t("services.supportDesc")}
-                </p>
+                <div className="p-8 pt-5">
+                  <h3 className="text-xl font-semibold mb-3">
+                    {t("services.supportTitle")}
+                  </h3>
+                  <p className="text-white/60 leading-relaxed text-sm">
+                    {t("services.supportDesc")}
+                  </p>
+                </div>
               </div>
             </div>
 
