@@ -12,11 +12,25 @@ import {
   Twitter,
   Youtube,
   Instagram,
+  Globe,
 } from "lucide-react";
+import { useLanguage } from "@/app/context/LanguageContext";
 
 export default function Home() {
-  const [grind, setGrind] = useState("Grain");
-  const [frequency, setFrequency] = useState("Bi-Weekly");
+  const { t, locale, setLocale } = useLanguage();
+  const [grind, setGrind] = useState<"grain" | "grinded">("grain");
+  const [frequency, setFrequency] = useState<"weekly" | "biWeekly" | "monthly">(
+    "biWeekly"
+  );
+
+  // Map internal state keys to translation keys for display
+  const grindLabel = grind === "grain" ? t("builder.grain") : t("builder.grinded");
+  const frequencyLabel =
+    frequency === "weekly"
+      ? t("builder.weekly")
+      : frequency === "biWeekly"
+        ? t("builder.biWeekly")
+        : t("builder.monthly");
 
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans text-foreground overflow-x-hidden">
@@ -33,30 +47,42 @@ export default function Home() {
               href="#historia"
               className="text-sm font-medium text-foreground/80 hover:text-foreground"
             >
-              Nuestra Historia
+              {t("nav.ourStory")}
             </Link>
             <Link
               href="#suscripciones"
               className="text-sm font-medium text-foreground/80 hover:text-foreground"
             >
-              Suscripciones
+              {t("nav.subscriptions")}
             </Link>
             <Link
               href="/shop"
               className="text-sm font-medium text-foreground/80 hover:text-foreground"
             >
-              Tienda
+              {t("nav.shop")}
             </Link>
             <Link
               href="/login"
               className="text-sm font-medium text-foreground/80 hover:text-foreground"
             >
-              Mi Cuenta
+              {t("nav.myAccount")}
             </Link>
+
+            {/* Language Switcher */}
+            <button
+              suppressHydrationWarning
+              onClick={() => setLocale(locale === "es" ? "en" : "es")}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border border-foreground/20 hover:border-[#C59F59] hover:bg-[#C59F59]/5 transition-all text-foreground/80 hover:text-foreground"
+              aria-label="Switch language"
+            >
+              <Globe className="w-4 h-4" strokeWidth={2} />
+              <span>{locale === "es" ? "EN" : "ES"}</span>
+            </button>
+
             <button
               suppressHydrationWarning
               className="relative p-2 hover:bg-foreground/5 rounded-full transition-colors"
-              aria-label="Cart"
+              aria-label={t("nav.cart")}
             >
               <ShoppingCart
                 className="w-5 h-5 text-foreground/80"
@@ -86,13 +112,13 @@ export default function Home() {
                 amantti.
               </h1>
               <p className="text-2xl md:text-3xl text-white/90 mb-8 font-light tracking-wide">
-                Pasión y tradición en cada taza.
+                {t("hero.tagline")}
               </p>
               <button
                 suppressHydrationWarning
                 className="px-8 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white text-lg font-medium rounded-md transition-all shadow-lg"
               >
-                Suscríbete Ahora
+                {t("hero.cta")}
               </button>
             </div>
           </div>
@@ -102,13 +128,13 @@ export default function Home() {
         <section className="py-20 bg-background relative" id="suscripciones">
           <div className="container mx-auto px-6 max-w-6xl relative z-10">
             <h2 className="text-4xl font-serif text-foreground mb-12">
-              Crea Tu Experiencia de Café
+              {t("builder.title")}
             </h2>
 
             <div className="grid lg:grid-cols-3 gap-12 lg:gap-8 border-b border-foreground/10 pb-16">
               {/* Step 1: Coffee */}
               <div className="flex flex-col">
-                <h3 className="text-xl font-medium mb-6">1. Elige Tu Café</h3>
+                <h3 className="text-xl font-medium mb-6">{t("builder.step1")}</h3>
                 <div className="border-2 border-[#C59F59] rounded-2xl p-6 bg-white shadow-sm flex flex-col relative overflow-hidden">
                   <div className="w-full h-64 bg-zinc-100 rounded-xl mb-6 flex items-center justify-center overflow-hidden relative">
                     <Image
@@ -121,25 +147,25 @@ export default function Home() {
 
                   <div className="space-y-2 mb-6 text-sm">
                     <div className="grid grid-cols-[80px_1fr] gap-2">
-                      <span className="font-bold">Variety</span>
+                      <span className="font-bold">{t("builder.variety")}</span>
                       <span className="text-foreground/80">
-                        Caturro & Tabbi
+                        {t("builder.varietyValue")}
                       </span>
                     </div>
                     <div className="grid grid-cols-[80px_1fr] gap-2">
-                      <span className="font-bold">Profile</span>
+                      <span className="font-bold">{t("builder.profile")}</span>
                       <span className="text-foreground/80">
-                        Caramel, Panela
+                        {t("builder.profileValue")}
                       </span>
                     </div>
                     <div className="grid grid-cols-[80px_1fr] gap-2">
-                      <span className="font-bold">Altitude</span>
-                      <span className="text-foreground/80">1800 mts</span>
+                      <span className="font-bold">{t("builder.altitude")}</span>
+                      <span className="text-foreground/80">{t("builder.altitudeValue")}</span>
                     </div>
                     <div className="grid grid-cols-[80px_1fr] gap-2">
-                      <span className="font-bold">Notes</span>
+                      <span className="font-bold">{t("builder.notes")}</span>
                       <span className="text-foreground/80 leading-tight">
-                        Sweet Caramel, Sugar Cane, Chocolate and Orange
+                        {t("builder.notesValue")}
                       </span>
                     </div>
                   </div>
@@ -149,25 +175,25 @@ export default function Home() {
                       <input
                         type="radio"
                         name="grind"
-                        value="Grain"
-                        checked={grind === "Grain"}
-                        onChange={() => setGrind("Grain")}
+                        value="grain"
+                        checked={grind === "grain"}
+                        onChange={() => setGrind("grain")}
                         className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
                         suppressHydrationWarning
                       />
-                      <span className="text-sm font-medium">Grain</span>
+                      <span className="text-sm font-medium">{t("builder.grain")}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
                         name="grind"
-                        value="Grinded"
-                        checked={grind === "Grinded"}
-                        onChange={() => setGrind("Grinded")}
+                        value="grinded"
+                        checked={grind === "grinded"}
+                        onChange={() => setGrind("grinded")}
                         className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
                         suppressHydrationWarning
                       />
-                      <span className="text-sm font-medium">Grinded</span>
+                      <span className="text-sm font-medium">{t("builder.grinded")}</span>
                     </label>
                   </div>
                 </div>
@@ -176,49 +202,49 @@ export default function Home() {
               {/* Step 2: Frequency */}
               <div className="flex flex-col">
                 <h3 className="text-xl font-medium mb-6">
-                  2. Delivery Frequency
+                  {t("builder.step2")}
                 </h3>
                 <div className="flex flex-col sm:flex-row lg:flex-col gap-4">
                   {/* Option 1 */}
                   <button
-                    onClick={() => setFrequency("Weekly")}
+                    onClick={() => setFrequency("weekly")}
                     suppressHydrationWarning
-                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "Weekly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
+                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "weekly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
                   >
                     <Calendar
-                      className={`w-10 h-10 mb-3 ${frequency === "Weekly" ? "text-[#C59F59]" : "text-foreground/70"}`}
+                      className={`w-10 h-10 mb-3 ${frequency === "weekly" ? "text-[#C59F59]" : "text-foreground/70"}`}
                       strokeWidth={1.5}
                     />
-                    <span className="font-medium text-sm">Weekly</span>
+                    <span className="font-medium text-sm">{t("builder.weekly")}</span>
                   </button>
 
                   {/* Option 2 */}
                   <button
-                    onClick={() => setFrequency("Bi-Weekly")}
+                    onClick={() => setFrequency("biWeekly")}
                     suppressHydrationWarning
-                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "Bi-Weekly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
+                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "biWeekly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
                   >
                     <CalendarClock
-                      className={`w-10 h-10 mb-3 ${frequency === "Bi-Weekly" ? "text-[#C59F59]" : "text-foreground/70"}`}
+                      className={`w-10 h-10 mb-3 ${frequency === "biWeekly" ? "text-[#C59F59]" : "text-foreground/70"}`}
                       strokeWidth={1.5}
                     />
-                    <span className="font-medium text-sm">Bi-Weekly</span>
+                    <span className="font-medium text-sm">{t("builder.biWeekly")}</span>
                     <span className="text-[10px] text-foreground/60 mt-1">
-                      (Recommended)
+                      {t("builder.recommended")}
                     </span>
                   </button>
 
                   {/* Option 3 */}
                   <button
-                    onClick={() => setFrequency("Monthly")}
+                    onClick={() => setFrequency("monthly")}
                     suppressHydrationWarning
-                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "Monthly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
+                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "monthly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
                   >
                     <CalendarDays
-                      className={`w-10 h-10 mb-3 ${frequency === "Monthly" ? "text-[#C59F59]" : "text-foreground/70"}`}
+                      className={`w-10 h-10 mb-3 ${frequency === "monthly" ? "text-[#C59F59]" : "text-foreground/70"}`}
                       strokeWidth={1.5}
                     />
-                    <span className="font-medium text-sm">Monthly</span>
+                    <span className="font-medium text-sm">{t("builder.monthly")}</span>
                   </button>
                 </div>
               </div>
@@ -226,20 +252,21 @@ export default function Home() {
               {/* Step 3: Summary */}
               <div className="flex flex-col">
                 <h3 className="text-xl font-medium mb-6">
-                  3. Subscription Summary
+                  {t("builder.step3")}
                 </h3>
                 <div className="border border-foreground/20 rounded-2xl p-8 bg-[#fbf9f4] shadow-sm flex flex-col h-full min-h-[300px]">
                   <div className="mb-8">
                     <h4 className="font-bold text-lg mb-1">
-                      Premium Coffee - {grind === "Grain" ? "Whole Bean" : "Ground"}
+                      {t("builder.premiumCoffee")} –{" "}
+                      {grind === "grain" ? t("builder.wholeBean") : t("builder.ground")}
                     </h4>
                     <p className="text-foreground/70 text-sm mb-6">
-                      {frequency} Delivery
+                      {frequencyLabel} · {t("builder.delivery")}
                     </p>
 
                     <div className="flex justify-between items-center text-sm border-t border-foreground/10 pt-4 mb-2">
                       <span className="text-foreground/80">
-                        Price per shipment:
+                        {t("builder.priceLabel")}
                       </span>
                       <span className="font-bold text-base">$X.XX</span>
                     </div>
@@ -249,7 +276,7 @@ export default function Home() {
                     suppressHydrationWarning
                     className="w-full py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all shadow-md mt-auto text-lg flex items-center justify-center gap-2"
                   >
-                    Complete Subscription
+                    {t("builder.completeSub")}
                   </button>
                 </div>
               </div>
