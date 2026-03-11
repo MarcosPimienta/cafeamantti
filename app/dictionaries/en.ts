@@ -2,6 +2,7 @@ export const en = {
   // Nav
   "nav.ourStory": "Our Story",
   "nav.subscriptions": "Subscriptions",
+  "nav.services": "Services",
   "nav.shop": "Shop",
   "nav.myAccount": "My Account",
   "nav.cart": "Cart",
@@ -9,6 +10,17 @@ export const en = {
   // Hero
   "hero.tagline": "Passion and tradition in every cup.",
   "hero.cta": "Subscribe Now",
+
+  // Services
+  "services.title": "More Than Just Coffee",
+  "services.subtitle": "We partner with businesses that share our passion. When you buy Amantti coffee to serve your clients, we become part of your team.",
+  "services.barismoTitle": "Barismo Training",
+  "services.barismoDesc": "We train your staff in the art of coffee preparation — from espresso calibration to latte art — so every cup served represents the best of Amantti.",
+  "services.maintenanceTitle": "Equipment Maintenance",
+  "services.maintenanceDesc": "Keep your machines performing at their best. We provide regular maintenance, diagnostics, and repair support to minimize downtime.",
+  "services.supportTitle": "Ongoing Support",
+  "services.supportDesc": "From menu consulting to quality control, our team is always available to help you grow your coffee offering and delight your customers.",
+  "services.cta": "Learn More",
 
   // Subscription Builder
   "builder.title": "Create Your Coffee Experience",

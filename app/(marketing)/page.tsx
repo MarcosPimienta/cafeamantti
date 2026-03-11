@@ -13,6 +13,9 @@ import {
   Youtube,
   Instagram,
   Globe,
+  Coffee,
+  Wrench,
+  Headset,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 
@@ -48,6 +51,12 @@ export default function Home() {
               className="text-sm font-medium text-foreground/80 hover:text-foreground"
             >
               {t("nav.ourStory")}
+            </Link>
+            <Link
+              href="#servicios"
+              className="text-sm font-medium text-foreground/80 hover:text-foreground"
+            >
+              {t("nav.services")}
             </Link>
             <Link
               href="#suscripciones"
@@ -119,6 +128,73 @@ export default function Home() {
                 className="px-8 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white text-lg font-medium rounded-md transition-all shadow-lg"
               >
                 {t("hero.cta")}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Services Section */}
+        <section className="py-24 bg-[#1a1a1a] text-white relative overflow-hidden" id="servicios">
+          {/* Subtle background pattern */}
+          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)", backgroundSize: "40px 40px" }} />
+
+          <div className="container mx-auto px-6 max-w-6xl relative z-10">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl md:text-5xl font-serif mb-6">
+                {t("services.title")}
+              </h2>
+              <p className="text-white/70 text-lg max-w-2xl mx-auto leading-relaxed">
+                {t("services.subtitle")}
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8">
+              {/* Barismo Training */}
+              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
+                <div className="w-14 h-14 rounded-xl bg-[#C59F59]/15 flex items-center justify-center mb-6 group-hover:bg-[#C59F59]/25 transition-colors">
+                  <Coffee className="w-7 h-7 text-[#C59F59]" strokeWidth={1.5} />
+                </div>
+                <h3 className="text-xl font-semibold mb-3">
+                  {t("services.barismoTitle")}
+                </h3>
+                <p className="text-white/60 leading-relaxed text-sm">
+                  {t("services.barismoDesc")}
+                </p>
+              </div>
+
+              {/* Equipment Maintenance */}
+              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
+                <div className="w-14 h-14 rounded-xl bg-[#C59F59]/15 flex items-center justify-center mb-6 group-hover:bg-[#C59F59]/25 transition-colors">
+                  <Wrench className="w-7 h-7 text-[#C59F59]" strokeWidth={1.5} />
+                </div>
+                <h3 className="text-xl font-semibold mb-3">
+                  {t("services.maintenanceTitle")}
+                </h3>
+                <p className="text-white/60 leading-relaxed text-sm">
+                  {t("services.maintenanceDesc")}
+                </p>
+              </div>
+
+              {/* Ongoing Support */}
+              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
+                <div className="w-14 h-14 rounded-xl bg-[#C59F59]/15 flex items-center justify-center mb-6 group-hover:bg-[#C59F59]/25 transition-colors">
+                  <Headset className="w-7 h-7 text-[#C59F59]" strokeWidth={1.5} />
+                </div>
+                <h3 className="text-xl font-semibold mb-3">
+                  {t("services.supportTitle")}
+                </h3>
+                <p className="text-white/60 leading-relaxed text-sm">
+                  {t("services.supportDesc")}
+                </p>
+              </div>
+            </div>
+
+            <div className="text-center mt-12">
+              <button
+                suppressHydrationWarning
+                className="px-8 py-3 bg-transparent border-2 border-[#C59F59] text-[#C59F59] hover:bg-[#C59F59] hover:text-white text-lg font-medium rounded-md transition-all"
+              >
+                {t("services.cta")}
               </button>
             </div>
           </div>
