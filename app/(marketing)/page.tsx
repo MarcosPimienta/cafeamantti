@@ -18,6 +18,8 @@ import {
   Headset,
   MessageCircle,
   Send,
+  Menu,
+  X,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 
@@ -27,6 +29,7 @@ export default function Home() {
   const [frequency, setFrequency] = useState<"weekly" | "biWeekly" | "monthly">(
     "biWeekly"
   );
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Map internal state keys to translation keys for display
   const grindLabel = grind === "grain" ? t("builder.grain") : t("builder.grinded");
@@ -103,6 +106,94 @@ export default function Home() {
                 0
               </span>
             </button>
+          </nav>
+
+          {/* Mobile Menu Toggle Button */}
+          <div className="flex items-center gap-4 md:hidden">
+            <button
+              suppressHydrationWarning
+              className="relative p-2 hover:bg-foreground/5 rounded-full transition-colors"
+              aria-label={t("nav.cart")}
+            >
+              <ShoppingCart
+                className="w-5 h-5 text-foreground/80"
+                strokeWidth={2}
+              />
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C59F59] text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">
+                0
+              </span>
+            </button>
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 -mr-2 text-foreground/80 hover:text-foreground transition-colors"
+              aria-label="Toggle mobile menu"
+            >
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6" strokeWidth={1.5} />
+              ) : (
+                <Menu className="w-6 h-6" strokeWidth={1.5} />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation Menu */}
+        <div
+          className={`md:hidden absolute top-20 left-0 w-full bg-background border-b border-foreground/10 shadow-lg transition-all duration-300 ease-in-out overflow-hidden z-40 ${
+            isMobileMenuOpen ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"
+          }`}
+        >
+          <nav className="flex flex-col px-6 py-6 space-y-6">
+            <Link
+              href="#historia"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-lg font-medium text-foreground/80 hover:text-foreground"
+            >
+              {t("nav.ourStory")}
+            </Link>
+            <Link
+              href="#servicios"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-lg font-medium text-foreground/80 hover:text-foreground"
+            >
+              {t("nav.services")}
+            </Link>
+            <Link
+              href="#suscripciones"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-lg font-medium text-foreground/80 hover:text-foreground"
+            >
+              {t("nav.subscriptions")}
+            </Link>
+            <Link
+              href="/shop"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-lg font-medium text-foreground/80 hover:text-foreground"
+            >
+              {t("nav.shop")}
+            </Link>
+            <Link
+              href="/login"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-lg font-medium text-foreground/80 hover:text-foreground"
+            >
+              {t("nav.myAccount")}
+            </Link>
+
+            <div className="pt-4 border-t border-foreground/10 flex items-center justify-between">
+              <span className="text-sm font-medium text-foreground/60 uppercase tracking-wider">
+                Language
+              </span>
+              <button
+                suppressHydrationWarning
+                onClick={() => setLocale(locale === "es" ? "en" : "es")}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-foreground/5 hover:bg-foreground/10 transition-colors"
+                aria-label="Switch language"
+              >
+                <Globe className="w-4 h-4" strokeWidth={2} />
+                <span>{locale === "es" ? "English" : "Español"}</span>
+              </button>
+            </div>
           </nav>
         </div>
       </header>
