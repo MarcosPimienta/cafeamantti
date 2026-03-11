@@ -51,6 +51,23 @@ export const en = {
   "builder.delivery": "Delivery",
   "builder.priceLabel": "Price per shipment:",
   "builder.completeSub": "Complete Subscription",
+
+  // Contact Form
+  "contact.title": "Get In Touch",
+  "contact.subtitle": "Interested in our B2B services? Fill out the form below and we'll reach out to you shortly.",
+  "contact.name": "Your Name",
+  "contact.email": "Email Address",
+  "contact.business": "Business Name",
+  "contact.service": "Service of Interest",
+  "contact.serviceDefault": "Select a service",
+  "contact.serviceBarismo": "Barismo Training",
+  "contact.serviceMaintenance": "Equipment Maintenance",
+  "contact.serviceSupport": "Ongoing Support",
+  "contact.serviceAll": "All Services",
+  "contact.message": "Message",
+  "contact.messagePlaceholder": "Tell us about your business and how we can help...",
+  "contact.submit": "Send Message",
+  "contact.whatsapp": "Or chat with us on WhatsApp",
 } as const;
 
 export type TranslationKey = keyof typeof en;

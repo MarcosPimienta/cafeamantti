@@ -53,4 +53,21 @@ export const es: Record<TranslationKey, string> = {
   "builder.delivery": "Entrega",
   "builder.priceLabel": "Precio por envío:",
   "builder.completeSub": "Completar Suscripción",
+
+  // Contact Form
+  "contact.title": "Contáctanos",
+  "contact.subtitle": "¿Interesado en nuestros servicios B2B? Completa el formulario y nos pondremos en contacto contigo pronto.",
+  "contact.name": "Tu Nombre",
+  "contact.email": "Correo Electrónico",
+  "contact.business": "Nombre del Negocio",
+  "contact.service": "Servicio de Interés",
+  "contact.serviceDefault": "Selecciona un servicio",
+  "contact.serviceBarismo": "Formación en Barismo",
+  "contact.serviceMaintenance": "Mantenimiento de Equipos",
+  "contact.serviceSupport": "Soporte Continuo",
+  "contact.serviceAll": "Todos los Servicios",
+  "contact.message": "Mensaje",
+  "contact.messagePlaceholder": "Cuéntanos sobre tu negocio y cómo podemos ayudarte...",
+  "contact.submit": "Enviar Mensaje",
+  "contact.whatsapp": "O escríbenos por WhatsApp",
 };

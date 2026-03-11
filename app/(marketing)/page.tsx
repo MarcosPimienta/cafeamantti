@@ -16,6 +16,8 @@ import {
   Coffee,
   Wrench,
   Headset,
+  MessageCircle,
+  Send,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 
@@ -223,12 +225,12 @@ export default function Home() {
             </div>
 
             <div className="text-center mt-12">
-              <button
-                suppressHydrationWarning
-                className="px-8 py-3 bg-transparent border-2 border-[#C59F59] text-[#C59F59] hover:bg-[#C59F59] hover:text-white text-lg font-medium rounded-md transition-all"
+              <a
+                href="#contacto"
+                className="inline-block px-8 py-3 bg-transparent border-2 border-[#C59F59] text-[#C59F59] hover:bg-[#C59F59] hover:text-white text-lg font-medium rounded-md transition-all"
               >
                 {t("services.cta")}
-              </button>
+              </a>
             </div>
           </div>
         </section>
@@ -402,7 +404,129 @@ export default function Home() {
             style={{ backgroundImage: "url('/images/branch-right.png')" }}
           />
         </section>
+
+        {/* Contact Form Section */}
+        <section className="py-24 bg-[#f7f4ef] relative" id="contacto">
+          <div className="container mx-auto px-6 max-w-4xl">
+            <div className="text-center mb-14">
+              <h2 className="text-4xl md:text-5xl font-serif text-foreground mb-6">
+                {t("contact.title")}
+              </h2>
+              <p className="text-foreground/60 text-lg max-w-2xl mx-auto leading-relaxed">
+                {t("contact.subtitle")}
+              </p>
+            </div>
+
+            <form
+              onSubmit={(e) => e.preventDefault()}
+              className="bg-white rounded-2xl shadow-lg p-8 md:p-12 space-y-6"
+            >
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-2">
+                    {t("contact.name")}
+                  </label>
+                  <input
+                    type="text"
+                    suppressHydrationWarning
+                    className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
+                    placeholder={t("contact.name")}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-2">
+                    {t("contact.email")}
+                  </label>
+                  <input
+                    type="email"
+                    suppressHydrationWarning
+                    className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
+                    placeholder={t("contact.email")}
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-2">
+                    {t("contact.business")}
+                  </label>
+                  <input
+                    type="text"
+                    suppressHydrationWarning
+                    className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
+                    placeholder={t("contact.business")}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-2">
+                    {t("contact.service")}
+                  </label>
+                  <select
+                    suppressHydrationWarning
+                    className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm text-foreground/80"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      {t("contact.serviceDefault")}
+                    </option>
+                    <option value="barismo">{t("contact.serviceBarismo")}</option>
+                    <option value="maintenance">{t("contact.serviceMaintenance")}</option>
+                    <option value="support">{t("contact.serviceSupport")}</option>
+                    <option value="all">{t("contact.serviceAll")}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-2">
+                  {t("contact.message")}
+                </label>
+                <textarea
+                  rows={4}
+                  suppressHydrationWarning
+                  className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-background focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm resize-none"
+                  placeholder={t("contact.messagePlaceholder")}
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+                <button
+                  type="submit"
+                  suppressHydrationWarning
+                  className="w-full sm:w-auto px-8 py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all shadow-md text-lg flex items-center justify-center gap-2"
+                >
+                  <Send className="w-5 h-5" strokeWidth={2} />
+                  {t("contact.submit")}
+                </button>
+
+                <span className="text-foreground/40 text-sm hidden sm:block">—</span>
+
+                <a
+                  href="https://wa.me/573332843078"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-6 py-4 bg-[#25D366] hover:bg-[#1fb855] text-white font-medium rounded-xl transition-all shadow-md text-lg flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-5 h-5" strokeWidth={2} />
+                  {t("contact.whatsapp")}
+                </a>
+              </div>
+            </form>
+          </div>
+        </section>
       </main>
+
+      {/* Floating WhatsApp Button */}
+      <a
+        href="https://wa.me/573332843078"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] hover:bg-[#1fb855] rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all hover:scale-110"
+        aria-label="WhatsApp"
+      >
+        <MessageCircle className="w-7 h-7 text-white" strokeWidth={2} />
+      </a>
 
       {/* Footer */}
       <footer className="bg-background py-8 border-t border-foreground/10 relative z-20">
