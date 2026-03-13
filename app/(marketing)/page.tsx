@@ -377,6 +377,82 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Our Story Section */}
+        <section className="py-24 bg-background overflow-hidden" id="historia">
+          <div className="container mx-auto px-6 max-w-7xl">
+            <div className="flex flex-col lg:flex-row items-center gap-16">
+              {/* Text Content */}
+              <div className="w-full lg:w-1/2">
+                <div className="max-w-xl">
+                  <span className="text-[#C59F59] font-bold text-sm tracking-widest uppercase mb-4 block">
+                    {locale === "es" ? "Nuestra Historia" : "Our Story"}
+                  </span>
+                  <h2 suppressHydrationWarning className="text-4xl md:text-5xl font-serif text-foreground mb-8 leading-tight">
+                    {t("story.title")}
+                  </h2>
+                  <div className="space-y-6">
+                    <p suppressHydrationWarning className="text-foreground/70 text-lg leading-relaxed">
+                      {t("story.content")}
+                    </p>
+                  </div>
+
+                  {/* Values Grid */}
+                  <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-8">
+                    <div className="space-y-3">
+                      <div className="w-10 h-10 rounded-full bg-[#C59F59]/10 flex items-center justify-center">
+                        <Globe className="w-5 h-5 text-[#C59F59]" strokeWidth={1.5} />
+                      </div>
+                      <h4 suppressHydrationWarning className="text-sm font-bold uppercase tracking-wider text-foreground">
+                        {t("story.traditionTitle")}
+                      </h4>
+                      <p suppressHydrationWarning className="text-foreground/60 text-xs leading-relaxed">
+                        {t("story.traditionDesc")}
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="w-10 h-10 rounded-full bg-[#C59F59]/10 flex items-center justify-center">
+                        <Coffee className="w-5 h-5 text-[#C59F59]" strokeWidth={1.5} />
+                      </div>
+                      <h4 suppressHydrationWarning className="text-sm font-bold uppercase tracking-wider text-foreground">
+                        {t("story.passionTitle")}
+                      </h4>
+                      <p suppressHydrationWarning className="text-foreground/60 text-xs leading-relaxed">
+                        {t("story.passionDesc")}
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="w-10 h-10 rounded-full bg-[#C59F59]/10 flex items-center justify-center">
+                        <Leaf className="w-5 h-5 text-[#C59F59]" strokeWidth={1.5} />
+                      </div>
+                      <h4 suppressHydrationWarning className="text-sm font-bold uppercase tracking-wider text-foreground">
+                        {t("story.sustainabilityTitle")}
+                      </h4>
+                      <p suppressHydrationWarning className="text-foreground/60 text-xs leading-relaxed">
+                        {t("story.sustainabilityDesc")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Image Content */}
+              <div className="w-full lg:w-1/2">
+                <div className="relative aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl">
+                  <Image
+                    src={locale === "es" ? "/images/AmanttiRootsESP.png" : "/images/AmanttiRoots.png"}
+                    alt={t("nav.ourStory")}
+                    fill
+                    className="object-cover transition-transform duration-700 hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Services Section */}
         <section className="py-24 bg-[#1a1a1a] text-white relative overflow-hidden" id="servicios">
           {/* Subtle background pattern */}
