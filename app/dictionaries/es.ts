@@ -102,4 +102,31 @@ export const es: Record<TranslationKey, string> = {
   "plans.frequencyLabel": "Frecuencia",
   "plans.idealLabel": "Ideal para",
   "plans.subscribe": "Suscribirme ahora",
+
+  // Products
+  "products.title": "Nuestra Colección de Café",
+  "products.subtitle": "Selecciona tu perfil favorito y personaliza tu experiencia.",
+  "products.weightLabel": "Peso",
+  "products.grindLabel": "Tipo de Molienda",
+  "products.grindLevelLabel": "Nivel de Molienda",
+  "products.addToCart": "Añadir al Carrito",
+  "products.addedToCart": "¡Añadido!",
+  "products.wholeBean": "Grano Entero",
+  "products.ground": "Molido",
+
+  "products.grind.espresso": "Espresso (Fina)",
+  "products.grind.drip": "Filtro / Drip (Media)",
+  "products.grind.frenchPress": "Prensa Francesa (Gruesa)",
+
+  "products.firmaTitle": "Firma Amantti",
+  "products.firmaDesc": "Nuestra mezcla de la casa, balanceada y constante. Un tributo al perfil clásico colombiano.",
+  "products.firmaProfile": "Chocolate, Caramelo y Naranja",
+
+  "products.honeyTitle": "Honey Process Limitado",
+  "products.honeyDesc": "Exótico y dulce. Este proceso conserva el mucílago de la cereza para un sabor frutal distintivo.",
+  "products.honeyProfile": "Frutos Rojos, Miel y Floral",
+
+  "products.microlotTitle": "Microlote del Mes",
+  "products.microlotDesc": "La joya de la corona. Pequeños lotes de variedades experimentales y fermentaciones únicas.",
+  "products.microlotProfile": "Complejo, Brillante e Irrepetible",
 };

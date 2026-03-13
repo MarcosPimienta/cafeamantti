@@ -100,6 +100,33 @@ export const en = {
   "plans.frequencyLabel": "Frequency",
   "plans.idealLabel": "Ideal for",
   "plans.subscribe": "Subscribe now",
+
+  // Products
+  "products.title": "Our Coffee Collection",
+  "products.subtitle": "Select your favorite profile and customize your experience.",
+  "products.weightLabel": "Weight",
+  "products.grindLabel": "Grind Type",
+  "products.grindLevelLabel": "Grind Level",
+  "products.addToCart": "Add to Cart",
+  "products.addedToCart": "Added!",
+  "products.wholeBean": "Whole Bean",
+  "products.ground": "Ground",
+
+  "products.grind.espresso": "Espresso (Fine)",
+  "products.grind.drip": "Drip / Filter (Medium)",
+  "products.grind.frenchPress": "French Press (Coarse)",
+
+  "products.firmaTitle": "Amantti Signature",
+  "products.firmaDesc": "Our house blend, balanced and consistent. A tribute to the classic Colombian profile.",
+  "products.firmaProfile": "Chocolate, Caramel & Orange",
+  
+  "products.honeyTitle": "Honey Process Limited",
+  "products.honeyDesc": "Exotic and sweet. This process preserves the coffee cherry's mucilage for a distinct fruity flavor.",
+  "products.honeyProfile": "Red Fruits, Honey & Floral",
+
+  "products.microlotTitle": "Monthly Microlot",
+  "products.microlotDesc": "The crown jewel. Small batches of experimental varietals and unique fermentations.",
+  "products.microlotProfile": "Complex, Bright & Unrepeatable",
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -20,8 +20,172 @@ import {
   Send,
   Menu,
   X,
+  Plus,
+  Check,
+  Truck,
+  Leaf,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
+
+
+interface ProductCardProps {
+  id: string;
+  titleKey: string;
+  descKey: string;
+  profileKey: string;
+  basePrice: number;
+  imageSrc: string;
+  t: (key: any) => string;
+}
+
+function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t }: ProductCardProps) {
+  const [weight, setWeight] = useState("250g");
+  const [isGround, setIsGround] = useState(false);
+  const [grindLevel, setGrindLevel] = useState("drip");
+  const [isAdding, setIsAdding] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const handleAddToCart = () => {
+    setIsAdding(true);
+    setTimeout(() => {
+      setIsAdding(false);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2000);
+    }, 800);
+  };
+
+  const getPrice = () => {
+    const multiplier = weight === "250g" ? 1 : weight === "500g" ? 1.8 : 3.2;
+    const price = basePrice * multiplier;
+    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(price);
+  };
+
+  return (
+    <div className="group relative bg-white border border-foreground/5 rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 flex flex-col">
+      {/* Product Image */}
+      <div className="relative h-64 bg-[#f9f7f2] flex items-center justify-center p-8 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+        <div className="relative w-48 h-full transition-transform duration-700 group-hover:scale-110 group-hover:rotate-2">
+          <Image
+            src={imageSrc}
+            alt={t(titleKey)}
+            fill
+            className="object-contain drop-shadow-2xl"
+          />
+        </div>
+        {id === "microlot" && (
+          <div className="absolute top-4 left-4">
+            <span className="bg-[#C59F59] text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-lg">Limited Edition</span>
+          </div>
+        )}
+      </div>
+      <div className="p-8 flex flex-col flex-1">
+        <div className="mb-6">
+          <h3 suppressHydrationWarning className="text-2xl font-serif mb-2 group-hover:text-[#C59F59] transition-colors">{t(titleKey)}</h3>
+          <p suppressHydrationWarning className="text-foreground/60 text-sm leading-relaxed mb-4 line-clamp-2">{t(descKey)}</p>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#C59F59]/80">
+            <Leaf className="w-3 h-3" />
+            <span suppressHydrationWarning>{t(profileKey)}</span>
+          </div>
+        </div>
+
+        <div className="space-y-6 mt-auto">
+          {/* Weight Selection */}
+          <div className="space-y-3">
+            <label suppressHydrationWarning className="text-[10px] font-bold uppercase tracking-tighter text-foreground/40">{t("products.weightLabel")}</label>
+            <div className="grid grid-cols-3 gap-2">
+              {["250g", "500g", "1kg"].map((w) => (
+                <button
+                  key={w}
+                  suppressHydrationWarning
+                  onClick={() => setWeight(w)}
+                  className={`py-2 text-xs font-medium rounded-lg border transition-all ${
+                    weight === w 
+                      ? "bg-[#C59F59] border-[#C59F59] text-white shadow-md shadow-[#C59F59]/20" 
+                      : "bg-transparent border-foreground/10 text-foreground/60 hover:border-[#C59F59]/40 hover:text-[#C59F59]"
+                  }`}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Grind Toggle */}
+          <div className="space-y-3">
+            <label suppressHydrationWarning className="text-[10px] font-bold uppercase tracking-tighter text-foreground/40">{t("products.grindLabel")}</label>
+            <div className="flex p-1 bg-foreground/5 rounded-xl">
+              <button
+                suppressHydrationWarning
+                onClick={() => setIsGround(false)}
+                className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+                  !isGround ? "bg-white text-foreground shadow-sm" : "text-foreground/40 hover:text-foreground/60"
+                }`}
+              >
+                {t("products.wholeBean")}
+              </button>
+              <button
+                suppressHydrationWarning
+                onClick={() => setIsGround(true)}
+                className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+                  isGround ? "bg-white text-foreground shadow-sm" : "text-foreground/40 hover:text-foreground/60"
+                }`}
+              >
+                {t("products.ground")}
+              </button>
+            </div>
+          </div>
+
+          {/* Grind Level (Animated) */}
+          <div className={`space-y-3 transition-all duration-300 ${isGround ? "opacity-100 max-h-24" : "opacity-0 max-h-0 overflow-hidden"}`}>
+            <label suppressHydrationWarning className="text-[10px] font-bold uppercase tracking-tighter text-foreground/40">{t("products.grindLevelLabel")}</label>
+            <select
+              value={grindLevel}
+              suppressHydrationWarning
+              onChange={(e) => setGrindLevel(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-foreground/10 bg-transparent focus:outline-none focus:border-[#C59F59]"
+            >
+              <option suppressHydrationWarning value="espresso">{t("products.grind.espresso")}</option>
+              <option suppressHydrationWarning value="drip">{t("products.grind.drip")}</option>
+              <option suppressHydrationWarning value="french">{t("products.grind.frenchPress")}</option>
+            </select>
+          </div>
+
+          {/* Price and Add Button */}
+          <div className="pt-6 border-t border-foreground/5 flex items-center justify-between">
+            <div className="flex flex-col">
+              <span suppressHydrationWarning className="text-2xl font-serif text-[#C59F59]">{getPrice()}</span>
+            </div>
+            <button
+              onClick={handleAddToCart}
+              suppressHydrationWarning
+              disabled={isAdding}
+              className={`relative px-6 py-3 rounded-xl font-medium text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden ${
+                showSuccess 
+                  ? "bg-green-500 text-white" 
+                  : "bg-foreground text-background hover:bg-[#C59F59] hover:text-white"
+              }`}
+            >
+              {isAdding ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : showSuccess ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span suppressHydrationWarning>{t("products.addedToCart")}</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  <span suppressHydrationWarning>{t("products.addToCart")}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const { t, locale, setLocale } = useLanguage();
@@ -512,6 +676,78 @@ export default function Home() {
           {/* Decorative elements */}
           <div className="absolute top-1/2 left-0 w-64 h-64 bg-[#C59F59]/5 rounded-full blur-3xl -translate-x-1/2"></div>
           <div className="absolute bottom-0 right-0 w-96 h-96 bg-[#C59F59]/5 rounded-full blur-3xl translate-x-1/4 translate-y-1/4"></div>
+        </section>
+
+        {/* Individual Products Section */}
+        <section className="py-24 bg-[#fdfbf7] relative" id="tienda">
+          <div className="container mx-auto px-6 max-w-7xl relative z-10">
+            <div className="text-center mb-16">
+              <h2 suppressHydrationWarning className="text-4xl md:text-5xl font-serif text-foreground mb-6">
+                {t("products.title")}
+              </h2>
+              <p suppressHydrationWarning className="text-foreground/60 text-lg max-w-2xl mx-auto">
+                {t("products.subtitle")}
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <ProductCard
+                id="firma"
+                titleKey="products.firmaTitle"
+                descKey="products.firmaDesc"
+                profileKey="products.firmaProfile"
+                basePrice={35000}
+                imageSrc="/images/Amantti_Coffee_Bag.png"
+                t={t}
+              />
+              <ProductCard
+                id="honey"
+                titleKey="products.honeyTitle"
+                descKey="products.honeyDesc"
+                profileKey="products.honeyProfile"
+                basePrice={48000}
+                imageSrc="/images/Amantti_Coffee_Bag.png"
+                t={t}
+              />
+              <ProductCard
+                id="microlot"
+                titleKey="products.microlotTitle"
+                descKey="products.microlotDesc"
+                profileKey="products.microlotProfile"
+                basePrice={65000}
+                imageSrc="/images/Amantti_Coffee_Bag.png"
+                t={t}
+              />
+            </div>
+
+            {/* Quick Benefits */}
+            <div className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8 py-10 border-t border-foreground/5">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                  <Truck className="w-6 h-6 text-[#C59F59]" />
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider text-foreground/40">Envío Nacional</span>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                  <Coffee className="w-6 h-6 text-[#C59F59]" />
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider text-foreground/40">Recién Tostado</span>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                  <Check className="w-6 h-6 text-[#C59F59]" />
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider text-foreground/40">Calidad Premium</span>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                  <Leaf className="w-6 h-6 text-[#C59F59]" />
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider text-foreground/40">Origen Único</span>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* Contact Form Section - Split Layout */}
