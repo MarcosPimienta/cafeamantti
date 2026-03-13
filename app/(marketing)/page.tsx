@@ -194,7 +194,7 @@ export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans text-foreground overflow-x-hidden">
       {/* Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-foreground/5 bg-background/95 backdrop-blur">
+      <header className="fixed top-0 left-0 z-50 w-full border-b border-foreground/5 bg-background/95 backdrop-blur">
         <div className="container mx-auto px-6 h-20 flex items-center justify-between">
           <Link href="/" className="flex items-center">
             <span className="font-bodoni italic text-3xl font-bold tracking-tight">
@@ -349,7 +349,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1 pt-20">
         {/* Hero Section */}
         <section className="relative w-full h-[500px] flex items-center overflow-hidden">
           {/* Background Image Placeholder */}
