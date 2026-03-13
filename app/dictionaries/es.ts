@@ -2,7 +2,7 @@ import type { TranslationKey } from "./en";
 
 export const es: Record<TranslationKey, string> = {
   // Nav
-
+  "nav.ourStory": "Nuestra Historia",
   "nav.subscriptions": "Suscripciones",
   "nav.services": "Servicios",
   "nav.shop": "Tienda",
@@ -13,7 +13,6 @@ export const es: Record<TranslationKey, string> = {
   "hero.tagline": "Pasión y tradición en cada taza.",
   "hero.cta": "Suscríbete Ahora",
 
-<<<<<<< HEAD
   // Story
   "story.title": "Inspirados por las raíces, impulsados por la pasión",
   "story.content": "Amantti nace como un homenaje a Luis Ospina, fundador y apasionado del café. Hoy continuamos su legado cultivando y seleccionando cafés colombianos con respeto por la tierra, las personas y la tradición cafetera.",
@@ -23,9 +22,6 @@ export const es: Record<TranslationKey, string> = {
   "story.passionDesc": "Amamos lo que hacemos y lo reflejamos en cada etapa, desde el grano hasta la taza.",
   "story.sustainabilityTitle": "Sostenibilidad",
   "story.sustainabilityDesc": "Cuidamos de nuestra tierra y de quienes la cultivan, porque creemos en un café con propósito.",
-=======
-
->>>>>>> b05e890e71212fe4799a846d453a398ea04e4bea
 
   // Services
   "services.title": "Más Que Solo Café",
