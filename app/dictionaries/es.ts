@@ -70,4 +70,36 @@ export const es: Record<TranslationKey, string> = {
   "contact.messagePlaceholder": "Cuéntanos sobre tu negocio y cómo podemos ayudarte...",
   "contact.submit": "Enviar Mensaje",
   "contact.whatsapp": "O escríbenos por WhatsApp",
+
+  // Subscription Plans
+  "plans.title": "Nuestros Planes de Suscripción",
+  "plans.essentialTitle": "Plan Devoción Esencial",
+  "plans.essentialSubtitle": "Anteriormente: Ritual Diario",
+  "plans.essentialQuote": "\"Para quien entiende que el primer café no es una rutina, sino un contrato con uno mismo.\"",
+  "plans.essentialContent": "250g o 500g de nuestra Firma Amantti (Perfil balanceado y constante).",
+  "plans.essentialDifference": "Acceso a la \"Bitácora de Tueste\" (notas digitales sobre el lote específico de la semana).",
+  "plans.essentialFrequency": "Quincenal o Mensual (Tú eliges el ritmo de tu ritual).",
+  "plans.essentialIdeal": "El purista que busca la perfección en la consistencia.",
+
+  "plans.alchemyTitle": "Plan Alquimia & Contraste",
+  "plans.alchemySubtitle": "Anteriormente: Plan Explorador",
+  "plans.alchemyQuote": "\"Un diálogo entre la tradición de nuestra firma y la complejidad de los procesos Honey.\"",
+  "plans.alchemyContent": "250g Amantti Premium + 250g Honey de Edición Limitada.",
+  "plans.alchemyDifference": "Incluye una \"Ficha de Cata Técnica\" para aprender a diferenciar notas frutales y procesos de fermentación.",
+  "plans.alchemyFrequency": "Mensual.",
+  "plans.alchemyIdeal": "Parejas o entusiastas que ven el café como un tema de conversación, no solo una bebida.",
+
+  "plans.curatorTitle": "Plan Curaduría Privada (The Curator’s Choice)",
+  "plans.curatorSubtitle": "Anteriormente: Plan Experiencia Especial",
+  "plans.curatorQuote": "\"Acceso total al inventario privado de Amantti. Reservado para quienes buscan lo irrepetible.\"",
+  "plans.curatorContent": "El dúo clásico (Premium + Honey) + El Microlote del Mes (Varietales exóticos como Geisha, Borbón Rosado o procesos experimentales).",
+  "plans.curatorDifference": "Envío prioritario de los lotes más escasos del año e invitación a una sesión de cata virtual privada con el tostador cada trimestre.",
+  "plans.curatorFrequency": "Mensual.",
+  "plans.curatorIdeal": "Coleccionistas de sabores y conocedores que exigen lo que el mercado masivo no puede ver.",
+  
+  "plans.contentLabel": "Contenido",
+  "plans.differenceLabel": "La Diferencia",
+  "plans.frequencyLabel": "Frecuencia",
+  "plans.idealLabel": "Ideal para",
+  "plans.subscribe": "Suscribirme ahora",
 };

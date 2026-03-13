@@ -25,20 +25,7 @@ import { useLanguage } from "@/app/context/LanguageContext";
 
 export default function Home() {
   const { t, locale, setLocale } = useLanguage();
-  const [grind, setGrind] = useState<"grain" | "grinded">("grain");
-  const [frequency, setFrequency] = useState<"weekly" | "biWeekly" | "monthly">(
-    "biWeekly"
-  );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Map internal state keys to translation keys for display
-  const grindLabel = grind === "grain" ? t("builder.grain") : t("builder.grinded");
-  const frequencyLabel =
-    frequency === "weekly"
-      ? t("builder.weekly")
-      : frequency === "biWeekly"
-        ? t("builder.biWeekly")
-        : t("builder.monthly");
 
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans text-foreground overflow-x-hidden">
@@ -326,174 +313,205 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Subscription Builder Section */}
-        <section className="py-20 bg-background relative" id="suscripciones">
-          <div className="container mx-auto px-6 max-w-6xl relative z-10">
-            <h2 className="text-4xl font-serif text-foreground mb-12">
-              {t("builder.title")}
-            </h2>
+        {/* Subscription Plans Section */}
+        <section className="py-24 bg-background relative overflow-hidden" id="suscripciones">
+          <div className="container mx-auto px-6 max-w-7xl relative z-10">
+            <div className="text-center mb-20">
+              <h2 suppressHydrationWarning className="text-4xl md:text-6xl font-serif text-foreground mb-6">
+                {t("plans.title")}
+              </h2>
+              <div className="w-24 h-1 bg-[#C59F59] mx-auto mb-8"></div>
+            </div>
 
-            <div className="grid lg:grid-cols-3 gap-12 lg:gap-8 border-b border-foreground/10 pb-16">
-              {/* Step 1: Coffee */}
-              <div className="flex flex-col">
-                <h3 className="text-xl font-medium mb-6">{t("builder.step1")}</h3>
-                <div className="border-2 border-[#C59F59] rounded-2xl p-6 bg-white shadow-sm flex flex-col relative overflow-hidden">
-                  <div className="w-full h-64 bg-zinc-100 rounded-xl mb-6 flex items-center justify-center overflow-hidden relative">
+            <div className="grid lg:grid-cols-3 gap-8">
+              {/* Plan I: Devoción Esencial */}
+              <div className="group relative bg-white border border-foreground/5 rounded-3xl p-8 shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 flex flex-col overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Coffee className="w-24 h-24 rotate-12" />
+                </div>
+                
+                {/* Visual Representation of Plan */}
+                <div className="relative w-full h-40 mb-6 flex items-center justify-center">
+                  <div className="relative w-32 h-full transition-transform duration-500 group-hover:scale-110">
                     <Image
                       src="/images/Amantti_Coffee_Bag.png"
-                      alt="Amantti Premium Blend Coffee Bag"
+                      alt="Amantti Essential Bag"
                       fill
-                      className="object-contain p-4"
+                      className="object-contain drop-shadow-xl"
                     />
-                  </div>
-
-                  <div className="space-y-2 mb-6 text-sm">
-                    <div className="grid grid-cols-[80px_1fr] gap-2">
-                      <span className="font-bold">{t("builder.variety")}</span>
-                      <span className="text-foreground/80">
-                        {t("builder.varietyValue")}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-[80px_1fr] gap-2">
-                      <span className="font-bold">{t("builder.profile")}</span>
-                      <span className="text-foreground/80">
-                        {t("builder.profileValue")}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-[80px_1fr] gap-2">
-                      <span className="font-bold">{t("builder.altitude")}</span>
-                      <span className="text-foreground/80">{t("builder.altitudeValue")}</span>
-                    </div>
-                    <div className="grid grid-cols-[80px_1fr] gap-2">
-                      <span className="font-bold">{t("builder.notes")}</span>
-                      <span className="text-foreground/80 leading-tight">
-                        {t("builder.notesValue")}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-auto flex gap-4 pt-4 border-t border-foreground/10 justify-center">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="grind"
-                        value="grain"
-                        checked={grind === "grain"}
-                        onChange={() => setGrind("grain")}
-                        className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
-                        suppressHydrationWarning
-                      />
-                      <span className="text-sm font-medium">{t("builder.grain")}</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="grind"
-                        value="grinded"
-                        checked={grind === "grinded"}
-                        onChange={() => setGrind("grinded")}
-                        className="w-4 h-4 text-[#C59F59] focus:ring-[#C59F59]"
-                        suppressHydrationWarning
-                      />
-                      <span className="text-sm font-medium">{t("builder.grinded")}</span>
-                    </label>
                   </div>
                 </div>
-              </div>
 
-              {/* Step 2: Frequency */}
-              <div className="flex flex-col">
-                <h3 className="text-xl font-medium mb-6">
-                  {t("builder.step2")}
-                </h3>
-                <div className="flex flex-col sm:flex-row lg:flex-col gap-4">
-                  {/* Option 1 */}
-                  <button
-                    onClick={() => setFrequency("weekly")}
-                    suppressHydrationWarning
-                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "weekly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
-                  >
-                    <Calendar
-                      className={`w-10 h-10 mb-3 ${frequency === "weekly" ? "text-[#C59F59]" : "text-foreground/70"}`}
-                      strokeWidth={1.5}
-                    />
-                    <span className="font-medium text-sm">{t("builder.weekly")}</span>
-                  </button>
-
-                  {/* Option 2 */}
-                  <button
-                    onClick={() => setFrequency("biWeekly")}
-                    suppressHydrationWarning
-                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "biWeekly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
-                  >
-                    <CalendarClock
-                      className={`w-10 h-10 mb-3 ${frequency === "biWeekly" ? "text-[#C59F59]" : "text-foreground/70"}`}
-                      strokeWidth={1.5}
-                    />
-                    <span className="font-medium text-sm">{t("builder.biWeekly")}</span>
-                    <span className="text-[10px] text-foreground/60 mt-1">
-                      {t("builder.recommended")}
-                    </span>
-                  </button>
-
-                  {/* Option 3 */}
-                  <button
-                    onClick={() => setFrequency("monthly")}
-                    suppressHydrationWarning
-                    className={`flex-1 lg:flex-none flex flex-col items-center justify-center p-6 rounded-xl transition-all ${frequency === "monthly" ? "border-2 border-[#C59F59] bg-[#C59F59]/5 shadow-sm relative overflow-hidden" : "border border-foreground/20 hover:border-[#C59F59] bg-white"}`}
-                  >
-                    <CalendarDays
-                      className={`w-10 h-10 mb-3 ${frequency === "monthly" ? "text-[#C59F59]" : "text-foreground/70"}`}
-                      strokeWidth={1.5}
-                    />
-                    <span className="font-medium text-sm">{t("builder.monthly")}</span>
-                  </button>
+                <div className="mb-8">
+                  <span className="text-[#C59F59] font-bold text-sm tracking-widest uppercase mb-2 block">Plan I</span>
+                  <h3 suppressHydrationWarning className="text-3xl font-serif mb-2">{t("plans.essentialTitle")}</h3>
+                  <p suppressHydrationWarning className="text-foreground/40 text-sm italic mb-6">{t("plans.essentialSubtitle")}</p>
+                  <p suppressHydrationWarning className="text-lg font-bodoni italic text-foreground/80 leading-relaxed border-l-2 border-[#C59F59] pl-4">
+                    {t("plans.essentialQuote")}
+                  </p>
                 </div>
-              </div>
 
-              {/* Step 3: Summary */}
-              <div className="flex flex-col">
-                <h3 className="text-xl font-medium mb-6">
-                  {t("builder.step3")}
-                </h3>
-                <div className="border border-foreground/20 rounded-2xl p-8 bg-[#fbf9f4] shadow-sm flex flex-col h-full min-h-[300px]">
-                  <div className="mb-8">
-                    <h4 className="font-bold text-lg mb-1">
-                      {t("builder.premiumCoffee")} –{" "}
-                      {grind === "grain" ? t("builder.wholeBean") : t("builder.ground")}
-                    </h4>
-                    <p className="text-foreground/70 text-sm mb-6">
-                      {frequencyLabel} · {t("builder.delivery")}
+                <div className="space-y-6 mb-10 flex-1">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.contentLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.essentialContent")}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.differenceLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.essentialDifference")}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.frequencyLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.essentialFrequency")}</p>
+                  </div>
+                  <div className="pt-4 border-t border-foreground/5">
+                    <p className="text-sm font-medium text-foreground/50">
+                      <span className="text-foreground/80 italic">{t("plans.idealLabel")}:</span> {t("plans.essentialIdeal")}
                     </p>
-
-                    <div className="flex justify-between items-center text-sm border-t border-foreground/10 pt-4 mb-2">
-                      <span className="text-foreground/80">
-                        {t("builder.priceLabel")}
-                      </span>
-                      <span className="font-bold text-base">$X.XX</span>
-                    </div>
                   </div>
-
-                  <button
-                    suppressHydrationWarning
-                    className="w-full py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all shadow-md mt-auto text-lg flex items-center justify-center gap-2"
-                  >
-                    {t("builder.completeSub")}
-                  </button>
                 </div>
+
+                <button 
+                  suppressHydrationWarning
+                  className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl"
+                >
+                  {t("plans.subscribe")}
+                </button>
+              </div>
+
+              {/* Plan II: Alquimia & Contraste */}
+              <div className="group relative bg-[#FDFBF7] border-2 border-[#C59F59] rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 flex flex-col overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <span className="bg-[#C59F59] text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-tighter">Popular</span>
+                </div>
+
+                {/* Visual Representation of Plan */}
+                <div className="relative w-full h-40 mb-6 flex items-center justify-center">
+                  <div className="relative w-40 h-full transition-transform duration-500 group-hover:scale-110">
+                    <Image
+                      src="/images/Amantti_Coffee_Bag.png"
+                      alt="Amantti Premium Bag"
+                      fill
+                      className="object-contain drop-shadow-xl -rotate-6 -translate-x-4"
+                    />
+                    <Image
+                      src="/images/Amantti_Coffee_Bag.png"
+                      alt="Amantti Honey Bag"
+                      fill
+                      className="object-contain drop-shadow-2xl rotate-6 translate-x-4 mix-blend-multiply"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-8">
+                  <span className="text-[#C59F59] font-bold text-sm tracking-widest uppercase mb-2 block">Plan II</span>
+                  <h3 suppressHydrationWarning className="text-3xl font-serif mb-2">{t("plans.alchemyTitle")}</h3>
+                  <p suppressHydrationWarning className="text-foreground/40 text-sm italic mb-6">{t("plans.alchemySubtitle")}</p>
+                  <p suppressHydrationWarning className="text-lg font-bodoni italic text-foreground/80 leading-relaxed border-l-2 border-[#C59F59] pl-4">
+                    {t("plans.alchemyQuote")}
+                  </p>
+                </div>
+
+                <div className="space-y-6 mb-10 flex-1">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.contentLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.alchemyContent")}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.differenceLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.alchemyDifference")}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.frequencyLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.alchemyFrequency")}</p>
+                  </div>
+                  <div className="pt-4 border-t border-foreground/5">
+                    <p className="text-sm font-medium text-foreground/50">
+                      <span className="text-foreground/80 italic">{t("plans.idealLabel")}:</span> {t("plans.alchemyIdeal")}
+                    </p>
+                  </div>
+                </div>
+
+                <button 
+                  suppressHydrationWarning
+                  className="w-full py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl scale-105"
+                >
+                  {t("plans.subscribe")}
+                </button>
+              </div>
+
+              {/* Plan III: Curaduría Privada */}
+              <div className="group relative bg-[#1a1a1a] border border-white/5 rounded-3xl p-8 shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 flex flex-col overflow-hidden text-white">
+                <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+                  <CalendarClock className="w-24 h-24 -rotate-12 text-[#C59F59]" />
+                </div>
+
+                {/* Visual Representation of Plan */}
+                <div className="relative w-full h-40 mb-6 flex items-center justify-center">
+                  <div className="relative w-48 h-full transition-transform duration-500 group-hover:scale-110">
+                    <Image
+                      src="/images/Amantti_Coffee_Bag.png"
+                      alt="Amantti Bag 1"
+                      fill
+                      className="object-contain drop-shadow-xl -rotate-12 -translate-x-8 opacity-60"
+                    />
+                    <Image
+                      src="/images/Amantti_Coffee_Bag.png"
+                      alt="Amantti Bag 2"
+                      fill
+                      className="object-contain drop-shadow-xl rotate-12 translate-x-8 opacity-60"
+                    />
+                    <Image
+                      src="/images/Amantti_Coffee_Bag.png"
+                      alt="Amantti Microlot Bag"
+                      fill
+                      className="object-contain drop-shadow-2xl scale-110 brightness-110"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-8">
+                  <span className="text-[#C59F59] font-bold text-sm tracking-widest uppercase mb-2 block tracking-[0.2em]">Exclusivo</span>
+                  <h3 suppressHydrationWarning className="text-3xl font-serif mb-2">{t("plans.curatorTitle")}</h3>
+                  <p suppressHydrationWarning className="text-white/40 text-sm italic mb-6">{t("plans.curatorSubtitle")}</p>
+                  <p suppressHydrationWarning className="text-lg font-bodoni italic text-white/80 leading-relaxed border-l-2 border-[#C59F59] pl-4">
+                    {t("plans.curatorQuote")}
+                  </p>
+                </div>
+
+                <div className="space-y-6 mb-10 flex-1">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.contentLabel")}</h4>
+                    <p className="text-white/70">{t("plans.curatorContent")}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.differenceLabel")}</h4>
+                    <p className="text-white/70">{t("plans.curatorDifference")}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.frequencyLabel")}</h4>
+                    <p className="text-white/70">{t("plans.curatorFrequency")}</p>
+                  </div>
+                  <div className="pt-4 border-t border-white/10">
+                    <p className="text-sm font-medium text-white/50">
+                      <span className="text-white/80 italic">{t("plans.idealLabel")}:</span> {t("plans.curatorIdeal")}
+                    </p>
+                  </div>
+                </div>
+
+                <button 
+                  suppressHydrationWarning
+                  className="w-full py-4 bg-white text-black hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl"
+                >
+                  {t("plans.subscribe")}
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Decorative Plant Graphics (Bottom Left/Right placeholders) */}
-          <div
-            className="absolute bottom-0 left-0 opacity-20 pointer-events-none w-80 h-80 bg-no-repeat bg-bottom bg-contain"
-            style={{ backgroundImage: "url('/images/branch-left.png')" }}
-          />
-          <div
-            className="absolute bottom-0 right-0 opacity-20 pointer-events-none w-80 h-80 bg-no-repeat bg-bottom bg-contain"
-            style={{ backgroundImage: "url('/images/branch-right.png')" }}
-          />
+          {/* Decorative elements */}
+          <div className="absolute top-1/2 left-0 w-64 h-64 bg-[#C59F59]/5 rounded-full blur-3xl -translate-x-1/2"></div>
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-[#C59F59]/5 rounded-full blur-3xl translate-x-1/4 translate-y-1/4"></div>
         </section>
 
         {/* Contact Form Section - Split Layout */}
