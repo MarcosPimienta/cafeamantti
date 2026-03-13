@@ -498,8 +498,8 @@ export default function Home() {
                 <div className="relative w-full h-40 mb-6 flex items-center justify-center">
                   <div className="relative w-32 h-full transition-transform duration-500 group-hover:scale-110">
                     <Image
-                      src="/images/Amantti_Coffee_Bag.png"
-                      alt="Amantti Essential Bag"
+                      src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                      alt="Amantti Traditional Bag"
                       fill
                       className="object-contain drop-shadow-xl"
                     />
@@ -553,13 +553,13 @@ export default function Home() {
                 <div className="relative w-full h-40 mb-6 flex items-center justify-center">
                   <div className="relative w-40 h-full transition-transform duration-500 group-hover:scale-110">
                     <Image
-                      src="/images/Amantti_Coffee_Bag.png"
-                      alt="Amantti Premium Bag"
+                      src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                      alt="Amantti Traditional Bag"
                       fill
                       className="object-contain drop-shadow-lg -rotate-12 -translate-x-6 translate-y-2 opacity-90"
                     />
                     <Image
-                      src="/images/Amantti_Coffee_Bag.png"
+                      src="/images/Front_White_Honey_Coffee_Bag.png"
                       alt="Amantti Honey Bag"
                       fill
                       className="object-contain drop-shadow-2xl rotate-6 translate-x-6 -translate-y-1"
@@ -614,14 +614,14 @@ export default function Home() {
                 <div className="relative w-full h-40 mb-6 flex items-center justify-center">
                   <div className="relative w-48 h-full transition-transform duration-500 group-hover:scale-110">
                     <Image
-                      src="/images/Amantti_Coffee_Bag.png"
-                      alt="Amantti Bag 1"
+                      src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                      alt="Amantti Traditional Bag"
                       fill
                       className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-12 translate-y-4 opacity-40 blur-[1px]"
                     />
                     <Image
-                      src="/images/Amantti_Coffee_Bag.png"
-                      alt="Amantti Bag 2"
+                      src="/images/Front_White_Honey_Coffee_Bag.png"
+                      alt="Amantti Honey Bag"
                       fill
                       className="object-contain drop-shadow-xl rotate-[20deg] translate-x-12 translate-y-4 opacity-40 blur-[1px]"
                     />
@@ -697,7 +697,7 @@ export default function Home() {
                 descKey="products.firmaDesc"
                 profileKey="products.firmaProfile"
                 basePrice={35000}
-                imageSrc="/images/Amantti_Coffee_Bag.png"
+                imageSrc="/images/Front_Paper_Traditional_Coffee_Bag.png"
                 t={t}
               />
               <ProductCard
@@ -706,7 +706,7 @@ export default function Home() {
                 descKey="products.honeyDesc"
                 profileKey="products.honeyProfile"
                 basePrice={48000}
-                imageSrc="/images/Amantti_Coffee_Bag.png"
+                imageSrc="/images/Front_White_Honey_Coffee_Bag.png"
                 t={t}
               />
               <ProductCard
