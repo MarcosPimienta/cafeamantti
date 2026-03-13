@@ -617,13 +617,13 @@ export default function Home() {
                       src="/images/Front_Paper_Traditional_Coffee_Bag.png"
                       alt="Amantti Traditional Bag"
                       fill
-                      className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-12 translate-y-4 opacity-40 blur-[1px]"
+                      className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-12 translate-y-4 opacity-80"
                     />
                     <Image
                       src="/images/Front_White_Honey_Coffee_Bag.png"
                       alt="Amantti Honey Bag"
                       fill
-                      className="object-contain drop-shadow-xl rotate-[20deg] translate-x-12 translate-y-4 opacity-40 blur-[1px]"
+                      className="object-contain drop-shadow-xl rotate-[20deg] translate-x-12 translate-y-4 opacity-80"
                     />
                     <Image
                       src="/images/Amantti_Coffee_Bag.png"
