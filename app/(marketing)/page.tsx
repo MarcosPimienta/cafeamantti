@@ -392,13 +392,13 @@ export default function Home() {
                       src="/images/Amantti_Coffee_Bag.png"
                       alt="Amantti Premium Bag"
                       fill
-                      className="object-contain drop-shadow-xl -rotate-6 -translate-x-4"
+                      className="object-contain drop-shadow-lg -rotate-12 -translate-x-6 translate-y-2 opacity-90"
                     />
                     <Image
                       src="/images/Amantti_Coffee_Bag.png"
                       alt="Amantti Honey Bag"
                       fill
-                      className="object-contain drop-shadow-2xl rotate-6 translate-x-4 mix-blend-multiply"
+                      className="object-contain drop-shadow-2xl rotate-6 translate-x-6 -translate-y-1"
                     />
                   </div>
                 </div>
@@ -453,19 +453,19 @@ export default function Home() {
                       src="/images/Amantti_Coffee_Bag.png"
                       alt="Amantti Bag 1"
                       fill
-                      className="object-contain drop-shadow-xl -rotate-12 -translate-x-8 opacity-60"
+                      className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-12 translate-y-4 opacity-40 blur-[1px]"
                     />
                     <Image
                       src="/images/Amantti_Coffee_Bag.png"
                       alt="Amantti Bag 2"
                       fill
-                      className="object-contain drop-shadow-xl rotate-12 translate-x-8 opacity-60"
+                      className="object-contain drop-shadow-xl rotate-[20deg] translate-x-12 translate-y-4 opacity-40 blur-[1px]"
                     />
                     <Image
                       src="/images/Amantti_Coffee_Bag.png"
                       alt="Amantti Microlot Bag"
                       fill
-                      className="object-contain drop-shadow-2xl scale-110 brightness-110"
+                      className="object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.4)] scale-110 brightness-110 z-10"
                     />
                   </div>
                 </div>
