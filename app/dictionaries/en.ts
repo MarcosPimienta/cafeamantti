@@ -74,7 +74,7 @@ export const en = {
   "plans.essentialTitle": "Essential Devotion Plan",
   "plans.essentialSubtitle": "Formerly: Daily Ritual",
   "plans.essentialQuote": "\"For those who understand that the first coffee is not a routine, but a contract with oneself.\"",
-  "plans.essentialContent": "250g or 500g of our Amantti Signature (Balanced and consistent profile).",
+  "plans.essentialContent": "250g or 500g of our Amantti Selection (Balanced and consistent profile).",
   "plans.essentialDifference": "Access to the \"Roast Log\" (digital notes on the specific batch of the week).",
   "plans.essentialFrequency": "Bi-weekly or Monthly (You choose the rhythm of your ritual).",
   "plans.essentialIdeal": "The purist seeking perfection in consistency.",
@@ -116,7 +116,7 @@ export const en = {
   "products.grind.drip": "Drip / Filter (Medium)",
   "products.grind.frenchPress": "French Press (Coarse)",
 
-  "products.firmaTitle": "Amantti Signature",
+  "products.firmaTitle": "Amantti Selection",
   "products.firmaDesc": "Our house blend, balanced and consistent. A tribute to the classic Colombian profile.",
   "products.firmaProfile": "Chocolate, Caramel & Orange",
   

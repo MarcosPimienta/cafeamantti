@@ -76,7 +76,7 @@ export const es: Record<TranslationKey, string> = {
   "plans.essentialTitle": "Plan Devoción Esencial",
   "plans.essentialSubtitle": "Anteriormente: Ritual Diario",
   "plans.essentialQuote": "\"Para quien entiende que el primer café no es una rutina, sino un contrato con uno mismo.\"",
-  "plans.essentialContent": "250g o 500g de nuestra Firma Amantti (Perfil balanceado y constante).",
+  "plans.essentialContent": "250g o 500g de nuestra Selección Amantti (Perfil balanceado y constante).",
   "plans.essentialDifference": "Acceso a la \"Bitácora de Tueste\" (notas digitales sobre el lote específico de la semana).",
   "plans.essentialFrequency": "Quincenal o Mensual (Tú eliges el ritmo de tu ritual).",
   "plans.essentialIdeal": "El purista que busca la perfección en la consistencia.",
@@ -118,7 +118,7 @@ export const es: Record<TranslationKey, string> = {
   "products.grind.drip": "Filtro / Drip (Media)",
   "products.grind.frenchPress": "Prensa Francesa (Gruesa)",
 
-  "products.firmaTitle": "Firma Amantti",
+  "products.firmaTitle": "Selección Amantti",
   "products.firmaDesc": "Nuestra mezcla de la casa, balanceada y constante. Un tributo al perfil clásico colombiano.",
   "products.firmaProfile": "Chocolate, Caramelo y Naranja",
 
