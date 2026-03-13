@@ -15,7 +15,7 @@ export const es: Record<TranslationKey, string> = {
 
   // Story
   "story.title": "Inspirados por las raíces, impulsados por la pasión",
-  "story.content": "Amantti es un punto de encuentro entre la pasión y la tradición. Nace como un tributo a Luis Ospina, nuestro fundador, quien en 2016 dejó un legacy en el mundo del café. Desde entonces, honramos su memoria cultivando granos de origen colombiano con prácticas responsables y sostenibles, reflejando en cada cosecha la calidad de nuestra finca y el compromiso con nuestra tierra.",
+  "story.content": "Amantti nace como un homenaje a Luis Ospina, fundador y apasionado del café. Hoy continuamos su legado cultivando y seleccionando cafés colombianos con respeto por la tierra, las personas y la tradición cafetera.",
   "story.traditionTitle": "Tradición e innovación",
   "story.traditionDesc": "Respetamos la herencia del café colombiano y la complementamos con técnicas modernas.",
   "story.passionTitle": "Pasión",
