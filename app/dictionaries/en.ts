@@ -1,6 +1,6 @@
 export const en = {
   // Nav
-  "nav.ourStory": "Our Story",
+
   "nav.subscriptions": "Subscriptions",
   "nav.services": "Services",
   "nav.shop": "Shop",
@@ -11,6 +11,7 @@ export const en = {
   "hero.tagline": "Passion and tradition in every cup.",
   "hero.cta": "Subscribe Now",
 
+<<<<<<< HEAD
   // Story
   "story.title": "Inspired by roots, driven by passion",
   "story.content": "Amantti was born as a tribute to Luis Ospina, founder and coffee enthusiast. Today we continue his legacy by cultivating and selecting Colombian coffees with respect for the land, the people, and the coffee tradition.",
@@ -20,6 +21,9 @@ export const en = {
   "story.passionDesc": "We love what we do and reflect it in every stage, from bean to cup.",
   "story.sustainabilityTitle": "Sustainability",
   "story.sustainabilityDesc": "We take care of our land and those who cultivate it, because we believe in coffee with purpose.",
+=======
+
+>>>>>>> b05e890e71212fe4799a846d453a398ea04e4bea
 
   // Services
   "services.title": "More Than Just Coffee",
