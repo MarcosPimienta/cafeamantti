@@ -27,7 +27,7 @@ export const es: Record<TranslationKey, string> = {
   "services.title": "Tu Éxito, Nuestra Mezcla",
   "services.subtitle": "Más que un proveedor, somos el aliado que potencia tu negocio. Con Amantti, aseguras calidad excepcional y un equipo que te acompaña en el arte de servir una taza inolvidable.",
   "services.barismoTitle": "Formación en Barismo",
-  "services.barismoDesc": "Capacitamos a tu personal en el arte de la preparación del café — desde la calibración del espresso hasta el latte art — para que cada taza servida represente lo mejor de Amantti.",
+  "services.barismoDesc": "Capacitamos a tu personal en el arte del café: desde la calibración del espresso hasta técnicas de latte art y extracción. Nuestro objetivo es que cada taza servida represente la calidad y el carácter de Amantti.",
   "services.maintenanceTitle": "Mantenimiento de Equipos",
   "services.maintenanceDesc": "Mantén tus máquinas funcionando al máximo. Ofrecemos mantenimiento regular, diagnósticos y soporte de reparación para minimizar tiempos de inactividad.",
   "services.supportTitle": "Soporte Continuo",

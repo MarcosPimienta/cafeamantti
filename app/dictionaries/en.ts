@@ -25,7 +25,7 @@ export const en = {
   "services.title": "Your Success, Our Blend",
   "services.subtitle": "More than a supplier, we are the partner that powers your business. With Amantti, you ensure exceptional quality and a team that joins you in the art of serving an unforgettable cup.",
   "services.barismoTitle": "Barismo Training",
-  "services.barismoDesc": "We train your staff in the art of coffee preparation — from espresso calibration to latte art — so every cup served represents the best of Amantti.",
+  "services.barismoDesc": "We train your staff in the art of coffee: from espresso calibration to latte art and extraction techniques. Our goal is for every cup served to represent the quality and character of Amantti.",
   "services.maintenanceTitle": "Equipment Maintenance",
   "services.maintenanceDesc": "Keep your machines performing at their best. We provide regular maintenance, diagnostics, and repair support to minimize downtime.",
   "services.supportTitle": "Ongoing Support",
