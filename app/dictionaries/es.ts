@@ -29,7 +29,7 @@ export const es: Record<TranslationKey, string> = {
   "services.barismoTitle": "Formación en Barismo",
   "services.barismoDesc": "Capacitamos a tu personal en el arte del café: desde la calibración del espresso hasta técnicas de latte art y extracción. Nuestro objetivo es que cada taza servida represente la calidad y el carácter de Amantti.",
   "services.maintenanceTitle": "Mantenimiento de Equipos",
-  "services.maintenanceDesc": "Mantén tus máquinas funcionando al máximo. Ofrecemos mantenimiento regular, diagnósticos y soporte de reparación para minimizar tiempos de inactividad.",
+  "services.maintenanceDesc": "Mantenemos sus equipos funcionando en óptimas condiciones con mantenimiento preventivo, diagnósticos técnicos y soporte especializado, reduciendo tiempos de inactividad y asegurando consistencia en cada preparación.",
   "services.supportTitle": "Soporte Continuo",
   "services.supportDesc": "Desde consultoría de menú hasta control de calidad, nuestro equipo está siempre disponible para ayudarte a crecer tu oferta de café y deleitar a tus clientes.",
   "services.cta": "Conoce Más",
