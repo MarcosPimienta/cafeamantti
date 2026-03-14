@@ -24,8 +24,8 @@ export const es: Record<TranslationKey, string> = {
   "story.sustainabilityDesc": "Cuidamos de nuestra tierra y de quienes la cultivan, porque creemos en un café con propósito.",
 
   // Services
-  "services.title": "Más Que Solo Café",
-  "services.subtitle": "Nos asociamos con negocios que comparten nuestra pasión. Cuando compras café Amantti para servir a tus clientes, nos convertimos en parte de tu equipo.",
+  "services.title": "Tu Éxito, Nuestra Mezcla",
+  "services.subtitle": "Más que un proveedor, somos el aliado que potencia tu negocio. Con Amantti, aseguras calidad excepcional y un equipo que te acompaña en el arte de servir una taza inolvidable.",
   "services.barismoTitle": "Formación en Barismo",
   "services.barismoDesc": "Capacitamos a tu personal en el arte de la preparación del café — desde la calibración del espresso hasta el latte art — para que cada taza servida represente lo mejor de Amantti.",
   "services.maintenanceTitle": "Mantenimiento de Equipos",

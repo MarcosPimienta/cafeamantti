@@ -22,8 +22,8 @@ export const en = {
   "story.sustainabilityDesc": "We take care of our land and those who cultivate it, because we believe in coffee with purpose.",
 
   // Services
-  "services.title": "More Than Just Coffee",
-  "services.subtitle": "We partner with businesses that share our passion. When you buy Amantti coffee to serve your clients, we become part of your team.",
+  "services.title": "Your Success, Our Blend",
+  "services.subtitle": "More than a supplier, we are the partner that powers your business. With Amantti, you ensure exceptional quality and a team that joins you in the art of serving an unforgettable cup.",
   "services.barismoTitle": "Barismo Training",
   "services.barismoDesc": "We train your staff in the art of coffee preparation — from espresso calibration to latte art — so every cup served represents the best of Amantti.",
   "services.maintenanceTitle": "Equipment Maintenance",
