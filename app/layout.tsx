@@ -31,7 +31,7 @@ const bodoni = Bodoni_Moda({
 
 export const metadata: Metadata = {
   title: "Café Amantti",
-  description: "Pasión y tradición en cada taza.",
+  description: "Café Especial de Origen Colombiano",
 };
 
 export default function RootLayout({

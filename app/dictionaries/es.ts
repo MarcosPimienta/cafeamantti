@@ -10,7 +10,7 @@ export const es: Record<TranslationKey, string> = {
   "nav.cart": "Carrito",
 
   // Hero
-  "hero.tagline": "Pasión y tradición en cada taza.",
+  "hero.tagline": "",
   "hero.cta": "Suscríbete Ahora",
 
   // Story

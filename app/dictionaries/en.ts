@@ -8,7 +8,7 @@ export const en = {
   "nav.cart": "Cart",
 
   // Hero
-  "hero.tagline": "Passion and tradition in every cup.",
+  "hero.tagline": "",
   "hero.cta": "Subscribe Now",
 
   // Story
