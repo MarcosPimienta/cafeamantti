@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { login, signup } from "./actions";
 import { Coffee } from "lucide-react";
+import Link from "next/link";
 
 // The validation schema
 const loginSchema = z.object({
@@ -233,14 +234,12 @@ export default function LoginPage() {
         <div className="mt-8 text-center sm:text-sm">
           <p className="text-foreground/70">
             {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-            <button
-              onClick={toggleMode}
-              type="button"
-              suppressHydrationWarning
+            <Link
+              href={isLogin ? "/register" : "/login"}
               className="font-semibold text-foreground hover:underline focus:outline-none transition-all"
             >
               {isLogin ? "Sign up" : "Log in"}
-            </button>
+            </Link>
           </p>
         </div>
       </div>
