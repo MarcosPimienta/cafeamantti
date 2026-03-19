@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import { 
   Coffee, 
@@ -56,7 +56,7 @@ const DEPARTAMENTOS = [
   "Tolima", "Valle del Cauca", "Vaupés", "Vichada"
 ];
 
-export default function BuilderPage() {
+function BuilderForm() {
   const searchParams = useSearchParams();
   const subscriptionId = searchParams.get("id");
 
@@ -461,5 +461,17 @@ export default function BuilderPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function BuilderPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#fdfbf7] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-[#C59F59] animate-spin" />
+      </div>
+    }>
+      <BuilderForm />
+    </Suspense>
   );
 }
