@@ -54,7 +54,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    <main suppressHydrationWarning className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       {/* Brand Background */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0 scale-105 blur-[2px]"
@@ -70,8 +70,8 @@ export default function RegisterPage() {
                 <Coffee className="w-8 h-8 text-background" strokeWidth={1.5} />
               </div>
             </Link>
-            <h1 className="text-5xl font-bodoni text-center mb-3 tracking-tight">
-              Únete a <span className="italic">Amantti</span>
+            <h1 className="text-5xl md:text-6xl font-bodoni italic text-center mb-3 tracking-tight">
+              amantti.
             </h1>
             <p className="text-[10px] text-foreground/40 text-center font-bold tracking-[0.3em] uppercase max-w-xs leading-relaxed">
               Crea tu perfil y comienza a disfrutar del café más selecto de Colombia.
@@ -85,7 +85,7 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form suppressHydrationWarning onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="group space-y-2">
                 <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Nombre</label>
@@ -93,6 +93,7 @@ export default function RegisterPage() {
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
                   <input
                     {...register("firstName")}
+                    suppressHydrationWarning
                     className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
                     placeholder="Juan"
                   />
@@ -106,6 +107,7 @@ export default function RegisterPage() {
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
                   <input
                     {...register("lastName")}
+                    suppressHydrationWarning
                     className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
                     placeholder="Pérez"
                   />
@@ -121,6 +123,7 @@ export default function RegisterPage() {
                 <input
                   {...register("email")}
                   type="email"
+                  suppressHydrationWarning
                   className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
                   placeholder="juan@ejemplo.com"
                 />
@@ -135,6 +138,7 @@ export default function RegisterPage() {
                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
                   <input
                     {...register("phone")}
+                    suppressHydrationWarning
                     className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
                     placeholder="3001234567"
                   />
@@ -148,6 +152,7 @@ export default function RegisterPage() {
                   <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
                   <input
                     {...register("cedula")}
+                    suppressHydrationWarning
                     className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
                     placeholder="1029384756"
                   />
@@ -163,6 +168,7 @@ export default function RegisterPage() {
                 <input
                   {...register("password")}
                   type="password"
+                  suppressHydrationWarning
                   className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
                   placeholder="••••••••"
                 />
@@ -174,6 +180,7 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
+                suppressHydrationWarning
                 className="group w-full rounded-2xl bg-foreground px-6 py-4 text-sm font-bold uppercase tracking-widest text-background shadow-xl hover:bg-[#C59F59] hover:text-white transition-all duration-500 flex items-center justify-center gap-3 disabled:opacity-50"
               >
                 <span>{isSubmitting ? "Registrando..." : "Crear Cuenta"}</span>

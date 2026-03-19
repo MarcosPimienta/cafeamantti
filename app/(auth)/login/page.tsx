@@ -80,163 +80,97 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-background p-4 font-sans text-foreground">
-      <div className="max-w-md w-full p-8 bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100">
+    <main suppressHydrationWarning className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Brand Background */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0 scale-105 blur-[2px]"
+        style={{ backgroundImage: "url('/images/AmanttiBG02.png')" }}
+      />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-10" />
+
+      <div className="max-w-md w-full p-10 bg-white/90 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/20 relative z-20 animate-in fade-in zoom-in duration-700">
         {/* Logo & Headline */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-foreground rounded-full flex items-center justify-center mb-4">
-            {/* Themed dark icon representation */}
-            <Coffee className="w-8 h-8 text-background" strokeWidth={1.5} />
+        <div className="flex flex-col items-center mb-10">
+          <div className="w-20 h-20 bg-foreground rounded-full flex items-center justify-center mb-6 shadow-xl ring-8 ring-foreground/5">
+            <Coffee className="w-10 h-10 text-background" strokeWidth={1.2} />
           </div>
-          <h1 className="text-4xl font-serif text-center mb-2 text-foreground">
-            Amantti
+          <h1 className="text-5xl md:text-6xl font-bodoni italic text-center mb-3 text-foreground tracking-tight leading-none">
+            amantti.
           </h1>
-          <p className="text-sm text-foreground/70 text-center font-medium tracking-wide uppercase">
-            {isLogin ? "Welcome Back" : "Create an Account"}
+          <p className="text-[10px] text-foreground/40 text-center font-bold tracking-[0.3em] uppercase">
+            {isLogin ? "Bienvenido de nuevo" : "Crea tu cuenta"}
           </p>
         </div>
 
         {errorMsg && (
-          <div className="mb-6 p-3 bg-red-50 text-red-800 text-sm rounded-md border border-red-200">
+          <div className="mb-8 p-4 bg-red-50 text-red-800 text-[11px] font-medium rounded-2xl border border-red-100 flex items-center gap-3">
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
             {errorMsg}
           </div>
         )}
 
         {/* Auth Form */}
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-5"
-          suppressHydrationWarning
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground/80 mb-1">
+          <form
+            suppressHydrationWarning
+            onSubmit={handleSubmit(onSubmit)}
+            className="space-y-6"
+          >
+          <div className="space-y-5">
+            <div className="group">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 mb-2 px-1 transition-colors group-focus-within:text-[#C59F59]">
                 Email
               </label>
               <input
                 {...register("email")}
                 type="email"
                 suppressHydrationWarning
-                className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
-                placeholder="hello@example.com"
+                className="block w-full rounded-2xl border border-foreground/10 bg-white/50 px-5 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
+                placeholder="hola@ejemplo.com"
               />
               {errors.email?.message && (
-                <p className="mt-1.5 text-sm text-red-600 font-medium">
+                <p className="mt-1.5 text-[10px] text-red-600 font-medium px-1">
                   {String(errors.email.message)}
                 </p>
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-foreground/80 mb-1">
-                Password
+            <div className="group">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 mb-2 px-1 transition-colors group-focus-within:text-[#C59F59]">
+                Contraseña
               </label>
               <input
                 {...register("password")}
                 type="password"
                 suppressHydrationWarning
-                className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
+                className="block w-full rounded-2xl border border-foreground/10 bg-white/50 px-5 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
                 placeholder="••••••••"
               />
               {errors.password?.message && (
-                <p className="mt-1.5 text-sm text-red-600 font-medium">
+                <p className="mt-1.5 text-[10px] text-red-600 font-medium px-1">
                   {String(errors.password.message)}
                 </p>
               )}
             </div>
           </div>
 
-          {/* Signup Only Fields */}
-          {!isLogin && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">
-                    First Name
-                  </label>
-                  <input
-                    {...register("firstName")}
-                    className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
-                  />
-                  {errors.firstName?.message && (
-                    <p className="mt-1.5 text-sm text-red-600 font-medium">
-                      {String(errors.firstName.message)}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">
-                    Last Name
-                  </label>
-                  <input
-                    {...register("lastName")}
-                    className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
-                  />
-                  {errors.lastName?.message && (
-                    <p className="mt-1.5 text-sm text-red-600 font-medium">
-                      {String(errors.lastName.message)}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">
-                  Phone Number
-                </label>
-                <div className="relative border border-gray-200 bg-white/80 rounded-lg flex items-center focus-within:ring-1 focus-within:ring-foreground focus-within:border-foreground transition-all">
-                  <span className="pl-4 text-foreground/60 text-sm font-medium">
-                    +57
-                  </span>
-                  <input
-                    {...register("phone")}
-                    placeholder="300 123 4567"
-                    className="block w-full bg-transparent pl-2 pr-4 py-2.5 text-foreground placeholder:text-gray-400 focus:outline-none"
-                  />
-                </div>
-                {errors.phone?.message && (
-                  <p className="mt-1.5 text-sm text-red-600 font-medium">
-                    {String(errors.phone.message)}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">
-                  Cédula
-                </label>
-                <input
-                  {...register("cedula")}
-                  placeholder="10293847"
-                  className="block w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-foreground placeholder:text-gray-400 focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground transition-all"
-                />
-                {errors.cedula?.message && (
-                  <p className="mt-1.5 text-sm text-red-600 font-medium">
-                    {String(errors.cedula.message)}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="pt-2">
+          <div className="pt-4">
             <button
               type="submit"
               disabled={isSubmitting}
               suppressHydrationWarning
-              className="w-full rounded-lg bg-foreground px-4 py-3 text-sm font-semibold text-background shadow-lg hover:bg-foreground/90 focus:outline-none focus:ring-2 focus:ring-foreground focus:ring-offset-2 disabled:opacity-50 transition-all font-serif tracking-wide"
+              className="w-full rounded-2xl bg-foreground px-6 py-4 text-sm font-bold uppercase tracking-widest text-background shadow-xl hover:bg-[#C59F59] hover:text-white transition-all duration-500 disabled:opacity-50"
             >
-              {isSubmitting ? "Please wait..." : isLogin ? "Log In" : "Sign Up"}
+              {isSubmitting ? "Espere..." : isLogin ? "Iniciar Sesión" : "Registrarse"}
             </button>
           </div>
         </form>
 
-        <div className="mt-8 text-center sm:text-sm">
-          <p className="text-foreground/70">
-            {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
+        <div className="mt-10 pt-10 border-t border-foreground/5 text-center">
+          <p className="text-sm text-foreground/40">
+            {isLogin ? "¿No tienes cuenta?" : "¿Ya tienes cuenta?"}{" "}
             <Link
               href={isLogin ? "/register" : "/login"}
-              className="font-semibold text-foreground hover:underline focus:outline-none transition-all"
+              className="font-bold text-foreground hover:text-[#C59F59] transition-colors"
             >
               {isLogin ? "Sign up" : "Log in"}
             </Link>
