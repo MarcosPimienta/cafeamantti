@@ -4,12 +4,24 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-export async function createSubscription(formData: FormData) {
+export async function getSubscription(id: string) {
   const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('*')
+    .eq('id', id)
+    .single()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  if (error) {
+    console.error('Error fetching subscription:', error)
+    return null
+  }
+  return data
+}
+
+export async function upsertSubscription(formData: FormData, subscriptionId?: string | null) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
     throw new Error('User not authenticated')
@@ -20,21 +32,48 @@ export async function createSubscription(formData: FormData) {
   const weight = formData.get('weight') as string
   const grind = formData.get('grind') as string
   const grind_level = formData.get('grind_level') as string
+  
+  const shipping_state = formData.get('shipping_state') as string
+  const shipping_city = formData.get('shipping_city') as string
+  const shipping_address = formData.get('shipping_address') as string
+  const shipping_details = formData.get('shipping_details') as string
 
-  const { error } = await supabase.from('subscriptions').insert({
+  const subscriptionData = {
     user_id: user.id,
     plan_id,
     frequency,
     weight,
     grind,
     grind_level: grind === 'ground' ? grind_level : null,
+    shipping_state,
+    shipping_city,
+    shipping_address,
+    shipping_details,
     status: 'active',
-    next_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Placeholder: next week
-  })
+  };
 
-  if (error) {
-    console.error('Error creating subscription:', error)
-    return { error: 'Failed to create subscription' }
+  let result;
+  if (subscriptionId) {
+    result = await supabase
+      .from('subscriptions')
+      .update({
+        ...subscriptionData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', subscriptionId)
+      .eq('user_id', user.id);
+  } else {
+    result = await supabase
+      .from('subscriptions')
+      .insert({
+        ...subscriptionData,
+        next_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+  }
+
+  if (result.error) {
+    console.error('Error in upsertSubscription:', result.error)
+    return { error: result.error.message }
   }
 
   revalidatePath('/dashboard')

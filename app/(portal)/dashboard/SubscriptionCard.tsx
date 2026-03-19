@@ -13,6 +13,10 @@ interface Subscription {
   grind: string;
   frequency: string;
   next_delivery_date: string;
+  shipping_address?: string;
+  shipping_city?: string;
+  shipping_state?: string;
+  shipping_details?: string;
 }
 
 export function SubscriptionCard({ subscription }: { subscription: Subscription }) {
@@ -47,8 +51,8 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
   return (
     <>
       <div className="space-y-8">
-        <div className="flex items-start gap-8">
-          <div className="relative w-24 h-32 bg-[#fdfbf7] rounded-2xl flex items-center justify-center p-4 shadow-inner ring-1 ring-black/5 overflow-hidden group">
+        <div className="flex flex-col md:flex-row md:items-start gap-8">
+          <div className="relative w-full md:w-32 h-40 bg-[#fdfbf7] rounded-2xl flex items-center justify-center p-6 shadow-inner ring-1 ring-black/5 overflow-hidden group">
             {subscription.plan_id === 'essential' && (
               <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-110">
                 <Image
@@ -104,39 +108,54 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
               </>
             )}
           </div>
-          <div className="flex-1">
-            <h3 className="text-2xl font-serif mb-2 capitalize">Plan {subscription.plan_id}</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-2 text-sm text-foreground/60">
-                <Package className="w-4 h-4" />
-                <span>{subscription.weight} • {subscription.grind === 'whole' ? 'Grano' : 'Molido'}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-foreground/60">
-                <Calendar className="w-4 h-4" />
-                <span className="capitalize">{subscription.frequency}</span>
+          <div className="flex-1 space-y-6">
+            <div>
+              <h3 className="text-3xl font-serif mb-2 capitalize">Plan {subscription.plan_id}</h3>
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2 text-sm text-foreground/60 px-3 py-1 bg-foreground/5 rounded-full">
+                  <Package className="w-3.5 h-3.5" />
+                  <span>{subscription.weight} • {subscription.grind === 'whole' ? 'Grano' : 'Molido'}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-foreground/60 px-3 py-1 bg-foreground/5 rounded-full">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span className="capitalize">{subscription.frequency}</span>
+                </div>
               </div>
             </div>
+
+            {subscription.shipping_address && (
+              <div className="p-4 bg-white border border-foreground/5 rounded-2xl space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">Dirección de Entrega</p>
+                <p className="text-sm font-medium">
+                  {subscription.shipping_address}
+                  {subscription.shipping_details && `, ${subscription.shipping_details}`}
+                </p>
+                <p className="text-xs text-foreground/40 italic">
+                  {subscription.shipping_city}, {subscription.shipping_state}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="pt-8 border-t border-foreground/5 flex items-center justify-between">
+        <div className="pt-8 border-t border-foreground/5 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/30 mb-1">Próximo Envío</p>
-            <p suppressHydrationWarning className="font-medium">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/30 mb-1 text-center sm:text-left">Próximo Envío</p>
+            <p suppressHydrationWarning className="font-medium text-center sm:text-left">
               {new Date(subscription.next_delivery_date).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <Link 
-              href="/builder" 
-              className="px-6 py-3 bg-foreground text-background text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#C59F59] transition-all"
+              href={`/builder?id=${subscription.id}`} 
+              className="flex-1 sm:flex-none text-center px-8 py-4 bg-foreground text-background text-xs font-bold uppercase tracking-widest rounded-2xl hover:bg-[#C59F59] transition-all"
             >
               Gestionar
             </Link>
             <button 
               onClick={() => setShowConfirm(true)}
               suppressHydrationWarning
-              className="px-6 py-3 border border-red-100 text-red-400 text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all font-bold"
+              className="flex-1 sm:flex-none px-8 py-4 border border-red-100 text-red-500 text-xs font-bold uppercase tracking-widest rounded-2xl hover:bg-red-50 transition-all font-bold"
             >
               Cancelar
             </button>

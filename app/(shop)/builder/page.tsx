@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { 
   Coffee, 
@@ -14,7 +14,8 @@ import {
   Loader2
 } from "lucide-react";
 import Link from "next/link";
-import { createSubscription } from "./actions";
+import { useSearchParams } from "next/navigation";
+import { upsertSubscription, getSubscription } from "./actions";
 
 const PLANS = [
   {
@@ -47,15 +48,54 @@ const FREQUENCIES = [
   { id: "monthly", label: "Mensual" },
 ];
 
+const DEPARTAMENTOS = [
+  "Amazonas", "Antioquia", "Arauca", "Atlántico", "Bogotá DC", "Bolívar", "Boyacá", "Caldas", 
+  "Caquetá", "Casanare", "Cauca", "Cesar", "Chocó", "Córdoba", "Cundinamarca", "Guainía", 
+  "Guaviare", "Huila", "La Guajira", "Magdalena", "Meta", "Nariño", "Norte de Santander", 
+  "Putumayo", "Quindío", "Risaralda", "San Andrés y Providencia", "Santander", "Sucre", 
+  "Tolima", "Valle del Cauca", "Vaupés", "Vichada"
+];
+
 export default function BuilderPage() {
+  const searchParams = useSearchParams();
+  const subscriptionId = searchParams.get("id");
+
   const [selection, setSelection] = useState({
     plan_id: "essential",
     weight: "250g",
     grind: "whole",
     grind_level: "drip",
     frequency: "monthly",
+    shipping_state: "",
+    shipping_city: "",
+    shipping_address: "",
+    shipping_details: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(!!subscriptionId);
+
+  useEffect(() => {
+    if (subscriptionId) {
+      const loadSubscription = async () => {
+        const data = await getSubscription(subscriptionId);
+        if (data) {
+          setSelection({
+            plan_id: data.plan_id,
+            weight: data.weight,
+            grind: data.grind,
+            grind_level: data.grind_level || "drip",
+            frequency: data.frequency,
+            shipping_state: data.shipping_state || "",
+            shipping_city: data.shipping_city || "",
+            shipping_address: data.shipping_address || "",
+            shipping_details: data.shipping_details || "",
+          });
+        }
+        setIsLoading(false);
+      };
+      loadSubscription();
+    }
+  }, [subscriptionId]);
 
   const currentPlan = PLANS.find((p) => p.id === selection.plan_id)!;
 
@@ -65,12 +105,20 @@ export default function BuilderPage() {
     try {
       const formData = new FormData();
       Object.entries(selection).forEach(([key, value]) => formData.append(key, value));
-      await createSubscription(formData);
+      await upsertSubscription(formData, subscriptionId);
     } catch (error) {
       console.error(error);
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#fdfbf7] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-[#C59F59] animate-spin" />
+      </div>
+    );
+  }
 
   const getPrice = () => {
     const multiplier = selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 3.2;
@@ -265,6 +313,66 @@ export default function BuilderPage() {
                     </p>
                   </button>
                 ))}
+              </div>
+            </section>
+
+            {/* Section 4: Shipping Info */}
+            <section className="space-y-8">
+              <div className="flex items-center gap-4">
+                <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">4</span>
+                <h2 className="text-2xl font-serif">Información de Envío</h2>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-6 bg-white p-8 rounded-3xl border border-foreground/5 shadow-sm">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 px-1">Departamento</label>
+                  <select
+                    value={selection.shipping_state}
+                    onChange={(e) => setSelection({ ...selection, shipping_state: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
+                    required
+                  >
+                    <option value="">Selecciona Departamento</option>
+                    {DEPARTAMENTOS.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 px-1">Ciudad / Municipio</label>
+                  <input
+                    type="text"
+                    value={selection.shipping_city}
+                    onChange={(e) => setSelection({ ...selection, shipping_city: e.target.value })}
+                    placeholder="Ej. Bogotá, Medellín..."
+                    className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
+                    required
+                  />
+                </div>
+
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 px-1">Dirección Exacta</label>
+                  <input
+                    type="text"
+                    value={selection.shipping_address}
+                    onChange={(e) => setSelection({ ...selection, shipping_address: e.target.value })}
+                    placeholder="Calle, Carrera, Avenida..."
+                    className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
+                    required
+                  />
+                </div>
+
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 px-1">Apto / Torre / Otros Detalles</label>
+                  <input
+                    type="text"
+                    value={selection.shipping_details}
+                    onChange={(e) => setSelection({ ...selection, shipping_details: e.target.value })}
+                    placeholder="Ej. Apto 502, Torre A, Portería..."
+                    className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
+                  />
+                </div>
               </div>
             </section>
           </div>
