@@ -60,10 +60,18 @@ export async function updateSubscriptionStatus(subscriptionId: string, status: '
 export async function deleteSubscription(subscriptionId: string) {
   const supabase = await createClient()
 
-  const { error } = await supabase
+  const { data: { user } } = await supabase.auth.getUser()
+  console.log('[DEBUG] Attempting to delete subscription:', { 
+    subscriptionId, 
+    userId: user?.id 
+  })
+
+  const { error, count } = await supabase
     .from('subscriptions')
-    .delete()
+    .delete({ count: 'exact' })
     .eq('id', subscriptionId)
+
+  console.log('[DEBUG] Delete operation result:', { error, count })
 
   if (error) {
     console.error('Error deleting subscription:', error)

@@ -82,6 +82,7 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
             </Link>
             <button 
               onClick={() => setShowConfirm(true)}
+              suppressHydrationWarning
               className="px-6 py-3 border border-red-100 text-red-400 text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-red-50 transition-all font-bold"
             >
               Cancelar

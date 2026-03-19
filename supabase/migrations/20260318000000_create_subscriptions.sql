@@ -35,6 +35,12 @@ CREATE POLICY "Users can update own subscriptions"
     FOR UPDATE 
     USING (auth.uid() = user_id);
 
+-- Users can delete their own subscriptions
+CREATE POLICY "Users can delete own subscriptions" 
+    ON public.subscriptions 
+    FOR DELETE 
+    USING (auth.uid() = user_id);
+
 -- Trigger for updated_at
 CREATE TRIGGER on_subscriptions_updated
     BEFORE UPDATE ON public.subscriptions
