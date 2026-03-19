@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Coffee, ArrowRight, User, Mail, Lock, Phone, CreditCard, Globe } from "lucide-react";
+import { Coffee, ArrowRight, User, Mail, Lock, Phone, CreditCard, Globe, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { signup } from "../login/actions"; // Reusing the signup action
 
@@ -65,6 +65,13 @@ export default function RegisterPage() {
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-10" />
 
       <div className="max-w-xl w-full p-10 bg-white/90 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/20 relative z-20 animate-in fade-in zoom-in duration-700">
+        <Link 
+          href="/" 
+          className="absolute -top-12 left-0 flex items-center gap-2 text-white/60 hover:text-white transition-colors group"
+        >
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+          <span className="text-sm font-medium tracking-tight">Volver al inicio</span>
+        </Link>
         <div className="relative z-10">
           <div className="flex flex-col items-center mb-10">
             <Link href="/" className="mb-6">

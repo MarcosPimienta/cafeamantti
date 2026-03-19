@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { login, signup } from "./actions";
-import { Coffee } from "lucide-react";
+import { Coffee, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
@@ -100,6 +100,13 @@ function LoginForm() {
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-10" />
 
       <div className="max-w-md w-full p-10 bg-white/90 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/20 relative z-20 animate-in fade-in zoom-in duration-700">
+        <Link 
+          href="/" 
+          className="absolute -top-12 left-0 flex items-center gap-2 text-white/60 hover:text-white transition-colors group"
+        >
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+          <span className="text-sm font-medium tracking-tight">Volver al inicio</span>
+        </Link>
         {/* Logo & Headline */}
         <div className="flex flex-col items-center mb-10">
           <div className="w-20 h-20 bg-foreground rounded-full flex items-center justify-center mb-6 shadow-xl ring-8 ring-foreground/5">
