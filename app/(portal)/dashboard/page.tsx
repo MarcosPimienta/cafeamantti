@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Coffee, Calendar, Package, CreditCard, ChevronRight, Settings, LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "@/app/(auth)/login/actions";
+import { SubscriptionCard } from "./SubscriptionCard";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -33,9 +34,17 @@ export default async function DashboardPage() {
     <main className="min-h-screen bg-[#fdfbf7] p-8 font-sans text-foreground">
       <div className="max-w-6xl mx-auto">
         <header className="flex items-center justify-between mb-12">
-          <div>
-            <h1 className="text-4xl font-serif mb-2">Mi Portal Amantti</h1>
-            <p className="text-foreground/40 text-sm italic">Bienvenido de nuevo, {greetingName}.</p>
+          <div className="flex items-center gap-8">
+            <Link href="/" className="hover:opacity-70 transition-opacity">
+              <span className="font-bodoni italic text-4xl font-bold tracking-tight">
+                amantti
+              </span>
+            </Link>
+            <div className="h-10 w-px bg-foreground/10 hidden md:block" />
+            <div>
+              <h1 className="text-3xl font-serif">Mi Portal</h1>
+              <p className="text-foreground/40 text-xs italic">Bienvenido de nuevo, {greetingName}.</p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <button className="p-3 rounded-full hover:bg-foreground/5 transition-colors">
@@ -64,39 +73,7 @@ export default async function DashboardPage() {
 
               {subscriptions.length > 0 ? (
                 <div className="space-y-8">
-                  <div className="flex items-start gap-8">
-                    <div className="relative w-24 h-32 bg-[#fdfbf7] rounded-2xl flex items-center justify-center p-4">
-                      {/* Dynamic image based on plan_id */}
-                      <Coffee className="w-8 h-8 text-[#C59F59] opacity-20 absolute" />
-                      <Package className="w-12 h-12 text-foreground/10" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-2xl font-serif mb-2 capitalize">Plan {subscriptions[0].plan_id}</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex items-center gap-2 text-sm text-foreground/60">
-                          <Package className="w-4 h-4" />
-                          <span>{subscriptions[0].weight} • {subscriptions[0].grind === 'whole' ? 'Grano' : 'Molido'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-foreground/60">
-                          <Calendar className="w-4 h-4" />
-                          <span className="capitalize">{subscriptions[0].frequency}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="pt-8 border-t border-foreground/5 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/30 mb-1">Próximo Envío</p>
-                      <p suppressHydrationWarning className="font-medium">{new Date(subscriptions[0].next_delivery_date).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}</p>
-                    </div>
-                    <Link 
-                      href="/builder" 
-                      className="px-6 py-3 bg-foreground text-background text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#C59F59] transition-all"
-                    >
-                      Gestionar
-                    </Link>
-                  </div>
+                  <SubscriptionCard subscription={subscriptions[0]} />
                 </div>
               ) : (
                 <div className="text-center py-12">

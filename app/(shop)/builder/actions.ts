@@ -37,8 +37,8 @@ export async function createSubscription(formData: FormData) {
     return { error: 'Failed to create subscription' }
   }
 
-  revalidatePath('/portal/dashboard')
-  redirect('/portal/dashboard')
+  revalidatePath('/dashboard')
+  redirect('/dashboard')
 }
 
 export async function updateSubscriptionStatus(subscriptionId: string, status: 'active' | 'paused' | 'cancelled') {
@@ -54,5 +54,21 @@ export async function updateSubscriptionStatus(subscriptionId: string, status: '
     return { error: 'Failed to update status' }
   }
 
-  revalidatePath('/portal/dashboard')
+  revalidatePath('/dashboard')
+}
+
+export async function deleteSubscription(subscriptionId: string) {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('subscriptions')
+    .delete()
+    .eq('id', subscriptionId)
+
+  if (error) {
+    console.error('Error deleting subscription:', error)
+    return { error: 'Failed to delete subscription' }
+  }
+
+  revalidatePath('/dashboard')
 }
