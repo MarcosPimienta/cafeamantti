@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { login, signup } from "./actions";
 import { Coffee } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 // The validation schema
 const loginSchema = z.object({
@@ -29,9 +30,17 @@ const signupSchema = loginSchema.extend({
     .regex(/^\d{8,10}$/, { message: "Cédula must be 8-10 digits" }),
 });
 
-export default function LoginPage() {
+function LoginForm() {
   const [isLogin, setIsLogin] = useState(true);
+  const searchParams = useSearchParams();
+  const urlError = searchParams.get("error");
   const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    if (urlError) {
+      setErrorMsg(urlError);
+    }
+  }, [urlError]);
 
   const schema = isLogin ? loginSchema : signupSchema;
 
@@ -56,21 +65,18 @@ export default function LoginPage() {
 
   const onSubmit = async (data: any) => {
     setErrorMsg("");
-    try {
-      const formData = new FormData();
-      Object.entries(data).forEach(([key, value]) => {
-        if (value) formData.append(key, value as string);
-      });
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value) formData.append(key, value as string);
+    });
 
-      // Call standard server actions
-      if (isLogin) {
-        await login(formData);
-      } else {
-        await signup(formData);
-      }
-    } catch (e: any) {
-      setErrorMsg("An unexpected error occurred.");
+    if (isLogin) {
+      await login(formData);
+    } else {
+      await signup(formData);
     }
+    // Note: No try/catch here because login/signup use redirect(), 
+    // which shouldn't be caught by a generic error handler in the client.
   };
 
   const toggleMode = () => {
@@ -178,5 +184,17 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-black/5">
+        <div className="w-8 h-8 border-4 border-foreground/20 border-t-foreground rounded-full animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

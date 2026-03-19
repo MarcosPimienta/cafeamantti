@@ -240,7 +240,7 @@ export default function Home() {
               {t("nav.subscriptions")}
             </Link>
             <Link
-              href="/shop"
+              href="#tienda"
               className="text-sm font-medium text-foreground/80 hover:text-foreground"
             >
               {t("nav.shop")}
@@ -341,7 +341,7 @@ export default function Home() {
               {t("nav.subscriptions")}
             </Link>
             <Link
-              href="/shop"
+              href="#tienda"
               onClick={() => setIsMobileMenuOpen(false)}
               className="text-lg font-medium text-foreground/80 hover:text-foreground"
             >

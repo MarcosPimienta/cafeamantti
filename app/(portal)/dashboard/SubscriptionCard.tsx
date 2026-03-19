@@ -23,17 +23,21 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleted, setIsDeleted] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleDelete = () => {
+    setErrorMsg(null);
     startTransition(async () => {
       try {
-        await deleteSubscription(subscription.id);
+        const result = await deleteSubscription(subscription.id);
+        if (result?.error) {
+          setErrorMsg(result.error);
+          return;
+        }
         setIsDeleted(true);
-        // After showing success for a bit, it will vanish from the dashboard 
-        // because of the revalidatePath in the action + server-side refresh
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
-        setShowConfirm(false);
+        setErrorMsg(error.message || "Error al cancelar la suscripción");
       }
     });
   };
@@ -183,6 +187,13 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
               <p className="text-sm text-foreground/40 mb-8 max-w-[240px]">
                 Esta acción eliminará tu {subscription.plan_id} de forma permanente. No recibirás más entregas de este plan.
               </p>
+
+              {errorMsg && (
+                <div className="w-full mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 animate-in fade-in slide-in-from-top-1">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-left">{errorMsg}</p>
+                </div>
+              )}
 
               <div className="w-full flex flex-col gap-3">
                 <button
