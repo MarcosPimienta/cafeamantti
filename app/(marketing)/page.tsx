@@ -209,6 +209,14 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const getSubscribeHref = (planId: string) => {
+    const baseUrl = `/builder?plan=${planId}`;
+    if (!user) {
+      return `/login?redirectTo=${encodeURIComponent(baseUrl)}`;
+    }
+    return baseUrl;
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans text-foreground overflow-x-hidden">
       {/* Navigation */}
@@ -637,12 +645,13 @@ export default function Home() {
                   </div>
                 </div>
 
-                <button 
+                <Link 
+                  href={getSubscribeHref('essential')}
                   suppressHydrationWarning
-                  className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl"
+                  className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl text-center"
                 >
                   {t("plans.subscribe")}
-                </button>
+                </Link>
               </div>
 
               {/* Plan II: Alquimia & Contraste */}
@@ -698,12 +707,13 @@ export default function Home() {
                   </div>
                 </div>
 
-                <button 
+                <Link 
+                  href={getSubscribeHref('alchemy')}
                   suppressHydrationWarning
-                  className="w-full py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl scale-105"
+                  className="w-full py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl scale-105 text-center"
                 >
                   {t("plans.subscribe")}
-                </button>
+                </Link>
               </div>
 
               {/* Plan III: Curaduría Privada */}
@@ -765,12 +775,13 @@ export default function Home() {
                   </div>
                 </div>
 
-                <button 
+                <Link 
+                  href={getSubscribeHref('curator')}
                   suppressHydrationWarning
-                  className="w-full py-4 bg-white text-black hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl"
+                  className="w-full py-4 bg-white text-black hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl text-center"
                 >
                   {t("plans.subscribe")}
-                </button>
+                </Link>
               </div>
             </div>
           </div>

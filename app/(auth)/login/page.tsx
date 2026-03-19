@@ -70,6 +70,11 @@ function LoginForm() {
       if (value) formData.append(key, value as string);
     });
 
+    const redirectTo = searchParams.get("redirectTo");
+    if (redirectTo) {
+      formData.append("redirectTo", redirectTo);
+    }
+
     if (isLogin) {
       await login(formData);
     } else {

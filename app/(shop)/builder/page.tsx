@@ -94,8 +94,14 @@ function BuilderForm() {
         setIsLoading(false);
       };
       loadSubscription();
+    } else {
+      // For new subscriptions, check if a plan was pre-selected in the URL
+      const planFromUrl = searchParams.get("plan");
+      if (planFromUrl && PLANS.some(p => p.id === planFromUrl)) {
+        setSelection(prev => ({ ...prev, plan_id: planFromUrl }));
+      }
     }
-  }, [subscriptionId]);
+  }, [subscriptionId, searchParams]);
 
   const currentPlan = PLANS.find((p) => p.id === selection.plan_id)!;
 

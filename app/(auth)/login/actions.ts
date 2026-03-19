@@ -7,21 +7,21 @@ import { createClient } from '@/utils/supabase/server'
 export async function login(formData: FormData) {
   const supabase = await createClient()
 
-  // type-casting here for convenience
-  // in practice, use a library like zod to validate user input
   const data = {
     email: formData.get('email') as string,
     password: formData.get('password') as string,
   }
 
+  const redirectTo = (formData.get('redirectTo') as string) || '/dashboard'
+
   const { error } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
-    redirect('/login?error=Could not authenticate user')
+    redirect(`/login?error=${encodeURIComponent(error.message)}`)
   }
 
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect(redirectTo)
 }
 
 export async function signup(formData: FormData) {
@@ -34,6 +34,8 @@ export async function signup(formData: FormData) {
   const phone = formData.get('phone') as string
   const cedula = formData.get('cedula') as string
   const address = formData.get('address') as string
+  
+  const redirectTo = (formData.get('redirectTo') as string) || '/dashboard'
 
   const { error } = await supabase.auth.signUp({
     email,
@@ -50,11 +52,11 @@ export async function signup(formData: FormData) {
   })
 
   if (error) {
-    redirect('/login?error=Could not authenticate user')
+    redirect(`/login?error=${encodeURIComponent(error.message)}`)
   }
 
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect(redirectTo)
 }
 export async function signOut() {
   const supabase = await createClient()
