@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Coffee, Package, Calendar, Loader2, AlertTriangle, X, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { deleteSubscription } from '@/app/(shop)/builder/actions';
 
 interface Subscription {
@@ -47,9 +48,61 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
     <>
       <div className="space-y-8">
         <div className="flex items-start gap-8">
-          <div className="relative w-24 h-32 bg-[#fdfbf7] rounded-2xl flex items-center justify-center p-4 shadow-inner ring-1 ring-black/5">
-            <Coffee className="w-8 h-8 text-[#C59F59] opacity-20 absolute" />
-            <Package className="w-12 h-12 text-foreground/10" />
+          <div className="relative w-24 h-32 bg-[#fdfbf7] rounded-2xl flex items-center justify-center p-4 shadow-inner ring-1 ring-black/5 overflow-hidden group">
+            {subscription.plan_id === 'essential' && (
+              <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-110">
+                <Image
+                  src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                  alt="Amantti Traditional Bag"
+                  fill
+                  className="object-contain drop-shadow-xl"
+                />
+              </div>
+            )}
+            {subscription.plan_id === 'alchemy' && (
+              <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-110 scale-90">
+                <Image
+                  src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                  alt="Amantti Traditional Bag"
+                  fill
+                  className="object-contain drop-shadow-lg -rotate-12 -translate-x-3 translate-y-1 opacity-90"
+                />
+                <Image
+                  src="/images/Front_White_Honey_Coffee_Bag.png"
+                  alt="Amantti Honey Bag"
+                  fill
+                  className="object-contain drop-shadow-2xl rotate-6 translate-x-3 -translate-y-1"
+                />
+              </div>
+            )}
+            {subscription.plan_id === 'curator' && (
+              <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-110 scale-[0.8]">
+                <Image
+                  src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                  alt="Amantti Traditional Bag"
+                  fill
+                  className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-6 translate-y-2 opacity-80"
+                />
+                <Image
+                  src="/images/Front_White_Honey_Coffee_Bag.png"
+                  alt="Amantti Honey Bag"
+                  fill
+                  className="object-contain drop-shadow-xl rotate-[20deg] translate-x-6 translate-y-2 opacity-80"
+                />
+                <Image
+                  src="/images/Amantti_Coffee_Bag.png"
+                  alt="Amantti Microlot Bag"
+                  fill
+                  className="object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] scale-110 brightness-110 z-10"
+                />
+              </div>
+            )}
+            {!['essential', 'alchemy', 'curator'].includes(subscription.plan_id) && (
+              <>
+                <Coffee className="w-8 h-8 text-[#C59F59] opacity-20 absolute" />
+                <Package className="w-12 h-12 text-foreground/10" />
+              </>
+            )}
           </div>
           <div className="flex-1">
             <h3 className="text-2xl font-serif mb-2 capitalize">Plan {subscription.plan_id}</h3>
