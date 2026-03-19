@@ -16,13 +16,13 @@ export default async function OnboardingPage() {
   // Fetch the existing profile
   const { data: profile } = await supabase
     .from("profiles")
-    .select("cedula_number, address, first_name")
+    .select("cedula_number, address, first_name, phone_number")
     .eq("id", user.id)
     .single();
 
   // If already complete, go to dashboard
   if (profile?.cedula_number && profile?.address) {
-    redirect("/portal/dashboard");
+    redirect("/dashboard");
   }
 
   async function completeProfile(formData: FormData) {
@@ -41,7 +41,7 @@ export default async function OnboardingPage() {
         .update({ cedula_number, address })
         .eq("id", user.id);
 
-      redirect("/portal/dashboard");
+      redirect("/dashboard");
     }
   }
 
@@ -80,6 +80,7 @@ export default async function OnboardingPage() {
                     name="cedula_number"
                     type="text"
                     required
+                    defaultValue={profile?.cedula_number || ""}
                     placeholder="1029384756"
                     className="block w-full rounded-2xl border border-foreground/10 bg-white/50 px-11 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
                   />

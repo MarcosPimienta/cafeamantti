@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Coffee, ArrowRight, User, Mail, Lock, Phone, CreditCard } from "lucide-react";
+import { Coffee, ArrowRight, User, Mail, Lock, Phone, CreditCard, Globe } from "lucide-react";
 import Link from "next/link";
 import { signup } from "../login/actions"; // Reusing the signup action
 
@@ -17,6 +17,7 @@ const signupSchema = z.object({
     message: "Invalid format. E.g: 3001234567",
   }),
   cedula: z.string().regex(/^\d{8,10}$/, { message: "Cédula must be 8-10 digits" }),
+  address: z.string().min(5, { message: "Address is too short" }),
 });
 
 type FormValues = z.infer<typeof signupSchema>;
@@ -37,6 +38,7 @@ export default function RegisterPage() {
       lastName: "",
       phone: "",
       cedula: "",
+      address: "",
     },
   });
 
@@ -159,6 +161,20 @@ export default function RegisterPage() {
                 </div>
                 {errors.cedula && <p className="text-[10px] text-red-500 mt-1 px-1 font-medium">{errors.cedula.message}</p>}
               </div>
+            </div>
+
+            <div className="group space-y-2">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Dirección de Envío</label>
+              <div className="relative">
+                <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                <input
+                  {...register("address")}
+                  suppressHydrationWarning
+                  className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
+                  placeholder="Calle 123 # 45 - 67, Bogotá"
+                />
+              </div>
+              {errors.address && <p className="text-[10px] text-red-500 mt-1 px-1 font-medium">{errors.address.message}</p>}
             </div>
 
             <div className="group space-y-2">

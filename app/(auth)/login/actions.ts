@@ -21,7 +21,7 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  redirect('/portal/dashboard')
+  redirect('/dashboard')
 }
 
 export async function signup(formData: FormData) {
@@ -33,6 +33,7 @@ export async function signup(formData: FormData) {
   const lastName = formData.get('lastName') as string
   const phone = formData.get('phone') as string
   const cedula = formData.get('cedula') as string
+  const address = formData.get('address') as string
 
   const { error } = await supabase.auth.signUp({
     email,
@@ -43,6 +44,7 @@ export async function signup(formData: FormData) {
         last_name: lastName,
         phone,
         cedula,
+        address,
       }
     }
   })
@@ -52,5 +54,10 @@ export async function signup(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  redirect('/portal/dashboard')
+  redirect('/dashboard')
+}
+export async function signOut() {
+  const supabase = await createClient()
+  await supabase.auth.signOut()
+  redirect('/')
 }

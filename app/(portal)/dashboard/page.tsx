@@ -1,7 +1,8 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { Coffee, Calendar, Package, CreditCard, ChevronRight, Settings } from "lucide-react";
+import { Coffee, Calendar, Package, CreditCard, ChevronRight, Settings, LogOut } from "lucide-react";
 import Link from "next/link";
+import { signOut } from "@/app/(auth)/login/actions";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -23,10 +24,10 @@ export default async function DashboardPage() {
   const profile = profileRes.data;
   const subscriptions = subRes.data || [];
 
-  // Onboarding Check
-  if (!profile?.cedula_number || !profile?.address) {
-    redirect("/onboarding");
-  }
+  const greetingName = profile?.first_name || 
+    user.user_metadata?.first_name || 
+    user.email?.split('@')[0] || 
+    "entusiasta del café";
 
   return (
     <main className="min-h-screen bg-[#fdfbf7] p-8 font-sans text-foreground">
@@ -34,11 +35,18 @@ export default async function DashboardPage() {
         <header className="flex items-center justify-between mb-12">
           <div>
             <h1 className="text-4xl font-serif mb-2">Mi Portal Amantti</h1>
-            <p className="text-foreground/40 text-sm italic">Bienvenido de nuevo, {profile.first_name || "entusiasta del café"}.</p>
+            <p className="text-foreground/40 text-sm italic">Bienvenido de nuevo, {greetingName}.</p>
           </div>
-          <button className="p-3 rounded-full hover:bg-foreground/5 transition-colors">
-            <Settings className="w-5 h-5 text-foreground/40" />
-          </button>
+          <div className="flex items-center gap-4">
+            <button className="p-3 rounded-full hover:bg-foreground/5 transition-colors">
+              <Settings className="w-5 h-5 text-foreground/40" />
+            </button>
+            <form action={signOut}>
+              <button type="submit" className="p-3 rounded-full hover:bg-red-50 text-red-400 transition-colors" title="Cerrar sesión">
+                <LogOut className="w-5 h-5" />
+              </button>
+            </form>
+          </div>
         </header>
 
         <div className="grid lg:grid-cols-3 gap-8">
@@ -80,7 +88,7 @@ export default async function DashboardPage() {
                   <div className="pt-8 border-t border-foreground/5 flex items-center justify-between">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/30 mb-1">Próximo Envío</p>
-                      <p className="font-medium">{new Date(subscriptions[0].next_delivery_date).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}</p>
+                      <p suppressHydrationWarning className="font-medium">{new Date(subscriptions[0].next_delivery_date).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}</p>
                     </div>
                     <Link 
                       href="/builder" 
@@ -117,11 +125,11 @@ export default async function DashboardPage() {
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="space-y-4">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/30">Dirección</label>
-                  <p className="text-sm font-medium">{profile.address}</p>
+                  <p className="text-sm font-medium">{profile?.address || "No especificada"}</p>
                 </div>
                 <div className="space-y-4">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/30">Documento de Identidad</label>
-                  <p className="text-sm font-medium">{profile.cedula_number}</p>
+                  <p className="text-sm font-medium">{profile?.cedula_number || "No especificado"}</p>
                 </div>
               </div>
             </div>
@@ -135,7 +143,7 @@ export default async function DashboardPage() {
               </div>
               <h3 className="text-lg font-serif mb-4">¿Sabías que?</h3>
               <p className="text-sm text-background/60 leading-relaxed mb-6 italic">"El café Amantti pasa por un proceso de selección manual grano a grano para asegurar que solo lo mejor llegue a tu taza."</p>
-              <button className="text-xs font-bold uppercase tracking-widest text-[#C59F59] hover:text-white transition-colors">Ver bitácora de tueste</button>
+              <button suppressHydrationWarning className="text-xs font-bold uppercase tracking-widest text-[#C59F59] hover:text-white transition-colors">Ver bitácora de tueste</button>
             </div>
           </div>
         </div>

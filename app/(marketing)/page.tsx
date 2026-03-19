@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClient } from "@/utils/supabase/client";
 import {
   ShoppingCart,
   Calendar,
@@ -190,6 +191,23 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
 export default function Home() {
   const { t, locale, setLocale } = useLanguage();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans text-foreground overflow-x-hidden">
@@ -228,10 +246,14 @@ export default function Home() {
               {t("nav.shop")}
             </Link>
             <Link
-              href="/login"
-              className="text-sm font-medium text-foreground/80 hover:text-foreground"
+              href={user ? "/dashboard" : "/login"}
+              className="text-sm font-medium text-foreground/80 hover:text-foreground flex items-center gap-2"
             >
-              {t("nav.myAccount")}
+              {loading ? (
+                <div className="w-4 h-4 border-2 border-foreground/20 border-t-foreground/60 rounded-full animate-spin" />
+              ) : (
+                user ? "Dashboard" : t("nav.myAccount")
+              )}
             </Link>
 
             {/* Language Switcher */}
@@ -326,11 +348,11 @@ export default function Home() {
               {t("nav.shop")}
             </Link>
             <Link
-              href="/login"
+              href={user ? "/dashboard" : "/login"}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="text-lg font-medium text-foreground/80 hover:text-foreground"
+              className="text-lg font-medium text-foreground/80 hover:text-foreground flex items-center gap-2"
             >
-              {t("nav.myAccount")}
+              {user ? "Dashboard" : t("nav.myAccount")}
             </Link>
 
             <div className="pt-4 border-t border-foreground/10 flex items-center justify-between">
