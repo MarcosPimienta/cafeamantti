@@ -1,29 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
-import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
-  // Update the session token
-  const response = await updateSession(request)
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-        },
-      },
-    }
-  )
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Update the session and get the user in a single step
+  const { supabaseResponse, user } = await updateSession(request)
 
   const isPortal = request.nextUrl.pathname.startsWith('/portal')
   const isAuth = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register')
@@ -36,7 +16,7 @@ export async function middleware(request: NextRequest) {
      return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  return response
+  return supabaseResponse
 }
 
 export const config = {
