@@ -137,6 +137,14 @@ export const en = {
   "products.microlotTitle": "Monthly Microlot",
   "products.microlotDesc": "The crown jewel. Small batches of experimental varietals and unique fermentations.",
   "products.microlotProfile": "Complex, Bright & Unrepeatable",
+
+  "cart.title": "Your Cart",
+  "cart.empty": "Your cart is empty",
+  "cart.subtotal": "Subtotal",
+  "cart.checkout": "Checkout",
+  "cart.remove": "Remove",
+  "cart.items": "items",
+  "cart.item": "item",
 } as const;
 
 export type TranslationKey = keyof typeof en;

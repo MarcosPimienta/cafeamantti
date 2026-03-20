@@ -27,6 +27,8 @@ import {
   Leaf,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
+import { useCart } from "@/app/context/CartContext";
+import { CartDrawer } from "@/app/components/CartDrawer";
 
 
 interface ProductCardProps {
@@ -45,9 +47,22 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
   const [grindLevel, setGrindLevel] = useState("drip");
   const [isAdding, setIsAdding] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const { addItem } = useCart();
 
   const handleAddToCart = () => {
     setIsAdding(true);
+    
+    // Add to cart context
+    addItem({
+      id,
+      nameKey: titleKey,
+      price: calculatePrice(),
+      weight,
+      grind: isGround ? "ground" : "whole",
+      grindLevel: isGround ? grindLevel : undefined,
+      image: imageSrc,
+    });
+
     setTimeout(() => {
       setIsAdding(false);
       setShowSuccess(true);
@@ -55,10 +70,13 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
     }, 800);
   };
 
-  const getPrice = () => {
+  const calculatePrice = () => {
     const multiplier = weight === "250g" ? 1 : weight === "500g" ? 1.8 : 3.2;
-    const price = basePrice * multiplier;
-    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(price);
+    return basePrice * multiplier;
+  };
+
+  const getPriceFormated = () => {
+    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(calculatePrice());
   };
 
   return (
@@ -155,7 +173,7 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
           {/* Price and Add Button */}
           <div className="pt-6 border-t border-foreground/5 flex items-center justify-between">
             <div className="flex flex-col">
-              <span suppressHydrationWarning className="text-2xl font-serif text-[#C59F59]">{getPrice()}</span>
+              <span suppressHydrationWarning className="text-2xl font-serif text-[#C59F59]">{getPriceFormated()}</span>
             </div>
             <button
               onClick={handleAddToCart}
@@ -190,7 +208,9 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
 
 export default function Home() {
   const { t, locale, setLocale } = useLanguage();
+  const { itemCount } = useCart();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -277,6 +297,7 @@ export default function Home() {
 
             <button
               suppressHydrationWarning
+              onClick={() => setIsCartOpen(true)}
               className="relative p-2 hover:bg-foreground/5 rounded-full transition-colors"
               aria-label={t("nav.cart")}
             >
@@ -284,9 +305,11 @@ export default function Home() {
                 className="w-5 h-5 text-foreground/80"
                 strokeWidth={2}
               />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C59F59] text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">
-                0
-              </span>
+              {itemCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C59F59] text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">
+                  {itemCount}
+                </span>
+              )}
             </button>
           </nav>
 
@@ -294,6 +317,7 @@ export default function Home() {
           <div className="flex items-center gap-4 md:hidden">
             <button
               suppressHydrationWarning
+              onClick={() => setIsCartOpen(true)}
               className="relative p-2 hover:bg-foreground/5 rounded-full transition-colors"
               aria-label={t("nav.cart")}
             >
@@ -301,9 +325,11 @@ export default function Home() {
                 className="w-5 h-5 text-foreground/80"
                 strokeWidth={2}
               />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C59F59] text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">
-                0
-              </span>
+              {itemCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C59F59] text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">
+                  {itemCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -380,6 +406,8 @@ export default function Home() {
           </nav>
         </div>
       </header>
+
+      <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
 
       <main className="flex-1 pt-20">
         {/* Hero Section */}

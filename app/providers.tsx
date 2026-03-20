@@ -1,8 +1,15 @@
 "use client";
 
 import { LanguageProvider } from "@/app/context/LanguageContext";
+import { CartProvider } from "@/app/context/CartContext";
 import type { ReactNode } from "react";
 
 export function Providers({ children }: { children: ReactNode }) {
-  return <LanguageProvider>{children}</LanguageProvider>;
+  return (
+    <LanguageProvider>
+      <CartProvider>
+        {children}
+      </CartProvider>
+    </LanguageProvider>
+  );
 }

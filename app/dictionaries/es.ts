@@ -139,4 +139,12 @@ export const es: Record<TranslationKey, string> = {
   "products.microlotTitle": "Microlote del Mes",
   "products.microlotDesc": "La joya de la corona. Pequeños lotes de variedades experimentales y fermentaciones únicas.",
   "products.microlotProfile": "Complejo, Brillante e Irrepetible",
+
+  "cart.title": "Tu Carrito",
+  "cart.empty": "Tu carrito está vacío",
+  "cart.subtotal": "Subtotal",
+  "cart.checkout": "Finalizar Compra",
+  "cart.remove": "Eliminar",
+  "cart.items": "productos",
+  "cart.item": "producto",
 };
