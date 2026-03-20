@@ -2,21 +2,38 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // Update the session and get the user in a single step
-  const { supabaseResponse, user } = await updateSession(request)
+  const { pathname } = request.nextUrl
 
-  const isPortal = request.nextUrl.pathname.startsWith('/portal')
-  const isAuth = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register')
+  // Define paths that REQUIRE authentication checks
+  const isProtectedPath = pathname.startsWith('/portal') || pathname.startsWith('/dashboard')
+  const isAuthPath = pathname.startsWith('/login') || pathname.startsWith('/register')
+  
+  // Check for the presence of a Supabase session cookie
+  const hasSessionCookie = request.cookies.getAll().some(cookie => cookie.name.startsWith('sb-'))
 
-  if (isPortal && !user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  // Optimization: Only run the expensive session update/user check if:
+  // 1. We are on a protected or auth path
+  // 2. We have a session cookie that might need refreshing
+  if (isProtectedPath || isAuthPath || hasSessionCookie) {
+    const { supabaseResponse, user } = await updateSession(request)
+
+    if (isProtectedPath && !user) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    if (isAuthPath && user) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
+    return supabaseResponse
   }
 
-  if (isAuth && user) {
-     return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
-
-  return supabaseResponse
+  // Fast path for guest users on public pages
+  return NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
 }
 
 export const config = {
