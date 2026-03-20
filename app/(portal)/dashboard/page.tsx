@@ -96,23 +96,6 @@ export default async function DashboardPage() {
               )}
             </div>
 
-            {/* Profile Info Card */}
-            <div className="bg-white rounded-3xl p-10 border border-foreground/5 shadow-xl">
-              <h2 className="text-xl font-serif mb-8 flex items-center gap-3">
-                <CreditCard className="w-5 h-5 text-[#C59F59]" />
-                Datos de Envío & Facturación
-              </h2>
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/30">Dirección</label>
-                  <p className="text-sm font-medium">{profile?.address || "No especificada"}</p>
-                </div>
-                <div className="space-y-4">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/30">Documento de Identidad</label>
-                  <p className="text-sm font-medium">{profile?.cedula_number || "No especificado"}</p>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Sidebar Area */}
