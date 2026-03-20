@@ -22,7 +22,7 @@ export const en = {
   "story.sustainabilityDesc": "We take care of our land and those who cultivate it, because we believe in coffee with purpose.",
 
   // Services
-  "services.title": "Your Success, Our Blend",
+  "services.title": "Elevating your service standard",
   "services.subtitle": "More than a supplier, we are the partner that powers your business. With Amantti, you ensure exceptional quality and a team that joins you in the art of serving an unforgettable cup.",
   "services.barismoTitle": "Barismo Training",
   "services.barismoDesc": "We train your staff in the art of coffee: from espresso calibration to latte art and extraction techniques. Our goal is for every cup served to represent the quality and character of Amantti.",
