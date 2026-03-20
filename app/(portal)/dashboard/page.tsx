@@ -4,6 +4,7 @@ import { Coffee, Calendar, Package, CreditCard, ChevronRight, Settings, LogOut }
 import Link from "next/link";
 import { signOut } from "@/app/(auth)/login/actions";
 import { SubscriptionCard } from "./SubscriptionCard";
+import { DashboardCart } from "@/app/components/DashboardCart";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -61,6 +62,8 @@ export default async function DashboardPage() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content: Subscription Status */}
           <div className="lg:col-span-2 space-y-8">
+            <DashboardCart />
+            
             <div className="bg-white rounded-3xl p-10 border border-foreground/5 shadow-xl">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-xl font-serif">Tu Suscripción Activa</h2>
