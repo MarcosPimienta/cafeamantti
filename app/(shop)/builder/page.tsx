@@ -41,7 +41,7 @@ const PLANS = [
   },
 ];
 
-const WEIGHTS = ["250g", "500g", "1kg"];
+const WEIGHTS = ["250g", "500g", "2.5kg"];
 const FREQUENCIES = [
   { id: "weekly", label: "Semanal" },
   { id: "bi-weekly", label: "Quincenal" },
@@ -127,7 +127,7 @@ function BuilderForm() {
   }
 
   const getPrice = () => {
-    const multiplier = selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 3.2;
+    const multiplier = selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 8;
     return currentPlan.price * multiplier;
   };
 

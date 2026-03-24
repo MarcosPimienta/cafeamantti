@@ -71,7 +71,7 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
   };
 
   const calculatePrice = () => {
-    const multiplier = weight === "250g" ? 1 : weight === "500g" ? 1.8 : 3.2;
+    const multiplier = weight === "250g" ? 1 : weight === "500g" ? 1.8 : 8;
     return basePrice * multiplier;
   };
 
@@ -113,7 +113,7 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
           <div className="space-y-3">
             <label suppressHydrationWarning className="text-[10px] font-bold uppercase tracking-tighter text-foreground/40">{t("products.weightLabel")}</label>
             <div className="grid grid-cols-3 gap-2">
-              {["250g", "500g", "1kg"].map((w) => (
+              {["250g", "500g", "2.5kg"].map((w) => (
                 <button
                   key={w}
                   suppressHydrationWarning
