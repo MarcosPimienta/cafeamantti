@@ -84,7 +84,7 @@ export const es: Record<TranslationKey, string> = {
   // Subscription Plans
   "plans.title": "Nuestros Planes de Suscripción",
   "plans.essentialTitle": "Plan Devoción Esencial",
-  "plans.essentialSubtitle": "Anteriormente: Ritual Diario",
+  "plans.essentialSubtitle": "",
   "plans.essentialQuote": "El café esencial para empezar cada día con intención.",
   "plans.essentialContent": "250g o 500g de nuestra Selección Amantti (Perfil balanceado y constante).",
   "plans.essentialDifference": "Acceso a la \"Bitácora de Tueste\" (notas digitales sobre el lote específico de la semana).",
@@ -92,7 +92,7 @@ export const es: Record<TranslationKey, string> = {
   "plans.essentialIdeal": "El purista que busca la perfección en la consistencia.",
 
   "plans.alchemyTitle": "Plan Alquimia & Contraste",
-  "plans.alchemySubtitle": "Anteriormente: Plan Explorador",
+  "plans.alchemySubtitle": "",
   "plans.alchemyQuote": "Para quienes disfrutan descubrir nuevos perfiles y contrastes en cada taza.",
   "plans.alchemyContent": "250g Amantti Premium + 250g Honey de Edición Limitada.",
   "plans.alchemyDifference": "Incluye una \"Ficha de Cata Técnica\" para aprender a diferenciar notas frutales y procesos de fermentación.",
@@ -100,7 +100,7 @@ export const es: Record<TranslationKey, string> = {
   "plans.alchemyIdeal": "Parejas o entusiastas que ven el café como un tema de conversación, no solo una bebida.",
 
   "plans.curatorTitle": "Plan Curaduría Privada (The Curator’s Choice)",
-  "plans.curatorSubtitle": "Anteriormente: Plan Experiencia Especial",
+  "plans.curatorSubtitle": "",
   "plans.curatorQuote": "Una selección privada de los cafés más excepcionales de Amantti.",
   "plans.curatorContent": "El dúo clásico (Premium + Honey) + El Microlote del Mes (Varietales exóticos como Geisha, Borbón Rosado o procesos experimentales).",
   "plans.curatorDifference": "Envío prioritario de los lotes más escasos del año e invitación a una sesión de cata virtual privada con el tostador cada trimestre.",

@@ -82,7 +82,7 @@ export const en = {
   // Subscription Plans
   "plans.title": "Our Subscription Plans",
   "plans.essentialTitle": "Essential Devotion Plan",
-  "plans.essentialSubtitle": "Formerly: Daily Ritual",
+  "plans.essentialSubtitle": "",
   "plans.essentialQuote": "The essential coffee to start each day with intention.",
   "plans.essentialContent": "250g or 500g of our Amantti Selection (Balanced and consistent profile).",
   "plans.essentialDifference": "Access to the \"Roast Log\" (digital notes on the specific batch of the week).",
@@ -90,7 +90,7 @@ export const en = {
   "plans.essentialIdeal": "The purist seeking perfection in consistency.",
 
   "plans.alchemyTitle": "Alchemy & Contrast Plan",
-  "plans.alchemySubtitle": "Formerly: Explorer Plan",
+  "plans.alchemySubtitle": "",
   "plans.alchemyQuote": "For those who enjoy discovering new profiles and contrasts in every cup.",
   "plans.alchemyContent": "250g Amantti Premium + 250g Limited Edition Honey.",
   "plans.alchemyDifference": "Includes a \"Technical Tasting Sheet\" to learn to differentiate fruity notes and fermentation processes.",
@@ -98,7 +98,7 @@ export const en = {
   "plans.alchemyIdeal": "Pairs or enthusiasts who see coffee as a conversation topic, not just a beverage.",
 
   "plans.curatorTitle": "Private Curation Plan (The Curator's Choice)",
-  "plans.curatorSubtitle": "Formerly: Special Experience Plan",
+  "plans.curatorSubtitle": "",
   "plans.curatorQuote": "A private selection of Amantti's most exceptional coffees.",
   "plans.curatorContent": "The classic duo (Premium + Honey) + The Micro-lot of the Month (Exotic varietals like Geisha, Pink Bourbon, or experimental processes).",
   "plans.curatorDifference": "Priority shipping for the year's rarest lots and invitation to a quarterly private virtual tasting session with the roaster.",
