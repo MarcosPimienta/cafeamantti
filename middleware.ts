@@ -6,19 +6,33 @@ export async function middleware(request: NextRequest) {
 
   // Define paths that REQUIRE authentication checks
   const isProtectedPath = pathname.startsWith('/portal') || pathname.startsWith('/dashboard')
+  const isAdminPath = pathname.startsWith('/admin')
   const isAuthPath = pathname.startsWith('/login') || pathname.startsWith('/register')
   
   // Check for the presence of a Supabase session cookie
   const hasSessionCookie = request.cookies.getAll().some(cookie => cookie.name.startsWith('sb-'))
 
   // Optimization: Only run the expensive session update/user check if:
-  // 1. We are on a protected or auth path
+  // 1. We are on a protected, admin, or auth path
   // 2. We have a session cookie that might need refreshing
-  if (isProtectedPath || isAuthPath || hasSessionCookie) {
-    const { supabaseResponse, user } = await updateSession(request)
+  if (isProtectedPath || isAdminPath || isAuthPath || hasSessionCookie) {
+    const { supabase, supabaseResponse, user } = await updateSession(request)
 
-    if (isProtectedPath && !user) {
+    if ((isProtectedPath || isAdminPath) && !user) {
       return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    if (isAdminPath && user) {
+      // Verify admin role
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+        
+      if (profile?.role !== 'admin') {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
     }
 
     if (isAuthPath && user) {
