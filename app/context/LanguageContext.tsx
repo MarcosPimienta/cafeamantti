@@ -24,12 +24,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem("locale") as Locale | null;
     if (stored && (stored === "en" || stored === "es")) {
       setLocaleState(stored);
+      document.cookie = `NEXT_LOCALE=${stored}; path=/; max-age=31536000`;
     }
   }, []);
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);
     localStorage.setItem("locale", newLocale);
+    document.cookie = `NEXT_LOCALE=${newLocale}; path=/; max-age=31536000`;
   }, []);
 
   const t = useCallback(
