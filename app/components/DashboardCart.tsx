@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { ShoppingBag, Plus, Minus, Trash2, ArrowRight, Coffee } from "lucide-react";
 import { useCart } from "@/app/context/CartContext";
@@ -10,6 +10,7 @@ import Link from "next/link";
 export function DashboardCart() {
   const { items, removeItem, updateQuantity, subtotal, itemCount } = useCart();
   const { t } = useLanguage();
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -112,10 +113,25 @@ export function DashboardCart() {
               <p className="text-3xl font-serif text-[#C59F59]">{formatPrice(subtotal)}</p>
             </div>
             
-            <button suppressHydrationWarning className="px-10 py-5 bg-foreground text-background text-[10px] font-bold uppercase tracking-[0.2em] rounded-[1.25rem] hover:bg-[#C59F59] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3 group">
-              {t("cart.checkout")}
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-            </button>
+            <div className="flex flex-col items-end gap-3">
+              <div className="flex items-center gap-2">
+                <input
+                  id="dash-cart-terms"
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59] cursor-pointer"
+                />
+                <label htmlFor="dash-cart-terms" className="text-xs text-foreground/80 cursor-pointer">
+                  {t("auth.terms" as any)} <Link href="/terms" target="_blank" className="font-bold text-[#C59F59] hover:underline">{t("auth.termsLink" as any)}</Link>
+                </label>
+              </div>
+
+              <button disabled={!termsAccepted} suppressHydrationWarning className="px-10 py-5 bg-foreground text-background text-[10px] font-bold uppercase tracking-[0.2em] rounded-[1.25rem] hover:bg-[#C59F59] hover:text-white disabled:opacity-50 disabled:hover:bg-foreground disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-3 group">
+                {t("cart.checkout")}
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+              </button>
+            </div>
           </div>
         </div>
       )}

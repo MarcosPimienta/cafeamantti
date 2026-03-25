@@ -176,6 +176,9 @@ export const en = {
   "dashboard.sidebar.title": "Did you know?",
   "dashboard.sidebar.quote": "\"Amantti coffee goes through a manual, bean-by-bean selection process to ensure only the best reaches your cup.\"",
   "dashboard.sidebar.link": "View roasting log",
+
+  "auth.terms": "I agree to the",
+  "auth.termsLink": "Terms and Conditions",
 } as const;
 
 export type TranslationKey = keyof typeof en;

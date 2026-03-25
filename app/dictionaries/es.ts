@@ -178,4 +178,7 @@ export const es: Record<TranslationKey, string> = {
   "dashboard.sidebar.title": "¿Sabías que?",
   "dashboard.sidebar.quote": "\"El café Amantti pasa por un proceso de selección manual grano a grano para asegurar que solo lo mejor llegue a tu taza.\"",
   "dashboard.sidebar.link": "Ver bitácora de tueste",
+
+  "auth.terms": "Acepto los",
+  "auth.termsLink": "Términos y Condiciones",
 };

@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { X, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
+import Link from "next/link";
 import { useCart } from "@/app/context/CartContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 
@@ -14,6 +15,7 @@ interface CartDrawerProps {
 export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   const { items, removeItem, updateQuantity, subtotal, itemCount } = useCart();
   const { t } = useLanguage();
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -125,7 +127,21 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
               <span className="text-foreground/40 text-sm">{t("cart.subtotal")}</span>
               <span className="text-2xl font-serif">{formatPrice(subtotal)}</span>
             </div>
-            <button className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white font-bold uppercase tracking-[0.2em] text-[10px] rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 group">
+
+            <div className="flex items-start gap-3 mt-4 mb-2">
+              <input
+                id="cart-terms"
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="w-4 h-4 mt-0.5 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59] cursor-pointer"
+              />
+              <label htmlFor="cart-terms" className="text-xs text-foreground/60 leading-tight flex-1 cursor-pointer">
+                {t("auth.terms" as any)} <Link href="/terms" target="_blank" onClick={(e) => e.stopPropagation()} className="font-bold text-[#C59F59] hover:underline">{t("auth.termsLink" as any)}</Link>
+              </label>
+            </div>
+
+            <button disabled={!termsAccepted} className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white disabled:opacity-50 disabled:hover:bg-foreground disabled:cursor-not-allowed font-bold uppercase tracking-[0.2em] text-[10px] rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 group">
               {t("cart.checkout")}
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>

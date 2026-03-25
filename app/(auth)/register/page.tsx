@@ -18,6 +18,9 @@ const signupSchema = z.object({
   }),
   cedula: z.string().regex(/^\d{8,10}$/, { message: "Cédula must be 8-10 digits" }),
   address: z.string().min(5, { message: "Address is too short" }),
+  terms: z.boolean().refine((val) => val === true, {
+    message: "Debes aceptar los términos y condiciones",
+  }),
 });
 
 type FormValues = z.infer<typeof signupSchema>;
@@ -39,6 +42,7 @@ export default function RegisterPage() {
       phone: "",
       cedula: "",
       address: "",
+      terms: false as any,
     },
   });
 
@@ -47,7 +51,9 @@ export default function RegisterPage() {
     try {
       const formData = new FormData();
       Object.entries(data).forEach(([key, value]) => {
-        formData.append(key, value);
+        if (key !== "terms") {
+          formData.append(key, String(value));
+        }
       });
       await signup(formData);
     } catch (e: any) {
@@ -197,6 +203,23 @@ export default function RegisterPage() {
                 />
               </div>
               {errors.password && <p className="text-[10px] text-red-500 mt-1 px-1 font-medium">{errors.password.message}</p>}
+            </div>
+
+            <div className="flex items-start gap-3 px-1 mt-6">
+              <div className="flex h-5 items-center mt-1">
+                <input
+                  id="terms"
+                  type="checkbox"
+                  {...register("terms")}
+                  className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]"
+                />
+              </div>
+              <div className="text-sm">
+                <label htmlFor="terms" className="text-foreground/60">
+                  Acepto los <Link href="/terms" target="_blank" className="font-bold text-[#C59F59] hover:underline">Términos y Condiciones</Link>
+                </label>
+                {errors.terms && <p className="text-[10px] text-red-500 mt-1 font-medium">{errors.terms.message}</p>}
+              </div>
             </div>
 
             <div className="pt-6">
