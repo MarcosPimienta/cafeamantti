@@ -1033,25 +1033,9 @@ export default function Home() {
         <div className="container mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex gap-4">
             <Link
-              href="#"
-              className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
-            >
-              <Facebook className="w-4 h-4" />
-            </Link>
-            <Link
-              href="#"
-              className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
-            >
-              <Twitter className="w-4 h-4" />
-            </Link>
-            <Link
-              href="#"
-              className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
-            >
-              <Youtube className="w-4 h-4" />
-            </Link>
-            <Link
-              href="#"
+              href="https://www.instagram.com/cafeamantti?igsh=aHdoaGZzd3NlMnF1"
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
             >
               <Instagram className="w-4 h-4" />
@@ -1059,7 +1043,7 @@ export default function Home() {
           </div>
 
           <div className="text-sm font-medium text-foreground/60 hover:text-foreground transition-colors">
-            <Link href="https://instagram.com/cafeamantti" target="_blank">
+            <Link href="https://www.instagram.com/cafeamantti?igsh=aHdoaGZzd3NlMnF1" target="_blank" rel="noopener noreferrer">
               @cafeamantti
             </Link>
           </div>
