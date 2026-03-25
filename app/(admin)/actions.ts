@@ -133,3 +133,28 @@ export async function updateStoreSettings(formData: FormData) {
   
   return { success: true };
 }
+
+export async function updateShippingSettings(formData: FormData) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  
+  const default_shipping_cost = Number(formData.get("default_shipping_cost"));
+  const free_shipping_threshold = Number(formData.get("free_shipping_threshold"));
+
+  const { error } = await supabase
+    .from('store_settings')
+    .update({ 
+      default_shipping_cost, 
+      free_shipping_threshold 
+    })
+    .eq('id', 1);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/admin');
+  revalidatePath('/admin/settings');
+  
+  return { success: true };
+}
