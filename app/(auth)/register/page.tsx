@@ -7,6 +7,7 @@ import * as z from "zod";
 import { Coffee, ArrowRight, User, Mail, Lock, Phone, CreditCard, Globe, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { signup } from "../login/actions"; // Reusing the signup action
+import { TermsModal } from "@/app/components/TermsModal";
 
 const signupSchema = z.object({
   email: z.string().email({ message: "Invalid email address" }),
@@ -27,6 +28,7 @@ type FormValues = z.infer<typeof signupSchema>;
 
 export default function RegisterPage() {
   const [errorMsg, setErrorMsg] = useState("");
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   const {
     register,
@@ -210,13 +212,22 @@ export default function RegisterPage() {
                 <input
                   id="terms"
                   type="checkbox"
+                  suppressHydrationWarning
                   {...register("terms")}
                   className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]"
                 />
               </div>
               <div className="text-sm">
                 <label htmlFor="terms" className="text-foreground/60">
-                  Acepto los <Link href="/terms" target="_blank" className="font-bold text-[#C59F59] hover:underline">Términos y Condiciones</Link>
+                  Acepto los{" "}
+                  <button 
+                    type="button" 
+                    suppressHydrationWarning
+                    onClick={() => setIsTermsOpen(true)} 
+                    className="font-bold text-[#C59F59] hover:underline"
+                  >
+                    Términos y Condiciones
+                  </button>
                 </label>
                 {errors.terms && <p className="text-[10px] text-red-500 mt-1 font-medium">{errors.terms.message}</p>}
               </div>
@@ -245,6 +256,7 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
+      <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
     </main>
   );
 }

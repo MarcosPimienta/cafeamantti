@@ -6,11 +6,13 @@ import { ShoppingBag, Plus, Minus, Trash2, ArrowRight, Coffee } from "lucide-rea
 import { useCart } from "@/app/context/CartContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 import Link from "next/link";
+import { TermsModal } from "@/app/components/TermsModal";
 
 export function DashboardCart() {
   const { items, removeItem, updateQuantity, subtotal, itemCount } = useCart();
   const { t } = useLanguage();
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -123,7 +125,14 @@ export function DashboardCart() {
                   className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59] cursor-pointer"
                 />
                 <label htmlFor="dash-cart-terms" className="text-xs text-foreground/80 cursor-pointer">
-                  {t("auth.terms" as any)} <Link href="/terms" target="_blank" className="font-bold text-[#C59F59] hover:underline">{t("auth.termsLink" as any)}</Link>
+                  {t("auth.terms" as any)}{" "}
+                  <button 
+                    type="button" 
+                    onClick={(e) => { e.preventDefault(); setIsTermsOpen(true); }} 
+                    className="font-bold text-[#C59F59] hover:underline"
+                  >
+                    {t("auth.termsLink" as any)}
+                  </button>
                 </label>
               </div>
 
@@ -135,6 +144,7 @@ export function DashboardCart() {
           </div>
         </div>
       )}
+      <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
     </div>
   );
 }

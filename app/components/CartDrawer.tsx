@@ -6,6 +6,7 @@ import { X, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useCart } from "@/app/context/CartContext";
 import { useLanguage } from "@/app/context/LanguageContext";
+import { TermsModal } from "@/app/components/TermsModal";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   const { items, removeItem, updateQuantity, subtotal, itemCount } = useCart();
   const { t } = useLanguage();
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -137,7 +139,14 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                 className="w-4 h-4 mt-0.5 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59] cursor-pointer"
               />
               <label htmlFor="cart-terms" className="text-xs text-foreground/60 leading-tight flex-1 cursor-pointer">
-                {t("auth.terms" as any)} <Link href="/terms" target="_blank" onClick={(e) => e.stopPropagation()} className="font-bold text-[#C59F59] hover:underline">{t("auth.termsLink" as any)}</Link>
+                {t("auth.terms" as any)}{" "}
+                <button 
+                  type="button" 
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsTermsOpen(true); }} 
+                  className="font-bold text-[#C59F59] hover:underline"
+                >
+                  {t("auth.termsLink" as any)}
+                </button>
               </label>
             </div>
 
@@ -147,6 +156,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
             </button>
           </div>
         )}
+        <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
       </div>
     </>
   );
