@@ -293,3 +293,123 @@ export async function updateInventoryItem(
 
   return { success: true };
 }
+
+// ============================================================
+// PRODUCTION BATCH ACTIONS
+// ============================================================
+
+export async function runProductionBatch(
+  processType: 'trilla' | 'tostion',
+  inputInventoryId: string,
+  inputQtyKg: number,
+  outputInventoryId: string,
+  outputQtyKg: number,
+  notes?: string
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Fetch both inventory items
+  const { data: items, error: fetchError } = await supabase
+    .from('inventory')
+    .select('id, current_stock, product_name')
+    .in('id', [inputInventoryId, outputInventoryId]);
+
+  if (fetchError || !items || items.length < 2) throw new Error('Productos no encontrados');
+
+  const inputItem = items.find(i => i.id === inputInventoryId);
+  const outputItem = items.find(i => i.id === outputInventoryId);
+
+  if (!inputItem || !outputItem) throw new Error('Productos no encontrados');
+  if (inputItem.current_stock < inputQtyKg) {
+    throw new Error(`Stock insuficiente de "${inputItem.product_name}". Disponible: ${inputItem.current_stock} kg`);
+  }
+
+  const weightLossPct = ((inputQtyKg - outputQtyKg) / inputQtyKg) * 100;
+  const processLabel = processType === 'trilla' ? 'Trilla' : 'Tostión';
+
+  const newInputStock = inputItem.current_stock - inputQtyKg;
+  const newOutputStock = outputItem.current_stock + outputQtyKg;
+
+  // ── Salida on input ──────────────────────────────────────
+  const { error: salErr } = await supabase.from('inventory_movements').insert({
+    inventory_id: inputInventoryId,
+    type: 'salida',
+    quantity: -inputQtyKg,
+    reason: `Proceso: ${processLabel}${notes ? ` — ${notes}` : ''}`,
+    created_by: user?.id ?? null,
+  });
+  if (salErr) throw new Error(salErr.message);
+
+  const { error: inpUpdErr } = await supabase
+    .from('inventory')
+    .update({ current_stock: newInputStock })
+    .eq('id', inputInventoryId);
+  if (inpUpdErr) throw new Error(inpUpdErr.message);
+
+  // ── Entrada on output ────────────────────────────────────
+  const { error: entErr } = await supabase.from('inventory_movements').insert({
+    inventory_id: outputInventoryId,
+    type: 'entrada',
+    quantity: outputQtyKg,
+    reason: `Producto de ${processLabel} (pérdida ${weightLossPct.toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
+    created_by: user?.id ?? null,
+  });
+  if (entErr) throw new Error(entErr.message);
+
+  const { error: outUpdErr } = await supabase
+    .from('inventory')
+    .update({ current_stock: newOutputStock })
+    .eq('id', outputInventoryId);
+  if (outUpdErr) throw new Error(outUpdErr.message);
+
+  // ── Record the production batch ──────────────────────────
+  const { error: batchErr } = await supabase.from('production_batches').insert({
+    process_type: processType,
+    input_inventory_id: inputInventoryId,
+    input_quantity_kg: inputQtyKg,
+    output_inventory_id: outputInventoryId,
+    output_quantity_kg: outputQtyKg,
+    weight_loss_pct: weightLossPct,
+    notes: notes ?? null,
+    created_by: user?.id ?? null,
+  });
+  if (batchErr) throw new Error(batchErr.message);
+
+  revalidatePath('/admin/inventory');
+
+  return { success: true, newInputStock, newOutputStock };
+}
+
+export async function getProductionBatches() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('production_batches')
+    .select(`
+      id,
+      process_type,
+      input_quantity_kg,
+      output_quantity_kg,
+      weight_loss_pct,
+      notes,
+      created_at,
+      input_inventory:input_inventory_id ( product_code, product_name ),
+      output_inventory:output_inventory_id ( product_code, product_name )
+    `)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error('Error fetching production batches:', error);
+    return [];
+  }
+
+  return data;
+}
