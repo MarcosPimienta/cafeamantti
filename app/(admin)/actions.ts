@@ -18,6 +18,27 @@ export async function checkIsAdmin() {
   return profile?.role === 'admin';
 }
 
+export async function logAuditAction(
+  actionType: "CREATE" | "UPDATE" | "DELETE",
+  entityType: "MOVEMENT" | "TRILLA_BATCH",
+  entityId: string,
+  inventoryId?: string,
+  details?: Record<string, any>
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return; // Silent return if no admin context
+
+  await supabase.from("inventory_audit_logs").insert({
+    admin_id: user.id,
+    action_type: actionType,
+    entity_type: entityType,
+    entity_id: entityId,
+    inventory_id: inventoryId || null,
+    details: details || null,
+  });
+}
+
 export async function getDashboardMetrics() {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
@@ -434,7 +455,7 @@ async function _insertMovement(
     lote?: string;
   } = {}
 ) {
-  const { error } = await supabase.from('inventory_movements').insert({
+  const { data, error } = await supabase.from('inventory_movements').insert({
     inventory_id: inventoryId,
     type,
     quantity,
@@ -445,8 +466,9 @@ async function _insertMovement(
     entry_type: opts.entry_type ?? null,
     tab_source: opts.tab_source ?? null,
     lote: opts.lote ?? null,
-  });
+  }).select('id').single();
   if (error) throw new Error(error.message);
+  return data.id;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -540,7 +562,7 @@ export async function createEntrada(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
+  const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
     movement_date: date,
     entry_type: entryType,
     responsable,
@@ -549,6 +571,7 @@ export async function createEntrada(
   });
 
   const newStock = await _updateStockBy(supabase, inventoryId, qty);
+  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote });
   revalidatePath('/admin/inventory');
   return { success: true, newStock };
 }
@@ -566,7 +589,7 @@ export async function createSalida(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
+  const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
     movement_date: date,
     reason,
     responsable,
@@ -574,6 +597,7 @@ export async function createSalida(
   });
 
   const newStock = await _updateStockBy(supabase, inventoryId, -qty);
+  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, reason, responsable });
   revalidatePath('/admin/inventory');
   return { success: true, newStock };
 }
@@ -591,7 +615,7 @@ export async function createProdConsumo(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
+  const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
     movement_date: date,
     entry_type: entryType,
     responsable,
@@ -599,6 +623,7 @@ export async function createProdConsumo(
   });
 
   const newStock = await _updateStockBy(supabase, inventoryId, -qty);
+  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, entryType, responsable });
   revalidatePath('/admin/inventory');
   return { success: true, newStock };
 }
@@ -619,13 +644,14 @@ export async function createProdAlta(
   const reason =
     [lote ? `Lote: ${lote}` : null, notes].filter(Boolean).join(' — ') || null;
 
-  await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
+  const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
     movement_date: date,
     reason: reason ?? undefined,
     tab_source: 'prod_alta',
   });
 
   const newStock = await _updateStockBy(supabase, inventoryId, qty);
+  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, reason });
   revalidatePath('/admin/inventory');
   return { success: true, newStock };
 }
@@ -677,7 +703,7 @@ export async function createTrillaBatch(
   const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, outputQtyKg);
 
   // Production batch record
-  const { error: batchErr } = await supabase.from('production_batches').insert({
+  const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
     process_type: 'trilla',
     input_inventory_id: pergaminoInventoryId,
     input_quantity_kg: inputQtyKg,
@@ -688,16 +714,35 @@ export async function createTrillaBatch(
     notes: notes ?? null,
     created_by: user?.id ?? null,
     movement_date: date,
-  });
+  }).select('id').single();
   if (batchErr) throw new Error(batchErr.message);
+
+  await logAuditAction("CREATE", "TRILLA_BATCH", batchData.id, undefined, { inputQtyKg, outputQtyKg, rendimientoPct });
 
   revalidatePath('/admin/inventory');
   return { success: true, newPergaminoStock, newVerdeStock };
 }
 
 // ============================================================
-// REPORT DATA ACTION
+// REPORT AND AUDIT ACTIONS
 // ============================================================
+
+export async function getAuditLogs() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('inventory_audit_logs')
+    .select(`
+      *,
+      profiles:admin_id (first_name, last_name, email)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return data;
+}
 
 export async function getInventoryReportData() {
   const isAdmin = await checkIsAdmin();
@@ -733,5 +778,125 @@ export async function getInventoryReportData() {
     movements: movements ?? [],
     trillaBatches: trillaBatches ?? [],
     allMovements: allMovements ?? [],
+  };
+}
+
+// ============================================================
+// EDIT / DELETE ACTIONS
+// ============================================================
+
+export async function deleteMovement(id: string) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data: mov, error: selErr } = await supabase
+    .from('inventory_movements')
+    .select('inventory_id, quantity')
+    .eq('id', id)
+    .single();
+  if (selErr || !mov) throw new Error('Movimiento no encontrado');
+
+  const { error } = await supabase
+    .from('inventory_movements')
+    .delete()
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+
+  // Reverse the stock effect (negate the stored quantity)
+  const newStock = await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
+  await logAuditAction("DELETE", "MOVEMENT", id, mov.inventory_id, { old_quantity: mov.quantity });
+  revalidatePath('/admin/inventory');
+  return { success: true, inventoryId: mov.inventory_id, newStock };
+}
+
+export async function updateMovement(
+  id: string,
+  newQty: number, // signed — same sign as the original movement
+  date: string,
+  reason?: string,
+  responsable?: string,
+  entry_type?: string
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data: mov, error: selErr } = await supabase
+    .from('inventory_movements')
+    .select('inventory_id, quantity')
+    .eq('id', id)
+    .single();
+  if (selErr || !mov) throw new Error('Movimiento no encontrado');
+
+  const { error } = await supabase
+    .from('inventory_movements')
+    .update({
+      quantity: newQty,
+      movement_date: date,
+      reason: reason ?? null,
+      responsable: responsable ?? null,
+      entry_type: entry_type || null,
+    })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+
+  // Apply only the difference to stock
+  const delta = newQty - Number(mov.quantity);
+  const newStock = await _updateStockBy(supabase, mov.inventory_id, delta);
+  
+  await logAuditAction("UPDATE", "MOVEMENT", id, mov.inventory_id, { 
+    old_quantity: mov.quantity, 
+    new_quantity: newQty,
+    reason, responsable
+  });
+  
+  revalidatePath('/admin/inventory');
+  return { success: true, inventoryId: mov.inventory_id as string, newStock };
+}
+
+export async function deleteTrillaBatch(batchId: string) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data: batch, error: selErr } = await supabase
+    .from('production_batches')
+    .select('input_inventory_id, output_inventory_id, input_quantity_kg, output_quantity_kg')
+    .eq('id', batchId)
+    .single();
+  if (selErr || !batch) throw new Error('Lote no encontrado');
+
+  // Delete any linked movements (if production_batch_id column exists)
+  await supabase.from('inventory_movements').delete().eq('production_batch_id', batchId);
+
+  const { error } = await supabase
+    .from('production_batches')
+    .delete()
+    .eq('id', batchId);
+  if (error) throw new Error(error.message);
+
+  // Reverse: add back Pergamino, subtract Verde
+  const newPergaminoStock = await _updateStockBy(
+    supabase, batch.input_inventory_id, Number(batch.input_quantity_kg)
+  );
+  const newVerdeStock = await _updateStockBy(
+    supabase, batch.output_inventory_id, -Number(batch.output_quantity_kg)
+  );
+
+  await logAuditAction("DELETE", "TRILLA_BATCH", batchId, undefined, { 
+    batch_details: batch 
+  });
+
+  revalidatePath('/admin/inventory');
+  return {
+    success: true,
+    pergaminoId: batch.input_inventory_id as string,
+    newPergaminoStock,
+    verdeId: batch.output_inventory_id as string,
+    newVerdeStock,
   };
 }

@@ -21,6 +21,8 @@ import {
   Factory,
   RefreshCw,
   BarChart2,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import {
   BarChart,
@@ -48,6 +50,10 @@ import {
   createProdAlta,
   createTrillaBatch,
   getInventoryReportData,
+  deleteMovement,
+  updateMovement,
+  deleteTrillaBatch,
+  getAuditLogs,
 } from "../../actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -113,6 +119,7 @@ const TABS = [
   { id: "prod_altas", label: "Prod. Altas", Icon: TrendingUp },
   { id: "salidas", label: "Salidas", Icon: PackageMinus },
   { id: "reportes", label: "Reportes", Icon: BarChart2 },
+  { id: "auditoria", label: "Auditoría", Icon: History },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -829,6 +836,101 @@ function InventarioTab({
   );
 }
 
+// ─── Edit Movement Modal ──────────────────────────────────────────────────────
+
+function EditMovementModal({
+  record,
+  onClose,
+  onSuccess,
+}: {
+  record: MovementRecord;
+  onClose: () => void;
+  onSuccess: (inventoryId: string, newStock: number) => void;
+}) {
+  const origSign = record.quantity < 0 ? -1 : 1;
+  const [date, setDate] = useState(record.movement_date ?? today());
+  const [qty, setQty] = useState(String(Math.abs(record.quantity)));
+  const [reason, setReason] = useState(record.reason ?? "");
+  const [responsable, setResponsable] = useState(record.responsable ?? "");
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const parsedQty = parseFloat(qty);
+    if (isNaN(parsedQty) || parsedQty <= 0) { setError("Cantidad inválida"); return; }
+    const signedQty = origSign * parsedQty;
+    startTransition(async () => {
+      try {
+        const res = await updateMovement(record.id, signedQty, date, reason || undefined, responsable || undefined, record.entry_type || undefined);
+        onSuccess(res.inventoryId, res.newStock);
+        onClose();
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Error al guardar");
+      }
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="px-8 pt-8 pb-5 border-b border-foreground/5 flex items-center justify-between">
+          <div>
+            <p className={labelCls}>Editar movimiento</p>
+            <h3 className="text-xl font-serif">{record.quantity > 0 ? "+" : ""}{record.quantity}</h3>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5"><X className="w-5 h-5 text-foreground/40" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-8 space-y-4">
+          <div><label className={labelCls}>Fecha</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required /></div>
+          <div><label className={labelCls}>Cantidad (valor absoluto)</label><input type="number" min="0.001" step="0.001" value={qty} onChange={(e) => setQty(e.target.value)} className={inputCls} required /></div>
+          <div><label className={labelCls}>Motivo / Notas</label><input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo..." className={inputCls} /></div>
+          <div><label className={labelCls}>Responsable</label><input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder="Nombre..." className={inputCls} /></div>
+          {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-3 border border-foreground/10 rounded-2xl text-sm font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5">Cancelar</button>
+            <button type="submit" disabled={isPending} className="flex-1 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white rounded-2xl text-sm font-bold uppercase tracking-widest disabled:opacity-60">{isPending ? "Guardando..." : "Guardar"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Acciones cell helpers ────────────────────────────────────────────────────
+
+function AccionesCell({
+  id,
+  deletingId,
+  onEdit,
+  onConfirmDelete,
+  onCancelDelete,
+  onDelete,
+}: {
+  id: string;
+  deletingId: string | null;
+  onEdit: () => void;
+  onConfirmDelete: () => void;
+  onCancelDelete: () => void;
+  onDelete: () => void;
+}) {
+  if (deletingId === id) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold text-red-600">¿Eliminar?</span>
+        <button onClick={onConfirmDelete} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">Sí</button>
+        <button onClick={onCancelDelete} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">No</button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <button onClick={onEdit} title="Editar" className="p-1.5 rounded-lg hover:bg-foreground/5 text-foreground/40 hover:text-[#C59F59]"><Pencil className="w-3.5 h-3.5" /></button>
+      <button onClick={onDelete} title="Eliminar" className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+    </div>
+  );
+}
+
 // ─── Entradas Tab ─────────────────────────────────────────────────────────────
 
 function EntradasTab({
@@ -854,6 +956,8 @@ function EntradasTab({
     type: "success" | "error";
     msg: string;
   } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
     setLoading(true);
@@ -898,6 +1002,19 @@ function EntradasTab({
           type: "error",
           msg: err instanceof Error ? err.message : "Error al registrar",
         });
+      }
+    });
+  }
+
+  function handleDeleteRecord(record: MovementRecord) {
+    startTransition(async () => {
+      try {
+        const res = await deleteMovement(record.id);
+        onStockUpdate(res.inventoryId as string, res.newStock);
+        setDeletingId(null);
+        loadHistory();
+      } catch (err: unknown) {
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar" });
       }
     });
   }
@@ -1045,6 +1162,7 @@ function EntradasTab({
                   <th className={thCls}>Lote</th>
                   <th className={thCls}>Tipo</th>
                   <th className={thCls}>Responsable</th>
+                  <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -1091,6 +1209,9 @@ function EntradasTab({
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.responsable || "—"}
                       </td>
+                      <td className={tdCls}>
+                        <AccionesCell id={r.id} deletingId={deletingId} onEdit={() => setEditingRecord(r)} onConfirmDelete={() => handleDeleteRecord(r)} onCancelDelete={() => setDeletingId(null)} onDelete={() => setDeletingId(r.id)} />
+                      </td>
                     </tr>
                   );
                 })}
@@ -1099,6 +1220,9 @@ function EntradasTab({
           </div>
         )}
       </div>
+      {editingRecord && (
+        <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStockUpdate(invId, s); loadHistory(); setEditingRecord(null); }} />
+      )}
     </div>
   );
 }
@@ -1127,6 +1251,7 @@ function TrillaTab({
     type: "success" | "error";
     msg: string;
   } | null>(null);
+  const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
 
   // Auto-calculate output whenever input or rendimiento changes
   useEffect(() => {
@@ -1200,6 +1325,22 @@ function TrillaTab({
           type: "error",
           msg: err instanceof Error ? err.message : "Error al registrar la Trilla",
         });
+      }
+    });
+  }
+
+  function handleDeleteBatch(batchId: string) {
+    startTransition(async () => {
+      try {
+        const res = await deleteTrillaBatch(batchId);
+        onStocksUpdate([
+          { id: res.pergaminoId, newStock: res.newPergaminoStock },
+          { id: res.verdeId, newStock: res.newVerdeStock },
+        ]);
+        setDeletingBatchId(null);
+        loadHistory();
+      } catch (err: unknown) {
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar lote" });
       }
     });
   }
@@ -1400,6 +1541,7 @@ function TrillaTab({
                   <th className={`${thCls} text-right`}>Verde (kg)</th>
                   <th className={`${thCls} text-right`}>Pérdida %</th>
                   <th className={thCls}>Notas</th>
+                  <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -1426,6 +1568,19 @@ function TrillaTab({
                     </td>
                     <td className={`${tdCls} text-foreground/50`}>
                       {b.notes || "—"}
+                    </td>
+                    <td className={tdCls}>
+                      {deletingBatchId === b.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-red-600">¿Eliminar?</span>
+                          <button onClick={() => handleDeleteBatch(b.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">Sí</button>
+                          <button onClick={() => setDeletingBatchId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">No</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setDeletingBatchId(b.id)} title="Eliminar" className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1462,6 +1617,8 @@ function ProdConsumosTab({
     type: "success" | "error";
     msg: string;
   } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
     setLoading(true);
@@ -1505,6 +1662,19 @@ function ProdConsumosTab({
           type: "error",
           msg: err instanceof Error ? err.message : "Error al registrar",
         });
+      }
+    });
+  }
+
+  function handleDeleteRecord(record: MovementRecord) {
+    startTransition(async () => {
+      try {
+        const res = await deleteMovement(record.id);
+        onStockUpdate(res.inventoryId as string, res.newStock);
+        setDeletingId(null);
+        loadHistory();
+      } catch (err: unknown) {
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar" });
       }
     });
   }
@@ -1636,6 +1806,7 @@ function ProdConsumosTab({
                   <th className={`${thCls} text-right`}>Cantidad</th>
                   <th className={thCls}>Tipo</th>
                   <th className={thCls}>Responsable</th>
+                  <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -1673,6 +1844,9 @@ function ProdConsumosTab({
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.responsable || "—"}
                       </td>
+                      <td className={tdCls}>
+                        <AccionesCell id={r.id} deletingId={deletingId} onEdit={() => setEditingRecord(r)} onConfirmDelete={() => handleDeleteRecord(r)} onCancelDelete={() => setDeletingId(null)} onDelete={() => setDeletingId(r.id)} />
+                      </td>
                     </tr>
                   );
                 })}
@@ -1681,6 +1855,9 @@ function ProdConsumosTab({
           </div>
         )}
       </div>
+      {editingRecord && (
+        <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStockUpdate(invId, s); loadHistory(); setEditingRecord(null); }} />
+      )}
     </div>
   );
 }
@@ -1717,6 +1894,8 @@ function ProdAltasTab({
     type: "success" | "error";
     msg: string;
   } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
     setLoading(true);
@@ -1760,6 +1939,19 @@ function ProdAltasTab({
           type: "error",
           msg: err instanceof Error ? err.message : "Error al registrar",
         });
+      }
+    });
+  }
+
+  function handleDeleteRecord(record: MovementRecord) {
+    startTransition(async () => {
+      try {
+        const res = await deleteMovement(record.id);
+        onStockUpdate(res.inventoryId as string, res.newStock);
+        setDeletingId(null);
+        loadHistory();
+      } catch (err: unknown) {
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar" });
       }
     });
   }
@@ -1887,6 +2079,7 @@ function ProdAltasTab({
                   <th className={thCls}>Producto</th>
                   <th className={`${thCls} text-right`}>Cantidad</th>
                   <th className={thCls}>Lote / Notas</th>
+                  <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -1911,6 +2104,9 @@ function ProdAltasTab({
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.reason || "—"}
                       </td>
+                      <td className={tdCls}>
+                        <AccionesCell id={r.id} deletingId={deletingId} onEdit={() => setEditingRecord(r)} onConfirmDelete={() => handleDeleteRecord(r)} onCancelDelete={() => setDeletingId(null)} onDelete={() => setDeletingId(r.id)} />
+                      </td>
                     </tr>
                   );
                 })}
@@ -1919,6 +2115,9 @@ function ProdAltasTab({
           </div>
         )}
       </div>
+      {editingRecord && (
+        <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStockUpdate(invId, s); loadHistory(); setEditingRecord(null); }} />
+      )}
     </div>
   );
 }
@@ -1947,6 +2146,8 @@ function SalidasTab({
     type: "success" | "error";
     msg: string;
   } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
     setLoading(true);
@@ -1990,6 +2191,19 @@ function SalidasTab({
           type: "error",
           msg: err instanceof Error ? err.message : "Error al registrar",
         });
+      }
+    });
+  }
+
+  function handleDeleteRecord(record: MovementRecord) {
+    startTransition(async () => {
+      try {
+        const res = await deleteMovement(record.id);
+        onStockUpdate(res.inventoryId as string, res.newStock);
+        setDeletingId(null);
+        loadHistory();
+      } catch (err: unknown) {
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar" });
       }
     });
   }
@@ -2118,6 +2332,7 @@ function SalidasTab({
                   <th className={`${thCls} text-right`}>Cantidad</th>
                   <th className={thCls}>Motivo</th>
                   <th className={thCls}>Responsable</th>
+                  <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -2145,6 +2360,9 @@ function SalidasTab({
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.responsable || "—"}
                       </td>
+                      <td className={tdCls}>
+                        <AccionesCell id={r.id} deletingId={deletingId} onEdit={() => setEditingRecord(r)} onConfirmDelete={() => handleDeleteRecord(r)} onCancelDelete={() => setDeletingId(null)} onDelete={() => setDeletingId(r.id)} />
+                      </td>
                     </tr>
                   );
                 })}
@@ -2153,6 +2371,9 @@ function SalidasTab({
           </div>
         )}
       </div>
+      {editingRecord && (
+        <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStockUpdate(invId, s); loadHistory(); setEditingRecord(null); }} />
+      )}
     </div>
   );
 }
@@ -2591,6 +2812,88 @@ function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
   );
 }
 
+// ─── Auditoría Tab ─────────────────────────────────────────────────────────────
+
+function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getAuditLogs()
+      .then(setLogs)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7]">
+          <h3 className="font-serif text-lg">Historial de Auditoría</h3>
+          <p className="text-sm text-foreground/50">Registro completo de creaciones, modificaciones y eliminaciones</p>
+        </div>
+        {loading ? (
+          <div className="py-20 text-center text-foreground/40 text-sm font-bold tracking-widest flex items-center justify-center gap-2">
+             <Loader2 className="w-4 h-4 animate-spin" /> CARGANDO AUDITORÍA...
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="py-20 text-center text-foreground/40 text-sm font-bold tracking-widest">
+            NO HAY REGISTROS DE AUDITORÍA
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-[#fdfbf7] border-b border-foreground/5">
+                  <th className={thCls}>Fecha</th>
+                  <th className={thCls}>Usuario (Admin)</th>
+                  <th className={thCls}>Acción</th>
+                  <th className={thCls}>Entidad / Ref</th>
+                  <th className={thCls}>Detalle Base</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-foreground/5">
+                {logs.map((log) => {
+                  const inv = inventory.find((i) => i.id === log.inventory_id);
+                  const isDel = log.action_type === "DELETE";
+                  const isUpd = log.action_type === "UPDATE";
+                  
+                  return (
+                    <tr key={log.id} className="hover:bg-[#fdfbf7]">
+                      <td className={`${tdCls} whitespace-nowrap`}>
+                        {new Date(log.created_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                      </td>
+                      <td className={tdCls}>
+                        <div className="font-bold">{log.profiles?.first_name} {log.profiles?.last_name}</div>
+                        <div className="text-[10px] text-foreground/50 truncate max-w-[120px]">{log.profiles?.email}</div>
+                      </td>
+                      <td className={tdCls}>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${isDel ? "bg-red-50 text-red-600" : isUpd ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"}`}>
+                          {log.action_type}
+                        </span>
+                      </td>
+                      <td className={tdCls}>
+                        <div className="font-bold">{log.entity_type}</div>
+                        {inv && <div className="text-[10px] font-mono text-foreground/50">{inv.product_code}</div>}
+                      </td>
+                      <td className={`${tdCls} text-foreground/60`}>
+                        <pre className="text-[10px] bg-foreground/5 p-2 rounded-lg whitespace-pre-wrap max-w-xs overflow-hidden">
+                          {JSON.stringify(log.details, null, 2)}
+                        </pre>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Client Component ────────────────────────────────────────────────────
 
 export default function InventoryClient({
@@ -2667,6 +2970,7 @@ export default function InventoryClient({
         <SalidasTab inventory={inventory} onStockUpdate={updateStock} />
       )}
       {activeTab === "reportes" && <ReportesTab inventory={inventory} />}
+      {activeTab === "auditoria" && <AuditoriaTab inventory={inventory} />}
     </div>
   );
 }
