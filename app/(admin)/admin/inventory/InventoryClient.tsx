@@ -2441,6 +2441,8 @@ function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     trillaBatches: any[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tostionBatches: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     allMovements: any[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2522,6 +2524,27 @@ function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
           : `#${i + 1}`,
         Pergamino: Number(b.input_quantity_kg),
         Verde: Number(b.output_quantity_kg),
+        Rendimiento: b.rendimiento_pct
+          ? Math.round(Number(b.rendimiento_pct) * 100)
+          : null,
+      })
+    );
+  }, [reportData]);
+
+  // 6. Tostion bar chart
+  const tostionData = useMemo(() => {
+    if (!reportData || !reportData.tostionBatches) return [];
+    return reportData.tostionBatches.map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (b: any, i: number) => ({
+        name: b.movement_date
+          ? new Date(b.movement_date).toLocaleDateString("es-CO", {
+              day: "numeric",
+              month: "short",
+            })
+          : `#${i + 1}`,
+        Verde: Number(b.input_quantity_kg),
+        Tostado: Number(b.output_quantity_kg),
         Rendimiento: b.rendimiento_pct
           ? Math.round(Number(b.rendimiento_pct) * 100)
           : null,
@@ -2793,6 +2816,71 @@ function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
                 yAxisId="kg"
                 dataKey="Verde"
                 fill="#10b981"
+                radius={[6, 6, 0, 0]}
+              />
+              <Line
+                yAxisId="pct"
+                type="monotone"
+                dataKey="Rendimiento"
+                stroke="#6366f1"
+                strokeWidth={2}
+                dot={{ r: 4 }}
+                name="Rendimiento %"
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </ChartCard>
+
+      {/* Row 4: Tostión efficiency bar */}
+      <ChartCard title="Historial de Tostión — Verde Entrada vs Procesado Salida (kg)">
+        {tostionData.length === 0 ? (
+          <div className="flex items-center justify-center h-48 text-foreground/40 text-sm">
+            Sin datos de tostión aún.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart
+              data={tostionData}
+              margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0ece4" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#9c8f78" }} />
+              <YAxis
+                yAxisId="kg"
+                tick={{ fontSize: 11, fill: "#9c8f78" }}
+                label={{
+                  value: "kg",
+                  angle: -90,
+                  position: "insideLeft",
+                  style: { fontSize: 10, fill: "#9c8f78" },
+                }}
+              />
+              <YAxis
+                yAxisId="pct"
+                orientation="right"
+                tick={{ fontSize: 11, fill: "#9c8f78" }}
+                unit="%"
+                domain={[60, 100]}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 12,
+                  border: "1px solid #e8e0d0",
+                  fontSize: 12,
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar
+                yAxisId="kg"
+                dataKey="Verde"
+                fill="#10b981"
+                radius={[6, 6, 0, 0]}
+              />
+              <Bar
+                yAxisId="kg"
+                dataKey="Tostado"
+                fill="#C59F59"
                 radius={[6, 6, 0, 0]}
               />
               <Line

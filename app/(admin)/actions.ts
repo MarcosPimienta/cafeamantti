@@ -769,6 +769,14 @@ export async function getInventoryReportData() {
     .eq('process_type', 'trilla')
     .order('movement_date', { ascending: true });
 
+  const { data: tostionBatches } = await supabase
+    .from('production_batches')
+    .select(
+      'id, input_quantity_kg, output_quantity_kg, weight_loss_pct, rendimiento_pct, movement_date, created_at'
+    )
+    .eq('process_type', 'tostion')
+    .order('movement_date', { ascending: true });
+
   // All movements (no cutoff) grouped by tab_source for pie chart
   const { data: allMovements } = await supabase
     .from('inventory_movements')
@@ -777,6 +785,7 @@ export async function getInventoryReportData() {
   return {
     movements: movements ?? [],
     trillaBatches: trillaBatches ?? [],
+    tostionBatches: tostionBatches ?? [],
     allMovements: allMovements ?? [],
   };
 }
