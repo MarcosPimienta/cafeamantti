@@ -1,0 +1,13 @@
+📌 Código,📝 Descripción,⚖️ Unidad de Medida,📦 Presentación,🚨 Stock Mínimo,📊 Stock Actual (auto),🔖 Lote (referencia),⏰ Próximo Vencimiento (auto),🟢 Estado (auto),,
+CAPG-001,Café Pergamino,kg,-,100,-8.1,,,,,#N/A
+CAFV-001,Café Verde,kg,-,100,276.1985,,#NAME?,🟢 OK,,
+CAFT-250G,Café Tostado 250g (Grano/Molido),ud,250g,20,-201,,#NAME?,🟡 Bajo mínimo,,
+CAFT-500G,Café Tostado 500g (Grano/Molido),ud,500g,15,-61,,#NAME?,🟡 Bajo mínimo,,
+CAFT-2K5,Café Tostado 2.5kg (Grano/Molido),ud,2.5kg,5,15,,#NAME?,🟢 OK,,
+EMP-BOLSA,Bolsa Empaque,ud,-,50,353,,#NAME?,🟢 OK,,
+ETQ-CAFE,Etiqueta Café,ud,-,50,-435,,#NAME?,🟡 Bajo mínimo,,
+STK-AMT,Stickers Amantti,ud,-,30,200,,#NAME?,🟢 OK,,
+POC-001,Pocillo,ud,-,10,63,,#NAME?,🟢 OK,,
+SACF-001,Sacos de fique,ud,,,,,,,,
+CAFT-125G,Café Tostado 125g (Grano/Molido),ud,125g,,,,,,,
+CAFT-001,Cafe Tostado KG,kg,,100,,,,,,
