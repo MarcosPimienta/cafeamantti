@@ -2531,26 +2531,62 @@ function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
     );
   }, [reportData]);
 
-  // 6. Tostion bar chart
+  // 6. Tostion Weekly aggregation (Verde vs Tostado)
   const tostionData = useMemo(() => {
-    if (!reportData || !reportData.tostionBatches) return [];
-    return reportData.tostionBatches.map(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (b: any, i: number) => ({
-        name: b.movement_date
-          ? new Date(b.movement_date).toLocaleDateString("es-CO", {
-              day: "numeric",
-              month: "short",
-            })
-          : `#${i + 1}`,
-        Verde: Number(b.input_quantity_kg),
-        Tostado: Number(b.output_quantity_kg),
-        Rendimiento: b.rendimiento_pct
-          ? Math.round(Number(b.rendimiento_pct) * 100)
-          : null,
+    if (!reportData) return [];
+
+    const weightMap: Record<string, number> = {
+      "CAFT-125G": 0.125,
+      "CAFT-250G": 0.25,
+      "CAFT-500G": 0.5,
+      "CAFT-2K5": 2.5,
+      "CAFT-001": 1.0,
+    };
+
+    const weeks: Record<
+      string,
+      { name: string; Verde: number; Tostado: number; Rendimiento: number | null }
+    > = {};
+
+    for (const m of reportData.movements) {
+      if (m.tab_source !== "prod_consumo" && m.tab_source !== "prod_alta") continue;
+
+      const inv = inventory.find((i) => i.id === m.inventory_id);
+      if (!inv) continue;
+
+      const date = new Date(m.movement_date ?? m.created_at);
+      const year = date.getFullYear();
+      const week = Math.ceil(
+        ((date.getTime() - new Date(year, 0, 1).getTime()) / 86400000 +
+          new Date(year, 0, 1).getDay() +
+          1) /
+          7
+      );
+      const key = `${year}-S${String(week).padStart(2, "0")}`;
+
+      if (!weeks[key]) {
+        weeks[key] = { name: key, Verde: 0, Tostado: 0, Rendimiento: null };
+      }
+
+      if (m.tab_source === "prod_consumo" && inv.product_code === "CAFV-001") {
+        weeks[key].Verde += Math.abs(m.quantity);
+      } else if (m.tab_source === "prod_alta") {
+        const weight = weightMap[inv.product_code];
+        if (weight) {
+          weeks[key].Tostado += Math.abs(m.quantity) * weight;
+        }
+      }
+    }
+
+    return Object.values(weeks)
+      .map((w) => {
+        if (w.Verde > 0) {
+          w.Rendimiento = Math.round((w.Tostado / w.Verde) * 100);
+        }
+        return w;
       })
-    );
-  }, [reportData]);
+      .slice(-8); // Show last 8 active weeks
+  }, [reportData, inventory]);
 
   // ── KPI summary ───────────────────────────────────────────────────────────
   const totalEntradas = reportData
