@@ -897,6 +897,47 @@ function EditMovementModal({
   );
 }
 
+// ─── Pagination helpers ───────────────────────────────────────────────────────
+
+const ITEMS_PER_PAGE = 10;
+
+function PaginationControls({
+  currentPage,
+  totalItems,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between border-t border-foreground/5 px-6 py-4 bg-[#fdfbf7] gap-4">
+      <span className="text-[11px] font-bold uppercase tracking-widest text-foreground/50">
+        Página <span className="text-[#C59F59] text-sm">{currentPage}</span> de {totalPages}
+      </span>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl disabled:opacity-30 disabled:pointer-events-none hover:bg-foreground/5 transition-colors"
+        >
+          Anterior
+        </button>
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl disabled:opacity-30 disabled:pointer-events-none hover:bg-foreground/5 transition-colors"
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Acciones cell helpers ────────────────────────────────────────────────────
 
 function AccionesCell({
@@ -957,6 +998,8 @@ function EntradasTab({
     msg: string;
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedRecords = records.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
@@ -1151,8 +1194,9 @@ function EntradasTab({
         {loading || records.length === 0 ? (
           <HistoryLoadingOrEmpty loading={loading} empty={records.length === 0} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                   <th className={thCls}>Fecha</th>
@@ -1166,7 +1210,7 @@ function EntradasTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
-                {records.map((r) => {
+                {paginatedRecords.map((r) => {
                   const inv = getRelation(r.inventory);
                   return (
                     <tr key={r.id} className="hover:bg-[#fdfbf7]">
@@ -1218,6 +1262,12 @@ function EntradasTab({
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={records.length}
+            onPageChange={setCurrentPage}
+          />
+        </>
         )}
       </div>
       {editingRecord && (
@@ -1252,6 +1302,8 @@ function TrillaTab({
     msg: string;
   } | null>(null);
   const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedBatches = batches.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   // Auto-calculate output whenever input or rendimiento changes
   useEffect(() => {
@@ -1531,8 +1583,9 @@ function TrillaTab({
         {loading || batches.length === 0 ? (
           <HistoryLoadingOrEmpty loading={loading} empty={batches.length === 0} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                   <th className={thCls}>Fecha</th>
@@ -1545,7 +1598,7 @@ function TrillaTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
-                {batches.map((b) => (
+                {paginatedBatches.map((b) => (
                   <tr key={b.id} className="hover:bg-[#fdfbf7]">
                     <td className={tdCls}>
                       {b.movement_date
@@ -1587,6 +1640,12 @@ function TrillaTab({
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={batches.length}
+            onPageChange={setCurrentPage}
+          />
+        </>
         )}
       </div>
     </div>
@@ -1618,6 +1677,8 @@ function ProdConsumosTab({
     msg: string;
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedRecords = records.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
@@ -1796,8 +1857,9 @@ function ProdConsumosTab({
         {loading || records.length === 0 ? (
           <HistoryLoadingOrEmpty loading={loading} empty={records.length === 0} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                   <th className={thCls}>Fecha</th>
@@ -1810,7 +1872,7 @@ function ProdConsumosTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
-                {records.map((r) => {
+                {paginatedRecords.map((r) => {
                   const inv = getRelation(r.inventory);
                   return (
                     <tr key={r.id} className="hover:bg-[#fdfbf7]">
@@ -1853,6 +1915,12 @@ function ProdConsumosTab({
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={records.length}
+            onPageChange={setCurrentPage}
+          />
+        </>
         )}
       </div>
       {editingRecord && (
@@ -1895,6 +1963,8 @@ function ProdAltasTab({
     msg: string;
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedRecords = records.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
@@ -2070,8 +2140,9 @@ function ProdAltasTab({
         {loading || records.length === 0 ? (
           <HistoryLoadingOrEmpty loading={loading} empty={records.length === 0} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                   <th className={thCls}>Fecha</th>
@@ -2083,7 +2154,7 @@ function ProdAltasTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
-                {records.map((r) => {
+                {paginatedRecords.map((r) => {
                   const inv = getRelation(r.inventory);
                   return (
                     <tr key={r.id} className="hover:bg-[#fdfbf7]">
@@ -2113,6 +2184,12 @@ function ProdAltasTab({
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={records.length}
+            onPageChange={setCurrentPage}
+          />
+        </>
         )}
       </div>
       {editingRecord && (
@@ -2147,6 +2224,8 @@ function SalidasTab({
     msg: string;
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedRecords = records.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
@@ -2322,8 +2401,9 @@ function SalidasTab({
         {loading || records.length === 0 ? (
           <HistoryLoadingOrEmpty loading={loading} empty={records.length === 0} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                   <th className={thCls}>Fecha</th>
@@ -2336,7 +2416,7 @@ function SalidasTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
-                {records.map((r) => {
+                {paginatedRecords.map((r) => {
                   const inv = getRelation(r.inventory);
                   return (
                     <tr key={r.id} className="hover:bg-[#fdfbf7]">
@@ -2369,6 +2449,12 @@ function SalidasTab({
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={records.length}
+            onPageChange={setCurrentPage}
+          />
+        </>
         )}
       </div>
       {editingRecord && (
@@ -2942,6 +3028,8 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const paginatedLogs = logs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   useEffect(() => {
     getAuditLogs()
@@ -2966,8 +3054,9 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
             NO HAY REGISTROS DE AUDITORÍA
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                   <th className={thCls}>Fecha</th>
@@ -2978,7 +3067,7 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
-                {logs.map((log) => {
+                {paginatedLogs.map((log) => {
                   const inv = inventory.find((i) => i.id === log.inventory_id);
                   const isDel = log.action_type === "DELETE";
                   const isUpd = log.action_type === "UPDATE";
@@ -3012,6 +3101,12 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={logs.length}
+            onPageChange={setCurrentPage}
+          />
+        </>
         )}
       </div>
     </div>
