@@ -20,7 +20,23 @@ import {
   FlaskConical,
   Factory,
   RefreshCw,
+  BarChart2,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+} from "recharts";
 import {
   adjustInventoryStock,
   getInventoryMovements,
@@ -31,6 +47,7 @@ import {
   createProdConsumo,
   createProdAlta,
   createTrillaBatch,
+  getInventoryReportData,
 } from "../../actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -94,6 +111,7 @@ const TABS = [
   { id: "prod_consumos", label: "Prod. Consumos", Icon: Factory },
   { id: "prod_altas", label: "Prod. Altas", Icon: TrendingUp },
   { id: "salidas", label: "Salidas", Icon: PackageMinus },
+  { id: "reportes", label: "Reportes", Icon: BarChart2 },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -2113,6 +2131,440 @@ function SalidasTab({
   );
 }
 
+// ─── Reportes Tab ────────────────────────────────────────────────────────────
+
+const PIE_COLORS = [
+  "#C59F59",
+  "#10b981",
+  "#ef4444",
+  "#6366f1",
+  "#f59e0b",
+  "#3b82f6",
+];
+
+const TAB_LABELS: Record<string, string> = {
+  entrada: "Entradas",
+  salida: "Salidas",
+  trilla: "Trilla",
+  prod_consumo: "Prod. Consumos",
+  prod_alta: "Prod. Altas",
+};
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  color = "text-foreground",
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  color?: string;
+}) {
+  return (
+    <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">
+        {label}
+      </p>
+      <p className={`text-3xl font-serif font-bold ${color}`}>{value}</p>
+      {sub && <p className="text-xs text-foreground/40 mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+function ChartCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6">
+      <h3 className="font-serif text-lg mb-5">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
+  const [reportData, setReportData] = useState<{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    movements: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    trillaBatches: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    allMovements: any[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getInventoryReportData()
+      .then(setReportData)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // ── derived data ──────────────────────────────────────────────────────────
+
+  // 1. Stock vs Mínimo — bar chart
+  const stockData = inventory
+    .filter((i) => i.current_stock !== 0 || i.min_stock !== 0)
+    .sort((a, b) => b.current_stock - a.current_stock)
+    .map((i) => ({
+      name: i.product_code,
+      Stock: i.current_stock,
+      Mínimo: i.min_stock,
+    }));
+
+  // 2. Category donut
+  const categoryData = Object.entries(
+    inventory.reduce((acc, i) => {
+      acc[i.category] = (acc[i.category] ?? 0) + 1;
+      return acc;
+    }, {} as Record<string, number>)
+  ).map(([name, value]) => ({ name, value }));
+
+  // 3. Pie by tab_source
+  const pieData = useMemo(() => {
+    if (!reportData) return [];
+    const counts: Record<string, number> = {};
+    for (const m of reportData.allMovements) {
+      if (!m.tab_source) continue;
+      counts[m.tab_source] = (counts[m.tab_source] ?? 0) + 1;
+    }
+    return Object.entries(counts).map(([key, value]) => ({
+      name: TAB_LABELS[key] ?? key,
+      value,
+    }));
+  }, [reportData]);
+
+  // 4. Weekly line chart — entradas vs salidas (last 8 weeks)
+  const weeklyData = useMemo(() => {
+    if (!reportData) return [];
+    const weeks: Record<string, { semana: string; Entradas: number; Salidas: number }> = {};
+    for (const m of reportData.movements) {
+      const date = new Date(m.movement_date ?? m.created_at);
+      // ISO week label: YYYY-Www
+      const year = date.getFullYear();
+      const week = Math.ceil(
+        ((date.getTime() - new Date(year, 0, 1).getTime()) / 86400000 +
+          new Date(year, 0, 1).getDay() +
+          1) /
+          7
+      );
+      const key = `${year}-S${String(week).padStart(2, "0")}`;
+      if (!weeks[key]) weeks[key] = { semana: key, Entradas: 0, Salidas: 0 };
+      if (m.quantity > 0) weeks[key].Entradas += m.quantity;
+      else weeks[key].Salidas += Math.abs(m.quantity);
+    }
+    return Object.values(weeks).slice(-8);
+  }, [reportData]);
+
+  // 5. Trilla bar chart
+  const trillaData = useMemo(() => {
+    if (!reportData) return [];
+    return reportData.trillaBatches.map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (b: any, i: number) => ({
+        name: b.movement_date
+          ? new Date(b.movement_date).toLocaleDateString("es-CO", {
+              day: "numeric",
+              month: "short",
+            })
+          : `#${i + 1}`,
+        Pergamino: Number(b.input_quantity_kg),
+        Verde: Number(b.output_quantity_kg),
+        Rendimiento: b.rendimiento_pct
+          ? Math.round(Number(b.rendimiento_pct) * 100)
+          : null,
+      })
+    );
+  }, [reportData]);
+
+  // ── KPI summary ───────────────────────────────────────────────────────────
+  const totalEntradas = reportData
+    ? reportData.allMovements
+        .filter((m) => m.tab_source === "entrada")
+        .length
+    : 0;
+  const totalSalidas = reportData
+    ? reportData.allMovements
+        .filter((m) => m.tab_source === "salida")
+        .length
+    : 0;
+  const totalTrilla = reportData ? reportData.trillaBatches.length : 0;
+  const totalPergaminoKg = reportData
+    ? reportData.trillaBatches.reduce(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (acc: number, b: any) => acc + Number(b.input_quantity_kg),
+        0
+      )
+    : 0;
+  const lowStock = inventory.filter((i) => i.current_stock <= i.min_stock).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="w-10 h-10 text-[#C59F59] animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-xl font-serif">Reportes y Estadísticas</h2>
+        <p className="text-sm text-foreground/50 mt-1">
+          Resumen visual del estado del inventario y flujo de producción.
+        </p>
+      </div>
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <KpiCard label="SKUs totales" value={inventory.length} />
+        <KpiCard
+          label="Stock bajo"
+          value={lowStock}
+          sub="productos en alerta"
+          color={lowStock > 0 ? "text-amber-600" : "text-emerald-600"}
+        />
+        <KpiCard label="Entradas (total)" value={totalEntradas} color="text-emerald-600" />
+        <KpiCard label="Salidas (total)" value={totalSalidas} color="text-red-600" />
+        <KpiCard
+          label="Trillas realizadas"
+          value={totalTrilla}
+          sub={`${totalPergaminoKg.toFixed(1)} kg procesados`}
+          color="text-[#C59F59]"
+        />
+      </div>
+
+      {/* Row 1: Stock bar + Category donut */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ChartCard title="Stock Actual vs Mínimo por Producto">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart
+                data={stockData}
+                margin={{ top: 5, right: 10, left: 0, bottom: 60 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0ece4" />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 10, fill: "#9c8f78" }}
+                  angle={-40}
+                  textAnchor="end"
+                  interval={0}
+                />
+                <YAxis tick={{ fontSize: 11, fill: "#9c8f78" }} />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "1px solid #e8e0d0",
+                    fontSize: 12,
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 16 }} />
+                <Bar dataKey="Stock" fill="#C59F59" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Mínimo" fill="#e8d8b4" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+
+        <ChartCard title="SKUs por Categoría">
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={categoryData}
+                cx="50%"
+                cy="45%"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={4}
+                dataKey="value"
+                label={({ name, value }) => `${name} (${value})`}
+                labelLine={false}
+              >
+                {categoryData.map((_, idx) => (
+                  <Cell
+                    key={idx}
+                    fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                  />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 12,
+                  border: "1px solid #e8e0d0",
+                  fontSize: 12,
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      {/* Row 2: Weekly line + Movements pie */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ChartCard title="Tendencia Semanal — Entradas vs Salidas (últimas 8 semanas)">
+            {weeklyData.length === 0 ? (
+              <div className="flex items-center justify-center h-48 text-foreground/40 text-sm">
+                Sin datos de movimientos aún.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart
+                  data={weeklyData}
+                  margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0ece4" />
+                  <XAxis
+                    dataKey="semana"
+                    tick={{ fontSize: 10, fill: "#9c8f78" }}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: "#9c8f78" }} />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid #e8e0d0",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Line
+                    type="monotone"
+                    dataKey="Entradas"
+                    stroke="#10b981"
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: "#10b981" }}
+                    activeDot={{ r: 6 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Salidas"
+                    stroke="#ef4444"
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: "#ef4444" }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+        </div>
+
+        <ChartCard title="Movimientos por Tipo">
+          {pieData.length === 0 ? (
+            <div className="flex items-center justify-center h-48 text-foreground/40 text-sm">
+              Sin movimientos aún.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="45%"
+                  outerRadius={95}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {pieData.map((_, idx) => (
+                    <Cell
+                      key={idx}
+                      fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "1px solid #e8e0d0",
+                    fontSize: 12,
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: 11 }}
+                  iconType="circle"
+                  iconSize={8}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Row 3: Trilla efficiency bar */}
+      <ChartCard title="Historial de Trillas — Pergamino Entrada vs Verde Salida (kg)">
+        {trillaData.length === 0 ? (
+          <div className="flex items-center justify-center h-48 text-foreground/40 text-sm">
+            Sin trillas registradas aún.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart
+              data={trillaData}
+              margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0ece4" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#9c8f78" }} />
+              <YAxis
+                yAxisId="kg"
+                tick={{ fontSize: 11, fill: "#9c8f78" }}
+                label={{
+                  value: "kg",
+                  angle: -90,
+                  position: "insideLeft",
+                  style: { fontSize: 10, fill: "#9c8f78" },
+                }}
+              />
+              <YAxis
+                yAxisId="pct"
+                orientation="right"
+                tick={{ fontSize: 11, fill: "#9c8f78" }}
+                unit="%"
+                domain={[60, 100]}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 12,
+                  border: "1px solid #e8e0d0",
+                  fontSize: 12,
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar
+                yAxisId="kg"
+                dataKey="Pergamino"
+                fill="#d4b47a"
+                radius={[6, 6, 0, 0]}
+              />
+              <Bar
+                yAxisId="kg"
+                dataKey="Verde"
+                fill="#10b981"
+                radius={[6, 6, 0, 0]}
+              />
+              <Line
+                yAxisId="pct"
+                type="monotone"
+                dataKey="Rendimiento"
+                stroke="#6366f1"
+                strokeWidth={2}
+                dot={{ r: 4 }}
+                name="Rendimiento %"
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </ChartCard>
+    </div>
+  );
+}
+
 // ─── Main Client Component ────────────────────────────────────────────────────
 
 export default function InventoryClient({
@@ -2188,6 +2640,7 @@ export default function InventoryClient({
       {activeTab === "salidas" && (
         <SalidasTab inventory={inventory} onStockUpdate={updateStock} />
       )}
+      {activeTab === "reportes" && <ReportesTab inventory={inventory} />}
     </div>
   );
 }

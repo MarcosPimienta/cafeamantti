@@ -690,3 +690,44 @@ export async function createTrillaBatch(
   revalidatePath('/admin/inventory');
   return { success: true, newPergaminoStock, newVerdeStock };
 }
+
+// ============================================================
+// REPORT DATA ACTION
+// ============================================================
+
+export async function getInventoryReportData() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  // All movements in the last 180 days
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 180);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  const { data: movements } = await supabase
+    .from('inventory_movements')
+    .select('id, type, quantity, movement_date, tab_source, created_at, inventory_id')
+    .gte('movement_date', cutoffStr)
+    .order('movement_date', { ascending: true });
+
+  const { data: trillaBatches } = await supabase
+    .from('production_batches')
+    .select(
+      'id, input_quantity_kg, output_quantity_kg, weight_loss_pct, rendimiento_pct, movement_date, created_at'
+    )
+    .eq('process_type', 'trilla')
+    .order('movement_date', { ascending: true });
+
+  // All movements (no cutoff) grouped by tab_source for pie chart
+  const { data: allMovements } = await supabase
+    .from('inventory_movements')
+    .select('tab_source, quantity');
+
+  return {
+    movements: movements ?? [],
+    trillaBatches: trillaBatches ?? [],
+    allMovements: allMovements ?? [],
+  };
+}
