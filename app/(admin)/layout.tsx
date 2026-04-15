@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { Coffee, LayoutDashboard, ShoppingBag, Users, Settings, LogOut } from "lucide-react";
+import { Coffee, LayoutDashboard, ShoppingBag, Users, Settings, LogOut, Package } from "lucide-react";
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 
@@ -34,6 +34,10 @@ export default async function AdminLayout({
           <Link href="/admin/orders" className="flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl text-foreground/60 hover:bg-[#C59F59] hover:text-white transition-all group">
             <ShoppingBag className="w-4 h-4 text-foreground/40 group-hover:text-white/80" />
             Órdenes
+          </Link>
+          <Link href="/admin/inventory" className="flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl text-foreground/60 hover:bg-[#C59F59] hover:text-white transition-all group">
+            <Package className="w-4 h-4 text-foreground/40 group-hover:text-white/80" />
+            Inventario
           </Link>
           <Link href="/admin/subscriptions" className="flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl text-foreground/60 hover:bg-[#C59F59] hover:text-white transition-all group">
             <Coffee className="w-4 h-4 text-foreground/40 group-hover:text-white/80" />
