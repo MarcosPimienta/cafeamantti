@@ -413,3 +413,280 @@ export async function getProductionBatches() {
 
   return data;
 }
+
+// ============================================================
+// INTERNAL HELPERS (not exported — run on-server only)
+// ============================================================
+
+async function _insertMovement(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  userId: string | null,
+  inventoryId: string,
+  type: 'entrada' | 'salida',
+  quantity: number,
+  opts: {
+    movement_date?: string;
+    reason?: string;
+    responsable?: string;
+    entry_type?: string;
+    tab_source?: string;
+  } = {}
+) {
+  const { error } = await supabase.from('inventory_movements').insert({
+    inventory_id: inventoryId,
+    type,
+    quantity,
+    reason: opts.reason ?? null,
+    created_by: userId,
+    movement_date: opts.movement_date ?? null,
+    responsable: opts.responsable ?? null,
+    entry_type: opts.entry_type ?? null,
+    tab_source: opts.tab_source ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function _updateStockBy(supabase: any, inventoryId: string, delta: number): Promise<number> {
+  const { data, error: selErr } = await supabase
+    .from('inventory')
+    .select('current_stock')
+    .eq('id', inventoryId)
+    .single();
+  if (selErr || !data) throw new Error('Producto no encontrado');
+  const newStock = Number(data.current_stock) + delta;
+  if (newStock < 0) throw new Error('El stock no puede ser negativo');
+  const { error: updErr } = await supabase
+    .from('inventory')
+    .update({ current_stock: newStock })
+    .eq('id', inventoryId);
+  if (updErr) throw new Error(updErr.message);
+  return newStock;
+}
+
+// ============================================================
+// TAB-BASED DATA FETCHING
+// ============================================================
+
+export async function getMovementsByTab(tabSource: string) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('inventory_movements')
+    .select(`
+      id, inventory_id, type, quantity, reason,
+      movement_date, responsable, entry_type, tab_source, created_at,
+      inventory ( product_code, product_name, unit )
+    `)
+    .eq('tab_source', tabSource)
+    .order('movement_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.error('getMovementsByTab error:', error);
+    return [];
+  }
+  return data;
+}
+
+export async function getTrillaBatches() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('production_batches')
+    .select(`
+      id, process_type, input_quantity_kg, output_quantity_kg,
+      weight_loss_pct, rendimiento_pct, movement_date, notes, created_at,
+      input_inventory:input_inventory_id ( product_code, product_name ),
+      output_inventory:output_inventory_id ( product_code, product_name )
+    `)
+    .eq('process_type', 'trilla')
+    .order('movement_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.error('getTrillaBatches error:', error);
+    return [];
+  }
+  return data;
+}
+
+// ============================================================
+// TAB OPERATION ACTIONS
+// ============================================================
+
+export async function createEntrada(
+  inventoryId: string,
+  qty: number,
+  date: string,
+  entryType: 'MP' | 'MAT',
+  responsable?: string
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
+    movement_date: date,
+    entry_type: entryType,
+    responsable,
+    tab_source: 'entrada',
+  });
+
+  const newStock = await _updateStockBy(supabase, inventoryId, qty);
+  revalidatePath('/admin/inventory');
+  return { success: true, newStock };
+}
+
+export async function createSalida(
+  inventoryId: string,
+  qty: number,
+  date: string,
+  reason?: string,
+  responsable?: string
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
+    movement_date: date,
+    reason,
+    responsable,
+    tab_source: 'salida',
+  });
+
+  const newStock = await _updateStockBy(supabase, inventoryId, -qty);
+  revalidatePath('/admin/inventory');
+  return { success: true, newStock };
+}
+
+export async function createProdConsumo(
+  inventoryId: string,
+  qty: number,
+  date: string,
+  entryType: 'MP' | 'MAT',
+  responsable?: string
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
+    movement_date: date,
+    entry_type: entryType,
+    responsable,
+    tab_source: 'prod_consumo',
+  });
+
+  const newStock = await _updateStockBy(supabase, inventoryId, -qty);
+  revalidatePath('/admin/inventory');
+  return { success: true, newStock };
+}
+
+export async function createProdAlta(
+  inventoryId: string,
+  qty: number,
+  date: string,
+  lote?: string,
+  notes?: string
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const reason =
+    [lote ? `Lote: ${lote}` : null, notes].filter(Boolean).join(' — ') || null;
+
+  await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
+    movement_date: date,
+    reason: reason ?? undefined,
+    tab_source: 'prod_alta',
+  });
+
+  const newStock = await _updateStockBy(supabase, inventoryId, qty);
+  revalidatePath('/admin/inventory');
+  return { success: true, newStock };
+}
+
+export async function createTrillaBatch(
+  pergaminoInventoryId: string,
+  verdeInventoryId: string,
+  inputQtyKg: number,
+  rendimientoPct: number, // decimal, e.g. 0.735
+  date: string,
+  notes?: string
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Validate Pergamino stock
+  const { data: pergamino, error: pergErr } = await supabase
+    .from('inventory')
+    .select('current_stock, product_name')
+    .eq('id', pergaminoInventoryId)
+    .single();
+  if (pergErr || !pergamino) throw new Error('Café Pergamino no encontrado');
+  if (Number(pergamino.current_stock) < inputQtyKg) {
+    throw new Error(
+      `Stock insuficiente de Café Pergamino. Disponible: ${pergamino.current_stock} kg`
+    );
+  }
+
+  const outputQtyKg = inputQtyKg * rendimientoPct;
+  const weightLossPct = (1 - rendimientoPct) * 100;
+
+  // Salida: Pergamino
+  await _insertMovement(supabase, user?.id ?? null, pergaminoInventoryId, 'salida', -inputQtyKg, {
+    movement_date: date,
+    reason: `Trilla → Café Verde${notes ? ` — ${notes}` : ''}`,
+    tab_source: 'trilla',
+  });
+  const newPergaminoStock = await _updateStockBy(supabase, pergaminoInventoryId, -inputQtyKg);
+
+  // Entrada: Verde
+  await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'entrada', outputQtyKg, {
+    movement_date: date,
+    reason: `Trilla (rend. ${(rendimientoPct * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
+    tab_source: 'trilla',
+  });
+  const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, outputQtyKg);
+
+  // Production batch record
+  const { error: batchErr } = await supabase.from('production_batches').insert({
+    process_type: 'trilla',
+    input_inventory_id: pergaminoInventoryId,
+    input_quantity_kg: inputQtyKg,
+    output_inventory_id: verdeInventoryId,
+    output_quantity_kg: outputQtyKg,
+    weight_loss_pct: weightLossPct,
+    rendimiento_pct: rendimientoPct,
+    notes: notes ?? null,
+    created_by: user?.id ?? null,
+    movement_date: date,
+  });
+  if (batchErr) throw new Error(batchErr.message);
+
+  revalidatePath('/admin/inventory');
+  return { success: true, newPergaminoStock, newVerdeStock };
+}
