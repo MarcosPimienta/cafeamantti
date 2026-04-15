@@ -71,6 +71,7 @@ interface MovementRecord {
   type: string;
   quantity: number;
   reason: string | null;
+  lote: string | null;
   movement_date: string | null;
   responsable: string | null;
   entry_type: string | null;
@@ -843,6 +844,7 @@ function EntradasTab({
     date: today(),
     entryType: "MP" as "MP" | "MAT",
     responsable: "",
+    lote: "",
   };
   const [form, setForm] = useState(initForm);
   const [records, setRecords] = useState<MovementRecord[]>([]);
@@ -884,7 +886,8 @@ function EntradasTab({
           parseFloat(form.qty),
           form.date,
           form.entryType,
-          form.responsable || undefined
+          form.responsable || undefined,
+          form.lote || undefined
         );
         onStockUpdate(form.inventoryId, res.newStock);
         setFeedback({ type: "success", msg: "✓ Entrada registrada exitosamente" });
@@ -982,6 +985,19 @@ function EntradasTab({
                 className={inputCls}
               />
             </div>
+            <div>
+              <label htmlFor="ent-lote" className={labelCls}>
+                Lote (opcional)
+              </label>
+              <input
+                id="ent-lote"
+                type="text"
+                value={form.lote}
+                onChange={(e) => setForm({ ...form, lote: e.target.value })}
+                placeholder="ej. L2025-01-P00"
+                className={inputCls}
+              />
+            </div>
           </div>
           <FeedbackBanner feedback={feedback} />
           <button
@@ -1026,6 +1042,7 @@ function EntradasTab({
                   <th className={thCls}>Código</th>
                   <th className={thCls}>Producto</th>
                   <th className={`${thCls} text-right`}>Cantidad</th>
+                  <th className={thCls}>Lote</th>
                   <th className={thCls}>Tipo</th>
                   <th className={thCls}>Responsable</th>
                 </tr>
@@ -1048,6 +1065,15 @@ function EntradasTab({
                       <td className={tdCls}>{inv?.product_name ?? "—"}</td>
                       <td className={`${tdCls} text-right font-bold text-emerald-700`}>
                         +{r.quantity}
+                      </td>
+                      <td className={tdCls}>
+                        {r.lote ? (
+                          <span className="font-mono text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg">
+                            {r.lote}
+                          </span>
+                        ) : (
+                          <span className="text-foreground/30">—</span>
+                        )}
                       </td>
                       <td className={tdCls}>
                         {r.entry_type && (

@@ -431,6 +431,7 @@ async function _insertMovement(
     responsable?: string;
     entry_type?: string;
     tab_source?: string;
+    lote?: string;
   } = {}
 ) {
   const { error } = await supabase.from('inventory_movements').insert({
@@ -443,6 +444,7 @@ async function _insertMovement(
     responsable: opts.responsable ?? null,
     entry_type: opts.entry_type ?? null,
     tab_source: opts.tab_source ?? null,
+    lote: opts.lote ?? null,
   });
   if (error) throw new Error(error.message);
 }
@@ -478,7 +480,7 @@ export async function getMovementsByTab(tabSource: string) {
   const { data, error } = await supabase
     .from('inventory_movements')
     .select(`
-      id, inventory_id, type, quantity, reason,
+      id, inventory_id, type, quantity, reason, lote,
       movement_date, responsable, entry_type, tab_source, created_at,
       inventory ( product_code, product_name, unit )
     `)
@@ -529,7 +531,8 @@ export async function createEntrada(
   qty: number,
   date: string,
   entryType: 'MP' | 'MAT',
-  responsable?: string
+  responsable?: string,
+  lote?: string
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -542,6 +545,7 @@ export async function createEntrada(
     entry_type: entryType,
     responsable,
     tab_source: 'entrada',
+    lote,
   });
 
   const newStock = await _updateStockBy(supabase, inventoryId, qty);
