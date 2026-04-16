@@ -642,15 +642,6 @@ function InventarioTab({
     }
   }
 
-  function SortIcon({ field }: { field: keyof InventoryItem }) {
-    if (sortField !== field) return null;
-    return sortAsc ? (
-      <ChevronUp className="w-3 h-3" />
-    ) : (
-      <ChevronDown className="w-3 h-3" />
-    );
-  }
-
   return (
     <>
       {/* Summary cards */}
@@ -727,6 +718,7 @@ function InventarioTab({
               placeholder="Buscar por nombre o código..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              suppressHydrationWarning={true}
               className="w-full pl-11 pr-4 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
             />
           </div>
@@ -736,6 +728,7 @@ function InventarioTab({
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
+                suppressHydrationWarning={true}
                 className="pl-9 pr-4 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none appearance-none cursor-pointer"
               >
                 <option value="all">Todas las categorías</option>
@@ -746,6 +739,7 @@ function InventarioTab({
             </div>
             <button
               onClick={() => setLowStockOnly(!lowStockOnly)}
+              suppressHydrationWarning={true}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all whitespace-nowrap ${
                 lowStockOnly
                   ? "bg-amber-500 text-white border-amber-500"
@@ -763,31 +757,29 @@ function InventarioTab({
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                <th
-                  className={`${thCls} cursor-pointer`}
-                  onClick={() => toggleSort("product_code")}
-                >
-                  <span className="flex items-center gap-1">
-                    Código <SortIcon field="product_code" />
-                  </span>
-                </th>
-                <th
-                  className={`${thCls} cursor-pointer`}
-                  onClick={() => toggleSort("product_name")}
-                >
-                  <span className="flex items-center gap-1">
-                    Producto <SortIcon field="product_name" />
-                  </span>
-                </th>
+                <SortableTh 
+                  label="Código" 
+                  field="product_code" 
+                  sortField={sortField} 
+                  sortAsc={sortAsc} 
+                  onSort={(f) => toggleSort(f as keyof InventoryItem)} 
+                />
+                <SortableTh 
+                  label="Producto" 
+                  field="product_name" 
+                  sortField={sortField} 
+                  sortAsc={sortAsc} 
+                  onSort={(f) => toggleSort(f as keyof InventoryItem)} 
+                />
                 <th className={thCls}>Categoría</th>
-                <th
-                  className={`${thCls} cursor-pointer text-right`}
-                  onClick={() => toggleSort("current_stock")}
-                >
-                  <span className="flex items-center gap-1 justify-end">
-                    Stock <SortIcon field="current_stock" />
-                  </span>
-                </th>
+                <SortableTh 
+                  label="Stock" 
+                  field="current_stock" 
+                  className="text-right"
+                  sortField={sortField} 
+                  sortAsc={sortAsc} 
+                  onSort={(f) => toggleSort(f as keyof InventoryItem)} 
+                />
                 <th className={`${thCls} text-right`}>Mín.</th>
                 <th className={`${thCls} text-center`}>Estado</th>
                 <th className={`${thCls} text-center`}>Acciones</th>
@@ -1166,6 +1158,7 @@ function EntradasTab({
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
+                suppressHydrationWarning={true}
                 className={inputCls}
                 required
               />
@@ -1551,6 +1544,7 @@ function TrillaTab({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
+                suppressHydrationWarning={true}
                 className={inputCls}
                 required
               />
@@ -1872,6 +1866,7 @@ function ProdConsumosTab({
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
+                suppressHydrationWarning={true}
                 className={inputCls}
                 required
               />
@@ -2156,6 +2151,7 @@ function ProdAltasTab({
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
+                suppressHydrationWarning={true}
                 className={inputCls}
                 required
               />
@@ -2499,6 +2495,7 @@ function SalidasTab({
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
+                suppressHydrationWarning={true}
                 className={inputCls}
                 required
               />
@@ -3220,8 +3217,9 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortField, setSortField] = useState("date");
+  const [sortAsc, setSortAsc] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const paginatedLogs = logs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   useEffect(() => {
     getAuditLogs()
@@ -3229,6 +3227,17 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  const sortedLogs = useMemo(() => sortRecordsList(logs, sortField, sortAsc), [logs, sortField, sortAsc]);
+  const paginatedLogs = sortedLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  function handleSort(field: string) {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -3251,10 +3260,10 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <th className={thCls}>Fecha</th>
-                  <th className={thCls}>Usuario (Admin)</th>
-                  <th className={thCls}>Acción</th>
-                  <th className={thCls}>Entidad / Ref</th>
+                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Usuario (Admin)" field="profiles.first_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Acción" field="action_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Entidad / Ref" field="entity_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Detalle Base</th>
                 </tr>
               </thead>
@@ -3349,6 +3358,7 @@ export default function InventoryClient({
             key={id}
             id={`tab-${id}`}
             onClick={() => setActiveTab(id)}
+            suppressHydrationWarning={true}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all ${
               activeTab === id
                 ? "bg-[#C59F59] text-white shadow-sm"
