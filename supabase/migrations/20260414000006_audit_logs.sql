@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS inventory_audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    admin_id UUID REFERENCES auth.users(id),
+    admin_id UUID REFERENCES public.profiles(id),
     action_type VARCHAR(50) NOT NULL, -- 'CREATE', 'UPDATE', 'DELETE'
     entity_type VARCHAR(50) NOT NULL, -- 'MOVEMENT', 'TRILLA_BATCH'
     entity_id UUID,
