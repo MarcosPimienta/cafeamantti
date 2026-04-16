@@ -632,6 +632,7 @@ export async function createProdAlta(
   inventoryId: string,
   qty: number,
   date: string,
+  consumos: { id: string; qty: number }[] = [],
   lote?: string,
   notes?: string
 ) {
@@ -641,9 +642,48 @@ export async function createProdAlta(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Validate stock for all consumos first to avoid partial commits
+  for (const c of consumos) {
+    if (c.qty <= 0) continue;
+    const { data: matInfo, error } = await supabase
+      .from('inventory')
+      .select('current_stock, product_name')
+      .eq('id', c.id)
+      .single();
+    
+    if (error || !matInfo) {
+      throw new Error(`Material consumido no encontrado.`);
+    }
+    
+    if (matInfo.current_stock < c.qty) {
+      throw new Error(`Stock insuficiente para el material consumido: ${matInfo.product_name}.`);
+    }
+  }
+
   const reason =
     [lote ? `Lote: ${lote}` : null, notes].filter(Boolean).join(' — ') || null;
 
+  // 1. Process consumos (Salidas)
+  const consumedResults: { id: string; newStock: number }[] = [];
+  for (const c of consumos) {
+    if (c.qty <= 0) continue;
+    
+    const matReason = `Consumo para Alta de prod. term.${reason ? ` — ${reason}` : ''}`;
+    
+    const cId = await _insertMovement(supabase, user?.id ?? null, c.id, 'salida', -c.qty, {
+      movement_date: date,
+      reason: matReason,
+      entry_type: 'MAT',
+      tab_source: 'prod_alta_consumo',
+    });
+    
+    const ns = await _updateStockBy(supabase, c.id, -c.qty);
+    consumedResults.push({ id: c.id, newStock: ns });
+    
+    await logAuditAction("CREATE", "MOVEMENT", cId, c.id, { qty: -c.qty, reason: matReason });
+  }
+
+  // 2. Process Prod Alta (Entrada)
   const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
     movement_date: date,
     reason: reason ?? undefined,
@@ -651,9 +691,10 @@ export async function createProdAlta(
   });
 
   const newStock = await _updateStockBy(supabase, inventoryId, qty);
-  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, reason });
+  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, reason, consumosCount: consumos.length });
+  
   revalidatePath('/admin/inventory');
-  return { success: true, newStock };
+  return { success: true, newStock, consumedResults };
 }
 
 export async function createTrillaBatch(

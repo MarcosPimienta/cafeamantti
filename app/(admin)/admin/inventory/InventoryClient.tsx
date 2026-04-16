@@ -1955,6 +1955,7 @@ function ProdAltasTab({
     notes: "",
   };
   const [form, setForm] = useState(initForm);
+  const [consumos, setConsumos] = useState<{ id: string; qty: string }[]>([]);
   const [records, setRecords] = useState<MovementRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -1993,16 +1994,27 @@ function ProdAltasTab({
     }
     startTransition(async () => {
       try {
+        const consumosParsed = consumos
+          .filter(c => c.id && c.qty && parseFloat(c.qty) > 0)
+          .map(c => ({ id: c.id, qty: parseFloat(c.qty) }));
+
         const res = await createProdAlta(
           form.inventoryId,
           parseFloat(form.qty),
           form.date,
+          consumosParsed,
           form.lote || undefined,
           form.notes || undefined
         );
         onStockUpdate(form.inventoryId, res.newStock);
+        if (res.consumedResults) {
+          res.consumedResults.forEach((cr: { id: string; newStock: number }) => {
+            onStockUpdate(cr.id, cr.newStock);
+          });
+        }
         setFeedback({ type: "success", msg: "✓ Alta de producción registrada" });
         setForm(initForm);
+        setConsumos([]);
         loadHistory();
       } catch (err: unknown) {
         setFeedback({
@@ -2106,6 +2118,75 @@ function ProdAltasTab({
               />
             </div>
           </div>
+
+          {/* Materiales Consumidos */}
+          <div className="mb-6 p-5 rounded-2xl border border-foreground/10 bg-[#fdfbf7]">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Materiales Consumidos</h3>
+                <p className="text-xs text-foreground/50">Opcional. Registra bolsas o stickers utilizados.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConsumos([...consumos, { id: "", qty: "" }])}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-xs font-bold text-foreground transition-colors"
+              >
+                <PackagePlus className="w-3.5 h-3.5" />
+                Agregar Material
+              </button>
+            </div>
+            
+            {consumos.length > 0 ? (
+              <div className="space-y-3">
+                {consumos.map((c, i) => (
+                  <div key={i} className="flex flex-col sm:flex-row gap-3 items-end">
+                    <div className="flex-1">
+                      <label className="text-[10px] uppercase font-bold text-foreground/40 mb-1 block">Material</label>
+                      <ProductSelect
+                        value={c.id}
+                        onChange={(v) => {
+                          const newC = [...consumos];
+                          newC[i].id = v;
+                          setConsumos(newC);
+                        }}
+                        inventory={inventory}
+                        filter={(inv) => inv.category === "empaque" || inv.category === "accesorio"}
+                        placeholder="Seleccionar bolsa o sticker..."
+                      />
+                    </div>
+                    <div className="w-full sm:w-32">
+                      <label className="text-[10px] uppercase font-bold text-foreground/40 mb-1 block">Cantidad</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        value={c.qty}
+                        onChange={(e) => {
+                          const newC = [...consumos];
+                          newC[i].qty = e.target.value;
+                          setConsumos(newC);
+                        }}
+                        placeholder="ej. 50"
+                        className={inputCls}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setConsumos(consumos.filter((_, idx) => idx !== i))}
+                      className="p-3.5 mb-px rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-center text-foreground/40 border-2 border-dashed border-foreground/5 rounded-xl py-6">
+                No has agregado materiales consumidos.
+              </p>
+            )}
+          </div>
+
           <FeedbackBanner feedback={feedback} />
           <button
             type="submit"
