@@ -1684,7 +1684,11 @@ function ProdConsumosTab({
   function loadHistory() {
     setLoading(true);
     getMovementsByTab("prod_consumo")
-      .then((d) => setRecords(d as MovementRecord[]))
+      .then((d) => {
+        const data = d as MovementRecord[];
+        // Esconder consumos viejos de empaques/stickers en esta vista para mantenerla limpia
+        setRecords(data.filter((r) => r.entry_type === "MP" || r.inventory?.category === "cafe"));
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }
@@ -1746,7 +1750,7 @@ function ProdConsumosTab({
         <div className="mb-6">
           <h2 className="text-xl font-serif">Producción — Consumos</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            Registra materias primas (MP) y materiales (MAT) consumidos en un lote de producción.
+            Registra el café verde consumido para el proceso de Tostión (Materia Prima).
           </p>
         </div>
         <form onSubmit={handleSubmit}>
@@ -1773,6 +1777,8 @@ function ProdConsumosTab({
                 value={form.inventoryId}
                 onChange={(v) => setForm({ ...form, inventoryId: v })}
                 inventory={inventory}
+                filter={(i) => i.category === 'cafe'}
+                placeholder="Seleccionar café verde..."
               />
             </div>
             <div>
@@ -1791,22 +1797,7 @@ function ProdConsumosTab({
                 required
               />
             </div>
-            <div>
-              <label htmlFor="pc-type" className={labelCls}>
-                Tipo (MP / MAT)
-              </label>
-              <select
-                id="pc-type"
-                value={form.entryType}
-                onChange={(e) =>
-                  setForm({ ...form, entryType: e.target.value as "MP" | "MAT" })
-                }
-                className={`${inputCls} appearance-none cursor-pointer`}
-              >
-                <option value="MP">MP — Materia Prima</option>
-                <option value="MAT">MAT — Material</option>
-              </select>
-            </div>
+
             <div>
               <label htmlFor="pc-resp" className={labelCls}>
                 Responsable (opcional)
@@ -1866,7 +1857,6 @@ function ProdConsumosTab({
                   <th className={thCls}>Código</th>
                   <th className={thCls}>Producto</th>
                   <th className={`${thCls} text-right`}>Cantidad</th>
-                  <th className={thCls}>Tipo</th>
                   <th className={thCls}>Responsable</th>
                   <th className={thCls}>Acciones</th>
                 </tr>
@@ -1889,19 +1879,6 @@ function ProdConsumosTab({
                       <td className={tdCls}>{inv?.product_name ?? "—"}</td>
                       <td className={`${tdCls} text-right font-bold text-red-600`}>
                         {r.quantity}
-                      </td>
-                      <td className={tdCls}>
-                        {r.entry_type && (
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                              r.entry_type === "MP"
-                                ? "bg-[#C59F59]/10 text-[#C59F59]"
-                                : "bg-blue-50 text-blue-600"
-                            }`}
-                          >
-                            {r.entry_type}
-                          </span>
-                        )}
                       </td>
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.responsable || "—"}
