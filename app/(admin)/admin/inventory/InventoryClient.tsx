@@ -519,6 +519,76 @@ function HistoryDrawer({
   );
 }
 
+function SortingIcon({
+  field,
+  sortField,
+  sortAsc,
+}: {
+  field: string;
+  sortField: string;
+  sortAsc: boolean;
+}) {
+  if (sortField !== field) return <span className="w-3 h-3 block" />;
+  return sortAsc ? (
+    <ChevronUp className="w-3 h-3 text-[#C59F59]" />
+  ) : (
+    <ChevronDown className="w-3 h-3 text-[#C59F59]" />
+  );
+}
+
+function SortableTh({
+  label,
+  field,
+  sortField,
+  sortAsc,
+  onSort,
+  className = "",
+}: {
+  label: string;
+  field: string;
+  sortField: string;
+  sortAsc: boolean;
+  onSort: (f: string) => void;
+  className?: string;
+}) {
+  const isRight = className.includes("text-right");
+  return (
+    <th
+      className={`${thCls} cursor-pointer hover:bg-black/5 transition-colors select-none ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <span className={`flex items-center gap-1 ${isRight ? "justify-end" : ""}`}>
+        {label} <SortingIcon field={field} sortField={sortField} sortAsc={sortAsc} />
+      </span>
+    </th>
+  );
+}
+
+function sortRecordsList<T>(data: T[], sortField: string, sortAsc: boolean): T[] {
+  return [...data].sort((a: any, b: any) => {
+    let aVal = sortField === "date" ? (a.movement_date || a.created_at) : (sortField.includes(".") ? sortField.split(".").reduce((o: any, i: string) => o?.[i], a) : a[sortField]);
+    let bVal = sortField === "date" ? (b.movement_date || b.created_at) : (sortField.includes(".") ? sortField.split(".").reduce((o: any, i: string) => o?.[i], b) : b[sortField]);
+    
+    if (Array.isArray(aVal)) aVal = aVal[0];
+    if (Array.isArray(bVal)) bVal = bVal[0];
+
+    if (sortField === "date") {
+      const cmp = new Date(aVal || 0).getTime() - new Date(bVal || 0).getTime();
+      return sortAsc ? cmp : -cmp;
+    }
+
+    const aNum = Number(aVal);
+    const bNum = Number(bVal);
+    let cmp = 0;
+    if (!isNaN(aNum) && !isNaN(bNum) && typeof aVal !== "boolean" && aVal !== null && aVal !== "") {
+      cmp = aNum - bNum;
+    } else {
+      cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""), "es");
+    }
+    return sortAsc ? cmp : -cmp;
+  });
+}
+
 // ─── Inventario Tab ───────────────────────────────────────────────────────────
 
 function InventarioTab({
@@ -999,7 +1069,20 @@ function EntradasTab({
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const paginatedRecords = records.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const [sortField, setSortField] = useState("date");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sortedRecords = useMemo(() => sortRecordsList(records, sortField, sortAsc), [records, sortField, sortAsc]);
+  const paginatedRecords = sortedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  function handleSort(field: string) {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  }
+
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
@@ -1199,13 +1282,13 @@ function EntradasTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <th className={thCls}>Fecha</th>
-                  <th className={thCls}>Código</th>
-                  <th className={thCls}>Producto</th>
-                  <th className={`${thCls} text-right`}>Cantidad</th>
-                  <th className={thCls}>Lote</th>
-                  <th className={thCls}>Tipo</th>
-                  <th className={thCls}>Responsable</th>
+                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Lote" field="lote" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Tipo" field="entry_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Responsable" field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
@@ -1303,7 +1386,19 @@ function TrillaTab({
   } | null>(null);
   const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const paginatedBatches = batches.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const [sortField, setSortField] = useState("date");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sortedBatches = useMemo(() => sortRecordsList(batches, sortField, sortAsc), [batches, sortField, sortAsc]);
+  const paginatedBatches = sortedBatches.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  function handleSort(field: string) {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  }
 
   // Auto-calculate output whenever input or rendimiento changes
   useEffect(() => {
@@ -1588,12 +1683,12 @@ function TrillaTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <th className={thCls}>Fecha</th>
-                  <th className={`${thCls} text-right`}>Pergamino (kg)</th>
-                  <th className={`${thCls} text-right`}>Rendimiento</th>
-                  <th className={`${thCls} text-right`}>Verde (kg)</th>
-                  <th className={`${thCls} text-right`}>Pérdida %</th>
-                  <th className={thCls}>Notas</th>
+                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Pergamino (kg)" field="input_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Rendimiento" field="rendimiento_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Verde (kg)" field="output_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Pérdida %" field="weight_loss_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Notas" field="notes" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
@@ -1678,7 +1773,20 @@ function ProdConsumosTab({
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const paginatedRecords = records.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const [sortField, setSortField] = useState("date");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sortedRecords = useMemo(() => sortRecordsList(records, sortField, sortAsc), [records, sortField, sortAsc]);
+  const paginatedRecords = sortedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  function handleSort(field: string) {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  }
+
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
@@ -1853,11 +1961,11 @@ function ProdConsumosTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <th className={thCls}>Fecha</th>
-                  <th className={thCls}>Código</th>
-                  <th className={thCls}>Producto</th>
-                  <th className={`${thCls} text-right`}>Cantidad</th>
-                  <th className={thCls}>Responsable</th>
+                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Responsable" field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
@@ -1942,7 +2050,20 @@ function ProdAltasTab({
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const paginatedRecords = records.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const [sortField, setSortField] = useState("date");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sortedRecords = useMemo(() => sortRecordsList(records, sortField, sortAsc), [records, sortField, sortAsc]);
+  const paginatedRecords = sortedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  function handleSort(field: string) {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  }
+
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
@@ -2203,11 +2324,11 @@ function ProdAltasTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <th className={thCls}>Fecha</th>
-                  <th className={thCls}>Código</th>
-                  <th className={thCls}>Producto</th>
-                  <th className={`${thCls} text-right`}>Cantidad</th>
-                  <th className={thCls}>Lote / Notas</th>
+                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Lote / Notas" field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
@@ -2283,7 +2404,20 @@ function SalidasTab({
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const paginatedRecords = records.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const [sortField, setSortField] = useState("date");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sortedRecords = useMemo(() => sortRecordsList(records, sortField, sortAsc), [records, sortField, sortAsc]);
+  const paginatedRecords = sortedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  function handleSort(field: string) {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  }
+
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
   function loadHistory() {
@@ -2464,12 +2598,12 @@ function SalidasTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <th className={thCls}>Fecha</th>
-                  <th className={thCls}>Código</th>
-                  <th className={thCls}>Producto</th>
-                  <th className={`${thCls} text-right`}>Cantidad</th>
-                  <th className={thCls}>Motivo</th>
-                  <th className={thCls}>Responsable</th>
+                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Motivo" field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Responsable" field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
