@@ -777,7 +777,7 @@ export async function getAuditLogs() {
     .from('inventory_audit_logs')
     .select(`
       *,
-      profiles:admin_id (first_name, last_name, email)
+      profiles:admin_id (first_name, last_name)
     `)
     .order('created_at', { ascending: false });
 
