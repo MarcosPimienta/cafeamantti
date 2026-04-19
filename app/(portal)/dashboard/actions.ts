@@ -11,13 +11,15 @@ export async function updateUserProfile(formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const first_name = formData.get("first_name") as string;
-  const last_name = formData.get("last_name") as string;
-  const phone_number = formData.get("phone_number") as string;
-  const cedula_number = formData.get("cedula_number") as string;
-  const department = formData.get("department") as string;
-  const city = formData.get("city") as string;
-  const address = formData.get("address") as string;
+  const sanitize = (str: string) => str ? str.replace(/<[^>]*>?/gm, '') : str;
+
+  const first_name = sanitize(formData.get("first_name") as string);
+  const last_name = sanitize(formData.get("last_name") as string);
+  const phone_number = sanitize(formData.get("phone_number") as string);
+  const cedula_number = sanitize(formData.get("cedula_number") as string);
+  const department = sanitize(formData.get("department") as string);
+  const city = sanitize(formData.get("city") as string);
+  const address = sanitize(formData.get("address") as string);
 
   const { error } = await supabase
     .from("profiles")

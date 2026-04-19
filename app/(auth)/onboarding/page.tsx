@@ -33,8 +33,9 @@ export default async function OnboardingPage() {
     } = await supabaseServer.auth.getUser();
 
     if (user) {
-      const cedula_number = formData.get("cedula_number") as string;
-      const address = formData.get("address") as string;
+      const sanitize = (str: string) => str ? str.replace(/<[^>]*>?/gm, '') : str;
+      const cedula_number = sanitize(formData.get("cedula_number") as string);
+      const address = sanitize(formData.get("address") as string);
 
       await supabaseServer
         .from("profiles")
