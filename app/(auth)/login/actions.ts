@@ -12,7 +12,6 @@ const signupSchema = z.object({
   firstName: z.string().min(2).transform(val => val.replace(/<[^>]*>?/gm, '')),
   lastName: z.string().min(2).transform(val => val.replace(/<[^>]*>?/gm, '')),
   phone: z.string().regex(/^(\+57)?\s?\d{10}$/),
-  cedula: z.string().regex(/^\d{8,10}$/),
   address: z.string().min(5).transform(val => val.replace(/<[^>]*>?/gm, '')),
 })
 
@@ -45,7 +44,6 @@ export async function signup(formData: FormData) {
     firstName: formData.get('firstName') as string,
     lastName: formData.get('lastName') as string,
     phone: formData.get('phone') as string,
-    cedula: formData.get('cedula') as string,
     address: formData.get('address') as string,
   }
 
@@ -56,7 +54,7 @@ export async function signup(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(errorMsg)}`)
   }
 
-  const { email, password, firstName, lastName, phone, cedula, address } = result.data
+  const { email, password, firstName, lastName, phone, address } = result.data
   
   const redirectTo = (formData.get('redirectTo') as string) || '/dashboard'
 
@@ -68,7 +66,6 @@ export async function signup(formData: FormData) {
         first_name: firstName,
         last_name: lastName,
         phone,
-        cedula,
         address,
       }
     }

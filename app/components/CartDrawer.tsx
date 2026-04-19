@@ -7,17 +7,20 @@ import Link from "next/link";
 import { useCart } from "@/app/context/CartContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { TermsModal } from "@/app/components/TermsModal";
+import { CheckoutModal } from "@/app/components/CheckoutModal";
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  profile?: any;
 }
 
-export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
+export function CartDrawer({ isOpen, onClose, profile }: CartDrawerProps) {
   const { items, removeItem, updateQuantity, subtotal, itemCount } = useCart();
   const { t } = useLanguage();
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -27,13 +30,13 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
     }).format(price);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen && !isCheckoutOpen) return null;
 
   return (
     <>
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] transition-opacity duration-300"
+        className={`fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         onClick={onClose}
       />
       
@@ -150,7 +153,11 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
               </label>
             </div>
 
-            <button disabled={!termsAccepted} className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white disabled:opacity-50 disabled:hover:bg-foreground disabled:cursor-not-allowed font-bold uppercase tracking-[0.2em] text-[10px] rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 group">
+            <button 
+              disabled={!termsAccepted} 
+              onClick={() => { setIsCheckoutOpen(true); onClose(); }}
+              className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white disabled:opacity-50 disabled:hover:bg-foreground disabled:cursor-not-allowed font-bold uppercase tracking-[0.2em] text-[10px] rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 group"
+            >
               {t("cart.checkout")}
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
@@ -158,6 +165,13 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
         )}
         <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
       </div>
+      
+      <CheckoutModal 
+        isOpen={isCheckoutOpen} 
+        onClose={() => setIsCheckoutOpen(false)} 
+        subtotal={subtotal}
+        userProfile={profile}
+      />
     </>
   );
 }

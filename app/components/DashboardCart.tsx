@@ -7,12 +7,14 @@ import { useCart } from "@/app/context/CartContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 import Link from "next/link";
 import { TermsModal } from "@/app/components/TermsModal";
+import { CheckoutModal } from "@/app/components/CheckoutModal";
 
-export function DashboardCart() {
+export function DashboardCart({ profile }: { profile: any }) {
   const { items, removeItem, updateQuantity, subtotal, itemCount } = useCart();
   const { t } = useLanguage();
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -136,7 +138,12 @@ export function DashboardCart() {
                 </label>
               </div>
 
-              <button disabled={!termsAccepted} suppressHydrationWarning className="px-10 py-5 bg-foreground text-background text-[10px] font-bold uppercase tracking-[0.2em] rounded-[1.25rem] hover:bg-[#C59F59] hover:text-white disabled:opacity-50 disabled:hover:bg-foreground disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-3 group">
+              <button 
+                disabled={!termsAccepted} 
+                onClick={() => setIsCheckoutOpen(true)}
+                suppressHydrationWarning 
+                className="px-10 py-5 bg-foreground text-background text-[10px] font-bold uppercase tracking-[0.2em] rounded-[1.25rem] hover:bg-[#C59F59] hover:text-white disabled:opacity-50 disabled:hover:bg-foreground disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-3 group"
+              >
                 {t("cart.checkout")}
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </button>
@@ -145,6 +152,12 @@ export function DashboardCart() {
         </div>
       )}
       <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+      <CheckoutModal 
+        isOpen={isCheckoutOpen} 
+        onClose={() => setIsCheckoutOpen(false)} 
+        subtotal={subtotal}
+        userProfile={profile}
+      />
     </div>
   );
 }

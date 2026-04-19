@@ -34,12 +34,11 @@ export default async function OnboardingPage() {
 
     if (user) {
       const sanitize = (str: string) => str ? str.replace(/<[^>]*>?/gm, '') : str;
-      const cedula_number = sanitize(formData.get("cedula_number") as string);
       const address = sanitize(formData.get("address") as string);
 
       await supabaseServer
         .from("profiles")
-        .update({ cedula_number, address })
+        .update({ address })
         .eq("id", user.id);
 
       redirect("/dashboard");
@@ -61,33 +60,12 @@ export default async function OnboardingPage() {
               Bienvenido, <span className="italic">{profile?.first_name || "a Amantti"}</span>
             </h1>
             <p className="text-sm text-foreground/60 text-center max-w-[280px] leading-relaxed">
-              Solo necesitamos unos detalles adicionales para personalizar tu experiencia.
+              Solo necesitamos tu dirección para completar el envío de tu café.
             </p>
           </div>
 
           <form action={completeProfile} className="space-y-6">
             <div className="space-y-4">
-              <div className="group">
-                <label
-                  htmlFor="cedula_number"
-                  className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 mb-2 group-focus-within:text-[#C59F59] transition-colors"
-                >
-                  Cédula / ID
-                </label>
-                <div className="relative">
-                  <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
-                  <input
-                    id="cedula_number"
-                    name="cedula_number"
-                    type="text"
-                    required
-                    defaultValue={profile?.cedula_number || ""}
-                    placeholder="1029384756"
-                    className="block w-full rounded-2xl border border-foreground/10 bg-white/50 px-11 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
-                  />
-                </div>
-              </div>
-
               <div className="group">
                 <label
                   htmlFor="address"

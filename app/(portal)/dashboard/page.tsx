@@ -118,7 +118,7 @@ export default async function DashboardPage(props: {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content Area */}
           <div className="lg:col-span-2 space-y-8">
-            <DashboardCart />
+            <DashboardCart profile={profile} />
             
             {tab === 'overview' && (
               <div className="bg-white rounded-3xl p-10 border border-foreground/5 shadow-xl">
