@@ -13,6 +13,10 @@ interface CheckoutModalProps {
 
 export function CheckoutModal({ isOpen, onClose, subtotal, userProfile }: CheckoutModalProps) {
   const [cedula, setCedula] = useState(userProfile?.cedula_number || "");
+  const [address, setAddress] = useState(userProfile?.address || "");
+  const [city, setCity] = useState(userProfile?.city || "");
+  const [department, setDepartment] = useState(userProfile?.department || "");
+  
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,49 +28,27 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile }: Checko
     setError(null);
 
     try {
-      // 1. Update profile with the new/confirmed Cedula
+      // 1. Update profile with the confirmed data
       const formData = new FormData();
       formData.append("cedula_number", cedula);
+      formData.append("address", address);
+      formData.append("city", city);
+      formData.append("department", department);
       formData.append("first_name", userProfile?.first_name || "");
       formData.append("last_name", userProfile?.last_name || "");
-      // Pass other fields if necessary to avoid wiping them
+      formData.append("phone_number", userProfile?.phone_number || "");
       
       await updateUserProfile(formData);
 
-      // 2. Here we would call ePayco SDK
-      // For now, we simulate the handover to ePayco
-      console.log("Handing over to ePayco with Cedula:", cedula);
+      // 2. Simulated ePayco handover
+      console.log("Handing over to ePayco with data:", { cedula, address, city, department });
       
-      // Example of ePayco handler (Pseudo-code)
-      /*
-      const handler = window.ePayco.checkout.configure({
-        key: process.env.NEXT_PUBLIC_EPAYCO_PUBLIC_KEY,
-        test: true
-      });
-      
-      handler.open({
-        name: "Café Amantti",
-        description: "Compra de Café Especial",
-        currency: "cop",
-        amount: subtotal.toString(),
-        tax_base: "0",
-        tax: "0",
-        country: "co",
-        lang: "es",
-        external: "false",
-        extra1: userProfile.id,
-        // Pre-fill user data
-        name_billing: `${userProfile.first_name} ${userProfile.last_name}`,
-        address_billing: userProfile.address,
-        type_doc_billing: "cc",
-        number_doc_billing: cedula,
-        mobile_phone_billing: userProfile.phone_number,
-      });
-      */
-
-      // Simulate a small delay for the "processing" look
+      // Simulate delay
       setTimeout(() => {
-        alert("Integración de ePayco: Aquí se abriría el widget de pago pre-cargado con tu cédula: " + cedula);
+        alert("Integración de ePayco: Se abriría el widget cargado con:\n" + 
+              `CC: ${cedula}\n` +
+              `Dirección: ${address}\n` +
+              `Ciudad: ${city}, ${department}`);
         setIsProcessing(false);
       }, 1500);
 
@@ -86,7 +68,7 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile }: Checko
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="relative w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300">
+      <div className="relative w-full max-w-lg bg-white rounded-[2.5rem] p-10 shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
         <button 
           onClick={onClose}
           className="absolute top-8 right-8 p-2 rounded-full hover:bg-foreground/5 text-foreground/20 hover:text-foreground transition-colors"
@@ -99,35 +81,63 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile }: Checko
             <div className="w-16 h-16 bg-[#C59F59]/10 rounded-full flex items-center justify-center mb-6">
               <CreditCard className="w-8 h-8 text-[#C59F59]" strokeWidth={1.5} />
             </div>
-            <h2 className="text-2xl font-serif">Finalizar Compra</h2>
-            <p className="text-sm text-foreground/40 mt-2">Completa tu información de facturación para ePayco</p>
+            <h2 className="text-2xl font-serif">Confirmar Datos de Pago</h2>
+            <p className="text-sm text-foreground/40 mt-2">Verifica tu información para el envío y facturación</p>
           </div>
 
           <form onSubmit={handlePayment} className="space-y-6">
-            <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-foreground/5 space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground/40">Total a pagar:</span>
-                <span className="font-serif text-xl text-[#C59F59]">{formatPrice(subtotal)}</span>
+            <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-foreground/5 flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-widest text-foreground/40">Total Suscripción:</span>
+              <span className="font-serif text-2xl text-[#C59F59]">{formatPrice(subtotal)}</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2 group">
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1">Cédula</label>
+                <div className="relative">
+                  <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                  <input
+                    required
+                    value={cedula}
+                    onChange={(e) => setCedula(e.target.value)}
+                    placeholder="1029384756"
+                    className="w-full pl-12 pr-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2 group">
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1">Dirección</label>
+                <input
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Calle 123 #45-67"
+                  className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                />
               </div>
             </div>
 
-            <div className="space-y-2 group">
-              <label htmlFor="checkout-cedula" className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1 group-focus-within:text-[#C59F59] transition-colors">
-                Cédula de Ciudadanía
-              </label>
-              <div className="relative">
-                <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2 group">
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1">Departamento</label>
                 <input
-                  id="checkout-cedula"
-                  type="text"
                   required
-                  value={cedula}
-                  onChange={(e) => setCedula(e.target.value)}
-                  placeholder="1029384756"
-                  className="w-full pl-12 pr-4 py-4 bg-[#fdfbf7] border border-foreground/10 rounded-2xl text-sm focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 focus:border-[#C59F59] transition-all"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  placeholder="Cundinamarca"
+                  className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                 />
               </div>
-              <p className="text-[9px] text-foreground/30 italic px-1">Requerido por ePayco para validación de identidad y facturación.</p>
+              <div className="space-y-2 group">
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1">Ciudad</label>
+                <input
+                  required
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Bogotá"
+                  className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                />
+              </div>
             </div>
 
             {error && (
