@@ -4,6 +4,18 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 
+import { z } from 'zod'
+
+const signupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  firstName: z.string().min(2).transform(val => val.replace(/<[^>]*>?/gm, '')),
+  lastName: z.string().min(2).transform(val => val.replace(/<[^>]*>?/gm, '')),
+  phone: z.string().regex(/^(\+57)?\s?\d{10}$/),
+  cedula: z.string().regex(/^\d{8,10}$/),
+  address: z.string().min(5).transform(val => val.replace(/<[^>]*>?/gm, '')),
+})
+
 export async function login(formData: FormData) {
   const supabase = await createClient()
 
@@ -27,13 +39,24 @@ export async function login(formData: FormData) {
 export async function signup(formData: FormData) {
   const supabase = await createClient()
 
-  const email = formData.get('email') as string
-  const password = formData.get('password') as string
-  const firstName = formData.get('firstName') as string
-  const lastName = formData.get('lastName') as string
-  const phone = formData.get('phone') as string
-  const cedula = formData.get('cedula') as string
-  const address = formData.get('address') as string
+  const rawData = {
+    email: formData.get('email') as string,
+    password: formData.get('password') as string,
+    firstName: formData.get('firstName') as string,
+    lastName: formData.get('lastName') as string,
+    phone: formData.get('phone') as string,
+    cedula: formData.get('cedula') as string,
+    address: formData.get('address') as string,
+  }
+
+  // Server-side validation and sanitization
+  const result = signupSchema.safeParse(rawData)
+  if (!result.success) {
+    const errorMsg = result.error.issues[0].message
+    redirect(`/login?error=${encodeURIComponent(errorMsg)}`)
+  }
+
+  const { email, password, firstName, lastName, phone, cedula, address } = result.data
   
   const redirectTo = (formData.get('redirectTo') as string) || '/dashboard'
 

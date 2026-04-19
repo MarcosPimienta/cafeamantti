@@ -6,10 +6,17 @@ import { redirect } from 'next/navigation'
 
 export async function getSubscription(id: string) {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return null
+  }
+
   const { data, error } = await supabase
     .from('subscriptions')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user.id)
     .single()
 
   if (error) {
@@ -82,11 +89,17 @@ export async function upsertSubscription(formData: FormData, subscriptionId?: st
 
 export async function updateSubscriptionStatus(subscriptionId: string, status: 'active' | 'paused' | 'cancelled') {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'User not authenticated' }
+  }
 
   const { error } = await supabase
     .from('subscriptions')
     .update({ status })
     .eq('id', subscriptionId)
+    .eq('user_id', user.id)
 
   if (error) {
     console.error('Error updating subscription status:', error)
@@ -100,15 +113,21 @@ export async function deleteSubscription(subscriptionId: string) {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: 'User not authenticated' }
+  }
+
   console.log('[DEBUG] Attempting to delete subscription:', { 
     subscriptionId, 
-    userId: user?.id 
+    userId: user.id 
   })
 
   const { error, count } = await supabase
     .from('subscriptions')
     .delete({ count: 'exact' })
     .eq('id', subscriptionId)
+    .eq('user_id', user.id)
 
   console.log('[DEBUG] Delete operation result:', { error, count })
 
