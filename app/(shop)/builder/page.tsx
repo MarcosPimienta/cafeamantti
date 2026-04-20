@@ -90,8 +90,11 @@ function BuilderForm() {
             shipping_address: data.shipping_address || "",
             shipping_details: data.shipping_details || "",
           });
+          setIsLoading(false);
+        } else {
+          // If ID is provided but no data (IDOR attempt or deleted), redirect
+          window.location.href = "/dashboard";
         }
-        setIsLoading(false);
       };
       loadSubscription();
     } else {
