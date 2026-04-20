@@ -562,18 +562,22 @@ export async function createEntrada(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
-    movement_date: date,
-    entry_type: entryType,
-    responsable,
-    tab_source: 'entrada',
-    lote,
-  });
+  try {
+    const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
+      movement_date: date,
+      entry_type: entryType,
+      responsable,
+      tab_source: 'entrada',
+      lote,
+    });
 
-  const newStock = await _updateStockBy(supabase, inventoryId, qty);
-  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote });
-  revalidatePath('/admin/inventory');
-  return { success: true, newStock };
+    const newStock = await _updateStockBy(supabase, inventoryId, qty);
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote });
+    revalidatePath('/admin/inventory');
+    return { success: true, newStock };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 export async function createSalida(
@@ -589,17 +593,21 @@ export async function createSalida(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
-    movement_date: date,
-    reason,
-    responsable,
-    tab_source: 'salida',
-  });
+  try {
+    const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
+      movement_date: date,
+      reason,
+      responsable,
+      tab_source: 'salida',
+    });
 
-  const newStock = await _updateStockBy(supabase, inventoryId, -qty);
-  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, reason, responsable });
-  revalidatePath('/admin/inventory');
-  return { success: true, newStock };
+    const newStock = await _updateStockBy(supabase, inventoryId, -qty);
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, reason, responsable });
+    revalidatePath('/admin/inventory');
+    return { success: true, newStock };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 export async function createProdConsumo(
@@ -615,17 +623,21 @@ export async function createProdConsumo(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
-    movement_date: date,
-    entry_type: entryType,
-    responsable,
-    tab_source: 'prod_consumo',
-  });
+  try {
+    const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
+      movement_date: date,
+      entry_type: entryType,
+      responsable,
+      tab_source: 'prod_consumo',
+    });
 
-  const newStock = await _updateStockBy(supabase, inventoryId, -qty);
-  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, entryType, responsable });
-  revalidatePath('/admin/inventory');
-  return { success: true, newStock };
+    const newStock = await _updateStockBy(supabase, inventoryId, -qty);
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, entryType, responsable });
+    revalidatePath('/admin/inventory');
+    return { success: true, newStock };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 export async function createProdAlta(
@@ -642,59 +654,53 @@ export async function createProdAlta(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Validate stock for all consumos first to avoid partial commits
-  for (const c of consumos) {
-    if (c.qty <= 0) continue;
-    const { data: matInfo, error } = await supabase
-      .from('inventory')
-      .select('current_stock, product_name')
-      .eq('id', c.id)
-      .single();
-    
-    if (error || !matInfo) {
-      throw new Error(`Material consumido no encontrado.`);
+  try {
+    // Validate stock for all consumos first to avoid partial commits
+    for (const c of consumos) {
+      if (c.qty <= 0) continue;
+      const { data: matInfo, error } = await supabase
+        .from('inventory')
+        .select('current_stock, product_name')
+        .eq('id', c.id)
+        .single();
+      
+      if (error || !matInfo) throw new Error(`Material consumido no encontrado.`);
+      if (matInfo.current_stock < c.qty) throw new Error(`Stock insuficiente: ${matInfo.product_name}.`);
     }
-    
-    if (matInfo.current_stock < c.qty) {
-      throw new Error(`Stock insuficiente para el material consumido: ${matInfo.product_name}.`);
+
+    const reason = [lote ? `Lote: ${lote}` : null, notes].filter(Boolean).join(' — ') || null;
+
+    // 1. Process consumos
+    const consumedResults: { id: string; newStock: number }[] = [];
+    for (const c of consumos) {
+      if (c.qty <= 0) continue;
+      const matReason = `Consumo para Alta de prod. term.${reason ? ` — ${reason}` : ''}`;
+      const cId = await _insertMovement(supabase, user?.id ?? null, c.id, 'salida', -c.qty, {
+        movement_date: date,
+        reason: matReason,
+        entry_type: 'MAT',
+        tab_source: 'prod_alta_consumo',
+      });
+      const ns = await _updateStockBy(supabase, c.id, -c.qty);
+      consumedResults.push({ id: c.id, newStock: ns });
+      await logAuditAction("CREATE", "MOVEMENT", cId, c.id, { qty: -c.qty, reason: matReason });
     }
-  }
 
-  const reason =
-    [lote ? `Lote: ${lote}` : null, notes].filter(Boolean).join(' — ') || null;
-
-  // 1. Process consumos (Salidas)
-  const consumedResults: { id: string; newStock: number }[] = [];
-  for (const c of consumos) {
-    if (c.qty <= 0) continue;
-    
-    const matReason = `Consumo para Alta de prod. term.${reason ? ` — ${reason}` : ''}`;
-    
-    const cId = await _insertMovement(supabase, user?.id ?? null, c.id, 'salida', -c.qty, {
+    // 2. Process Prod Alta
+    const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
       movement_date: date,
-      reason: matReason,
-      entry_type: 'MAT',
-      tab_source: 'prod_alta_consumo',
+      reason: reason ?? undefined,
+      tab_source: 'prod_alta',
     });
+
+    const newStock = await _updateStockBy(supabase, inventoryId, qty);
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, reason, consumosCount: consumos.length });
     
-    const ns = await _updateStockBy(supabase, c.id, -c.qty);
-    consumedResults.push({ id: c.id, newStock: ns });
-    
-    await logAuditAction("CREATE", "MOVEMENT", cId, c.id, { qty: -c.qty, reason: matReason });
+    revalidatePath('/admin/inventory');
+    return { success: true, newStock, consumedResults };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
-
-  // 2. Process Prod Alta (Entrada)
-  const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
-    movement_date: date,
-    reason: reason ?? undefined,
-    tab_source: 'prod_alta',
-  });
-
-  const newStock = await _updateStockBy(supabase, inventoryId, qty);
-  await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, reason, consumosCount: consumos.length });
-  
-  revalidatePath('/admin/inventory');
-  return { success: true, newStock, consumedResults };
 }
 
 export async function createTrillaBatch(
@@ -711,57 +717,61 @@ export async function createTrillaBatch(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Validate Pergamino stock
-  const { data: pergamino, error: pergErr } = await supabase
-    .from('inventory')
-    .select('current_stock, product_name')
-    .eq('id', pergaminoInventoryId)
-    .single();
-  if (pergErr || !pergamino) throw new Error('Café Pergamino no encontrado');
-  if (Number(pergamino.current_stock) < inputQtyKg) {
-    throw new Error(
-      `Stock insuficiente de Café Pergamino. Disponible: ${pergamino.current_stock} kg`
-    );
+  try {
+    // Validate Pergamino stock
+    const { data: pergamino, error: pergErr } = await supabase
+      .from('inventory')
+      .select('current_stock, product_name')
+      .eq('id', pergaminoInventoryId)
+      .single();
+    if (pergErr || !pergamino) throw new Error('Café Pergamino no encontrado');
+    if (Number(pergamino.current_stock) < inputQtyKg) {
+      throw new Error(
+        `Stock insuficiente de Café Pergamino. Disponible: ${pergamino.current_stock} kg`
+      );
+    }
+
+    const outputQtyKg = inputQtyKg * rendimientoPct;
+    const weightLossPct = (1 - rendimientoPct) * 100;
+
+    // Salida: Pergamino
+    await _insertMovement(supabase, user?.id ?? null, pergaminoInventoryId, 'salida', -inputQtyKg, {
+      movement_date: date,
+      reason: `Trilla → Café Verde${notes ? ` — ${notes}` : ''}`,
+      tab_source: 'trilla',
+    });
+    const newPergaminoStock = await _updateStockBy(supabase, pergaminoInventoryId, -inputQtyKg);
+
+    // Entrada: Verde
+    await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'entrada', outputQtyKg, {
+      movement_date: date,
+      reason: `Trilla (rend. ${(rendimientoPct * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
+      tab_source: 'trilla',
+    });
+    const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, outputQtyKg);
+
+    // Production batch record
+    const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
+      process_type: 'trilla',
+      input_inventory_id: pergaminoInventoryId,
+      input_quantity_kg: inputQtyKg,
+      output_inventory_id: verdeInventoryId,
+      output_quantity_kg: outputQtyKg,
+      weight_loss_pct: weightLossPct,
+      rendimiento_pct: rendimientoPct,
+      notes: notes ?? null,
+      created_by: user?.id ?? null,
+      movement_date: date,
+    }).select('id').single();
+    if (batchErr) throw new Error(batchErr.message);
+
+    await logAuditAction("CREATE", "TRILLA_BATCH", batchData.id, undefined, { inputQtyKg, outputQtyKg, rendimientoPct });
+
+    revalidatePath('/admin/inventory');
+    return { success: true, newPergaminoStock, newVerdeStock };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
-
-  const outputQtyKg = inputQtyKg * rendimientoPct;
-  const weightLossPct = (1 - rendimientoPct) * 100;
-
-  // Salida: Pergamino
-  await _insertMovement(supabase, user?.id ?? null, pergaminoInventoryId, 'salida', -inputQtyKg, {
-    movement_date: date,
-    reason: `Trilla → Café Verde${notes ? ` — ${notes}` : ''}`,
-    tab_source: 'trilla',
-  });
-  const newPergaminoStock = await _updateStockBy(supabase, pergaminoInventoryId, -inputQtyKg);
-
-  // Entrada: Verde
-  await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'entrada', outputQtyKg, {
-    movement_date: date,
-    reason: `Trilla (rend. ${(rendimientoPct * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
-    tab_source: 'trilla',
-  });
-  const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, outputQtyKg);
-
-  // Production batch record
-  const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
-    process_type: 'trilla',
-    input_inventory_id: pergaminoInventoryId,
-    input_quantity_kg: inputQtyKg,
-    output_inventory_id: verdeInventoryId,
-    output_quantity_kg: outputQtyKg,
-    weight_loss_pct: weightLossPct,
-    rendimiento_pct: rendimientoPct,
-    notes: notes ?? null,
-    created_by: user?.id ?? null,
-    movement_date: date,
-  }).select('id').single();
-  if (batchErr) throw new Error(batchErr.message);
-
-  await logAuditAction("CREATE", "TRILLA_BATCH", batchData.id, undefined, { inputQtyKg, outputQtyKg, rendimientoPct });
-
-  revalidatePath('/admin/inventory');
-  return { success: true, newPergaminoStock, newVerdeStock };
 }
 
 // ============================================================

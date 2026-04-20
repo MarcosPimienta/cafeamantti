@@ -566,8 +566,14 @@ function SortableTh({
 
 function sortRecordsList<T>(data: T[], sortField: string, sortAsc: boolean): T[] {
   return [...data].sort((a: any, b: any) => {
-    let aVal = sortField === "date" ? (a.movement_date || a.created_at) : (sortField.includes(".") ? sortField.split(".").reduce((o: any, i: string) => o?.[i], a) : a[sortField]);
-    let bVal = sortField === "date" ? (b.movement_date || b.created_at) : (sortField.includes(".") ? sortField.split(".").reduce((o: any, i: string) => o?.[i], b) : b[sortField]);
+    const getValue = (obj: any, path: string) => {
+      if (path === "date") return obj.movement_date || obj.created_at;
+      if (!path.includes(".")) return obj[path];
+      return path.split(".").reduce((o, i) => (o ? o[i] : undefined), obj);
+    };
+
+    let aVal = getValue(a, sortField);
+    let bVal = getValue(b, sortField);
     
     if (Array.isArray(aVal)) aVal = aVal[0];
     if (Array.isArray(bVal)) bVal = bVal[0];
@@ -1111,7 +1117,13 @@ function EntradasTab({
           form.responsable || undefined,
           form.lote || undefined
         );
-        onStockUpdate(form.inventoryId, res.newStock);
+        
+        if (!res.success) {
+          setFeedback({ type: "error", msg: res.error || "Error al registrar" });
+          return;
+        }
+
+        onStockUpdate(form.inventoryId, res.newStock ?? 0);
         setFeedback({ type: "success", msg: "✓ Entrada registrada exitosamente" });
         setForm(initForm);
         loadHistory();
@@ -1448,10 +1460,17 @@ function TrillaTab({
           date,
           notes || undefined
         );
+        
+        if (!res.success) {
+          setFeedback({ type: "error", msg: res.error || "Error al registrar la Trilla" });
+          return;
+        }
+
         onStocksUpdate([
-          { id: pergamino.id, newStock: res.newPergaminoStock },
-          { id: verde.id, newStock: res.newVerdeStock },
+          { id: pergamino.id, newStock: res.newPergaminoStock ?? 0 },
+          { id: verde.id, newStock: res.newVerdeStock ?? 0 },
         ]);
+
         setFeedback({
           type: "success",
           msg: `✓ Trilla registrada — ${inputNum.toFixed(2)} kg Pergamino → ${outputNum.toFixed(2)} kg Verde`,
@@ -1820,7 +1839,13 @@ function ProdConsumosTab({
           form.entryType,
           form.responsable || undefined
         );
-        onStockUpdate(form.inventoryId, res.newStock);
+        
+        if (!res.success) {
+          setFeedback({ type: "error", msg: res.error || "Error al registrar" });
+          return;
+        }
+
+        onStockUpdate(form.inventoryId, res.newStock ?? 0);
         setFeedback({ type: "success", msg: "✓ Consumo de producción registrado" });
         setForm(initForm);
         loadHistory();
@@ -2099,7 +2124,13 @@ function ProdAltasTab({
           form.lote || undefined,
           form.notes || undefined
         );
-        onStockUpdate(form.inventoryId, res.newStock);
+
+        if (!res.success) {
+          setFeedback({ type: "error", msg: res.error || "Error al registrar" });
+          return;
+        }
+
+        onStockUpdate(form.inventoryId, res.newStock ?? 0);
         if (res.consumedResults) {
           res.consumedResults.forEach((cr: { id: string; newStock: number }) => {
             onStockUpdate(cr.id, cr.newStock);
@@ -2449,7 +2480,13 @@ function SalidasTab({
           form.motivo || undefined,
           form.responsable || undefined
         );
-        onStockUpdate(form.inventoryId, res.newStock);
+
+        if (!res.success) {
+          setFeedback({ type: "error", msg: res.error || "Error al registrar" });
+          return;
+        }
+
+        onStockUpdate(form.inventoryId, res.newStock ?? 0);
         setFeedback({ type: "success", msg: "✓ Salida registrada exitosamente" });
         setForm(initForm);
         loadHistory();
