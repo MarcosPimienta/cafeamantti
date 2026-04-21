@@ -3270,9 +3270,10 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
   }, []);
 
   const users = useMemo(() => {
+    if (!Array.isArray(logs)) return [];
     const uMap = new Map();
     logs.forEach(l => {
-      if (l.profiles) {
+      if (l && l.profiles) {
         const fullName = `${l.profiles.first_name} ${l.profiles.last_name}`;
         uMap.set(l.admin_id, fullName);
       }
@@ -3281,6 +3282,7 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
   }, [logs]);
 
   const filteredLogs = useMemo(() => {
+    if (!Array.isArray(logs)) return [];
     let data = [...logs];
 
     if (search) {
@@ -3324,7 +3326,8 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
             <h3 className="font-serif text-lg">Historial de Auditoría</h3>
             <p className="text-sm text-foreground/50">Registro completo de creaciones, modificaciones y eliminaciones</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-black text-[#C59F59] mr-2">FILTROS:</span>
             <div className="relative min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
               <input 
