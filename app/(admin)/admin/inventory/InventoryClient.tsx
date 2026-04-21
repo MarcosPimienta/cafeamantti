@@ -3257,6 +3257,10 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [userFilter, setUserFilter] = useState("all");
+  const [actionFilter, setActionFilter] = useState("all");
+  const [entityFilter, setEntityFilter] = useState("all");
 
   useEffect(() => {
     getAuditLogs()
@@ -3265,8 +3269,44 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const sortedLogs = useMemo(() => sortRecordsList(logs, sortField, sortAsc), [logs, sortField, sortAsc]);
-  const paginatedLogs = sortedLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const users = useMemo(() => {
+    const uMap = new Map();
+    logs.forEach(l => {
+      if (l.profiles) {
+        const fullName = `${l.profiles.first_name} ${l.profiles.last_name}`;
+        uMap.set(l.admin_id, fullName);
+      }
+    });
+    return Array.from(uMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [logs]);
+
+  const filteredLogs = useMemo(() => {
+    let data = [...logs];
+
+    if (search) {
+      const q = search.toLowerCase();
+      data = data.filter(l => 
+        l.entity_id?.toLowerCase().includes(q) ||
+        JSON.stringify(l.details || {}).toLowerCase().includes(q)
+      );
+    }
+
+    if (userFilter !== "all") {
+      data = data.filter(l => l.admin_id === userFilter);
+    }
+
+    if (actionFilter !== "all") {
+      data = data.filter(l => l.action_type === actionFilter);
+    }
+
+    if (entityFilter !== "all") {
+      data = data.filter(l => l.entity_type === entityFilter);
+    }
+
+    return sortRecordsList(data, sortField, sortAsc);
+  }, [logs, search, userFilter, actionFilter, entityFilter, sortField, sortAsc]);
+
+  const paginatedLogs = filteredLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   function handleSort(field: string) {
     if (sortField === field) setSortAsc(!sortAsc);
@@ -3279,9 +3319,50 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
-        <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7]">
-          <h3 className="font-serif text-lg">Historial de Auditoría</h3>
-          <p className="text-sm text-foreground/50">Registro completo de creaciones, modificaciones y eliminaciones</p>
+        <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7] flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h3 className="font-serif text-lg">Historial de Auditoría</h3>
+            <p className="text-sm text-foreground/50">Registro completo de creaciones, modificaciones y eliminaciones</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="relative min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
+              <input 
+                type="text"
+                placeholder="Buscar en detalles..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                className="w-full pl-9 pr-4 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+              />
+            </div>
+            <select
+              value={userFilter}
+              onChange={(e) => { setUserFilter(e.target.value); setCurrentPage(1); }}
+              className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+            >
+              <option value="all">Todos los Usuarios</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            <select
+              value={actionFilter}
+              onChange={(e) => { setActionFilter(e.target.value); setCurrentPage(1); }}
+              className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+            >
+              <option value="all">Todas las Acciones</option>
+              <option value="CREATE">CREATE</option>
+              <option value="UPDATE">UPDATE</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+            <select
+              value={entityFilter}
+              onChange={(e) => { setEntityFilter(e.target.value); setCurrentPage(1); }}
+              className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+            >
+              <option value="all">Todas las Entidades</option>
+              <option value="MOVEMENT">MOVEMENT</option>
+              <option value="TRILLA_BATCH">TRILLA_BATCH</option>
+            </select>
+          </div>
         </div>
         {loading ? (
           <div className="py-20 text-center text-foreground/40 text-sm font-bold tracking-widest flex items-center justify-center gap-2">
@@ -3341,7 +3422,7 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
           </div>
           <PaginationControls
             currentPage={currentPage}
-            totalItems={logs.length}
+            totalItems={filteredLogs.length}
             onPageChange={setCurrentPage}
           />
         </>
