@@ -679,7 +679,7 @@ export async function createProdAlta(
         movement_date: date,
         reason: matReason,
         entry_type: 'MAT',
-        tab_source: 'prod_alta_consumo',
+        tab_source: 'prod_consumo',
       });
       const ns = await _updateStockBy(supabase, c.id, -c.qty);
       consumedResults.push({ id: c.id, newStock: ns });
