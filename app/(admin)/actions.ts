@@ -181,6 +181,106 @@ export async function updateShippingSettings(formData: FormData) {
 }
 
 // ============================================================
+// MANUAL ORDERS (ADMIN)
+// ============================================================
+
+export async function createManualAdminOrder(
+  data: {
+    contact_email: string;
+    contact_phone: string;
+    shipping_info: { address: string; details?: string; city: string; state: string };
+    status: string;
+    items: {
+      inventory_id: string;
+      product_code: string;
+      product_name: string;
+      quantity: number;
+      price: number;
+      weight?: string;
+      grind?: string;
+    }[];
+  }
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Validate stock for all items
+  for (const item of data.items) {
+    if (item.quantity <= 0) continue;
+    const { data: matInfo, error } = await supabase
+      .from('inventory')
+      .select('current_stock, product_name')
+      .eq('id', item.inventory_id)
+      .single();
+    
+    if (error || !matInfo) throw new Error(`Producto en inventario no encontrado: ${item.product_name}`);
+    if (Number(matInfo.current_stock) < item.quantity) throw new Error(`Stock insuficiente: ${matInfo.product_name}.`);
+  }
+
+  let total_amount = 0;
+  for (const item of data.items) {
+    total_amount += item.price * item.quantity;
+  }
+
+  // Insert Order
+  const { data: order, error: orderErr } = await supabase.from('orders').insert({
+    user_id: null,
+    total_amount,
+    shipping_info: data.shipping_info,
+    contact_email: data.contact_email,
+    contact_phone: data.contact_phone,
+    status: data.status
+  }).select('id').single();
+
+  if (orderErr) throw new Error(orderErr.message);
+
+  // Insert Order Items
+  const orderItemsData = data.items.map(item => ({
+    order_id: order.id,
+    product_id: item.product_name, // Save name to represent what was sold
+    weight: item.weight || null,
+    grind: item.grind || null,
+    quantity: item.quantity,
+    price_at_time: item.price
+  }));
+
+  const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsData);
+  if (itemsErr) {
+    // Cleanup if order items fail
+    await supabase.from('orders').delete().eq('id', order.id);
+    if (itemsErr.message.toLowerCase().includes('check constraint')) {
+      throw new Error("Por favor ejecuta la migración SQL '20260425000000_relax_order_items.sql' para permitir vender cualquier producto.");
+    }
+    throw new Error(itemsErr.message);
+  }
+
+  // Deduct Inventory
+  const movementDate = new Date().toISOString();
+  for (const item of data.items) {
+    if (item.quantity <= 0) continue;
+    
+    const reason = `Orden Manual #${order.id.split('-')[0]}`;
+    
+    const mId = await _insertMovement(supabase, user?.id ?? null, item.inventory_id, 'salida', -item.quantity, {
+      movement_date: movementDate,
+      reason: reason,
+      tab_source: 'salida',
+    });
+    
+    await _updateStockBy(supabase, item.inventory_id, -item.quantity);
+    await logAuditAction("CREATE", "MOVEMENT", mId, item.inventory_id, { qty: -item.quantity, reason });
+  }
+
+  revalidatePath('/admin/orders');
+  revalidatePath('/admin/inventory');
+
+  return { success: true, orderId: order.id };
+}
+
+// ============================================================
 // INVENTORY ACTIONS
 // ============================================================
 

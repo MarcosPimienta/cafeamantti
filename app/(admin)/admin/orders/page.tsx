@@ -3,6 +3,7 @@ import { checkIsAdmin, updateOrderStatus } from "../../actions";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { Search, Filter, Mail, Phone, Package, MapPin } from "lucide-react";
+import ManualOrderModal from "./ManualOrderModal";
 
 export default async function AdminOrdersPage() {
   const isAdmin = await checkIsAdmin();
@@ -16,6 +17,11 @@ export default async function AdminOrdersPage() {
       order_items (*)
     `)
     .order('created_at', { ascending: false });
+
+  const { data: inventory } = await supabase
+    .from('inventory')
+    .select('id, product_code, product_name, current_stock')
+    .order('product_name', { ascending: true });
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -67,10 +73,13 @@ export default async function AdminOrdersPage() {
               className="w-full pl-11 pr-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             />
           </div>
-          <button className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-foreground/5 transition-all w-full md:w-auto shrink-0">
-            <Filter className="w-4 h-4" />
-            Filtrar
-          </button>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <button className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-foreground/5 transition-all w-full md:w-auto shrink-0">
+              <Filter className="w-4 h-4" />
+              Filtrar
+            </button>
+            <ManualOrderModal inventory={inventory || []} />
+          </div>
         </div>
 
         {/* Orders List Content */}
