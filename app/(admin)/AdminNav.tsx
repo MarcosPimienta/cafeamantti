@@ -16,7 +16,8 @@ const NAV_ITEMS = [
   { href: "/admin/orders", label: "Órdenes", Icon: ShoppingBag },
   { href: "/admin/inventory", label: "Inventario", Icon: Package },
   { href: "/admin/subscriptions", label: "Suscripciones", Icon: Coffee },
-  { href: "/admin/customers", label: "Clientes", Icon: Users },
+  { href: "/admin/users", label: "Usuarios", Icon: Users },
+  { href: "/admin/customers", label: "Clientes (B2B)", Icon: Users },
 ];
 
 export default function AdminNav() {

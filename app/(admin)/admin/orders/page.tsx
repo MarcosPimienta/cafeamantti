@@ -1,5 +1,5 @@
 import React from "react";
-import { checkIsAdmin, updateOrderStatus } from "../../actions";
+import { checkIsAdmin, updateOrderStatus, getClientsCRM } from "../../actions";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { Search, Filter, Mail, Phone, Package, MapPin } from "lucide-react";
@@ -23,6 +23,8 @@ export default async function AdminOrdersPage() {
     .from('inventory')
     .select('id, product_code, product_name, current_stock')
     .order('product_name', { ascending: true });
+
+  const crmClients = await getClientsCRM();
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -79,7 +81,7 @@ export default async function AdminOrdersPage() {
               <Filter className="w-4 h-4" />
               Filtrar
             </button>
-            <ManualOrderModal inventory={inventory || []} />
+            <ManualOrderModal inventory={inventory || []} crmClients={crmClients} />
           </div>
         </div>
 
@@ -154,7 +156,7 @@ export default async function AdminOrdersPage() {
                   <div className="lg:w-64 shrink-0 bg-[#fdfbf7] p-6 rounded-2xl flex flex-col justify-start">
                     <div className="flex justify-between items-center mb-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">Acciones</p>
-                      <OrderActions order={order} inventory={inventory || []} />
+                      <OrderActions order={order} inventory={inventory || []} crmClients={crmClients} />
                     </div>
                     <form action={async (formData) => {
                       "use server";

@@ -186,6 +186,7 @@ export async function updateShippingSettings(formData: FormData) {
 
 export async function createManualAdminOrder(
   data: {
+    client_id?: string;
     contact_email: string;
     contact_phone: string;
     shipping_info: { address: string; details?: string; city: string; state: string };
@@ -228,6 +229,7 @@ export async function createManualAdminOrder(
   // Insert Order
   const { data: order, error: orderErr } = await supabase.from('orders').insert({
     user_id: null,
+    client_id: data.client_id || null,
     total_amount,
     shipping_info: data.shipping_info,
     contact_email: data.contact_email,
@@ -324,6 +326,7 @@ export async function deleteManualAdminOrder(orderId: string) {
 export async function updateManualAdminOrder(
   orderId: string,
   data: {
+    client_id?: string;
     contact_email: string;
     contact_phone: string;
     shipping_info: { address: string; details?: string; city: string; state: string };
@@ -405,6 +408,7 @@ export async function updateManualAdminOrder(
   }
 
   const { error: orderErr } = await supabase.from('orders').update({
+    client_id: data.client_id || null,
     total_amount,
     shipping_info: data.shipping_info,
     contact_email: data.contact_email,
@@ -509,6 +513,81 @@ export async function createManualCustomer(data: {
   if (profileError) throw new Error(`Usuario creado pero fallo el perfil: ${profileError.message}`);
 
   revalidatePath('/admin/customers');
+  return { success: true };
+}
+
+// ============================================================
+// CLIENTS CRM (MANUAL B2B/RETAIL)
+// ============================================================
+
+export async function getClientsCRM() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('clients')
+    .select(`
+      *,
+      orders(count)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error("Error fetching clients:", error);
+    return [];
+  }
+  return data;
+}
+
+export async function createClientCRM(data: {
+  name: string;
+  document_type: string;
+  document_number: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  department: string;
+}) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from('clients').insert(data);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/admin/customers');
+  revalidatePath('/admin/orders'); // For the manual order dropdown
+  return { success: true };
+}
+
+export async function updateClientCRM(id: string, data: any) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from('clients').update(data).eq('id', id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/admin/customers');
+  revalidatePath('/admin/orders');
+  return { success: true };
+}
+
+export async function deleteClientCRM(id: string) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from('clients').delete().eq('id', id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/admin/customers');
+  revalidatePath('/admin/orders');
   return { success: true };
 }
 

@@ -11,7 +11,7 @@ interface InventoryItem {
   current_stock: number;
 }
 
-export default function OrderActions({ order, inventory }: { order: any, inventory: InventoryItem[] }) {
+export default function OrderActions({ order, inventory, crmClients = [] }: { order: any, inventory: InventoryItem[], crmClients?: any[] }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -25,6 +25,19 @@ export default function OrderActions({ order, inventory }: { order: any, invento
   const [city, setCity] = useState(order.shipping_info?.city || "");
   const [state, setState] = useState(order.shipping_info?.state || "");
   const [status, setStatus] = useState(order.status || "pending");
+  const [selectedClientId, setSelectedClientId] = useState(order.client_id || "");
+
+  const handleClientSelect = (clientId: string) => {
+    setSelectedClientId(clientId);
+    const client = crmClients.find(c => c.id === clientId);
+    if (client) {
+      setContactEmail(client.email || "");
+      setContactPhone(client.phone || "");
+      setAddress(client.address || "Recogida en tienda");
+      setCity(client.city || "Bogotá");
+      setState(client.department || "Cundinamarca");
+    }
+  };
 
   const [items, setItems] = useState<{
     inventory_id: string;
@@ -115,6 +128,7 @@ export default function OrderActions({ order, inventory }: { order: any, invento
 
     try {
       await updateManualAdminOrder(order.id, {
+        client_id: selectedClientId || undefined,
         contact_email: contactEmail,
         contact_phone: contactPhone,
         shipping_info: { address, details, city, state },
@@ -178,6 +192,23 @@ export default function OrderActions({ order, inventory }: { order: any, invento
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
                 <div className="space-y-4">
                   <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">Contacto</h3>
+                  
+                  {isManual && crmClients && crmClients.length > 0 && (
+                    <div className="mb-4">
+                      <label className="block text-xs font-bold text-[#C59F59] mb-1">Cambiar Cliente Asignado</label>
+                      <select 
+                        value={selectedClientId} 
+                        onChange={e => handleClientSelect(e.target.value)}
+                        className="w-full px-4 py-2 bg-[#f9f7f0] border border-[#C59F59]/20 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/40"
+                      >
+                        <option value="">-- Sin Cliente CRM --</option>
+                        {crmClients.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.name} {c.document_number ? `(${c.document_number})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-xs font-medium text-foreground/60 mb-1">Email</label>
                     <input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} className="w-full px-4 py-2 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
