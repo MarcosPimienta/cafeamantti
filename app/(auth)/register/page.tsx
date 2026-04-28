@@ -21,6 +21,7 @@ const signupSchema = z.object({
   terms: z.boolean().refine((val) => val === true, {
     message: "Debes aceptar los términos y condiciones",
   }),
+  website: z.string().optional(), // HONEYPOT FIELD
 });
 
 type FormValues = z.infer<typeof signupSchema>;
@@ -43,6 +44,7 @@ export default function RegisterPage() {
       phone: "",
       address: "",
       terms: false as any,
+      website: "",
     },
   });
 
@@ -51,7 +53,7 @@ export default function RegisterPage() {
     try {
       const formData = new FormData();
       Object.entries(data).forEach(([key, value]) => {
-        if (key !== "terms") {
+        if (key !== "terms" && value !== undefined && value !== null) {
           formData.append(key, String(value));
         }
       });
@@ -101,6 +103,18 @@ export default function RegisterPage() {
           )}
 
           <form suppressHydrationWarning onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* HONEYPOT FIELD - Bots will fill this, humans won't see it */}
+            <div className="absolute left-[-9999px] top-[-9999px]" aria-hidden="true">
+              <label htmlFor="website">Website</label>
+              <input
+                id="website"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                {...register("website")}
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="group space-y-2">
                 <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Nombre</label>

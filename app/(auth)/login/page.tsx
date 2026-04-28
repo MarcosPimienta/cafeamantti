@@ -133,6 +133,17 @@ function LoginForm() {
             onSubmit={handleSubmit(onSubmit)}
             className="space-y-6"
           >
+            {/* HONEYPOT FIELD - Hidden from humans, bots will fill it */}
+            <div className="absolute left-[-9999px] top-[-9999px]" aria-hidden="true">
+              <label htmlFor="website">Website</label>
+              <input
+                id="website"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                {...register("website" as any)}
+              />
+            </div>
           <div className="space-y-5">
             <div className="group">
               <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 mb-2 px-1 transition-colors group-focus-within:text-[#C59F59]">

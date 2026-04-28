@@ -45,6 +45,14 @@ export async function signup(formData: FormData) {
     lastName: formData.get('lastName') as string,
     phone: formData.get('phone') as string,
     address: formData.get('address') as string,
+    website: formData.get('website') as string,
+  }
+
+  // Honeypot check
+  if (rawData.website) {
+    // If the honeypot field is filled, silently ignore to trick the bot
+    const redirectTo = (formData.get('redirectTo') as string) || '/dashboard'
+    redirect(redirectTo)
   }
 
   // Server-side validation and sanitization
