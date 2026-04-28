@@ -280,6 +280,69 @@ export async function createManualAdminOrder(
   return { success: true, orderId: order.id };
 }
 
+export async function createManualCustomer(data: {
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone_number: string;
+  cedula_number: string;
+  address: string;
+  city: string;
+  department: string;
+}) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error("Falta la llave SUPABASE_SERVICE_ROLE_KEY en .env.local para registrar usuarios manuales.");
+  }
+
+  const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+  const adminAuthClient = createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceRoleKey,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+
+  const { data: authData, error: authError } = await adminAuthClient.auth.admin.createUser({
+    email: data.email,
+    password: "Amantti2026*",
+    email_confirm: true,
+    user_metadata: {
+      first_name: data.first_name,
+      last_name: data.last_name,
+    }
+  });
+
+  if (authError) {
+    if (authError.message.includes('already registered')) throw new Error("Ya existe un cliente con este correo.");
+    throw new Error(authError.message);
+  }
+
+  if (!authData?.user) throw new Error("No se pudo crear el usuario.");
+
+  // The database trigger will automatically create the row in profiles.
+  // Wait a small moment to ensure the trigger completes, though usually it's synchronous in Postgres.
+  // We'll update the extra fields using standard client.
+  const supabase = await createClient();
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      cedula_number: data.cedula_number || null,
+      phone_number: data.phone_number || null,
+      address: data.address || null,
+      city: data.city || null,
+      department: data.department || null,
+    })
+    .eq('id', authData.user.id);
+
+  if (profileError) throw new Error(`Usuario creado pero fallo el perfil: ${profileError.message}`);
+
+  revalidatePath('/admin/customers');
+  return { success: true };
+}
+
 // ============================================================
 // INVENTORY ACTIONS
 // ============================================================
@@ -779,7 +842,7 @@ export async function createProdAlta(
         movement_date: date,
         reason: matReason,
         entry_type: 'MAT',
-        tab_source: 'prod_consumo',
+        tab_source: 'prod_alta',
       });
       const ns = await _updateStockBy(supabase, c.id, -c.qty);
       consumedResults.push({ id: c.id, newStock: ns });

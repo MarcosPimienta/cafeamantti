@@ -2375,8 +2375,8 @@ function ProdAltasTab({
                         </span>
                       </td>
                       <td className={tdCls}>{inv?.product_name ?? "—"}</td>
-                      <td className={`${tdCls} text-right font-bold text-emerald-700`}>
-                        +{r.quantity}
+                      <td className={`${tdCls} text-right font-bold ${r.quantity > 0 ? "text-emerald-700" : "text-red-600"}`}>
+                        {r.quantity > 0 ? "+" : ""}{r.quantity}
                       </td>
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.reason || "—"}
