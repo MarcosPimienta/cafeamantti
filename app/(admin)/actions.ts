@@ -274,10 +274,179 @@ export async function createManualAdminOrder(
     await logAuditAction("CREATE", "MOVEMENT", mId, item.inventory_id, { qty: -item.quantity, reason });
   }
 
+  revalidatePath('/admin');
   revalidatePath('/admin/orders');
   revalidatePath('/admin/inventory');
+  revalidatePath('/admin/inventory', 'page');
 
   return { success: true, orderId: order.id };
+}
+
+export async function deleteManualAdminOrder(orderId: string) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+
+  // Find the movements associated with this order
+  const shortId = orderId.split('-')[0];
+  const reasonStr = `Orden Manual #${shortId}`;
+
+  const { data: movements, error: movErr } = await supabase
+    .from('inventory_movements')
+    .select('id, inventory_id, quantity')
+    .eq('reason', reasonStr);
+
+  if (movErr) throw new Error(movErr.message);
+
+  // Revert inventory for each movement
+  if (movements && movements.length > 0) {
+    for (const mov of movements) {
+      await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
+      await logAuditAction("DELETE", "MOVEMENT", mov.id, mov.inventory_id, { old_quantity: mov.quantity, note: "Reverted by order deletion" });
+    }
+    // Delete the movements
+    await supabase.from('inventory_movements').delete().eq('reason', reasonStr);
+  }
+
+  // Delete the order (cascade will handle order_items)
+  const { error: orderErr } = await supabase.from('orders').delete().eq('id', orderId);
+  if (orderErr) throw new Error(orderErr.message);
+
+  revalidatePath('/admin');
+  revalidatePath('/admin/orders');
+  revalidatePath('/admin/inventory');
+  revalidatePath('/admin/inventory', 'page');
+
+  return { success: true };
+}
+
+export async function updateManualAdminOrder(
+  orderId: string,
+  data: {
+    contact_email: string;
+    contact_phone: string;
+    shipping_info: { address: string; details?: string; city: string; state: string };
+    status: string;
+    items: {
+      inventory_id: string;
+      product_code: string;
+      product_name: string;
+      quantity: number;
+      price: number;
+      weight?: string;
+      grind?: string;
+    }[];
+  }
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const shortId = orderId.split('-')[0];
+  const reasonStr = `Orden Manual #${shortId}`;
+
+  // 1. Validate stock for new items (considering what was already deducted)
+  // To keep it simple and safe: Revert old inventory, then check new inventory, then apply new inventory.
+  // Actually, checking stock should be done before mutating. 
+  // For a robust implementation:
+  
+  // A. Revert old inventory movements
+  const { data: oldMovements } = await supabase
+    .from('inventory_movements')
+    .select('id, inventory_id, quantity')
+    .eq('reason', reasonStr);
+
+  if (oldMovements) {
+    for (const mov of oldMovements) {
+      await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
+    }
+    await supabase.from('inventory_movements').delete().eq('reason', reasonStr);
+  }
+
+  // B. Delete old order items
+  await supabase.from('order_items').delete().eq('order_id', orderId);
+
+  // C. Validate new stock
+  for (const item of data.items) {
+    if (item.quantity <= 0) continue;
+    const { data: matInfo, error } = await supabase
+      .from('inventory')
+      .select('current_stock, product_name')
+      .eq('id', item.inventory_id)
+      .single();
+    
+    if (error || !matInfo) throw new Error(`Producto en inventario no encontrado: ${item.product_name}`);
+    if (Number(matInfo.current_stock) < item.quantity) {
+      // Re-apply old movements to restore state since we are aborting!
+      if (oldMovements) {
+        for (const mov of oldMovements) {
+          await _updateStockBy(supabase, mov.inventory_id, Number(mov.quantity));
+          await supabase.from('inventory_movements').insert({
+            inventory_id: mov.inventory_id,
+            type: 'salida',
+            quantity: mov.quantity,
+            reason: reasonStr,
+            created_by: user?.id,
+            tab_source: 'salida',
+          });
+        }
+      }
+      throw new Error(`Stock insuficiente: ${matInfo.product_name}.`);
+    }
+  }
+
+  // D. Insert new order items and update order details
+  let total_amount = 0;
+  for (const item of data.items) {
+    total_amount += item.price * item.quantity;
+  }
+
+  const { error: orderErr } = await supabase.from('orders').update({
+    total_amount,
+    shipping_info: data.shipping_info,
+    contact_email: data.contact_email,
+    contact_phone: data.contact_phone,
+    status: data.status
+  }).eq('id', orderId);
+
+  if (orderErr) throw new Error(orderErr.message);
+
+  const orderItemsData = data.items.map(item => ({
+    order_id: orderId,
+    product_id: item.product_name,
+    weight: item.weight || null,
+    grind: item.grind || null,
+    quantity: item.quantity,
+    price_at_time: item.price
+  }));
+
+  const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsData);
+  if (itemsErr) throw new Error(itemsErr.message);
+
+  // E. Deduct new inventory
+  const movementDate = new Date().toISOString();
+  for (const item of data.items) {
+    if (item.quantity <= 0) continue;
+    
+    const mId = await _insertMovement(supabase, user?.id ?? null, item.inventory_id, 'salida', -item.quantity, {
+      movement_date: movementDate,
+      reason: reasonStr,
+      tab_source: 'salida',
+    });
+    
+    await _updateStockBy(supabase, item.inventory_id, -item.quantity);
+    await logAuditAction("UPDATE", "MOVEMENT", mId, item.inventory_id, { qty: -item.quantity, reason: reasonStr });
+  }
+
+  revalidatePath('/admin');
+  revalidatePath('/admin/orders');
+  revalidatePath('/admin/inventory');
+  revalidatePath('/admin/inventory', 'page');
+
+  return { success: true };
 }
 
 export async function createManualCustomer(data: {

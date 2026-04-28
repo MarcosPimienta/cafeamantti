@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { Search, Filter, Mail, Phone, Package, MapPin } from "lucide-react";
 import ManualOrderModal from "./ManualOrderModal";
+import OrderActions from "./OrderActions";
 
 export default async function AdminOrdersPage() {
   const isAdmin = await checkIsAdmin();
@@ -151,7 +152,10 @@ export default async function AdminOrdersPage() {
 
                   {/* Right Column: Actions */}
                   <div className="lg:w-64 shrink-0 bg-[#fdfbf7] p-6 rounded-2xl flex flex-col justify-start">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-4">Actualizar Estado</p>
+                    <div className="flex justify-between items-center mb-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">Acciones</p>
+                      <OrderActions order={order} inventory={inventory || []} />
+                    </div>
                     <form action={async (formData) => {
                       "use server";
                       const newStatus = formData.get("status") as string;
