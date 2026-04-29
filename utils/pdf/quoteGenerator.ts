@@ -1,27 +1,23 @@
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 // Helper functions to load images as DataURLs
 function loadImage(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'Anonymous';
+    // Removed crossOrigin for same-origin local images which might cause issues
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return reject('No 2d context');
-      
-      // Draw image to canvas
-      ctx.drawImage(img, 0, 0);
-      
-      // We will make the background translucent if we wanted to manipulate pixels, 
-      // but it's better to manipulate opacity in jsPDF. 
-      // Actually jsPDF doesn't natively support opacity for addImage in all versions. 
-      // Wait, jsPDF setGState can do opacity. 
-      // But we can also just draw the image with opacity on the canvas to be safe.
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject('No 2d context');
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png', 1.0));
+      } catch (err) {
+        reject(err);
+      }
     };
     img.onerror = (e) => reject(e);
     img.src = url;
@@ -31,23 +27,24 @@ function loadImage(url: string): Promise<string> {
 function loadTranslucentImage(url: string, opacity: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'Anonymous';
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return reject('No 2d context');
-      
-      // Draw white background first
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Draw image with opacity
-      ctx.globalAlpha = opacity;
-      ctx.drawImage(img, 0, 0);
-      
-      resolve(canvas.toDataURL('image/jpeg', 0.9));
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject('No 2d context');
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.globalAlpha = opacity;
+        ctx.drawImage(img, 0, 0);
+        
+        resolve(canvas.toDataURL('image/jpeg', 0.9));
+      } catch (err) {
+        reject(err);
+      }
     };
     img.onerror = (e) => reject(e);
     img.src = url;
@@ -86,20 +83,17 @@ export async function generateQuotePDF(data: QuoteData) {
 
   // 1. Load images
   try {
-    const bgUrl = await loadTranslucentImage('/images/Main_Background.jpg', 0.15); // Translucent background
+    const bgUrl = await loadTranslucentImage('/images/Main_Background.jpg', 0.15);
     const logoUrl = await loadImage('/images/logo-amantti.png');
 
-    // 2. Draw Background
     doc.addImage(bgUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
 
-    // 3. Draw Logo (Top Left)
     const logoWidth = 40;
     const logoHeight = 40;
     doc.addImage(logoUrl, 'PNG', 15, 15, logoWidth, logoHeight);
 
   } catch (error) {
     console.error("Error loading images for PDF:", error);
-    // Continue generating PDF without images if they fail
   }
 
   // 4. Header Text
@@ -140,8 +134,7 @@ export async function generateQuotePDF(data: QuoteData) {
     formatCurrency(item.total_price)
   ]);
 
-  // Use any to bypass TS complaining about autoTable plugin if types are missing
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: startY + 35,
     head: [['Descripción', 'Cantidad', 'Precio Unitario', 'Total']],
     body: tableData,
@@ -162,7 +155,7 @@ export async function generateQuotePDF(data: QuoteData) {
   });
 
   // 7. Total Amount
-  const finalY = (doc as any).lastAutoTable.finalY || startY + 50;
+  const finalY = (doc as any).lastAutoTable?.finalY || startY + 50;
   
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");

@@ -6,18 +6,20 @@ import { generateQuotePDF } from '@/utils/pdf/quoteGenerator';
 import { Plus, Trash2, FileDown, Save, Eye, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-export default function NewQuoteForm({ clients, inventory }: { clients: any[], inventory: any[] }) {
+export default function QuoteForm({ clients, inventory, initialQuote }: { clients: any[], inventory: any[], initialQuote?: any }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
-  const [clientId, setClientId] = useState('');
-  const [status, setStatus] = useState('Borrador');
-  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
-  const [validUntil, setValidUntil] = useState('');
+  const [clientId, setClientId] = useState(initialQuote?.client_id || '');
+  const [status, setStatus] = useState(initialQuote?.status || 'Borrador');
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialQuote?.orientation || 'portrait');
   
-  const [items, setItems] = useState<any[]>([
+  const formattedDate = initialQuote?.valid_until ? new Date(initialQuote.valid_until).toISOString().split('T')[0] : '';
+  const [validUntil, setValidUntil] = useState(formattedDate);
+  
+  const [items, setItems] = useState<any[]>(initialQuote?.quote_items || [
     { product_id: '', description: '', quantity: 1, unit_price: 0, total_price: 0 }
   ]);
 
@@ -29,7 +31,7 @@ export default function NewQuoteForm({ clients, inventory }: { clients: any[], i
     if (field === 'product_id' && value !== 'otro') {
       const product = inventory.find(p => p.id === value);
       if (product) {
-        item.description = `${product.name} - ${product.weight || ''}`;
+        item.description = `${product.product_name} ${product.weight ? `- ${product.weight}` : ''}`;
       }
     }
     
@@ -106,7 +108,14 @@ export default function NewQuoteForm({ clients, inventory }: { clients: any[], i
 
     try {
       // 1. Save to database
-      const res = await createQuote(quoteData, items);
+      let res;
+      if (initialQuote) {
+        const { updateQuote } = await import('../actions');
+        res = await updateQuote(initialQuote.id, quoteData, items);
+      } else {
+        const { createQuote } = await import('../actions');
+        res = await createQuote(quoteData, items);
+      }
       if (!res.success) throw new Error(res.error);
 
       // 2. Generate PDF if requested
@@ -223,7 +232,7 @@ export default function NewQuoteForm({ clients, inventory }: { clients: any[], i
                   <option value="">Seleccionar...</option>
                   <option value="otro">Otro (Escribir manual)</option>
                   {inventory.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
+                    <option key={p.id} value={p.id}>{p.product_name}</option>
                   ))}
                 </select>
               </div>

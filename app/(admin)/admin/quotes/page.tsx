@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { FileText, Search, Plus, Calendar } from "lucide-react";
 import Link from "next/link";
 import { getQuotes } from "./actions";
+import QuoteActions from "./QuoteActions";
 
 export default async function QuotesListPage() {
   const isAdmin = await checkIsAdmin();
@@ -49,7 +50,7 @@ export default async function QuotesListPage() {
                 <th className="px-6 py-4 font-medium">Fecha</th>
                 <th className="px-6 py-4 font-medium">Total</th>
                 <th className="px-6 py-4 font-medium">Estado</th>
-                <th className="px-6 py-4 font-medium text-center">PDF</th>
+                <th className="px-6 py-4 font-medium text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-foreground/5">
@@ -88,9 +89,7 @@ export default async function QuotesListPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <button className="text-[#C59F59] hover:text-[#B38E4D] font-bold text-xs underline">
-                        Regenerar
-                      </button>
+                      <QuoteActions id={quote.id} />
                     </td>
                   </tr>
                 ))
