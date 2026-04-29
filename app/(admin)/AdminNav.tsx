@@ -9,6 +9,7 @@ import {
   Users,
   Settings,
   Package,
+  FileText
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/admin/subscriptions", label: "Suscripciones", Icon: Coffee },
   { href: "/admin/users", label: "Usuarios", Icon: Users },
   { href: "/admin/customers", label: "Clientes (B2B)", Icon: Users },
+  { href: "/admin/quotes", label: "Cotizaciones", Icon: FileText },
 ];
 
 export default function AdminNav() {
