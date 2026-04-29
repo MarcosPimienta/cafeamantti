@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'X-Frame-Options',
-            value: 'DENY',
+            value: 'SAMEORIGIN',
           },
           {
             key: 'X-Content-Type-Options',
@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://api.stripe.com;",
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://api.stripe.com; frame-src 'self' blob:; object-src 'self' blob:;",
           },
           {
             key: 'Strict-Transport-Security',
