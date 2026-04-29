@@ -6,9 +6,11 @@ import QuoteForm from "../new/NewQuoteForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-export default async function EditQuotePage({ params }: { params: { id: string } }) {
+export default async function EditQuotePage(props: { params: Promise<{ id: string }> }) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
+
+  const params = await props.params;
 
   const [clients, inventory, initialQuote] = await Promise.all([
     getClientsCRM(),
