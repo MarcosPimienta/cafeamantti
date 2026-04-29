@@ -3,12 +3,14 @@
 import React, { useState } from 'react';
 import { createQuote } from '../actions';
 import { generateQuotePDF } from '@/utils/pdf/quoteGenerator';
-import { Plus, Trash2, FileDown, Save } from 'lucide-react';
+import { Plus, Trash2, FileDown, Save, Eye, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function NewQuoteForm({ clients, inventory }: { clients: any[], inventory: any[] }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
   const [clientId, setClientId] = useState('');
   const [status, setStatus] = useState('Borrador');
@@ -48,6 +50,45 @@ export default function NewQuoteForm({ clients, inventory }: { clients: any[], i
 
   const totalAmount = items.reduce((sum, item) => sum + Number(item.total_price), 0);
 
+  const generatePdfBlob = async () => {
+    const client = clients.find(c => c.id === clientId);
+    const pdfData = {
+      clientName: client?.name || 'Cliente de Prueba',
+      clientDocument: client?.document_number || 'N/A',
+      clientEmail: client?.email || '',
+      clientPhone: client?.phone || '',
+      orientation,
+      items: items.map(i => ({
+        description: i.description || 'Item sin descripción',
+        quantity: Number(i.quantity) || 1,
+        unit_price: Number(i.unit_price) || 0,
+        total_price: Number(i.total_price) || 0
+      })),
+      totalAmount,
+      validUntil: validUntil || '15 días',
+      date: new Date().toLocaleDateString('es-CO')
+    };
+    
+    const doc = await generateQuotePDF(pdfData);
+    return doc.output('blob');
+  };
+
+  const handlePreview = async () => {
+    if (items.length === 0) return alert('Agrega al menos un item para previsualizar');
+    
+    setIsPreviewing(true);
+    try {
+      const blob = await generatePdfBlob();
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
+    } catch (error) {
+      console.error(error);
+      alert('Error al generar la vista previa');
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent, generatePdf: boolean) => {
     e.preventDefault();
     if (!clientId) return alert('Selecciona un cliente');
@@ -71,26 +112,13 @@ export default function NewQuoteForm({ clients, inventory }: { clients: any[], i
       // 2. Generate PDF if requested
       if (generatePdf) {
         const client = clients.find(c => c.id === clientId);
-        const pdfData = {
-          clientName: client?.name || '',
-          clientDocument: client?.document_number || '',
-          clientEmail: client?.email || '',
-          clientPhone: client?.phone || '',
-          orientation,
-          items: items.map(i => ({
-            description: i.description,
-            quantity: Number(i.quantity),
-            unit_price: Number(i.unit_price),
-            total_price: Number(i.total_price)
-          })),
-          totalAmount,
-          validUntil: validUntil || '15 días',
-          quoteId: res.id,
-          date: new Date().toLocaleDateString('es-CO')
-        };
-        
-        const doc = await generateQuotePDF(pdfData);
-        doc.save(`Cotizacion_${client?.name.replace(/\\s+/g, '_')}_${new Date().getTime()}.pdf`);
+        const blob = await generatePdfBlob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Cotizacion_${client?.name.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
       }
 
       router.push('/admin/quotes');
@@ -266,6 +294,14 @@ export default function NewQuoteForm({ clients, inventory }: { clients: any[], i
       <div className="flex items-center justify-end gap-4 pt-6 border-t border-foreground/5">
         <button 
           type="button"
+          onClick={handlePreview}
+          disabled={isPreviewing}
+          className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 text-foreground font-bold rounded-xl hover:bg-foreground/5 transition-colors disabled:opacity-50"
+        >
+          <Eye className="w-5 h-5" /> Previsualizar
+        </button>
+        <button 
+          type="button"
           onClick={(e) => handleSubmit(e, false)}
           disabled={isSubmitting}
           className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 text-foreground font-bold rounded-xl hover:bg-foreground/5 transition-colors disabled:opacity-50"
@@ -281,6 +317,34 @@ export default function NewQuoteForm({ clients, inventory }: { clients: any[], i
           <FileDown className="w-5 h-5" /> Guardar y Generar PDF
         </button>
       </div>
+
+      {/* Preview Modal */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-foreground/10 bg-[#f9f7f0]">
+              <h3 className="font-bold text-lg font-serif">Vista Previa de Cotización</h3>
+              <button 
+                type="button" 
+                onClick={() => {
+                  URL.revokeObjectURL(previewUrl);
+                  setPreviewUrl(null);
+                }}
+                className="p-2 hover:bg-foreground/10 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex-1 bg-neutral-100 p-4">
+              <iframe 
+                src={previewUrl} 
+                className="w-full h-full rounded-xl border border-foreground/10 shadow-sm"
+                title="PDF Preview"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
