@@ -83,13 +83,14 @@ export async function generateQuotePDF(data: QuoteData) {
 
   // 1. Load images
   try {
-    const bgUrl = await loadTranslucentImage('/images/Main_Background.jpg', 0.15);
+    const bgUrl = await loadTranslucentImage('/images/Main_Background.jpg', 0.25);
     const logoUrl = await loadImage('/images/logo-amantti.png');
 
     doc.addImage(bgUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
 
-    const logoWidth = 40;
-    const logoHeight = 40;
+    // The logo is 1024x221 (aspect ratio ~4.63)
+    const logoWidth = 60;
+    const logoHeight = 60 * (221 / 1024);
     doc.addImage(logoUrl, 'PNG', 15, 15, logoWidth, logoHeight);
 
   } catch (error) {
@@ -159,7 +160,7 @@ export async function generateQuotePDF(data: QuoteData) {
   
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
-  doc.text(`Total Cotizado:`, pageWidth - 60, finalY + 15);
+  doc.text(`Total Cotizado:`, pageWidth - 50, finalY + 15, { align: 'right' });
   
   doc.setFontSize(14);
   doc.text(`${formatCurrency(data.totalAmount)}`, pageWidth - 15, finalY + 15, { align: 'right' });
