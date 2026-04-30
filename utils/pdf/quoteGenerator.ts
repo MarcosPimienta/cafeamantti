@@ -173,6 +173,19 @@ export async function generateQuotePDF(
         logging: false,
         width: 816,
         windowWidth: 816,
+        // Strip ALL external/global stylesheets from the cloned document.
+        // Tailwind v4 uses oklch()/lab() color functions in its CSS variables
+        // which html2canvas cannot parse. Our template uses only inline styles
+        // with hex colors, so removing stylesheets is safe.
+        onclone: (_clonedDoc: Document) => {
+          const clonedDoc = _clonedDoc;
+          // Remove all <link rel="stylesheet"> tags
+          const links = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
+          links.forEach(el => el.parentNode?.removeChild(el));
+          // Remove all <style> tags
+          const styles = clonedDoc.querySelectorAll('style');
+          styles.forEach(el => el.parentNode?.removeChild(el));
+        },
       },
       jsPDF: {
         unit: 'px' as const,
