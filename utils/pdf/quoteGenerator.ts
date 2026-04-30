@@ -1,6 +1,3 @@
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
-
 export interface QuoteItem {
   description: string;
   quantity: number;
@@ -21,16 +18,21 @@ export interface QuoteData {
   date: string;
 }
 
-export async function generateQuotePDF(element: HTMLElement, filename: string = 'cotizacion.pdf'): Promise<Blob> {
+export async function generateQuotePDF(
+  element: HTMLElement,
+  filename: string = 'cotizacion.pdf',
+  orientation: 'portrait' | 'landscape' = 'portrait'
+): Promise<Blob> {
+  // Dynamic import to avoid SSR issues (html2pdf uses window/document)
+  const html2pdf = (await import('html2pdf.js')).default;
+
   const opt = {
-    margin:       0,
-    filename:     filename,
-    image:        { type: 'jpeg' as const, quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true, logging: false },
-    jsPDF:        { unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const }
+    margin:      0,
+    filename,
+    image:       { type: 'jpeg' as const, quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true },
+    jsPDF:       { unit: 'in' as const, format: 'letter' as const, orientation }
   };
 
-  // html2pdf returns a promise that resolves to the worker. 
-  // We can chain .output('blob') to get the Blob directly.
   return await html2pdf().set(opt).from(element).output('blob');
 }

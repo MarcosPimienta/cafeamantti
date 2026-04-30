@@ -56,8 +56,8 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
   const generatePdfBlob = async () => {
     if (!templateRef.current) throw new Error("Plantilla HTML no lista");
     const client = clients.find(c => c.id === clientId);
-    const filename = `Cotizacion_${client?.name.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
-    return await generateQuotePDF(templateRef.current, filename);
+    const filename = `Cotizacion_${(client?.name || 'Cliente').replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
+    return await generateQuotePDF(templateRef.current, filename, orientation);
   };
 
   const handlePreview = async () => {
