@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { generateQuotePDF } from '@/utils/pdf/quoteGenerator';
 import { Plus, Trash2, FileDown, Save, Eye, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -8,10 +8,8 @@ import { QuoteHTMLTemplate } from '../QuoteHTMLTemplate';
 
 export default function QuoteForm({ clients, inventory, initialQuote }: { clients: any[], inventory: any[], initialQuote?: any }) {
   const router = useRouter();
-  const templateRef = useRef<HTMLDivElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   
   const [clientId, setClientId] = useState(initialQuote?.client_id || '');
   const [status, setStatus] = useState(initialQuote?.status || 'Borrador');
@@ -80,20 +78,10 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
     return await generateQuotePDF(data, filename, orientation);
   };
 
-  const handlePreview = async () => {
+  const handlePreview = () => {
     if (items.length === 0) return alert('Agrega al menos un item para previsualizar');
-    
-    setIsPreviewing(true);
-    try {
-      const blob = await generatePdfBlob();
-      const url = URL.createObjectURL(blob);
-      setPreviewUrl(url);
-    } catch (error) {
-      console.error(error);
-      alert('Error al generar la vista previa');
-    } finally {
-      setIsPreviewing(false);
-    }
+    if (!clientId) return alert('Selecciona un cliente para previsualizar');
+    setShowPreview(true);
   };
 
   const handleSubmit = async (e: React.FormEvent, generatePdf: boolean) => {
@@ -309,8 +297,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
         <button 
           type="button"
           onClick={handlePreview}
-          disabled={isPreviewing}
-          className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 text-foreground font-bold rounded-xl hover:bg-foreground/5 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 text-foreground font-bold rounded-xl hover:bg-foreground/5 transition-colors"
         >
           <Eye className="w-5 h-5" /> Previsualizar
         </button>
@@ -332,52 +319,29 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
         </button>
       </div>
 
-      {/* Hidden HTML Template for PDF Generation */}
-      <div className="absolute left-[-9999px] top-[-9999px]">
-        <QuoteHTMLTemplate 
-          ref={templateRef} 
-          data={{
-            clientName: clients.find(c => c.id === clientId)?.name || 'Cliente',
-            clientDocument: clients.find(c => c.id === clientId)?.document_number || 'N/A',
-            clientEmail: clients.find(c => c.id === clientId)?.email || '',
-            clientPhone: clients.find(c => c.id === clientId)?.phone || '',
-            orientation,
-            items: items.map(i => ({
-              description: i.description || 'Item sin descripción',
-              quantity: Number(i.quantity) || 1,
-              unit_price: Number(i.unit_price) || 0,
-              total_price: Number(i.total_price) || 0
-            })),
-            totalAmount,
-            validUntil: validUntil || '15 días',
-            date: new Date().toLocaleDateString('es-CO')
-          }} 
-        />
-      </div>
-
-      {/* Preview Modal */}
-      {previewUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between p-4 border-b border-foreground/10 bg-[#f9f7f0]">
-              <h3 className="font-bold text-lg font-serif">Vista Previa de Cotización</h3>
+      {/* Preview Modal — renders the HTML template directly, no PDF generation */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-[#f5f3ee] rounded-3xl w-full max-w-5xl h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-[#f0ece2] flex-shrink-0">
+              <div>
+                <h3 className="font-bold text-lg" style={{ fontFamily: 'serif' }}>Vista Previa de Cotización</h3>
+                <p className="text-xs text-stone-400 mt-0.5">El PDF final se generará exactamente así al guardar</p>
+              </div>
               <button 
                 type="button" 
-                onClick={() => {
-                  URL.revokeObjectURL(previewUrl);
-                  setPreviewUrl(null);
-                }}
-                className="p-2 hover:bg-foreground/10 rounded-full transition-colors"
+                onClick={() => setShowPreview(false)}
+                className="p-2 hover:bg-stone-200 rounded-full transition-colors"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 bg-neutral-100 p-4">
-              <iframe 
-                src={previewUrl} 
-                className="w-full h-full rounded-xl border border-foreground/10 shadow-sm"
-                title="PDF Preview"
-              />
+            {/* Scrollable preview area */}
+            <div className="flex-1 overflow-auto p-6 flex justify-center">
+              <div className="shadow-2xl rounded-xl overflow-hidden">
+                <QuoteHTMLTemplate data={buildPdfData()} />
+              </div>
             </div>
           </div>
         </div>

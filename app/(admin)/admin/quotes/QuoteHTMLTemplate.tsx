@@ -1,17 +1,15 @@
-import React, { forwardRef } from 'react';
+import React from 'react';
 import { QuoteData } from '@/utils/pdf/quoteGenerator';
 
-// NOTE: This template uses ONLY inline styles with hex/rgb colors.
-// Tailwind v4 uses oklch() color functions which html2canvas cannot parse.
-// All colors must be explicit hex or rgb() values here.
+// NOTE: Uses ONLY inline styles with hex/rgb colors.
+// Tailwind v4 uses oklch() which html2canvas cannot parse.
 
-export const QuoteHTMLTemplate = forwardRef<HTMLDivElement, { data: QuoteData }>(({ data }, ref) => {
+export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(val);
 
   return (
     <div
-      ref={ref}
       style={{
         fontFamily: 'Arial, Helvetica, sans-serif',
         backgroundColor: '#ffffff',
@@ -197,6 +195,4 @@ export const QuoteHTMLTemplate = forwardRef<HTMLDivElement, { data: QuoteData }>
       </div>
     </div>
   );
-});
-
-QuoteHTMLTemplate.displayName = 'QuoteHTMLTemplate';
+}
