@@ -322,9 +322,10 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
       {/* Preview Modal — renders the HTML template directly, no PDF generation */}
       {showPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="bg-[#f5f3ee] rounded-3xl w-full max-w-5xl h-[92vh] flex flex-col overflow-hidden shadow-2xl">
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-[#f0ece2] flex-shrink-0">
+          {/* Outer shell — NO overflow-hidden so the scrollbar is never clipped */}
+          <div className="bg-[#f5f3ee] rounded-3xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl" style={{ overflow: 'clip' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-[#f0ece2] flex-shrink-0 rounded-t-3xl">
               <div>
                 <h3 className="font-bold text-lg" style={{ fontFamily: 'serif' }}>Vista Previa de Cotización</h3>
                 <p className="text-xs text-stone-400 mt-0.5">El PDF final se generará exactamente así al guardar</p>
@@ -337,10 +338,12 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
                 <X className="w-5 h-5" />
               </button>
             </div>
-            {/* Scrollable preview area */}
-            <div className="flex-1 overflow-auto p-6 flex justify-center">
-              <div className="shadow-2xl rounded-xl overflow-hidden">
-                <QuoteHTMLTemplate data={buildPdfData()} />
+            {/* Scrollable area — takes remaining height, scrolls vertically */}
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-6">
+              <div className="flex justify-center min-w-max">
+                <div className="shadow-2xl">
+                  <QuoteHTMLTemplate data={buildPdfData()} />
+                </div>
               </div>
             </div>
           </div>
