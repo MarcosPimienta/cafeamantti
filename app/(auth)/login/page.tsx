@@ -141,6 +141,7 @@ function LoginForm() {
                 type="text"
                 tabIndex={-1}
                 autoComplete="off"
+                suppressHydrationWarning
                 {...register("website" as any)}
               />
             </div>

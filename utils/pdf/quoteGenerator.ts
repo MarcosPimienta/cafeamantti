@@ -8,8 +8,10 @@ export interface QuoteItem {
 export interface QuoteData {
   clientName: string;
   clientDocument: string;
+  clientDocumentType?: string;
   clientEmail: string;
   clientPhone: string;
+  sellerName?: string;
   orientation: 'portrait' | 'landscape';
   items: QuoteItem[];
   totalAmount: number;
@@ -143,7 +145,7 @@ function buildHTMLString(data: QuoteData): string {
             <p style="margin:2px 0 0;font-size:13px;font-weight:600;color:#292524;">${data.clientName}</p>
           </td>
           <td style="width:50%;padding-bottom:8px;vertical-align:top;">
-            <p style="margin:0;font-size:10px;color:#78716c;text-transform:uppercase;">Documento</p>
+            <p style="margin:0;font-size:10px;color:#78716c;text-transform:uppercase;">${data.clientDocumentType || 'Documento'}</p>
             <p style="margin:2px 0 0;font-size:13px;font-weight:600;color:#292524;">${data.clientDocument || 'N/A'}</p>
           </td>
         </tr>
@@ -172,7 +174,17 @@ function buildHTMLString(data: QuoteData): string {
   `;
 
   const totalBlock = `
-    <div style="display:flex;justify-content:flex-end;margin-top:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:24px;">
+      <div style="text-align:left;">
+        <p style="margin:0;font-size:11px;font-weight:700;color:#292524;">${data.sellerName || 'Asesor Amantti'}</p>
+        <p style="margin:2px 0 0;font-size:10px;color:#57534e;line-height:1.4;">
+          Alma Trading Group SAS<br/>
+          Nit: 901752308-8<br/>
+          cafeamantti@gmail.com<br/>
+          CEL: +57 (333)284-3078<br/>
+          www.cafeamantti.com
+        </p>
+      </div>
       <div style="background-color:#292524;color:#fff;border-radius:12px;padding:18px 28px;min-width:260px;position:relative;overflow:hidden;">
         <div style="position:absolute;right:0;top:0;bottom:0;width:5px;background-color:#C59F59;"></div>
         <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#C59F59;text-transform:uppercase;letter-spacing:2px;">Total Cotizado</p>
@@ -202,8 +214,21 @@ function buildHTMLString(data: QuoteData): string {
       </div>
     `;
 
+    const currentPageStyle = `
+      font-family: Arial, Helvetica, sans-serif;
+      background-color: #ffffff;
+      color: #1c1917;
+      position: relative;
+      width: ${pageW}px;
+      height: ${pageH}px;
+      padding: ${padV}px ${PAD_H}px;
+      box-sizing: border-box;
+      overflow: hidden;
+      ${isLast ? '' : 'page-break-after: always;'}
+    `;
+
     return `
-      <div style="${pageStyle}">
+      <div style="${currentPageStyle}">
         <img src="${baseUrl}/images/Main_Background.jpg" style="${bgImgStyle}" />
         <div style="${contentStyle}">
           ${isFirst ? firstPageHeader : compactHeader(pageIdx)}
@@ -218,7 +243,7 @@ function buildHTMLString(data: QuoteData): string {
     `;
   }).join('');
 
-  return `<div style="display:inline-block;">${pagesHtml}</div>`;
+  return `<div style="display: flex; flex-direction: column; width: ${pageW}px; overflow: hidden;">${pagesHtml}</div>`;
 }
 
 export async function generateQuotePDF(

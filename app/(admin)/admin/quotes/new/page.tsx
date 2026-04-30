@@ -1,7 +1,7 @@
 import React from "react";
-import { checkIsAdmin, getClientsCRM, getInventory } from "../../../actions";
+import { checkIsAdmin, getClientsCRM, getCurrentUserProfile, getInventory } from "../../../actions";
 import { redirect } from "next/navigation";
-import QuoteForm from "./NewQuoteForm";
+import NewQuoteForm from "./NewQuoteForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -9,8 +9,13 @@ export default async function NewQuotePage() {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
 
-  const clients = await getClientsCRM() || [];
-  const inventory = await getInventory() || [];
+  const [clients, inventory, profile] = await Promise.all([
+    getClientsCRM(),
+    getInventory(),
+    getCurrentUserProfile()
+  ]);
+
+  const sellerName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : undefined;
 
   return (
     <div className="space-y-8">
@@ -28,7 +33,11 @@ export default async function NewQuotePage() {
       </div>
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 md:p-8">
-        <QuoteForm clients={clients} inventory={inventory} />
+        <NewQuoteForm 
+          clients={clients || []} 
+          inventory={inventory || []} 
+          sellerName={sellerName}
+        />
       </div>
     </div>
   );

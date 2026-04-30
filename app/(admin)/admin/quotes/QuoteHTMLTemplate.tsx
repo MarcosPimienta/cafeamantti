@@ -156,7 +156,17 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
 
   // ── Total block ─────────────────────────────────────────────────────────────
   const TotalBlock = () => (
-    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '24px' }}>
+      <div style={{ textAlign: 'left' }}>
+        <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#292524' }}>{data.sellerName || 'Asesor Amantti'}</p>
+        <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#57534e', lineHeight: '1.4' }}>
+          Alma Trading Group SAS<br/>
+          Nit: 901752308-8<br/>
+          cafeamantti@gmail.com<br/>
+          CEL: +57 (333)284-3078<br/>
+          www.cafeamantti.com
+        </p>
+      </div>
       <div style={{ backgroundColor: '#292524', color: '#ffffff', borderRadius: '12px', padding: '18px 28px', minWidth: '260px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', backgroundColor: '#C59F59' }} />
         <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: 700, color: '#C59F59', textTransform: 'uppercase', letterSpacing: '2px' }}>Total Cotizado</p>
@@ -176,14 +186,19 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
 
   // ══════════════════════════════════════════════════════════════════════════════
   return (
-    <div style={{ display: 'inline-block' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', width: `${pageW}px`, overflow: 'hidden' }}>
 
       {itemPages.map((_, pageIdx) => {
         const isFirst = pageIdx === 0;
         const isLast  = pageIdx === totalPages - 1;
 
+        const currentPageStyle: React.CSSProperties = {
+          ...pageStyle,
+          pageBreakAfter: isLast ? 'auto' : 'always',
+        };
+
         return (
-          <div key={pageIdx} style={pageStyle}>
+          <div key={pageIdx} style={currentPageStyle}>
             <div style={bgStyle} />
 
             <div style={contentStyle}>
@@ -215,7 +230,7 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
                             <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600, color: '#292524' }}>{data.clientName}</p>
                           </td>
                           <td style={{ width: '50%', paddingBottom: '8px', verticalAlign: 'top' }}>
-                            <p style={{ margin: 0, fontSize: '10px', color: '#78716c', textTransform: 'uppercase' }}>Documento</p>
+                            <p style={{ margin: 0, fontSize: '10px', color: '#78716c', textTransform: 'uppercase' }}>{data.clientDocumentType || 'Documento'}</p>
                             <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600, color: '#292524' }}>{data.clientDocument || 'N/A'}</p>
                           </td>
                         </tr>

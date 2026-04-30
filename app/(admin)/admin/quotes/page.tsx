@@ -36,6 +36,7 @@ export default async function QuotesListPage() {
             <input 
               type="text" 
               placeholder="Buscar por cliente o referencia..." 
+              suppressHydrationWarning
               className="w-full pl-11 pr-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             />
           </div>
@@ -70,12 +71,12 @@ export default async function QuotesListPage() {
                       <div className="text-xs text-foreground/50">{quote.clients?.document_number}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-xs text-foreground/60">
+                      <div className="flex items-center gap-2 text-xs text-foreground/60" suppressHydrationWarning>
                         <Calendar className="w-4 h-4 text-foreground/40" />
                         {new Date(quote.created_at).toLocaleDateString("es-CO")}
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-mono font-bold text-foreground">
+                    <td className="px-6 py-4 font-mono font-bold text-foreground" suppressHydrationWarning>
                       {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(quote.total_amount)}
                     </td>
                     <td className="px-6 py-4">

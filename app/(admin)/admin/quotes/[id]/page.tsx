@@ -1,8 +1,8 @@
 import React from "react";
-import { checkIsAdmin, getClientsCRM, getInventory } from "../../../actions";
+import { checkIsAdmin, getClientsCRM, getCurrentUserProfile, getInventory } from "../../../actions";
 import { getQuoteById } from "../actions";
 import { redirect } from "next/navigation";
-import QuoteForm from "../new/NewQuoteForm";
+import NewQuoteForm from "../new/NewQuoteForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -12,15 +12,18 @@ export default async function EditQuotePage(props: { params: Promise<{ id: strin
 
   const params = await props.params;
 
-  const [clients, inventory, initialQuote] = await Promise.all([
+  const [clients, inventory, initialQuote, profile] = await Promise.all([
     getClientsCRM(),
     getInventory(),
-    getQuoteById(params.id)
+    getQuoteById(params.id),
+    getCurrentUserProfile()
   ]);
 
   if (!initialQuote) {
     redirect('/admin/quotes');
   }
+
+  const sellerName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : undefined;
 
   return (
     <div className="space-y-8">
@@ -38,10 +41,11 @@ export default async function EditQuotePage(props: { params: Promise<{ id: strin
       </div>
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 md:p-8">
-        <QuoteForm 
+        <NewQuoteForm 
           clients={clients || []} 
           inventory={inventory || []} 
           initialQuote={initialQuote} 
+          sellerName={sellerName}
         />
       </div>
     </div>

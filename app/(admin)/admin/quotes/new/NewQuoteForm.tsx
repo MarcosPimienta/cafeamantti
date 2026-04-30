@@ -6,7 +6,7 @@ import { Plus, Trash2, FileDown, Save, Eye, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuoteHTMLTemplate } from '../QuoteHTMLTemplate';
 
-export default function QuoteForm({ clients, inventory, initialQuote }: { clients: any[], inventory: any[], initialQuote?: any }) {
+export default function NewQuoteForm({ clients, inventory, initialQuote, sellerName }: { clients: any[], inventory: any[], initialQuote?: any, sellerName?: string }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -56,8 +56,10 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
     return {
       clientName: client?.name || 'Cliente',
       clientDocument: client?.document_number || 'N/A',
+      clientDocumentType: client?.document_type || 'Documento',
       clientEmail: client?.email || 'N/A',
       clientPhone: client?.phone || 'N/A',
+      sellerName: sellerName || 'Asesor Amantti',
       orientation,
       items: items.map(i => ({
         description: i.description || 'Sin descripción',
@@ -146,6 +148,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
               required
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
+              suppressHydrationWarning
               className="w-full p-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
             >
               <option value="">Selecciona un cliente del CRM</option>
@@ -165,6 +168,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
               <select 
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
+                suppressHydrationWarning
                 className="w-full p-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
               >
                 <option value="Borrador">Borrador</option>
@@ -178,6 +182,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
               <select 
                 value={orientation}
                 onChange={(e) => setOrientation(e.target.value as any)}
+                suppressHydrationWarning
                 className="w-full p-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
               >
                 <option value="portrait">Vertical (Carta)</option>
@@ -191,6 +196,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
               type="date" 
               value={validUntil}
               onChange={(e) => setValidUntil(e.target.value)}
+              suppressHydrationWarning
               className="w-full p-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
             />
           </div>
@@ -206,6 +212,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
           <button 
             type="button" 
             onClick={addItem}
+            suppressHydrationWarning
             className="flex items-center gap-2 text-sm text-[#C59F59] font-bold hover:text-[#B38E4D]"
           >
             <Plus className="w-4 h-4" /> Agregar Item
@@ -220,6 +227,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
                 <select 
                   value={item.product_id}
                   onChange={(e) => handleItemChange(index, 'product_id', e.target.value)}
+                  suppressHydrationWarning
                   className="w-full p-2 bg-white border border-foreground/10 rounded-lg text-sm"
                 >
                   <option value="">Seleccionar...</option>
@@ -237,6 +245,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
                   onChange={(e) => handleItemChange(index, 'description', e.target.value)}
                   placeholder="Descripción del item"
                   required
+                  suppressHydrationWarning
                   className="w-full p-2 bg-white border border-foreground/10 rounded-lg text-sm"
                 />
               </div>
@@ -248,6 +257,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
                   value={item.quantity}
                   onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
                   required
+                  suppressHydrationWarning
                   className="w-full p-2 bg-white border border-foreground/10 rounded-lg text-sm text-center"
                 />
               </div>
@@ -259,12 +269,16 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
                   value={item.unit_price}
                   onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
                   required
+                  suppressHydrationWarning
                   className="w-full p-2 bg-white border border-foreground/10 rounded-lg text-sm text-right"
                 />
               </div>
               <div className="w-full md:w-32">
                 <label className="block text-xs font-bold text-foreground/70 mb-1">Total</label>
-                <div className="p-2 text-sm text-right font-mono font-bold bg-white/50 rounded-lg border border-transparent">
+                <div 
+                  suppressHydrationWarning
+                  className="p-2 text-sm text-right font-mono font-bold bg-white/50 rounded-lg border border-transparent"
+                >
                   {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(item.total_price)}
                 </div>
               </div>
@@ -272,6 +286,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
                 <button 
                   type="button" 
                   onClick={() => removeItem(index)}
+                  suppressHydrationWarning
                   className="p-2 mt-4 md:mt-5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
                   <Trash2 className="w-5 h-5" />
@@ -285,7 +300,10 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
           <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-[#C59F59]/20 w-full md:w-1/3">
             <div className="flex justify-between items-center text-xl font-bold text-foreground">
               <span>Gran Total:</span>
-              <span className="font-mono text-[#C59F59]">
+              <span 
+                suppressHydrationWarning
+                className="font-mono text-[#C59F59]"
+              >
                 {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(totalAmount)}
               </span>
             </div>
@@ -297,6 +315,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
         <button 
           type="button"
           onClick={handlePreview}
+          suppressHydrationWarning
           className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 text-foreground font-bold rounded-xl hover:bg-foreground/5 transition-colors"
         >
           <Eye className="w-5 h-5" /> Previsualizar
@@ -305,6 +324,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
           type="button"
           onClick={(e) => handleSubmit(e, false)}
           disabled={isSubmitting}
+          suppressHydrationWarning
           className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 text-foreground font-bold rounded-xl hover:bg-foreground/5 transition-colors disabled:opacity-50"
         >
           <Save className="w-5 h-5" /> Solo Guardar
@@ -313,6 +333,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
           type="button"
           onClick={(e) => handleSubmit(e, true)}
           disabled={isSubmitting}
+          suppressHydrationWarning
           className="flex items-center gap-2 px-6 py-3 bg-[#2a221f] text-white font-bold rounded-xl hover:bg-[#3d322d] transition-colors disabled:opacity-50"
         >
           <FileDown className="w-5 h-5" /> Guardar y Generar PDF
