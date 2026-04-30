@@ -53,11 +53,31 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
 
   const totalAmount = items.reduce((sum, item) => sum + Number(item.total_price), 0);
 
+  const buildPdfData = () => {
+    const client = clients.find(c => c.id === clientId);
+    return {
+      clientName: client?.name || 'Cliente',
+      clientDocument: client?.document_number || 'N/A',
+      clientEmail: client?.email || 'N/A',
+      clientPhone: client?.phone || 'N/A',
+      orientation,
+      items: items.map(i => ({
+        description: i.description || 'Sin descripción',
+        quantity: Number(i.quantity) || 1,
+        unit_price: Number(i.unit_price) || 0,
+        total_price: Number(i.total_price) || 0,
+      })),
+      totalAmount,
+      validUntil: validUntil || '15 días',
+      date: new Date().toLocaleDateString('es-CO'),
+    };
+  };
+
   const generatePdfBlob = async () => {
-    if (!templateRef.current) throw new Error("Plantilla HTML no lista");
     const client = clients.find(c => c.id === clientId);
     const filename = `Cotizacion_${(client?.name || 'Cliente').replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
-    return await generateQuotePDF(templateRef.current, filename, orientation);
+    const data = buildPdfData();
+    return await generateQuotePDF(data, filename, orientation);
   };
 
   const handlePreview = async () => {
