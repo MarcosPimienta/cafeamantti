@@ -339,7 +339,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
               </button>
             </div>
             {/* Scrollable area — takes remaining height, scrolls vertically */}
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-6">
+            <div className={`flex-1 min-h-0 overflow-x-auto p-6 ${orientation === 'landscape' ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
               <div className="flex justify-center min-w-max">
                 <div className="shadow-2xl">
                   <QuoteHTMLTemplate data={buildPdfData()} />
