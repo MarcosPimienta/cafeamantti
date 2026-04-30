@@ -38,17 +38,21 @@ function buildHTMLString(data: QuoteData): string {
   // Use absolute URL for images so html2canvas can fetch them
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
+  // Letter size: portrait 816x1056, landscape 1056x816 (at ~96dpi)
+  const isLandscape = data.orientation === 'landscape';
+  const docWidth  = isLandscape ? 1056 : 816;
+  const docHeight = isLandscape ? 816  : 1056;
+
   return `
     <div style="
       font-family: Arial, Helvetica, sans-serif;
       background-color: #ffffff;
       color: #1c1917;
       position: relative;
-      width: 816px;
-      min-height: 1056px;
-      padding: 64px;
+      width: ${docWidth}px;
+      min-height: ${docHeight}px;
+      padding: ${isLandscape ? '48px 64px' : '64px'};
       box-sizing: border-box;
-      overflow: hidden;
     ">
       <!-- Background Image -->
       <img src="${baseUrl}/images/Main_Background.jpg" style="
@@ -57,7 +61,7 @@ function buildHTMLString(data: QuoteData): string {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        opacity: 0.18;
+        opacity: 0.5;
         z-index: 0;
         top: 0; left: 0;
       " />
@@ -149,6 +153,7 @@ export async function generateQuotePDF(
   // Dynamic import — html2pdf.js uses window/document and cannot be imported at module level in Next.js
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const html2pdf = (await import('html2pdf.js')).default;
+  const isLandscape = orientation === 'landscape';
 
   // Build a temporary container and inject the HTML
   const container = document.createElement('div');
@@ -171,18 +176,12 @@ export async function generateQuotePDF(
         useCORS: true,
         allowTaint: false,
         logging: false,
-        width: 816,
-        windowWidth: 816,
-        // Strip ALL external/global stylesheets from the cloned document.
-        // Tailwind v4 uses oklch()/lab() color functions in its CSS variables
-        // which html2canvas cannot parse. Our template uses only inline styles
-        // with hex colors, so removing stylesheets is safe.
+        width: isLandscape ? 1056 : 816,
+        windowWidth: isLandscape ? 1056 : 816,
         onclone: (_clonedDoc: Document) => {
           const clonedDoc = _clonedDoc;
-          // Remove all <link rel="stylesheet"> tags
           const links = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
           links.forEach(el => el.parentNode?.removeChild(el));
-          // Remove all <style> tags
           const styles = clonedDoc.querySelectorAll('style');
           styles.forEach(el => el.parentNode?.removeChild(el));
         },

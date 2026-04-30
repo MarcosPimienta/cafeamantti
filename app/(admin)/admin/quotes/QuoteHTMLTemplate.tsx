@@ -8,6 +8,11 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(val);
 
+  // Letter size: portrait 816x1056px, landscape 1056x816px (at ~96dpi)
+  const isLandscape = data.orientation === 'landscape';
+  const docWidth  = isLandscape ? '1056px' : '816px';
+  const docHeight = isLandscape ? '816px'  : '1056px';
+
   return (
     <div
       style={{
@@ -15,11 +20,11 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
         backgroundColor: '#ffffff',
         color: '#1c1917',
         position: 'relative',
-        width: '816px',
-        minHeight: '1056px',
-        padding: '64px',
+        width: docWidth,
+        minHeight: docHeight,
+        padding: isLandscape ? '48px 64px' : '64px',
         boxSizing: 'border-box',
-        overflow: 'hidden',
+        // NO overflow:hidden — allows scroll in the preview modal
       }}
     >
       {/* Background Image */}
@@ -30,7 +35,7 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
           backgroundImage: "url('/images/Main_Background.jpg')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          opacity: 0.18,
+          opacity: 0.5,
           zIndex: 0,
         }}
       />
