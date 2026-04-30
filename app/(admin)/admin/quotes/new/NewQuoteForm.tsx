@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
-import { createQuote } from '../actions';
+import React, { useState, useRef } from 'react';
 import { generateQuotePDF } from '@/utils/pdf/quoteGenerator';
 import { Plus, Trash2, FileDown, Save, Eye, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { QuoteHTMLTemplate } from '../QuoteHTMLTemplate';
 
 export default function QuoteForm({ clients, inventory, initialQuote }: { clients: any[], inventory: any[], initialQuote?: any }) {
   const router = useRouter();
+  const templateRef = useRef<HTMLDivElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -53,26 +54,10 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
   const totalAmount = items.reduce((sum, item) => sum + Number(item.total_price), 0);
 
   const generatePdfBlob = async () => {
+    if (!templateRef.current) throw new Error("Plantilla HTML no lista");
     const client = clients.find(c => c.id === clientId);
-    const pdfData = {
-      clientName: client?.name || 'Cliente de Prueba',
-      clientDocument: client?.document_number || 'N/A',
-      clientEmail: client?.email || '',
-      clientPhone: client?.phone || '',
-      orientation,
-      items: items.map(i => ({
-        description: i.description || 'Item sin descripción',
-        quantity: Number(i.quantity) || 1,
-        unit_price: Number(i.unit_price) || 0,
-        total_price: Number(i.total_price) || 0
-      })),
-      totalAmount,
-      validUntil: validUntil || '15 días',
-      date: new Date().toLocaleDateString('es-CO')
-    };
-    
-    const doc = await generateQuotePDF(pdfData);
-    return doc.output('blob');
+    const filename = `Cotizacion_${client?.name.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
+    return await generateQuotePDF(templateRef.current, filename);
   };
 
   const handlePreview = async () => {
@@ -125,7 +110,7 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Cotizacion_${client?.name.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
+        a.download = `Cotizacion_${client?.name?.replace(/\s+/g, '_') || 'Nuevo'}_${new Date().getTime()}.pdf`;
         a.click();
         URL.revokeObjectURL(url);
       }
@@ -321,10 +306,33 @@ export default function QuoteForm({ clients, inventory, initialQuote }: { client
           type="button"
           onClick={(e) => handleSubmit(e, true)}
           disabled={isSubmitting}
-          className="flex items-center gap-2 px-6 py-3 bg-[#C59F59] text-white font-bold rounded-xl hover:bg-[#B38E4D] transition-colors disabled:opacity-50 shadow-lg shadow-[#C59F59]/20"
+          className="flex items-center gap-2 px-6 py-3 bg-[#2a221f] text-white font-bold rounded-xl hover:bg-[#3d322d] transition-colors disabled:opacity-50"
         >
           <FileDown className="w-5 h-5" /> Guardar y Generar PDF
         </button>
+      </div>
+
+      {/* Hidden HTML Template for PDF Generation */}
+      <div className="absolute left-[-9999px] top-[-9999px]">
+        <QuoteHTMLTemplate 
+          ref={templateRef} 
+          data={{
+            clientName: clients.find(c => c.id === clientId)?.name || 'Cliente',
+            clientDocument: clients.find(c => c.id === clientId)?.document_number || 'N/A',
+            clientEmail: clients.find(c => c.id === clientId)?.email || '',
+            clientPhone: clients.find(c => c.id === clientId)?.phone || '',
+            orientation,
+            items: items.map(i => ({
+              description: i.description || 'Item sin descripción',
+              quantity: Number(i.quantity) || 1,
+              unit_price: Number(i.unit_price) || 0,
+              total_price: Number(i.total_price) || 0
+            })),
+            totalAmount,
+            validUntil: validUntil || '15 días',
+            date: new Date().toLocaleDateString('es-CO')
+          }} 
+        />
       </div>
 
       {/* Preview Modal */}
