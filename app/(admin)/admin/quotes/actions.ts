@@ -161,3 +161,123 @@ export async function deleteQuote(id: string) {
     return { success: false, error: error.message };
   }
 }
+
+// ============================================================
+// PROPOSALS ACTIONS
+// ============================================================
+
+export async function getProposals() {
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from('proposals')
+      .select(`
+        *,
+        clients (
+          name,
+          document_number
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching proposals:', err);
+    return [];
+  }
+}
+
+export async function getProposalById(id: string) {
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from('proposals')
+      .select(`
+        *,
+        clients (
+          name,
+          document_number,
+          document_type,
+          email,
+          phone
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Error fetching proposal:', err);
+    return null;
+  }
+}
+
+export async function createProposal(data: any) {
+  const supabase = await createClient();
+  try {
+    const { data: proposal, error } = await supabase
+      .from('proposals')
+      .insert({
+        client_id: data.client_id,
+        title: data.title,
+        subtitle: data.subtitle,
+        content: data.content,
+        status: data.status || 'Borrador'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath('/admin/quotes');
+    return { success: true, id: proposal.id };
+  } catch (err: any) {
+    console.error('Error creating proposal:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateProposal(id: string, data: any) {
+  const supabase = await createClient();
+  try {
+    const { error } = await supabase
+      .from('proposals')
+      .update({
+        client_id: data.client_id,
+        title: data.title,
+        subtitle: data.subtitle,
+        content: data.content,
+        status: data.status
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/admin/quotes');
+    return { success: true, id };
+  } catch (err: any) {
+    console.error('Error updating proposal:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteProposal(id: string) {
+  const supabase = await createClient();
+  try {
+    const { error } = await supabase
+      .from('proposals')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/admin/quotes');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting proposal:', err);
+    return { success: false, error: err.message };
+  }
+}
+

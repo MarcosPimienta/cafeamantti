@@ -298,3 +298,88 @@ export async function generateQuotePDF(
     document.body.removeChild(container);
   }
 }
+
+export interface ProposalSection {
+  title: string;
+  text: string;
+}
+
+export interface ProposalData {
+  clientName: string;
+  date: string;
+  title: string;
+  subtitle?: string;
+  content: ProposalSection[];
+  sellerName?: string;
+}
+
+export async function generateProposalPDF(
+  data: ProposalData,
+  filename: string = 'propuesta.pdf'
+): Promise<Blob> {
+  const html2pdf = (await import('html2pdf.js')).default;
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  
+  // Build a simplified HTML for the PDF generator (html2pdf likes strings or elements)
+  // We'll create a temporary container and render the same styles as the template
+  const container = document.createElement('div');
+  
+  const sectionsHtml = data.content.map((s, i) => `
+    <div style="margin-bottom: 30px;">
+      <h3 style="font-size:16px; font-weight:800; text-transform:uppercase; color:#292524; border-bottom:1px solid rgba(197, 159, 89, 0.3); padding-bottom:8px; margin-bottom:15px;">${i+1}. ${s.title}</h3>
+      <div style="font-size:14px; line-height:1.7; color:#44403c; white-space:pre-wrap; text-align:justify;">${s.text}</div>
+    </div>
+  `).join('');
+
+  const html = `
+    <div style="font-family:Arial, sans-serif; background-color:#fff; color:#1c1917; width:816px; padding:64px 72px; box-sizing:border-box; position:relative; min-height:1056px;">
+      <img src="${baseUrl}/images/Main_Background.jpg" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.4; z-index:0;" />
+      <div style="position:relative; z-index:1;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:60px;">
+          <img src="${baseUrl}/images/logo-amantti.png" style="width:180px;" />
+          <p style="font-size:14px; color:#57534e; font-weight:600;">${data.date}</p>
+        </div>
+        <div style="margin-bottom:50px; text-align:center;">
+          <h1 style="font-size:28px; font-weight:900; text-transform:uppercase; letter-spacing:3px; color:#292524; margin:0 0 10px;">${data.title}</h1>
+          ${data.subtitle ? `<h2 style="font-size:20px; font-weight:600; color:#C59F59; margin:0; font-style:italic;">${data.subtitle}</h2>` : ''}
+          <div style="width:80px; height:3px; background-color:#C59F59; margin:30px auto;"></div>
+          <p style="font-size:14px; color:#78716c; margin:20px 0 0;">
+            <strong>Para:</strong> ${data.clientName}<br/>
+            <strong>De:</strong> Amantti Café
+          </p>
+        </div>
+        ${sectionsHtml}
+        <div style="margin-top:60px; border-top:1px solid #e7e5e4; padding-top:40px;">
+          <p style="font-size:14px; lineHeight:1.6; color:#44403c; margin-bottom:40px; font-style:italic;">
+            Estamos convencidos de que esta alianza beneficiará a ambas partes y proporcionará una experiencia única para los clientes de ${data.clientName}.<br/>
+            ¡Quedamos atentos para avanzar con los siguientes pasos y formalizar la alianza!
+          </p>
+          <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+            <div>
+              <p style="margin:0; font-size:12px; font-weight:700; color:#292524;">${data.sellerName || 'Asesor Amantti'}</p>
+              <p style="margin:2px 0 0; font-size:11px; color:#57534e;">Alma Trading Group SAS<br/>Nit: 901752308-8<br/>cafeamantti@gmail.com</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  container.innerHTML = html;
+  container.style.position = 'fixed';
+  container.style.left = '-10000px';
+  document.body.appendChild(container);
+
+  try {
+    const opt = {
+      margin: 0,
+      filename,
+      image: { type: 'jpeg' as const, quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'px' as const, format: [816, 1056] as [number, number], orientation: 'portrait' as const }
+    };
+    return await html2pdf().set(opt).from(container).output('blob');
+  } finally {
+    document.body.removeChild(container);
+  }
+}
