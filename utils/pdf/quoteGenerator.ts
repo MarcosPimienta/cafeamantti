@@ -30,13 +30,16 @@ const PAD_H   = 64;
 
 const H_HEADER        = 100;
 const H_HEADER_MARGIN = 40;
-const H_CLIENT        = 140;
-const H_CLIENT_MARGIN = 32;
+const H_CLIENT        = 180; // extra room for long client names that wrap
+const H_CLIENT_MARGIN = 24;
 const H_TABLE_HEAD    = 46;
 const H_FOOTER        = 48;
 const H_COMPACT_HEADER = 56;
 const H_COMPACT_MARGIN = 24;
 const H_TOTAL         = 100;
+
+const ROW_MIN = 40;
+const ROW_MAX = 80;
 
 function fmt(val: number): string {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(val);
@@ -64,17 +67,19 @@ function buildHTMLString(data: QuoteData): string {
 
   function rowHeightForPage(pageIdx: number): number {
     const count = itemPages[pageIdx].length;
-    if (count === 0) return 48;
+    if (count === 0) return ROW_MIN;
     const isLast = pageIdx === totalPages - 1;
 
+    let raw: number;
     if (pageIdx === 0 && totalPages === 1) {
-      return Math.max(36, Math.floor((innerH - firstOverhead - H_TOTAL) / count));
+      raw = Math.floor((innerH - firstOverhead - H_TOTAL) / count);
+    } else if (pageIdx === 0) {
+      raw = Math.floor((innerH - firstOverhead) / count);
+    } else {
+      const contOverhead = H_COMPACT_HEADER + H_COMPACT_MARGIN + H_TABLE_HEAD + H_FOOTER + (isLast ? H_TOTAL : 0);
+      raw = Math.floor((innerH - contOverhead) / count);
     }
-    if (pageIdx === 0) {
-      return Math.max(36, Math.floor((innerH - firstOverhead) / count));
-    }
-    const contOverhead = H_COMPACT_HEADER + H_COMPACT_MARGIN + H_TABLE_HEAD + H_FOOTER + (isLast ? H_TOTAL : 0);
-    return Math.max(36, Math.floor((innerH - contOverhead) / count));
+    return Math.max(ROW_MIN, Math.min(ROW_MAX, raw));
   }
 
   const pageStyle = `

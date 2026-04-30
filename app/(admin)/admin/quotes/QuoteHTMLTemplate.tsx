@@ -20,19 +20,18 @@ const PAD_V_L = 40; // landscape
 const PAD_H   = 64;
 
 // Fixed heights (approx) that appear on the first page only
-const H_HEADER        = 100; // logo + COTIZACIÓN heading
+const H_HEADER        = 100;
 const H_HEADER_MARGIN = 40;
-const H_CLIENT        = 140; // client info box
-const H_CLIENT_MARGIN = 32;
+const H_CLIENT        = 180; // extra room for long client names that wrap
+const H_CLIENT_MARGIN = 24;
 const H_TABLE_HEAD    = 46;
 const H_FOOTER        = 48;
-
-// Fixed heights for continuation pages
 const H_COMPACT_HEADER = 56;
 const H_COMPACT_MARGIN = 24;
+const H_TOTAL         = 100;
 
-// Total block height (last page)
-const H_TOTAL = 100;
+const ROW_MIN = 40; // px — never shorter than this
+const ROW_MAX = 80; // px — never taller than this
 
 export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
   const fmt = (v: number) =>
@@ -56,25 +55,24 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
   // First page: larger fixed overhead
   const firstPageOverhead  = H_HEADER + H_HEADER_MARGIN + H_CLIENT + H_CLIENT_MARGIN + H_TABLE_HEAD + H_FOOTER;
   const firstAvailRows     = innerH - firstPageOverhead;
-  // Last page (could be first): subtract total block
-  const lastPageExtraOverhead = totalPages === 1 ? H_TOTAL : H_COMPACT_HEADER + H_COMPACT_MARGIN + H_TABLE_HEAD + H_FOOTER + H_TOTAL;
 
   const rowHeightForPage = (pageIdx: number): number => {
     const count = itemPages[pageIdx].length;
-    if (count === 0) return 48;
+    if (count === 0) return ROW_MIN;
 
+    let raw: number;
     if (pageIdx === 0 && totalPages === 1) {
-      // single page — overhead includes both header+client AND total
       const avail = innerH - firstPageOverhead - H_TOTAL;
-      return Math.max(36, Math.floor(avail / count));
+      raw = Math.floor(avail / count);
+    } else if (pageIdx === 0) {
+      raw = Math.floor(firstAvailRows / count);
+    } else {
+      const isLast = pageIdx === totalPages - 1;
+      const contOverhead = H_COMPACT_HEADER + H_COMPACT_MARGIN + H_TABLE_HEAD + H_FOOTER + (isLast ? H_TOTAL : 0);
+      const avail = innerH - contOverhead;
+      raw = Math.floor(avail / count);
     }
-    if (pageIdx === 0) {
-      return Math.max(36, Math.floor(firstAvailRows / count));
-    }
-    const isLast = pageIdx === totalPages - 1;
-    const contOverhead = H_COMPACT_HEADER + H_COMPACT_MARGIN + H_TABLE_HEAD + H_FOOTER + (isLast ? H_TOTAL : 0);
-    const avail = innerH - contOverhead;
-    return Math.max(36, Math.floor(avail / count));
+    return Math.max(ROW_MIN, Math.min(ROW_MAX, raw));
   };
 
   // ── Shared styles ───────────────────────────────────────────────────────────
