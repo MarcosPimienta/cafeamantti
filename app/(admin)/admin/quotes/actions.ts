@@ -224,7 +224,10 @@ export async function createProposal(data: any) {
         title: data.title,
         subtitle: data.subtitle,
         content: data.content,
-        status: data.status || 'Borrador'
+        status: data.status || 'Borrador',
+        ally_logo_url: data.ally_logo_url || null,
+        background_image_url: data.background_image_url || null,
+        background_opacity: data.background_opacity ?? 0.15
       })
       .select()
       .single();
@@ -249,7 +252,10 @@ export async function updateProposal(id: string, data: any) {
         title: data.title,
         subtitle: data.subtitle,
         content: data.content,
-        status: data.status
+        status: data.status,
+        ally_logo_url: data.ally_logo_url || null,
+        background_image_url: data.background_image_url || null,
+        background_opacity: data.background_opacity ?? 0.15
       })
       .eq('id', id);
 

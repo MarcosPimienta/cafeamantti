@@ -299,9 +299,19 @@ export async function generateQuotePDF(
   }
 }
 
-export interface ProposalSection {
+export interface PriceTableItem {
+  item: string;
+  cost: number;
+  pvp: number;
+}
+
+export interface ProposalBlock {
+  id: string;
+  type: 'rich-text' | 'price-table' | 'checklist';
   title: string;
-  text: string;
+  text?: string;
+  items?: PriceTableItem[];
+  checklistItems?: string[];
 }
 
 export interface ProposalData {
@@ -309,8 +319,82 @@ export interface ProposalData {
   date: string;
   title: string;
   subtitle?: string;
-  content: ProposalSection[];
+  content: ProposalBlock[];
   sellerName?: string;
+  allyLogoUrl?: string;
+  backgroundImageUrl?: string;
+  backgroundOpacity?: number;
+}
+
+// Keep old interface for backwards compat
+export interface ProposalSection {
+  title: string;
+  text: string;
+}
+
+async function imageUrlToBase64(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return url; // fallback to original URL
+  }
+}
+
+function fmtCOP(val: number): string {
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
+}
+
+function buildBlockHtml(block: ProposalBlock, index: number): string {
+  const titleHtml = `<h3 style="font-size:16px; font-weight:800; text-transform:uppercase; color:#292524; border-bottom:1px solid rgba(197, 159, 89, 0.3); padding-bottom:8px; margin-bottom:15px; letter-spacing:1px;">${index + 1}. ${block.title}</h3>`;
+
+  if (block.type === 'price-table' && block.items) {
+    const rows = block.items.map((row, i) => {
+      const margin = row.pvp > 0 ? ((row.pvp - row.cost) / row.pvp * 100).toFixed(1) + '%' : '—';
+      return `<tr style="background-color:${i % 2 === 0 ? '#fff' : '#fafaf9'};">
+        <td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; font-weight:500; color:#292524;">${row.item}</td>
+        <td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; text-align:right; color:#57534e; font-family:monospace;">${fmtCOP(row.cost)}</td>
+        <td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; text-align:right; color:#292524; font-weight:700; font-family:monospace;">${fmtCOP(row.pvp)}</td>
+        <td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; text-align:right; color:#C59F59; font-weight:700;">${margin}</td>
+      </tr>`;
+    }).join('');
+
+    return `<div style="margin-bottom:30px;">
+      ${titleHtml}
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead><tr style="background-color:#292524;">
+          <th style="padding:10px 14px; color:#fff; text-align:left; font-weight:700; font-size:11px; letter-spacing:1px; text-transform:uppercase;">Producto</th>
+          <th style="padding:10px 14px; color:#fff; text-align:right; font-weight:700; font-size:11px; letter-spacing:1px;">Costo</th>
+          <th style="padding:10px 14px; color:#fff; text-align:right; font-weight:700; font-size:11px; letter-spacing:1px;">PVP Sugerido</th>
+          <th style="padding:10px 14px; color:#fff; text-align:right; font-weight:700; font-size:11px; letter-spacing:1px;">Margen</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  if (block.type === 'checklist' && block.checklistItems) {
+    const items = block.checklistItems.filter(Boolean).map(item =>
+      `<div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; font-size:14px; line-height:1.6; color:#44403c;">
+        <span style="color:#C59F59; font-weight:700; flex-shrink:0;">•</span>
+        <span>${item}</span>
+      </div>`
+    ).join('');
+
+    return `<div style="margin-bottom:30px;">${titleHtml}<div style="padding-left:8px;">${items}</div></div>`;
+  }
+
+  // rich-text (default)
+  return `<div style="margin-bottom:30px;">
+    ${titleHtml}
+    <div style="font-size:14px; line-height:1.7; color:#44403c; white-space:pre-wrap; text-align:justify;">${block.text || ''}</div>
+  </div>`;
 }
 
 export async function generateProposalPDF(
@@ -319,29 +403,39 @@ export async function generateProposalPDF(
 ): Promise<Blob> {
   const html2pdf = (await import('html2pdf.js')).default;
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  
-  // Build a simplified HTML for the PDF generator (html2pdf likes strings or elements)
-  // We'll create a temporary container and render the same styles as the template
-  const container = document.createElement('div');
-  
-  const sectionsHtml = data.content.map((s, i) => `
-    <div style="margin-bottom: 30px;">
-      <h3 style="font-size:16px; font-weight:800; text-transform:uppercase; color:#292524; border-bottom:1px solid rgba(197, 159, 89, 0.3); padding-bottom:8px; margin-bottom:15px;">${i+1}. ${s.title}</h3>
-      <div style="font-size:14px; line-height:1.7; color:#44403c; white-space:pre-wrap; text-align:justify;">${s.text}</div>
-    </div>
-  `).join('');
+
+  // Convert images to base64 for CORS-safe PDF generation
+  const bgUrl = data.backgroundImageUrl || `${baseUrl}/images/Main_Background.jpg`;
+  const bgBase64 = await imageUrlToBase64(bgUrl);
+  const logoBase64 = await imageUrlToBase64(`${baseUrl}/images/logo-amantti.png`);
+  const allyLogoBase64 = data.allyLogoUrl ? await imageUrlToBase64(data.allyLogoUrl) : '';
+  const opacity = data.backgroundOpacity ?? 0.15;
+
+  const sectionsHtml = data.content.map((block, i) => buildBlockHtml(block, i)).join('');
+
+  const allyLogoHtml = allyLogoBase64
+    ? `<div style="display:flex; align-items:center; gap:16px;">
+         <div style="width:1px; height:40px; background-color:#C59F59; opacity:0.4;"></div>
+         <img src="${allyLogoBase64}" style="max-width:140px; max-height:60px; object-fit:contain;" />
+       </div>`
+    : `<p style="font-size:14px; color:#57534e; font-weight:600;">${data.date}</p>`;
+
+  const dateIfAlly = allyLogoBase64
+    ? `<div style="text-align:right; margin-top:-40px; margin-bottom:30px;"><p style="margin:0; font-size:13px; color:#78716c;">${data.date}</p></div>`
+    : '';
 
   const html = `
     <div style="font-family:Arial, sans-serif; background-color:#fff; color:#1c1917; width:816px; padding:64px 72px; box-sizing:border-box; position:relative; min-height:1056px;">
-      <img src="${baseUrl}/images/Main_Background.jpg" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.4; z-index:0;" />
+      <img src="${bgBase64}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:${opacity}; z-index:0;" />
       <div style="position:relative; z-index:1;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:60px;">
-          <img src="${baseUrl}/images/logo-amantti.png" style="width:180px;" />
-          <p style="font-size:14px; color:#57534e; font-weight:600;">${data.date}</p>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:60px;">
+          <img src="${logoBase64}" style="width:160px;" />
+          ${allyLogoHtml}
         </div>
+        ${dateIfAlly}
         <div style="margin-bottom:50px; text-align:center;">
-          <h1 style="font-size:28px; font-weight:900; text-transform:uppercase; letter-spacing:3px; color:#292524; margin:0 0 10px;">${data.title}</h1>
-          ${data.subtitle ? `<h2 style="font-size:20px; font-weight:600; color:#C59F59; margin:0; font-style:italic;">${data.subtitle}</h2>` : ''}
+          <h1 style="font-size:26px; font-weight:900; text-transform:uppercase; letter-spacing:3px; color:#292524; margin:0 0 10px;">${data.title}</h1>
+          ${data.subtitle ? `<h2 style="font-size:18px; font-weight:600; color:#C59F59; margin:0; font-style:italic;">${data.subtitle}</h2>` : ''}
           <div style="width:80px; height:3px; background-color:#C59F59; margin:30px auto;"></div>
           <p style="font-size:14px; color:#78716c; margin:20px 0 0;">
             <strong>Para:</strong> ${data.clientName}<br/>
@@ -350,7 +444,7 @@ export async function generateProposalPDF(
         </div>
         ${sectionsHtml}
         <div style="margin-top:60px; border-top:1px solid #e7e5e4; padding-top:40px;">
-          <p style="font-size:14px; lineHeight:1.6; color:#44403c; margin-bottom:40px; font-style:italic;">
+          <p style="font-size:14px; line-height:1.6; color:#44403c; margin-bottom:40px; font-style:italic;">
             Estamos convencidos de que esta alianza beneficiará a ambas partes y proporcionará una experiencia única para los clientes de ${data.clientName}.<br/>
             ¡Quedamos atentos para avanzar con los siguientes pasos y formalizar la alianza!
           </p>
@@ -365,6 +459,7 @@ export async function generateProposalPDF(
     </div>
   `;
 
+  const container = document.createElement('div');
   container.innerHTML = html;
   container.style.position = 'fixed';
   container.style.left = '-10000px';
@@ -383,3 +478,4 @@ export async function generateProposalPDF(
     document.body.removeChild(container);
   }
 }
+
