@@ -1808,13 +1808,14 @@ function TostionTab({
       })),
       ...legacyRecords.map(r => {
         const inv = getRelation(r.inventory);
+        const input = Math.abs(Number(r.quantity));
         return {
           id: r.id,
           date: r.movement_date || r.created_at,
-          inputQty: Math.abs(Number(r.quantity)),
-          outputQty: null,
-          rend: null,
-          loss: null,
+          inputQty: input,
+          outputQty: input,
+          rend: 100,
+          loss: 0,
           notes: r.reason || `Historial: ${inv?.product_name || 'Café'}`,
           isLegacy: true
         };
@@ -2058,9 +2059,9 @@ function TostionTab({
                   <tr key={r.id} className="hover:bg-[#fdfbf7]">
                     <td className={tdCls}>{fmtDate(r.date)}</td>
                     <td className={`${tdCls} text-right font-mono`}>{r.inputQty.toFixed(2)} kg</td>
-                    <td className={`${tdCls} text-right`}>{r.rend ? `${r.rend.toFixed(1)}%` : "—"}</td>
-                    <td className={`${tdCls} text-right font-mono font-bold text-emerald-700`}>{r.outputQty ? `${r.outputQty.toFixed(2)} kg` : "—"}</td>
-                    <td className={`${tdCls} text-right text-red-500`}>{r.loss ? `${r.loss.toFixed(1)}%` : "—"}</td>
+                    <td className={`${tdCls} text-right`}>{r.rend !== null ? `${r.rend.toFixed(1)}%` : "—"}</td>
+                    <td className={`${tdCls} text-right font-mono font-bold text-emerald-700`}>{r.outputQty !== null ? `${r.outputQty.toFixed(2)} kg` : "—"}</td>
+                    <td className={`${tdCls} text-right text-red-500`}>{r.loss !== null ? `${r.loss.toFixed(1)}%` : "—"}</td>
                     <td className={`${tdCls} text-foreground/50 text-xs`}>{r.notes || "—"}</td>
                     <td className={tdCls}>
                       {!r.isLegacy ? (
