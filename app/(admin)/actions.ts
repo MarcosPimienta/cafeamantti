@@ -1498,15 +1498,16 @@ export async function migrateLegacyTostion() {
 
   if (!caft) throw new Error("CAFT-001 not found");
 
-  // 2. Get legacy movements
-  const { data: movs } = await supabase
+  // 2. Get legacy movements (expand filters to be more inclusive)
+  const { data: movs, error: mErr } = await supabase
     .from('inventory_movements')
     .select('*')
-    .eq('tab_source', 'prod_consumo')
+    .or('tab_source.eq.prod_consumo,tab_source.eq.prod_consumos,reason.ilike.%Historial%')
     .eq('type', 'salida')
     .is('production_batch_id', null);
 
-  if (!movs || movs.length === 0) return { success: true, count: 0 };
+  if (mErr) throw new Error("Error buscando movimientos: " + mErr.message);
+  if (!movs || movs.length === 0) return { success: true, count: 0, message: "No se encontraron movimientos para migrar." };
 
   let totalKgs = 0;
   for (const m of movs) {
