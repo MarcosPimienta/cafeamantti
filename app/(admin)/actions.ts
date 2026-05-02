@@ -1576,3 +1576,89 @@ export async function migrateLegacyTostion() {
     return { success: false, message: "ERROR: " + err.message };
   }
 }
+
+export async function migrateLegacyAltas() {
+  try {
+    const isAdmin = await checkIsAdmin();
+    if (!isAdmin) throw new Error('Unauthorized');
+    
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: caft } = await supabase
+      .from('inventory')
+      .select('id, current_stock')
+      .eq('product_code', 'CAFT-001')
+      .maybeSingle();
+
+    if (!caft) throw new Error("CAFT-001 not found");
+
+    // Get bag entries from prod_alta that are not marked as migrated
+    const { data: movs, error: mErr } = await supabase
+      .from('inventory_movements')
+      .select('*, inventory:inventory_id(product_code)')
+      .eq('tab_source', 'prod_alta')
+      .eq('type', 'entrada')
+      .not('reason', 'ilike', '%[MIGRADO]%')
+      .limit(10);
+
+    if (mErr) throw new Error("Error DB: " + mErr.message);
+    if (!movs || movs.length === 0) return { success: true, count: 0, message: "No hay registros de altas pendientes." };
+
+    function getUnitWeight(code: string): number {
+      if (code.includes("-125G")) return 0.125;
+      if (code.includes("-250G")) return 0.250;
+      if (code.includes("-500G")) return 0.500;
+      if (code.includes("-2K5")) return 2.5;
+      return 0;
+    }
+
+    let totalKgsToDeduct = 0;
+    let successCount = 0;
+
+    for (const m of movs) {
+      const inv = m.inventory as any;
+      if (!inv?.product_code.startsWith("CAFT-") || inv.product_code === "CAFT-001") {
+        // Just mark as migrated to skip in next run
+        await supabase.from('inventory_movements').update({ reason: (m.reason || '') + ' [MIGRADO]' }).eq('id', m.id);
+        continue;
+      }
+
+      const unitW = getUnitWeight(inv.product_code);
+      if (unitW === 0) {
+        await supabase.from('inventory_movements').update({ reason: (m.reason || '') + ' [MIGRADO]' }).eq('id', m.id);
+        continue;
+      }
+
+      const qty = Number(m.quantity);
+      const coffeeNeeded = qty * unitW;
+
+      // Create Salida for CAFT-001
+      await supabase.from('inventory_movements').insert({
+        inventory_id: caft.id,
+        type: 'salida',
+        quantity: -coffeeNeeded,
+        movement_date: m.movement_date || m.created_at,
+        reason: `Consumo automático por migración (Bolsas: ${inv.product_code}) [MIGRADO]`,
+        admin_id: user?.id ?? null,
+        tab_source: 'prod_alta'
+      });
+
+      // Mark original as migrated
+      await supabase.from('inventory_movements').update({ reason: (m.reason || '') + ' [MIGRADO]' }).eq('id', m.id);
+
+      totalKgsToDeduct += coffeeNeeded;
+      successCount++;
+    }
+
+    if (totalKgsToDeduct > 0) {
+      const finalNewStock = Number(caft.current_stock) - totalKgsToDeduct;
+      await supabase.from('inventory').update({ current_stock: finalNewStock }).eq('id', caft.id);
+    }
+
+    revalidatePath('/admin/inventory');
+    return { success: true, count: successCount, totalKgs: -totalKgsToDeduct, message: `Deducidos ${totalKgsToDeduct.toFixed(2)} kg de CAFT-001.` };
+  } catch (err: any) {
+    return { success: false, message: "ERROR: " + err.message };
+  }
+}

@@ -56,6 +56,7 @@ import {
   updateMovement,
   deleteProductionBatch,
   migrateLegacyTostion,
+  migrateLegacyAltas,
   getAuditLogs,
 } from "../../actions";
 
@@ -3577,6 +3578,38 @@ export default function InventoryClient({
             {label}
           </button>
         ))}
+
+        {activeTab === "tostion" && (
+          <button 
+            onClick={async () => {
+              if(confirm("¿Migrar historial antiguo de Tostión?")) {
+                const res = await migrateLegacyTostion();
+                if (!res.success) { alert(res.message); return; }
+                alert(`✓ ${res.count} procesados. +${res.totalKgs} kg a CAFT-001.`);
+                window.location.reload();
+              }
+            }}
+            className="ml-auto mr-2 px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all self-center shadow-sm"
+          >
+            Migrar Tostión
+          </button>
+        )}
+
+        {activeTab === "prod_altas" && (
+          <button 
+            onClick={async () => {
+              if(confirm("¿Corregir stock histórico de Empaque? Esto restará el café de CAFT-001 por cada bolsa producida en el pasado.")) {
+                const res = await migrateLegacyAltas();
+                if (!res.success) { alert(res.message); return; }
+                alert(`✓ ${res.count} procesados. ${res.totalKgs} kg a CAFT-001. ${res.message || ""}`);
+                window.location.reload();
+              }
+            }}
+            className="ml-auto mr-2 px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest bg-amber-100 text-amber-700 hover:bg-amber-200 transition-all self-center shadow-sm"
+          >
+            Corregir Stock (Empaque)
+          </button>
+        )}
       </div>
 
       {/* Tab content */}
