@@ -2215,6 +2215,40 @@ function ProdAltasTab({
     });
   }
 
+  function getUnitWeight(code: string): number {
+    if (code.includes("-125G")) return 0.125;
+    if (code.includes("-250G")) return 0.250;
+    if (code.includes("-500G")) return 0.500;
+    if (code.includes("-2K5")) return 2.5;
+    return 0;
+  }
+
+  // Auto-calculate coffee consumption when product or qty changes
+  useEffect(() => {
+    const selectedProd = inventory.find(i => i.id === form.inventoryId);
+    if (!selectedProd || !selectedProd.product_code.startsWith("CAFT-") || selectedProd.product_code === "CAFT-001") return;
+
+    const unitWeight = getUnitWeight(selectedProd.product_code);
+    if (unitWeight === 0) return;
+
+    const totalCoffeeNeeded = (parseFloat(form.qty) || 0) * unitWeight;
+    const bulkCoffee = inventory.find(i => i.product_code === "CAFT-001");
+
+    if (bulkCoffee && totalCoffeeNeeded > 0) {
+      setConsumos(prev => {
+        // Check if CAFT-001 is already in the list
+        const existingIdx = prev.findIndex(c => c.id === bulkCoffee.id);
+        const newConsumos = [...prev];
+        if (existingIdx >= 0) {
+          newConsumos[existingIdx] = { id: bulkCoffee.id, qty: totalCoffeeNeeded.toFixed(3) };
+        } else {
+          newConsumos.push({ id: bulkCoffee.id, qty: totalCoffeeNeeded.toFixed(3) });
+        }
+        return newConsumos;
+      });
+    }
+  }, [form.inventoryId, form.qty, inventory]);
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
@@ -3543,29 +3577,6 @@ export default function InventoryClient({
             {label}
           </button>
         ))}
-
-        {activeTab === "tostion" && (
-          <button 
-            onClick={async () => {
-              if(confirm("¿Migrar historial antiguo? Esto creará las entradas faltantes y ajustará el stock de CAFT-001 (100% rendimiento).")) {
-                try {
-                  const res = await migrateLegacyTostion();
-                  if (!res.success) {
-                    alert(res.message || "Ocurrió un error inesperado.");
-                    return;
-                  }
-                  alert(`✓ Migración: ${res.count} procesados en esta tanda. ${res.totalKgs ? `+${res.totalKgs} kg a CAFT-001.` : (res.message || "")}`);
-                  window.location.reload();
-                } catch (err) {
-                  alert("Error en migración: " + (err instanceof Error ? err.message : String(err)));
-                }
-              }
-            }}
-            className="ml-auto mr-2 px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all self-center shadow-sm"
-          >
-            Migrar Datos Históricos
-          </button>
-        )}
       </div>
 
       {/* Tab content */}
