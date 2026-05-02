@@ -1785,6 +1785,7 @@ function TostionTab({
 
   const [form, setForm] = useState(initForm);
   const [batches, setBatches] = useState<TrillaBatch[]>([]);
+  const [legacyRecords, setLegacyRecords] = useState<MovementRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -1793,21 +1794,47 @@ function TostionTab({
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
 
-  const sortedBatches = useMemo(() => sortRecordsList(batches, sortField, sortAsc), [batches, sortField, sortAsc]);
-  const paginatedBatches = sortedBatches.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const unifiedRecords = useMemo(() => {
+    const list: any[] = [
+      ...batches.map(b => ({
+        id: b.id,
+        date: b.movement_date || b.created_at,
+        inputQty: Number(b.input_quantity_kg),
+        outputQty: Number(b.output_quantity_kg),
+        rend: Number(b.rendimiento_pct) * 100,
+        loss: Number(b.weight_loss_pct),
+        notes: b.notes,
+        isLegacy: false
+      })),
+      ...legacyRecords.map(r => {
+        const inv = getRelation(r.inventory);
+        return {
+          id: r.id,
+          date: r.movement_date || r.created_at,
+          inputQty: Math.abs(Number(r.quantity)),
+          outputQty: null,
+          rend: null,
+          loss: null,
+          notes: r.reason || `Historial: ${inv?.product_name || 'Café'}`,
+          isLegacy: true
+        };
+      })
+    ];
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [batches, legacyRecords]);
 
-  function handleSort(field: string) {
-    if (sortField === field) setSortAsc(!sortAsc);
-    else {
-      setSortField(field);
-      setSortAsc(true);
-    }
-  }
+  const paginatedRecords = unifiedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   function loadHistory() {
     setLoading(true);
-    getTostionBatches()
-      .then((d) => setBatches(d as TrillaBatch[]))
+    Promise.all([
+      getTostionBatches(),
+      getMovementsByTab("prod_consumo")
+    ])
+      .then(([b, m]) => {
+        setBatches(b as TrillaBatch[]);
+        setLegacyRecords(m as MovementRecord[]);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }
@@ -2007,47 +2034,53 @@ function TostionTab({
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
-          <h3 className="font-serif text-lg">Historial de Tostión <span className="text-foreground/40 text-base font-sans">· {batches.length}</span></h3>
+          <h3 className="font-serif text-lg">Historial de Tostión <span className="text-foreground/40 text-base font-sans">· {unifiedRecords.length}</span></h3>
           <button onClick={loadHistory} className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40"><RefreshCw className="w-4 h-4" /></button>
         </div>
-        {loading || batches.length === 0 ? (
-          <HistoryLoadingOrEmpty loading={loading} empty={batches.length === 0} />
+        {loading || unifiedRecords.length === 0 ? (
+          <HistoryLoadingOrEmpty loading={loading} empty={unifiedRecords.length === 0} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Verde (In)" field="input_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Rend." field="rendimiento_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Tostado (Out)" field="output_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Merma %" field="weight_loss_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Notas" field="notes" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className={thCls}>Fecha</th>
+                  <th className={`${thCls} text-right`}>Verde (In)</th>
+                  <th className={`${thCls} text-right`}>Rend.</th>
+                  <th className={`${thCls} text-right`}>Tostado (Out)</th>
+                  <th className={`${thCls} text-right`}>Merma %</th>
+                  <th className={thCls}>Notas</th>
                   <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
-                {paginatedBatches.map((b) => (
-                  <tr key={b.id} className="hover:bg-[#fdfbf7]">
-                    <td className={tdCls}>{fmtDate(b.movement_date || b.created_at)}</td>
-                    <td className={`${tdCls} text-right font-mono`}>{Number(b.input_quantity_kg).toFixed(2)} kg</td>
-                    <td className={`${tdCls} text-right`}>{(Number(b.rendimiento_pct) * 100).toFixed(1)}%</td>
-                    <td className={`${tdCls} text-right font-mono font-bold text-emerald-700`}>{Number(b.output_quantity_kg).toFixed(2)} kg</td>
-                    <td className={`${tdCls} text-right text-red-500`}>{Number(b.weight_loss_pct).toFixed(1)}%</td>
-                    <td className={`${tdCls} text-foreground/50`}>{b.notes || "—"}</td>
+                {paginatedRecords.map((r) => (
+                  <tr key={r.id} className="hover:bg-[#fdfbf7]">
+                    <td className={tdCls}>{fmtDate(r.date)}</td>
+                    <td className={`${tdCls} text-right font-mono`}>{r.inputQty.toFixed(2)} kg</td>
+                    <td className={`${tdCls} text-right`}>{r.rend ? `${r.rend.toFixed(1)}%` : "—"}</td>
+                    <td className={`${tdCls} text-right font-mono font-bold text-emerald-700`}>{r.outputQty ? `${r.outputQty.toFixed(2)} kg` : "—"}</td>
+                    <td className={`${tdCls} text-right text-red-500`}>{r.loss ? `${r.loss.toFixed(1)}%` : "—"}</td>
+                    <td className={`${tdCls} text-foreground/50 text-xs`}>{r.notes || "—"}</td>
                     <td className={tdCls}>
-                      <button onClick={() => setDeletingId(b.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {!r.isLegacy ? (
+                        <button onClick={() => setDeletingId(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span className="text-[9px] font-bold text-foreground/20 uppercase tracking-tighter">Legacy</span>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <PaginationControls currentPage={currentPage} totalItems={batches.length} onPageChange={setCurrentPage} />
+            <PaginationControls currentPage={currentPage} totalItems={unifiedRecords.length} onPageChange={setCurrentPage} />
           </div>
         )}
       </div>
+
+
     </div>
   );
 }
@@ -2293,7 +2326,7 @@ function ProdAltasTab({
                           setConsumos(newC);
                         }}
                         inventory={inventory}
-                        filter={(inv) => inv.category === "empaque" || inv.category === "accesorio"}
+                        filter={(inv) => inv.category === "empaque" || inv.category === "accesorio" || inv.category === "cafe"}
                         placeholder="Seleccionar bolsa o sticker..."
                       />
                     </div>
