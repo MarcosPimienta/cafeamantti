@@ -1500,27 +1500,21 @@ export async function migrateLegacyTostion() {
     if (cErr) throw new Error("Error buscando CAFT-001: " + cErr.message);
     if (!caft) throw new Error("No se encontró CAFT-001");
 
-    // 2. Get legacy movements (Limit to 10 at a time to avoid timeouts)
+    // 2. Get legacy movements (Limit to 10. Filter out already processed by looking at the reason)
     const { data: movs, error: mErr } = await supabase
       .from('inventory_movements')
       .select('*, inventory:inventory_id(product_code, product_name)')
       .or('tab_source.eq.prod_consumo,tab_source.eq.prod_consumos,reason.ilike.%Historial%')
-      .is('production_batch_id', null)
+      .not('reason', 'ilike', '%[MIGRADO]%') // Filter out already migrated
       .limit(10);
 
     if (mErr) throw new Error("Error DB: " + mErr.message);
     
     if (!movs || movs.length === 0) {
-      const { count: alreadyMigrated } = await supabase
-        .from('inventory_movements')
-        .select('*', { count: 'exact', head: true })
-        .or('tab_source.eq.prod_consumo,tab_source.eq.prod_consumos')
-        .not('production_batch_id', 'is', null);
-
       return { 
         success: true, 
         count: 0, 
-        message: `No hay registros pendientes. (Migrados: ${alreadyMigrated || 0})` 
+        message: "No hay registros pendientes (todos los detectados ya están marcados como [MIGRADO])." 
       };
     }
 
@@ -1532,6 +1526,7 @@ export async function migrateLegacyTostion() {
         const qty = Math.abs(Number(m.quantity));
         if (qty <= 0) continue;
         
+        // Create batch record (standard columns only)
         const { data: batch, error: bErr } = await supabase.from('production_batches').insert({
           process_type: 'tostion',
           input_inventory_id: m.inventory_id,
@@ -1541,24 +1536,27 @@ export async function migrateLegacyTostion() {
           rendimiento_pct: 1.0,
           weight_loss_pct: 0.0,
           movement_date: m.movement_date || m.created_at,
-          notes: m.reason || 'Migración automática',
+          notes: (m.reason || 'Migración automática') + ' [MIGRADO]',
           created_by: user?.id ?? null
         }).select('id').single();
 
         if (bErr || !batch) continue;
 
+        // Create Entrada for CAFT-001 (standard columns only)
         await supabase.from('inventory_movements').insert({
           inventory_id: caft.id,
           type: 'entrada',
           quantity: qty,
           movement_date: m.movement_date || m.created_at,
-          reason: `Entrada automática (Migración)`,
+          reason: `Entrada automática (Migración de Tostión Lote:${batch.id}) [MIGRADO]`,
           admin_id: user?.id ?? null,
-          tab_source: 'prod_consumo',
-          production_batch_id: batch.id
+          tab_source: 'prod_consumo'
         });
 
-        await supabase.from('inventory_movements').update({ production_batch_id: batch.id }).eq('id', m.id);
+        // Mark the original legacy movement as migrated by updating its reason
+        await supabase.from('inventory_movements')
+          .update({ reason: (m.reason || 'Consumo') + ' [MIGRADO]' })
+          .eq('id', m.id);
         
         totalKgs += qty;
         successCount++;
@@ -1573,8 +1571,8 @@ export async function migrateLegacyTostion() {
     }
 
     revalidatePath('/admin/inventory');
-    return { success: true, count: successCount, totalKgs, message: `Procesados ${successCount} de esta tanda.` };
+    return { success: true, count: successCount, totalKgs, message: `Procesados ${successCount} registros.` };
   } catch (err: any) {
-    return { success: false, message: "ERROR CRÍTICO: " + err.message };
+    return { success: false, message: "ERROR: " + err.message };
   }
 }
