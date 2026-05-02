@@ -35,7 +35,7 @@ export async function getCurrentUserProfile() {
 
 export async function logAuditAction(
   actionType: "CREATE" | "UPDATE" | "DELETE",
-  entityType: "MOVEMENT" | "TRILLA_BATCH",
+  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH",
   entityId: string,
   inventoryId?: string,
   details?: Record<string, any>
@@ -970,6 +970,32 @@ export async function getTrillaBatches() {
   return data;
 }
 
+export async function getTostionBatches() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('production_batches')
+    .select(`
+      id, process_type, input_quantity_kg, output_quantity_kg,
+      weight_loss_pct, rendimiento_pct, movement_date, notes, created_at,
+      input_inventory:input_inventory_id ( product_code, product_name ),
+      output_inventory:output_inventory_id ( product_code, product_name )
+    `)
+    .eq('process_type', 'tostion')
+    .order('movement_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.error('getTostionBatches error:', error);
+    return [];
+  }
+  return data;
+}
+
 // ============================================================
 // TAB OPERATION ACTIONS
 // ============================================================
@@ -1200,6 +1226,75 @@ export async function createTrillaBatch(
   }
 }
 
+export async function createTostionBatch(
+  verdeInventoryId: string,
+  tostadoInventoryId: string,
+  inputQtyKg: number,
+  rendimientoPct: number,
+  date: string,
+  notes?: string
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  try {
+    // Validate Verde stock
+    const { data: verde, error: vErr } = await supabase
+      .from('inventory')
+      .select('current_stock, product_name')
+      .eq('id', verdeInventoryId)
+      .single();
+    if (vErr || !verde) throw new Error('Café Verde no encontrado');
+    if (Number(verde.current_stock) < inputQtyKg) {
+      throw new Error(`Stock insuficiente de Café Verde. Disponible: ${verde.current_stock} kg`);
+    }
+
+    const outputQtyKg = inputQtyKg * rendimientoPct;
+    const weightLossPct = (1 - rendimientoPct) * 100;
+
+    // Salida: Verde
+    await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'salida', -inputQtyKg, {
+      movement_date: date,
+      reason: `Tostión → Café Tostado${notes ? ` — ${notes}` : ''}`,
+      tab_source: 'prod_consumo', // Keep using same tab_source or create 'tostion'
+    });
+    const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, -inputQtyKg);
+
+    // Entrada: Tostado
+    await _insertMovement(supabase, user?.id ?? null, tostadoInventoryId, 'entrada', outputQtyKg, {
+      movement_date: date,
+      reason: `Tostión (rend. ${(rendimientoPct * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
+      tab_source: 'prod_consumo',
+    });
+    const newTostadoStock = await _updateStockBy(supabase, tostadoInventoryId, outputQtyKg);
+
+    // Production batch record
+    const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
+      process_type: 'tostion',
+      input_inventory_id: verdeInventoryId,
+      input_quantity_kg: inputQtyKg,
+      output_inventory_id: tostadoInventoryId,
+      output_quantity_kg: outputQtyKg,
+      weight_loss_pct: weightLossPct,
+      rendimiento_pct: rendimientoPct,
+      notes: notes ?? null,
+      created_by: user?.id ?? null,
+      movement_date: date,
+    }).select('id').single();
+    if (batchErr) throw new Error(batchErr.message);
+
+    await logAuditAction("CREATE", "TOSTION_BATCH", batchData.id, undefined, { inputQtyKg, outputQtyKg, rendimientoPct });
+
+    revalidatePath('/admin/inventory');
+    return { success: true, newVerdeStock, newTostadoStock };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 // ============================================================
 // REPORT AND AUDIT ACTIONS
 // ============================================================
@@ -1343,7 +1438,7 @@ export async function updateMovement(
   return { success: true, inventoryId: mov.inventory_id as string, newStock };
 }
 
-export async function deleteTrillaBatch(batchId: string) {
+export async function deleteProductionBatch(batchId: string) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
@@ -1365,11 +1460,11 @@ export async function deleteTrillaBatch(batchId: string) {
     .eq('id', batchId);
   if (error) throw new Error(error.message);
 
-  // Reverse: add back Pergamino, subtract Verde
-  const newPergaminoStock = await _updateStockBy(
+  // Reverse: add back input, subtract output
+  const newInputStock = await _updateStockBy(
     supabase, batch.input_inventory_id, Number(batch.input_quantity_kg)
   );
-  const newVerdeStock = await _updateStockBy(
+  const newOutputStock = await _updateStockBy(
     supabase, batch.output_inventory_id, -Number(batch.output_quantity_kg)
   );
 
@@ -1380,9 +1475,9 @@ export async function deleteTrillaBatch(batchId: string) {
   revalidatePath('/admin/inventory');
   return {
     success: true,
-    pergaminoId: batch.input_inventory_id as string,
-    newPergaminoStock,
-    verdeId: batch.output_inventory_id as string,
-    newVerdeStock,
+    inputInventoryId: batch.input_inventory_id as string,
+    newInputStock,
+    outputInventoryId: batch.output_inventory_id as string,
+    newOutputStock,
   };
 }

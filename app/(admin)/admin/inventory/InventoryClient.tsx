@@ -44,15 +44,17 @@ import {
   getInventoryMovements,
   getMovementsByTab,
   getTrillaBatches,
+  getTostionBatches,
   createEntrada,
   createSalida,
   createProdConsumo,
   createProdAlta,
+  createTostionBatch,
   createTrillaBatch,
   getInventoryReportData,
   deleteMovement,
   updateMovement,
-  deleteTrillaBatch,
+  deleteProductionBatch,
   getAuditLogs,
 } from "../../actions";
 
@@ -115,8 +117,8 @@ const TABS = [
   { id: "inventario", label: "Inventario", Icon: Package },
   { id: "entradas", label: "Entradas", Icon: PackagePlus },
   { id: "trilla", label: "Trilla", Icon: FlaskConical },
-  { id: "prod_consumos", label: "Prod. Consumos", Icon: Factory },
-  { id: "prod_altas", label: "Prod. Altas", Icon: TrendingUp },
+  { id: "prod_consumos", label: "Proceso Tostión", Icon: Factory },
+  { id: "prod_altas", label: "Empaque/Altas", Icon: TrendingUp },
   { id: "salidas", label: "Salidas", Icon: PackageMinus },
   { id: "reportes", label: "Reportes", Icon: BarChart2 },
   { id: "auditoria", label: "Auditoría", Icon: History },
@@ -1491,10 +1493,10 @@ function TrillaTab({
   function handleDeleteBatch(batchId: string) {
     startTransition(async () => {
       try {
-        const res = await deleteTrillaBatch(batchId);
+        const res = await deleteProductionBatch(batchId);
         onStocksUpdate([
-          { id: res.pergaminoId, newStock: res.newPergaminoStock },
-          { id: res.verdeId, newStock: res.newVerdeStock },
+          { id: res.inputInventoryId, newStock: res.newInputStock },
+          { id: res.outputInventoryId, newStock: res.newOutputStock },
         ]);
         setDeletingBatchId(null);
         loadHistory();
@@ -1762,35 +1764,37 @@ function TrillaTab({
 
 // ─── Producción Consumos Tab ──────────────────────────────────────────────────
 
-function ProdConsumosTab({
+// ─── Proceso de Tostión Tab ───────────────────────────────────────────────────
+
+function TostionTab({
   inventory,
-  onStockUpdate,
+  onStocksUpdate,
 }: {
   inventory: InventoryItem[];
-  onStockUpdate: (id: string, newStock: number) => void;
+  onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
 }) {
   const initForm = {
-    inventoryId: "",
-    qty: "",
+    inputInventoryId: "",
+    outputInventoryId: "",
+    inputQty: "",
+    rendimiento: "81", // Promedio típico de tostión (19% merma)
+    outputQty: "",
     date: today(),
-    entryType: "MP" as "MP" | "MAT",
-    responsable: "",
+    notes: "",
   };
+
   const [form, setForm] = useState(initForm);
-  const [records, setRecords] = useState<MovementRecord[]>([]);
+  const [batches, setBatches] = useState<TrillaBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
-  const [feedback, setFeedback] = useState<{
-    type: "success" | "error";
-    msg: string;
-  } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
 
-  const sortedRecords = useMemo(() => sortRecordsList(records, sortField, sortAsc), [records, sortField, sortAsc]);
-  const paginatedRecords = sortedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const sortedBatches = useMemo(() => sortRecordsList(batches, sortField, sortAsc), [batches, sortField, sortAsc]);
+  const paginatedBatches = sortedBatches.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   function handleSort(field: string) {
     if (sortField === field) setSortAsc(!sortAsc);
@@ -1800,16 +1804,10 @@ function ProdConsumosTab({
     }
   }
 
-  const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
-
   function loadHistory() {
     setLoading(true);
-    getMovementsByTab("prod_consumo")
-      .then((d) => {
-        const data = d as MovementRecord[];
-        // Esconder consumos viejos de empaques/stickers en esta vista para mantenerla limpia
-        setRecords(data.filter((r) => r.entry_type === "MP" || r.inventory?.category === "cafe"));
-      })
+    getTostionBatches()
+      .then((d) => setBatches(d as TrillaBatch[]))
       .catch(console.error)
       .finally(() => setLoading(false));
   }
@@ -1817,52 +1815,65 @@ function ProdConsumosTab({
   useEffect(() => {
     loadHistory();
   }, []);
+
+  // Auto-calculate output whenever input or rendimiento changes
   useEffect(() => {
-    if (feedback?.type === "success") {
-      const t = setTimeout(() => setFeedback(null), 4000);
-      return () => clearTimeout(t);
+    const input = parseFloat(form.inputQty);
+    const rend = parseFloat(form.rendimiento);
+    if (!isNaN(input) && input > 0 && !isNaN(rend) && rend > 0) {
+      setForm(prev => ({ ...prev, outputQty: (input * (rend / 100)).toFixed(3) }));
+    } else {
+      setForm(prev => ({ ...prev, outputQty: "" }));
     }
-  }, [feedback]);
+  }, [form.inputQty, form.rendimiento]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.inventoryId || !form.qty) {
+    const { inputInventoryId, outputInventoryId, inputQty, rendimiento, outputQty, date, notes } = form;
+
+    if (!inputInventoryId || !outputInventoryId || !inputQty || !outputQty) {
       setFeedback({ type: "error", msg: "Completa los campos obligatorios" });
       return;
     }
+
     startTransition(async () => {
       try {
-        const res = await createProdConsumo(
-          form.inventoryId,
-          parseFloat(form.qty),
-          form.date,
-          form.entryType,
-          form.responsable || undefined
+        const res = await createTostionBatch(
+          inputInventoryId,
+          outputInventoryId,
+          parseFloat(inputQty),
+          parseFloat(rendimiento) / 100,
+          date,
+          notes || undefined
         );
-        
+
         if (!res.success) {
           setFeedback({ type: "error", msg: res.error || "Error al registrar" });
           return;
         }
 
-        onStockUpdate(form.inventoryId, res.newStock ?? 0);
-        setFeedback({ type: "success", msg: "✓ Consumo de producción registrado" });
+        onStocksUpdate([
+          { id: inputInventoryId, newStock: res.newVerdeStock ?? 0 },
+          { id: outputInventoryId, newStock: res.newTostadoStock ?? 0 },
+        ]);
+
+        setFeedback({ type: "success", msg: "✓ Proceso de Tostión registrado con éxito" });
         setForm(initForm);
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({
-          type: "error",
-          msg: err instanceof Error ? err.message : "Error al registrar",
-        });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al registrar" });
       }
     });
   }
 
-  function handleDeleteRecord(record: MovementRecord) {
+  function handleDeleteBatch(batchId: string) {
     startTransition(async () => {
       try {
-        const res = await deleteMovement(record.id);
-        onStockUpdate(res.inventoryId as string, res.newStock);
+        const res = await deleteProductionBatch(batchId); 
+        onStocksUpdate([
+          { id: res.inputInventoryId, newStock: res.newInputStock },
+          { id: res.outputInventoryId, newStock: res.newOutputStock },
+        ]);
         setDeletingId(null);
         loadHistory();
       } catch (err: unknown) {
@@ -1871,166 +1882,172 @@ function ProdConsumosTab({
     });
   }
 
+  const inputNum = parseFloat(form.inputQty) || 0;
+  const outputNum = parseFloat(form.outputQty) || 0;
+  const lossKg = inputNum - outputNum;
+  const lossPct = inputNum > 0 ? (lossKg / inputNum) * 100 : 0;
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
-          <h2 className="text-xl font-serif">Producción — Consumos</h2>
+          <h2 className="text-xl font-serif">Proceso de Tostión</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            Registra el café verde consumido para el proceso de Tostión (Materia Prima).
+            Convierte café verde en café tostado. El sistema descontará el verde e incrementará el tostado.
           </p>
         </div>
+
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
             <div>
-              <label htmlFor="pc-date" className={labelCls}>
-                Fecha <span className="text-red-400">*</span>
-              </label>
+              <label htmlFor="tos-date" className={labelCls}>Fecha <span className="text-red-400">*</span></label>
               <input
-                id="pc-date"
+                id="tos-date"
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
-                suppressHydrationWarning={true}
                 className={inputCls}
                 required
               />
             </div>
             <div>
-              <label htmlFor="pc-product" className={labelCls}>
-                Producto <span className="text-red-400">*</span>
-              </label>
+              <label htmlFor="tos-input-product" className={labelCls}>Café Verde (In) <span className="text-red-400">*</span></label>
               <ProductSelect
-                id="pc-product"
-                value={form.inventoryId}
-                onChange={(v) => setForm({ ...form, inventoryId: v })}
+                id="tos-input-product"
+                value={form.inputInventoryId}
+                onChange={(v) => setForm({ ...form, inputInventoryId: v })}
                 inventory={inventory}
-                filter={(i) => i.category === 'cafe'}
+                filter={(i) => i.category === 'cafe' && i.product_code.startsWith('CAFV')}
                 placeholder="Seleccionar café verde..."
               />
             </div>
             <div>
-              <label htmlFor="pc-qty" className={labelCls}>
-                Cantidad <span className="text-red-400">*</span>
-              </label>
+              <label htmlFor="tos-output-product" className={labelCls}>Café Tostado (Out) <span className="text-red-400">*</span></label>
+              <ProductSelect
+                id="tos-output-product"
+                value={form.outputInventoryId}
+                onChange={(v) => setForm({ ...form, outputInventoryId: v })}
+                inventory={inventory}
+                filter={(i) => i.category === 'cafe' && (i.product_code.startsWith('CAFT') || i.product_name.toLowerCase().includes('tostado'))}
+                placeholder="Seleccionar café tostado..."
+              />
+            </div>
+            <div>
+              <label htmlFor="tos-input-qty" className={labelCls}>Cant. Verde (kg) <span className="text-red-400">*</span></label>
               <input
-                id="pc-qty"
+                id="tos-input-qty"
                 type="number"
                 min="0.001"
                 step="0.001"
-                value={form.qty}
-                onChange={(e) => setForm({ ...form, qty: e.target.value })}
-                placeholder="ej. 24"
+                value={form.inputQty}
+                onChange={(e) => setForm({ ...form, inputQty: e.target.value })}
                 className={inputCls}
                 required
               />
             </div>
-
             <div>
-              <label htmlFor="pc-resp" className={labelCls}>
-                Responsable (opcional)
-              </label>
+              <label htmlFor="tos-rend" className={labelCls}>Rendimiento Tostión (%)</label>
               <input
-                id="pc-resp"
-                type="text"
-                value={form.responsable}
-                onChange={(e) =>
-                  setForm({ ...form, responsable: e.target.value })
-                }
-                placeholder="Nombre..."
+                id="tos-rend"
+                type="number"
+                min="1"
+                max="100"
+                step="0.1"
+                value={form.rendimiento}
+                onChange={(e) => setForm({ ...form, rendimiento: e.target.value })}
                 className={inputCls}
               />
             </div>
+            <div>
+              <label htmlFor="tos-output-qty" className={labelCls}>Cant. Tostado (kg) <span className="text-amber-500">auto</span></label>
+              <input
+                id="tos-output-qty"
+                type="number"
+                min="0.001"
+                step="0.001"
+                value={form.outputQty}
+                onChange={(e) => setForm({ ...form, outputQty: e.target.value })}
+                className={`${inputCls} border-amber-200 bg-amber-50/50`}
+                required
+              />
+            </div>
           </div>
+
+          {inputNum > 0 && outputNum > 0 && (
+            <div className="grid grid-cols-3 gap-3 mb-4 bg-[#f9f7f0] rounded-2xl p-4 text-center">
+              <div><p className={labelCls}>Entrada Verde</p><p className="font-bold">{inputNum.toFixed(2)} kg</p></div>
+              <div><p className={labelCls}>Pérdida (Merma)</p><p className="font-bold text-red-600">{lossKg.toFixed(2)} kg</p></div>
+              <div><p className={labelCls}>% Pérdida</p><p className="font-bold text-xl">{lossPct.toFixed(1)}%</p></div>
+            </div>
+          )}
+
+          <div className="mb-5">
+            <label htmlFor="tos-notes" className={labelCls}>Notas</label>
+            <input
+              id="tos-notes"
+              type="text"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className={inputCls}
+              placeholder="ej. Tostión media-alta, Lote #..."
+            />
+          </div>
+
           <FeedbackBanner feedback={feedback} />
           <button
             type="submit"
             disabled={isPending}
             className="mt-4 flex items-center gap-2 px-8 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-2xl transition-all disabled:opacity-60"
           >
-            {isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Factory className="w-4 h-4" />
-            )}
-            {isPending ? "Registrando..." : "Registrar Consumo"}
+            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Factory className="w-4 h-4" />}
+            {isPending ? "Registrando..." : "Registrar Tostión"}
           </button>
         </form>
       </div>
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
-          <h3 className="font-serif text-lg">
-            Historial{" "}
-            <span className="text-foreground/40 text-base font-sans">
-              · {records.length}
-            </span>
-          </h3>
-          <button
-            onClick={loadHistory}
-            className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <h3 className="font-serif text-lg">Historial de Tostión <span className="text-foreground/40 text-base font-sans">· {batches.length}</span></h3>
+          <button onClick={loadHistory} className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40"><RefreshCw className="w-4 h-4" /></button>
         </div>
-        {loading || records.length === 0 ? (
-          <HistoryLoadingOrEmpty loading={loading} empty={records.length === 0} />
+        {loading || batches.length === 0 ? (
+          <HistoryLoadingOrEmpty loading={loading} empty={batches.length === 0} />
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                   <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Responsable" field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Verde (In)" field="input_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Rend." field="rendimiento_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Tostado (Out)" field="output_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Merma %" field="weight_loss_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Notas" field="notes" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
-                {paginatedRecords.map((r) => {
-                  const inv = getRelation(r.inventory);
-                  return (
-                    <tr key={r.id} className="hover:bg-[#fdfbf7]">
-                      <td className={tdCls}>
-                        {r.movement_date
-                          ? fmtDate(r.movement_date)
-                          : fmtDate(r.created_at)}
-                      </td>
-                      <td className={tdCls}>
-                        <span className="font-mono text-xs bg-foreground/5 px-2 py-1 rounded-lg">
-                          {inv?.product_code ?? "—"}
-                        </span>
-                      </td>
-                      <td className={tdCls}>{inv?.product_name ?? "—"}</td>
-                      <td className={`${tdCls} text-right font-bold text-red-600`}>
-                        {r.quantity}
-                      </td>
-                      <td className={`${tdCls} text-foreground/50`}>
-                        {r.responsable || "—"}
-                      </td>
-                      <td className={tdCls}>
-                        <AccionesCell id={r.id} deletingId={deletingId} onEdit={() => setEditingRecord(r)} onConfirmDelete={() => handleDeleteRecord(r)} onCancelDelete={() => setDeletingId(null)} onDelete={() => setDeletingId(r.id)} />
-                      </td>
-                    </tr>
-                  );
-                })}
+                {paginatedBatches.map((b) => (
+                  <tr key={b.id} className="hover:bg-[#fdfbf7]">
+                    <td className={tdCls}>{fmtDate(b.movement_date || b.created_at)}</td>
+                    <td className={`${tdCls} text-right font-mono`}>{Number(b.input_quantity_kg).toFixed(2)} kg</td>
+                    <td className={`${tdCls} text-right`}>{(Number(b.rendimiento_pct) * 100).toFixed(1)}%</td>
+                    <td className={`${tdCls} text-right font-mono font-bold text-emerald-700`}>{Number(b.output_quantity_kg).toFixed(2)} kg</td>
+                    <td className={`${tdCls} text-right text-red-500`}>{Number(b.weight_loss_pct).toFixed(1)}%</td>
+                    <td className={`${tdCls} text-foreground/50`}>{b.notes || "—"}</td>
+                    <td className={tdCls}>
+                      <button onClick={() => setDeletingId(b.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
+            <PaginationControls currentPage={currentPage} totalItems={batches.length} onPageChange={setCurrentPage} />
           </div>
-          <PaginationControls
-            currentPage={currentPage}
-            totalItems={records.length}
-            onPageChange={setCurrentPage}
-          />
-        </>
         )}
       </div>
-      {editingRecord && (
-        <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStockUpdate(invId, s); loadHistory(); setEditingRecord(null); }} />
-      )}
     </div>
   );
 }
@@ -2047,10 +2064,10 @@ const FINISHED_CODES = [
 
 function ProdAltasTab({
   inventory,
-  onStockUpdate,
+  onStocksUpdate,
 }: {
   inventory: InventoryItem[];
-  onStockUpdate: (id: string, newStock: number) => void;
+  onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
 }) {
   const initForm = {
     inventoryId: "",
@@ -2130,12 +2147,13 @@ function ProdAltasTab({
           return;
         }
 
-        onStockUpdate(form.inventoryId, res.newStock ?? 0);
+        const updates = [{ id: form.inventoryId, newStock: res.newStock ?? 0 }];
         if (res.consumedResults) {
           res.consumedResults.forEach((cr: { id: string; newStock: number }) => {
-            onStockUpdate(cr.id, cr.newStock);
+            updates.push({ id: cr.id, newStock: cr.newStock });
           });
         }
+        onStocksUpdate(updates);
         setFeedback({ type: "success", msg: "✓ Alta de producción registrada" });
         setForm(initForm);
         setConsumos([]);
@@ -2153,7 +2171,7 @@ function ProdAltasTab({
     startTransition(async () => {
       try {
         const res = await deleteMovement(record.id);
-        onStockUpdate(res.inventoryId as string, res.newStock);
+        onStocksUpdate([{ id: res.inventoryId as string, newStock: res.newStock }]);
         setDeletingId(null);
         loadHistory();
       } catch (err: unknown) {
@@ -2399,7 +2417,7 @@ function ProdAltasTab({
         )}
       </div>
       {editingRecord && (
-        <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStockUpdate(invId, s); loadHistory(); setEditingRecord(null); }} />
+        <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStocksUpdate([{ id: invId, newStock: s }]); loadHistory(); setEditingRecord(null); }} />
       )}
     </div>
   );
@@ -3503,10 +3521,10 @@ export default function InventoryClient({
         <TrillaTab inventory={inventory} onStocksUpdate={updateStocks} />
       )}
       {activeTab === "prod_consumos" && (
-        <ProdConsumosTab inventory={inventory} onStockUpdate={updateStock} />
+        <TostionTab inventory={inventory} onStocksUpdate={updateStocks} />
       )}
       {activeTab === "prod_altas" && (
-        <ProdAltasTab inventory={inventory} onStockUpdate={updateStock} />
+        <ProdAltasTab inventory={inventory} onStocksUpdate={updateStocks} />
       )}
       {activeTab === "salidas" && (
         <SalidasTab inventory={inventory} onStockUpdate={updateStock} />
