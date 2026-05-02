@@ -1481,3 +1481,73 @@ export async function deleteProductionBatch(batchId: string) {
     newOutputStock,
   };
 }
+
+export async function migrateLegacyTostion() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+  
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // 1. Get CAFT-001 ID
+  const { data: caft } = await supabase
+    .from('inventory')
+    .select('id, current_stock')
+    .eq('product_code', 'CAFT-001')
+    .single();
+
+  if (!caft) throw new Error("CAFT-001 not found");
+
+  // 2. Get legacy movements
+  const { data: movs } = await supabase
+    .from('inventory_movements')
+    .select('*')
+    .eq('tab_source', 'prod_consumo')
+    .eq('type', 'salida')
+    .is('production_batch_id', null);
+
+  if (!movs || movs.length === 0) return { success: true, count: 0 };
+
+  let totalKgs = 0;
+  for (const m of movs) {
+    const qty = Math.abs(Number(m.quantity));
+    
+    // Create batch
+    const { data: batch } = await supabase.from('production_batches').insert({
+      process_type: 'tostion',
+      input_inventory_id: m.inventory_id,
+      input_quantity_kg: qty,
+      output_inventory_id: caft.id,
+      output_quantity_kg: qty,
+      rendimiento_pct: 1.0,
+      weight_loss_pct: 0.0,
+      movement_date: m.movement_date || m.created_at,
+      notes: m.reason || 'Migración automática de historial',
+      created_by: user?.id
+    }).select('id').single();
+
+    if (batch) {
+      // Create Entrada
+      await supabase.from('inventory_movements').insert({
+        inventory_id: caft.id,
+        type: 'entrada',
+        quantity: qty,
+        movement_date: m.movement_date || m.created_at,
+        reason: `Entrada automática (Migración)`,
+        admin_id: user?.id,
+        tab_source: 'prod_consumo',
+        production_batch_id: batch.id
+      });
+
+      // Link legacy
+      await supabase.from('inventory_movements').update({ production_batch_id: batch.id }).eq('id', m.id);
+      totalKgs += qty;
+    }
+  }
+
+  // Update stock
+  await supabase.from('inventory').update({ current_stock: Number(caft.current_stock) + totalKgs }).eq('id', caft.id);
+
+  revalidatePath('/admin/inventory');
+  return { success: true, count: movs.length, totalKgs };
+}

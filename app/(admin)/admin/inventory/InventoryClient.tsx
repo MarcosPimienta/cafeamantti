@@ -55,6 +55,7 @@ import {
   deleteMovement,
   updateMovement,
   deleteProductionBatch,
+  migrateLegacyTostion,
   getAuditLogs,
 } from "../../actions";
 
@@ -117,7 +118,7 @@ const TABS = [
   { id: "inventario", label: "Inventario", Icon: Package },
   { id: "entradas", label: "Entradas", Icon: PackagePlus },
   { id: "trilla", label: "Trilla", Icon: FlaskConical },
-  { id: "prod_consumos", label: "Proceso Tostión", Icon: Factory },
+  { id: "tostion", label: "Proceso Tostión", Icon: Factory },
   { id: "prod_altas", label: "Empaque/Altas", Icon: TrendingUp },
   { id: "salidas", label: "Salidas", Icon: PackageMinus },
   { id: "reportes", label: "Reportes", Icon: BarChart2 },
@@ -3542,6 +3543,25 @@ export default function InventoryClient({
             {label}
           </button>
         ))}
+
+        {activeTab === "tostion" && (
+          <button 
+            onClick={async () => {
+              if(confirm("¿Migrar historial antiguo? Esto creará las entradas faltantes y ajustará el stock de CAFT-001 (100% rendimiento).")) {
+                try {
+                  const res = await migrateLegacyTostion();
+                  alert(`✓ Migración completada: ${res.count} registros procesados. Se sumaron ${res.totalKgs} kg a CAFT-001.`);
+                  window.location.reload();
+                } catch (err) {
+                  alert("Error en migración: " + (err instanceof Error ? err.message : String(err)));
+                }
+              }
+            }}
+            className="ml-auto mr-2 px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all self-center shadow-sm"
+          >
+            Migrar Datos Históricos
+          </button>
+        )}
       </div>
 
       {/* Tab content */}
@@ -3554,7 +3574,7 @@ export default function InventoryClient({
       {activeTab === "trilla" && (
         <TrillaTab inventory={inventory} onStocksUpdate={updateStocks} />
       )}
-      {activeTab === "prod_consumos" && (
+      {activeTab === "tostion" && (
         <TostionTab inventory={inventory} onStocksUpdate={updateStocks} />
       )}
       {activeTab === "prod_altas" && (
