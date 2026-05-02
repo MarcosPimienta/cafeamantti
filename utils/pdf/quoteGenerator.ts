@@ -397,6 +397,40 @@ function buildBlockHtml(block: ProposalBlock, index: number): string {
   </div>`;
 }
 
+function paginateBlocks(blocks: ProposalBlock[]): ProposalBlock[][] {
+  const pages: ProposalBlock[][] = [];
+  let currentPage: ProposalBlock[] = [];
+  let currentHeight = 0;
+  const FIRST_PAGE_LIMIT = 600; // less space due to big title
+  const PAGE_LIMIT = 750;
+
+  blocks.forEach((block, idx) => {
+    let blockHeight = 80; // base height for title + margin
+    if (block.type === 'rich-text') {
+      const chars = block.text?.length || 0;
+      blockHeight += Math.ceil(chars / 65) * 20; // approx 65 chars per line, 20px per line
+    } else if (block.type === 'price-table') {
+      blockHeight += 40 + (block.items?.length || 0) * 35; // header + rows
+    } else if (block.type === 'checklist') {
+      blockHeight += (block.checklistItems?.length || 0) * 30;
+    }
+
+    const limit = pages.length === 0 ? FIRST_PAGE_LIMIT : PAGE_LIMIT;
+
+    if (currentHeight + blockHeight > limit && currentPage.length > 0) {
+      pages.push(currentPage);
+      currentPage = [block];
+      currentHeight = blockHeight;
+    } else {
+      currentPage.push(block);
+      currentHeight += blockHeight;
+    }
+  });
+
+  if (currentPage.length > 0) pages.push(currentPage);
+  return pages;
+}
+
 export async function generateProposalPDF(
   data: ProposalData,
   filename: string = 'propuesta.pdf'
@@ -404,65 +438,101 @@ export async function generateProposalPDF(
   const html2pdf = (await import('html2pdf.js')).default;
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
-  // Convert images to base64 for CORS-safe PDF generation
-  const bgUrl = data.backgroundImageUrl || `${baseUrl}/images/Main_Background.jpg`;
+  // Convert images to base64
+  const rawBgUrl = data.backgroundImageUrl || '/images/Main_Background.jpg';
+  const bgUrl = rawBgUrl.startsWith('http') ? rawBgUrl : `${baseUrl}${rawBgUrl}`;
   const bgBase64 = await imageUrlToBase64(bgUrl);
   const logoBase64 = await imageUrlToBase64(`${baseUrl}/images/logo-amantti.png`);
   const allyLogoBase64 = data.allyLogoUrl ? await imageUrlToBase64(data.allyLogoUrl) : '';
-  const opacity = data.backgroundOpacity ?? 0.15;
+  const opacity = data.backgroundOpacity ?? 0.5;
 
-  const sectionsHtml = data.content.map((block, i) => buildBlockHtml(block, i)).join('');
+  const blockPages = paginateBlocks(data.content);
+  const totalPages = blockPages.length;
 
-  const allyLogoHtml = allyLogoBase64
-    ? `<div style="display:flex; align-items:center; gap:16px;">
-         <div style="width:1px; height:40px; background-color:#C59F59; opacity:0.4;"></div>
-         <img src="${allyLogoBase64}" style="max-width:140px; max-height:60px; object-fit:contain;" />
-       </div>`
-    : `<p style="font-size:14px; color:#57534e; font-weight:600;">${data.date}</p>`;
+  const pagesHtml = blockPages.map((pageBlocks, pageIdx) => {
+    const isFirst = pageIdx === 0;
+    const isLast = pageIdx === totalPages - 1;
 
-  const dateIfAlly = allyLogoBase64
-    ? `<div style="text-align:right; margin-top:-40px; margin-bottom:30px;"><p style="margin:0; font-size:13px; color:#78716c;">${data.date}</p></div>`
-    : '';
+    const allyLogoHtml = allyLogoBase64
+      ? `<div style="display:flex; align-items:center; gap:16px;">
+           <div style="width:1px; height:40px; background-color:#C59F59; opacity:0.4;"></div>
+           <img src="${allyLogoBase64}" style="max-width:140px; max-height:60px; object-fit:contain;" />
+         </div>`
+      : `<p style="font-size:14px; color:#57534e; font-weight:600;">${data.date}</p>`;
 
-  const html = `
-    <div style="font-family:Arial, sans-serif; background-color:#fff; color:#1c1917; width:816px; padding:64px 72px; box-sizing:border-box; position:relative; min-height:1056px;">
-      <img src="${bgBase64}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:${opacity}; z-index:0;" />
-      <div style="position:relative; z-index:1;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:60px;">
-          <img src="${logoBase64}" style="width:160px;" />
-          ${allyLogoHtml}
-        </div>
-        ${dateIfAlly}
-        <div style="margin-bottom:50px; text-align:center;">
-          <h1 style="font-size:26px; font-weight:900; text-transform:uppercase; letter-spacing:3px; color:#292524; margin:0 0 10px;">${data.title}</h1>
-          ${data.subtitle ? `<h2 style="font-size:18px; font-weight:600; color:#C59F59; margin:0; font-style:italic;">${data.subtitle}</h2>` : ''}
-          <div style="width:80px; height:3px; background-color:#C59F59; margin:30px auto;"></div>
-          <p style="font-size:14px; color:#78716c; margin:20px 0 0;">
-            <strong>Para:</strong> ${data.clientName}<br/>
-            <strong>De:</strong> Amantti Café
-          </p>
-        </div>
-        ${sectionsHtml}
-        <div style="margin-top:60px; border-top:1px solid #e7e5e4; padding-top:40px;">
-          <p style="font-size:14px; line-height:1.6; color:#44403c; margin-bottom:40px; font-style:italic;">
-            Estamos convencidos de que esta alianza beneficiará a ambas partes y proporcionará una experiencia única para los clientes de ${data.clientName}.<br/>
-            ¡Quedamos atentos para avanzar con los siguientes pasos y formalizar la alianza!
-          </p>
-          <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-            <div>
-              <p style="margin:0; font-size:12px; font-weight:700; color:#292524;">${data.sellerName || 'Asesor Amantti'}</p>
-              <p style="margin:2px 0 0; font-size:11px; color:#57534e;">Alma Trading Group SAS<br/>Nit: 901752308-8<br/>cafeamantti@gmail.com</p>
-            </div>
+    const dateIfAlly = allyLogoBase64
+      ? `<div style="text-align:right; margin-top:-40px; margin-bottom:30px;"><p style="margin:0; font-size:13px; color:#78716c;">${data.date}</p></div>`
+      : '';
+
+    const firstPageHeader = `
+      <div style="margin-bottom:50px; text-align:center;">
+        <h1 style="font-size:26px; font-weight:900; text-transform:uppercase; letter-spacing:3px; color:#292524; margin:0 0 10px; line-height:1.2;">${data.title}</h1>
+        ${data.subtitle ? `<h2 style="font-size:18px; font-weight:600; color:#C59F59; margin:0; font-style:italic;">${data.subtitle}</h2>` : ''}
+        <div style="width:80px; height:3px; background-color:#C59F59; margin:30px auto;"></div>
+        <p style="font-size:14px; color:#78716c; margin:20px 0 0;">
+          <strong>Para:</strong> ${data.clientName}<br/>
+          <strong>De:</strong> Amantti Café
+        </p>
+      </div>
+    `;
+
+    const normalHeader = `
+      <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:30px; padding-bottom:15px; border-bottom:1px solid rgba(197,159,89,0.2);">
+        <p style="font-size:10px; font-weight:700; color:#C59F59; text-transform:uppercase; letter-spacing:1px;">Propuesta Comercial — Pág ${pageIdx + 1}</p>
+      </div>
+    `;
+
+    const blocksHtml = pageBlocks.map((block, i) => {
+      // Correct index across pages
+      const absoluteIdx = blockPages.slice(0, pageIdx).reduce((acc, p) => acc + p.length, 0) + i;
+      return buildBlockHtml(block, absoluteIdx);
+    }).join('');
+
+    const footer = isLast ? `
+      <div style="margin-top:60px; border-top:1px solid #e7e5e4; padding-top:40px;">
+        <p style="font-size:14px; line-height:1.6; color:#44403c; margin-bottom:40px; font-style:italic;">
+          Estamos convencidos de que esta alianza beneficiará a ambas partes y proporcionará una experiencia única para los clientes de ${data.clientName}.<br/>
+          ¡Quedamos atentos para avanzar con los siguientes pasos y formalizar la alianza!
+        </p>
+        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+          <div>
+            <p style="margin:0; font-size:12px; font-weight:700; color:#292524;">${data.sellerName || 'Asesor Amantti'}</p>
+            <p style="margin:2px 0 0; font-size:11px; color:#57534e;">Alma Trading Group SAS<br/>Nit: 901752308-8<br/>cafeamantti@gmail.com</p>
           </div>
+          <img src="${logoBase64}" style="width:80px; opacity:0.3; filter:grayscale(1);" />
         </div>
       </div>
-    </div>
-  `;
+    ` : `
+      <div style="margin-top:auto; padding-top:20px; text-align:center; opacity:0.3;">
+        <p style="font-size:9px; color:#a8a29e; letter-spacing:1px;">Continúa en la siguiente página...</p>
+      </div>
+    `;
+
+    return `
+      <div style="font-family:Arial, sans-serif; background-color:#fff; color:#1c1917; width:816px; height:1056px; padding:64px 72px; box-sizing:border-box; position:relative; overflow:hidden; page-break-after:always;">
+        <div style="position:absolute; inset:0; background-image:url(${bgBase64}); background-size:cover; background-position:center; opacity:${opacity}; z-index:0;"></div>
+        <div style="position:relative; z-index:1; display:flex; flex-direction:column; height:100%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:40px;">
+            <img src="${logoBase64}" style="width:160px; height:auto; object-fit:contain;" />
+            ${allyLogoHtml}
+          </div>
+          ${dateIfAlly}
+          ${isFirst ? firstPageHeader : normalHeader}
+          <div style="flex:1;">
+            ${blocksHtml}
+          </div>
+          ${footer}
+        </div>
+      </div>
+    `;
+  }).join('');
 
   const container = document.createElement('div');
-  container.innerHTML = html;
+  container.innerHTML = pagesHtml;
   container.style.position = 'fixed';
   container.style.left = '-10000px';
+  container.style.top = '0';
+  container.style.zIndex = '-1';
   document.body.appendChild(container);
 
   try {
@@ -470,7 +540,13 @@ export async function generateProposalPDF(
       margin: 0,
       filename,
       image: { type: 'jpeg' as const, quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: { 
+        scale: 2, 
+        useCORS: true,
+        width: 816,
+        windowWidth: 816,
+        logging: false
+      },
       jsPDF: { unit: 'px' as const, format: [816, 1056] as [number, number], orientation: 'portrait' as const }
     };
     return await html2pdf().set(opt).from(container).output('blob');

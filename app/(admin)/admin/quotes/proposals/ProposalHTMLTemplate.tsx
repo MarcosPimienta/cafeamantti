@@ -101,135 +101,165 @@ function RenderBlock({ block, index }: { block: ProposalBlock; index: number }) 
   );
 }
 
+function paginateBlocks(blocks: ProposalBlock[]): ProposalBlock[][] {
+  const pages: ProposalBlock[][] = [];
+  let currentPage: ProposalBlock[] = [];
+  let currentHeight = 0;
+  const FIRST_PAGE_LIMIT = 500; // conservative for preview
+  const PAGE_LIMIT = 700;
+
+  blocks.forEach((block) => {
+    let blockHeight = 80;
+    if (block.type === 'rich-text') {
+      const chars = block.text?.length || 0;
+      blockHeight += Math.ceil(chars / 55) * 22; // approx for preview font
+    } else if (block.type === 'price-table') {
+      blockHeight += 50 + (block.items?.length || 0) * 40;
+    } else if (block.type === 'checklist') {
+      blockHeight += (block.checklistItems?.length || 0) * 35;
+    }
+
+    const limit = pages.length === 0 ? FIRST_PAGE_LIMIT : PAGE_LIMIT;
+
+    if (currentHeight + blockHeight > limit && currentPage.length > 0) {
+      pages.push(currentPage);
+      currentPage = [block];
+      currentHeight = blockHeight;
+    } else {
+      currentPage.push(block);
+      currentHeight += blockHeight;
+    }
+  });
+
+  if (currentPage.length > 0) pages.push(currentPage);
+  return pages;
+}
+
 export function ProposalHTMLTemplate({ data }: { data: ProposalData }) {
   const opacity = data.backgroundOpacity ?? 0.5;
   const bgUrl = data.backgroundImageUrl || '/images/Main_Background.jpg';
-
-  const pageStyle: React.CSSProperties = {
-    fontFamily: 'Arial, Helvetica, sans-serif',
-    backgroundColor: '#ffffff',
-    color: '#1c1917',
-    position: 'relative',
-    width: `${PORTRAIT_W}px`,
-    minHeight: `${PORTRAIT_H}px`,
-    padding: `${PAD_V}px ${PAD_H}px`,
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-  };
-
-  const bgStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    backgroundImage: `url('${bgUrl}')`,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    opacity,
-    zIndex: 0,
-  };
-
-  const contentStyle: React.CSSProperties = {
-    position: 'relative',
-    zIndex: 1,
-    flex: 1,
-  };
+  const blockPages = paginateBlocks(data.content);
+  const totalPages = blockPages.length;
 
   return (
-    <div style={{ display: 'inline-block', backgroundColor: '#f5f5f5', padding: '20px' }}>
-      <div style={pageStyle}>
-        <div style={bgStyle} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', backgroundColor: '#f0f0f0', padding: '40px' }}>
+      {blockPages.map((pageBlocks, pageIdx) => {
+        const isFirst = pageIdx === 0;
+        const isLast = pageIdx === totalPages - 1;
 
-        <div style={contentStyle}>
-          {/* Header: Dual logo */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '60px' }}>
-            <img src="/images/logo-amantti.png" alt="Amantti" style={{ width: '160px', height: 'auto' }} />
+        return (
+          <div key={pageIdx} style={{
+            fontFamily: 'Arial, Helvetica, sans-serif',
+            backgroundColor: '#ffffff',
+            color: '#1c1917',
+            position: 'relative',
+            width: `${PORTRAIT_W}px`,
+            height: `${PORTRAIT_H}px`,
+            padding: `${PAD_V}px ${PAD_H}px`,
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+          }}>
+            {/* Background */}
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: `url('${bgUrl}')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              opacity,
+              zIndex: 0,
+            }} />
 
-            {data.allyLogoUrl ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '1px', height: '40px', backgroundColor: '#C59F59', opacity: 0.4 }} />
-                <img src={data.allyLogoUrl} alt="Aliado" style={{ maxWidth: '140px', maxHeight: '60px', objectFit: 'contain' }} />
+            <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+                <img src="/images/logo-amantti.png" alt="Amantti" style={{ width: '160px', height: 'auto' }} />
+                
+                {data.allyLogoUrl ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '1px', height: '40px', backgroundColor: '#C59F59', opacity: 0.4 }} />
+                    <img src={data.allyLogoUrl} alt="Aliado" style={{ maxWidth: '140px', maxHeight: '60px', objectFit: 'contain' }} />
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#57534e', fontWeight: 600 }}>{data.date}</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ margin: 0, fontSize: '14px', color: '#57534e', fontWeight: 600 }}>{data.date}</p>
-              </div>
-            )}
-          </div>
 
-          {/* Date (shown separately when ally logo exists) */}
-          {data.allyLogoUrl && (
-            <div style={{ textAlign: 'right', marginTop: '-40px', marginBottom: '30px' }}>
-              <p style={{ margin: 0, fontSize: '13px', color: '#78716c' }}>{data.date}</p>
+              {/* Date secondary */}
+              {data.allyLogoUrl && (
+                <div style={{ textAlign: 'right', marginTop: '-40px', marginBottom: '30px' }}>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#78716c' }}>{data.date}</p>
+                </div>
+              )}
+
+              {/* Title Page Content */}
+              {isFirst && (
+                <div style={{ marginBottom: '50px', textAlign: 'center' }}>
+                  <h1 style={{ fontSize: '26px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '3px', color: '#292524', margin: '0 0 10px', lineHeight: '1.2' }}>
+                    {data.title}
+                  </h1>
+                  {data.subtitle && (
+                    <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#C59F59', margin: 0, fontStyle: 'italic' }}>
+                      {data.subtitle}
+                    </h2>
+                  )}
+                  <div style={{ width: '80px', height: '3px', backgroundColor: '#C59F59', margin: '30px auto' }} />
+                  <p style={{ fontSize: '14px', color: '#78716c', margin: '20px 0 0' }}>
+                    <strong>Para:</strong> {data.clientName}<br/>
+                    <strong>De:</strong> Amantti Café
+                  </p>
+                </div>
+              )}
+
+              {/* Page Sub-header if not first */}
+              {!isFirst && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '30px', paddingBottom: '15px', borderBottom: '1px solid rgba(197,159,89,0.2)' }}>
+                  <p style={{ fontSize: '10px', fontWeight: 700, color: '#C59F59', textTransform: 'uppercase', letterSpacing: '1px' }}>Propuesta Comercial — Pág {pageIdx + 1}</p>
+                </div>
+              )}
+
+              {/* Blocks for this page */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', flex: 1 }}>
+                {pageBlocks.map((block, i) => {
+                  const absoluteIdx = blockPages.slice(0, pageIdx).reduce((acc, p) => acc + p.length, 0) + i;
+                  return <RenderBlock key={block.id || absoluteIdx} block={block} index={absoluteIdx} />;
+                })}
+              </div>
+
+              {/* Footer / Signature only on last page */}
+              {isLast ? (
+                <div style={{ marginTop: '60px', borderTop: '1px solid #e7e5e4', paddingTop: '40px' }}>
+                  <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#44403c', marginBottom: '40px', fontStyle: 'italic' }}>
+                    Estamos convencidos de que esta alianza beneficiará a ambas partes y proporcionará una experiencia única para los clientes de {data.clientName}.<br/>
+                    ¡Quedamos atentos para avanzar con los siguientes pasos y formalizar la alianza!
+                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#292524' }}>{data.sellerName || 'Asesor Amantti'}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#57534e' }}>
+                        Alma Trading Group SAS<br/>
+                        Nit: 901752308-8<br/>
+                        cafeamantti@gmail.com
+                      </p>
+                    </div>
+                    <img src="/images/logo-amantti.png" alt="Logo" style={{ width: '80px', opacity: 0.3 }} />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginTop: 'auto', paddingTop: '20px', textAlign: 'center', opacity: 0.3 }}>
+                  <p style={{ margin: 0, fontSize: '10px', color: '#a8a29e', letterSpacing: '1px' }}>
+                    Página {pageIdx + 1} de {totalPages}
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-
-          {/* Title & Subtitle */}
-          <div style={{ marginBottom: '50px', textAlign: 'center' }}>
-            <h1 style={{
-              fontSize: '26px',
-              fontWeight: 900,
-              textTransform: 'uppercase',
-              letterSpacing: '3px',
-              color: '#292524',
-              margin: '0 0 10px 0',
-              lineHeight: '1.2'
-            }}>
-              {data.title}
-            </h1>
-            {data.subtitle && (
-              <h2 style={{
-                fontSize: '18px',
-                fontWeight: 600,
-                color: '#C59F59',
-                margin: 0,
-                fontStyle: 'italic'
-              }}>
-                {data.subtitle}
-              </h2>
-            )}
-            <div style={{ width: '80px', height: '3px', backgroundColor: '#C59F59', margin: '30px auto' }} />
-
-            <p style={{ fontSize: '14px', color: '#78716c', margin: '20px 0 0' }}>
-              <strong>Para:</strong> {data.clientName}<br/>
-              <strong>De:</strong> Amantti Café
-            </p>
           </div>
-
-          {/* Blocks */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-            {data.content.map((block, idx) => (
-              <RenderBlock key={block.id || idx} block={block} index={idx} />
-            ))}
-          </div>
-
-          {/* Closing & Signature */}
-          <div style={{ marginTop: '60px', borderTop: '1px solid #e7e5e4', paddingTop: '40px' }}>
-            <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#44403c', marginBottom: '40px', fontStyle: 'italic' }}>
-              Estamos convencidos de que esta alianza beneficiará a ambas partes y proporcionará una experiencia única para los clientes de {data.clientName}.<br/>
-              ¡Quedamos atentos para avanzar con los siguientes pasos y formalizar la alianza!
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#292524' }}>{data.sellerName || 'Asesor Amantti'}</p>
-                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#57534e' }}>
-                  Alma Trading Group SAS<br/>
-                  Nit: 901752308-8<br/>
-                  cafeamantti@gmail.com
-                </p>
-              </div>
-              <img src="/images/logo-amantti.png" alt="Logo" style={{ width: '80px', opacity: 0.3 }} />
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{ marginTop: 'auto', paddingTop: '20px', textAlign: 'center', opacity: 0.5 }}>
-          <p style={{ margin: 0, fontSize: '10px', color: '#a8a29e', letterSpacing: '1px' }}>
-            Café Amantti — Pasión por el origen &nbsp;·&nbsp; www.cafeamantti.com
-          </p>
-        </div>
-      </div>
+        );
+      })}
     </div>
   );
 }
