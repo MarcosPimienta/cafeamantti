@@ -469,18 +469,10 @@ export async function generateProposalPDF(
         <h1 style="font-size:26px; font-weight:900; text-transform:uppercase; letter-spacing:3px; color:#292524; margin:0 0 10px; line-height:1.2;">${data.title}</h1>
         ${data.subtitle ? `<h2 style="font-size:18px; font-weight:600; color:#C59F59; margin:0; font-style:italic;">${data.subtitle}</h2>` : ''}
         <div style="width:80px; height:3px; background-color:#C59F59; margin:30px auto;"></div>
-        <p style="font-size:14px; color:#78716c; margin:20px 0 0;">
-          <strong>Para:</strong> ${data.clientName}<br/>
-          <strong>De:</strong> Amantti Café
-        </p>
       </div>
     `;
 
-    const normalHeader = `
-      <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:30px; padding-bottom:15px; border-bottom:1px solid rgba(197,159,89,0.2);">
-        <p style="font-size:10px; font-weight:700; color:#C59F59; text-transform:uppercase; letter-spacing:1px;">Propuesta Comercial — Pág ${pageIdx + 1}</p>
-      </div>
-    `;
+    const normalHeader = '';
 
     const blocksHtml = pageBlocks.map((block, i) => {
       // Correct index across pages
@@ -509,7 +501,7 @@ export async function generateProposalPDF(
     `;
 
     return `
-      <div style="font-family:Arial, sans-serif; background-color:#fff; color:#1c1917; width:816px; height:1056px; padding:64px 72px; box-sizing:border-box; position:relative; overflow:hidden; page-break-after:always;">
+      <div style="font-family:Arial, sans-serif; background-color:#fff; color:#1c1917; width:816px; height:1056px; padding:64px 72px; box-sizing:border-box; position:relative; overflow:hidden; ${isLast ? '' : 'page-break-after:always;'}">
         <div style="position:absolute; inset:0; background-image:url(${bgBase64}); background-size:cover; background-position:center; opacity:${opacity}; z-index:0;"></div>
         <div style="position:relative; z-index:1; display:flex; flex-direction:column; height:100%;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:40px;">
@@ -528,7 +520,7 @@ export async function generateProposalPDF(
   }).join('');
 
   const container = document.createElement('div');
-  container.innerHTML = pagesHtml;
+  container.innerHTML = `<div style="display:flex; flex-direction:column; width:816px; overflow:hidden;">${pagesHtml}</div>`;
   container.style.position = 'fixed';
   container.style.left = '-10000px';
   container.style.top = '0';
@@ -536,6 +528,7 @@ export async function generateProposalPDF(
   document.body.appendChild(container);
 
   try {
+    const element = container.firstElementChild as HTMLElement;
     const opt = {
       margin: 0,
       filename,
@@ -545,13 +538,17 @@ export async function generateProposalPDF(
         useCORS: true,
         width: 816,
         windowWidth: 816,
-        logging: false
+        logging: false,
+        onclone: (_doc: Document) => {
+          _doc.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.parentNode?.removeChild(el));
+          _doc.querySelectorAll('style').forEach(el => el.parentNode?.removeChild(el));
+        },
       },
-      jsPDF: { unit: 'px' as const, format: [816, 1056] as [number, number], orientation: 'portrait' as const }
+      jsPDF: { unit: 'px' as const, format: [816, 1056] as [number, number], orientation: 'portrait' as const, hotfixes: ['px_scaling'] },
+      pagebreak: { mode: ['css', 'legacy'] }
     };
-    return await html2pdf().set(opt).from(container).output('blob');
+    return await html2pdf().set(opt).from(element).output('blob');
   } finally {
     document.body.removeChild(container);
   }
 }
-

@@ -208,18 +208,12 @@ export function ProposalHTMLTemplate({ data }: { data: ProposalData }) {
                     </h2>
                   )}
                   <div style={{ width: '80px', height: '3px', backgroundColor: '#C59F59', margin: '30px auto' }} />
-                  <p style={{ fontSize: '14px', color: '#78716c', margin: '20px 0 0' }}>
-                    <strong>Para:</strong> {data.clientName}<br/>
-                    <strong>De:</strong> Amantti Café
-                  </p>
                 </div>
               )}
 
               {/* Page Sub-header if not first */}
               {!isFirst && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '30px', paddingBottom: '15px', borderBottom: '1px solid rgba(197,159,89,0.2)' }}>
-                  <p style={{ fontSize: '10px', fontWeight: 700, color: '#C59F59', textTransform: 'uppercase', letterSpacing: '1px' }}>Propuesta Comercial — Pág {pageIdx + 1}</p>
-                </div>
+                <div style={{ marginBottom: '20px' }} />
               )}
 
               {/* Blocks for this page */}
