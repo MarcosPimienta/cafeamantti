@@ -1498,16 +1498,29 @@ export async function migrateLegacyTostion() {
 
   if (!caft) throw new Error("CAFT-001 not found");
 
-  // 2. Get legacy movements (expand filters to be more inclusive)
+  // 2. Get legacy movements (inclusive search)
   const { data: movs, error: mErr } = await supabase
     .from('inventory_movements')
-    .select('*')
+    .select('*, inventory:inventory_id(product_code)')
     .or('tab_source.eq.prod_consumo,tab_source.eq.prod_consumos,reason.ilike.%Historial%')
-    .eq('type', 'salida')
     .is('production_batch_id', null);
 
-  if (mErr) throw new Error("Error buscando movimientos: " + mErr.message);
-  if (!movs || movs.length === 0) return { success: true, count: 0, message: "No se encontraron movimientos para migrar." };
+  if (mErr) throw new Error("Error DB: " + mErr.message);
+  
+  if (!movs || movs.length === 0) {
+    // Check if they ALREADY have a production_batch_id
+    const { count: alreadyMigrated } = await supabase
+      .from('inventory_movements')
+      .select('*', { count: 'exact', head: true })
+      .or('tab_source.eq.prod_consumo,tab_source.eq.prod_consumos')
+      .not('production_batch_id', 'is', null);
+
+    return { 
+      success: true, 
+      count: 0, 
+      message: `No se hallaron registros pendientes. (Ya migrados: ${alreadyMigrated || 0})` 
+    };
+  }
 
   let totalKgs = 0;
   for (const m of movs) {

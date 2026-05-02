@@ -3550,7 +3550,7 @@ export default function InventoryClient({
               if(confirm("¿Migrar historial antiguo? Esto creará las entradas faltantes y ajustará el stock de CAFT-001 (100% rendimiento).")) {
                 try {
                   const res = await migrateLegacyTostion();
-                  alert(`✓ Migración completada: ${res.count} registros procesados. Se sumaron ${res.totalKgs} kg a CAFT-001.`);
+                  alert(`✓ Migración: ${res.count} nuevos procesados. ${res.totalKgs ? `Se sumaron ${res.totalKgs} kg a CAFT-001.` : (res.message || "")}`);
                   window.location.reload();
                 } catch (err) {
                   alert("Error en migración: " + (err instanceof Error ? err.message : String(err)));
