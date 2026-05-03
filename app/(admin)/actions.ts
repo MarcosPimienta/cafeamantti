@@ -691,8 +691,15 @@ export async function adjustInventoryStock(
   else if (type === 'entrada') delta = Math.abs(quantity);
   // 'ajuste' uses raw signed quantity
 
-  const newStock = item.current_stock + delta;
-  if (newStock < 0) throw new Error('El stock no puede ser negativo');
+  const currentStock = Number(item.current_stock);
+  const newStock = currentStock + delta;
+  
+  // Only block if we are making it MORE negative than it already was, 
+  // or if it's a new negative and current was >= 0.
+  // Exception: if the adjustment is intended to reach a specific positive value, we allow it.
+  if (newStock < 0 && newStock < currentStock) {
+    throw new Error('El stock resultante no puede ser menor al actual si es negativo.');
+  }
 
   // Insert movement record
   const { error: movError } = await supabase
