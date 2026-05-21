@@ -30,6 +30,38 @@ export default function CashflowListPage() {
     return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount);
   };
 
+  // Calculate missing dates
+  const getMissingDates = () => {
+    if (cashflows.length === 0) return [];
+    
+    // Find the earliest record to start checking from
+    const sortedDates = cashflows.map(c => new Date(c.date).getTime()).sort((a, b) => a - b);
+    const earliestDate = new Date(sortedDates[0]);
+    
+    const missing: string[] = [];
+    const current = new Date(earliestDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Ignore time, compare dates only
+    
+    // Create a Set of existing date strings (YYYY-MM-DD) for fast lookup
+    const existingDates = new Set(cashflows.map(c => c.date));
+
+    while (current < now) {
+      // getDay() returns 0 for Sunday
+      if (current.getDay() !== 0) {
+        const dateStr = current.toISOString().split('T')[0];
+        if (!existingDates.has(dateStr)) {
+          missing.push(dateStr);
+        }
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return missing;
+  };
+
+  const missingDates = getMissingDates();
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -47,6 +79,32 @@ export default function CashflowListPage() {
           </Link>
         </div>
       </div>
+
+      {missingDates.length > 0 && !isLoading && (
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-6 rounded-r-3xl flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+          <div>
+            <h3 className="text-amber-800 font-bold text-lg mb-1 flex items-center gap-2">
+              ⚠️ ¡Atención! Faltan registros de caja
+            </h3>
+            <p className="text-amber-700 text-sm">
+              Hemos detectado que no se ha registrado el flujo de caja para los siguientes días (excluyendo domingos):
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              {missingDates.map(date => (
+                <span key={date} className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold font-mono">
+                  {date}
+                </span>
+              ))}
+            </div>
+          </div>
+          <Link 
+            href="/admin/cashflow/new"
+            className="shrink-0 bg-amber-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-amber-600 transition-colors"
+          >
+            Completar Registros
+          </Link>
+        </div>
+      )}
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden min-h-[500px]">
         {/* Toolbar */}
