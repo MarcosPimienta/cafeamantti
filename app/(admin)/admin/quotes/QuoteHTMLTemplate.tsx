@@ -28,7 +28,7 @@ const H_TABLE_HEAD    = 46;
 const H_FOOTER        = 48;
 const H_COMPACT_HEADER = 56;
 const H_COMPACT_MARGIN = 24;
-const H_TOTAL         = 150;
+const H_TOTAL         = 170;
 
 const ROW_MIN = 40; // px — never shorter than this
 const ROW_MAX = 80; // px — never taller than this
@@ -169,16 +169,24 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
       </div>
       <div style={{ backgroundColor: '#292524', color: '#ffffff', borderRadius: '12px', padding: '18px 28px', minWidth: '260px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', backgroundColor: '#C59F59' }} />
-        {data.discountAmount ? (
+        {(data.discountAmount || data.taxAmount) ? (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: '#d6d3d1' }}>
               <span>Subtotal:</span>
               <span style={{ fontFamily: 'monospace' }}>{fmt(data.subtotal || 0)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px', color: '#d6d3d1' }}>
-              <span>Descuento:</span>
-              <span style={{ fontFamily: 'monospace', color: '#fca5a5' }}>-{fmt(data.discountAmount)}</span>
-            </div>
+            {data.discountAmount ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: '#d6d3d1' }}>
+                <span>Descuento:</span>
+                <span style={{ fontFamily: 'monospace', color: '#fca5a5' }}>-{fmt(data.discountAmount)}</span>
+              </div>
+            ) : null}
+            {data.taxAmount ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px', color: '#d6d3d1' }}>
+                <span>IVA (5%):</span>
+                <span style={{ fontFamily: 'monospace' }}>{fmt(data.taxAmount)}</span>
+              </div>
+            ) : null}
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: '12px' }} />
           </>
         ) : null}

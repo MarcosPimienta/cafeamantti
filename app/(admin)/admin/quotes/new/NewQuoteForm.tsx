@@ -18,6 +18,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   const [customClientPhone, setCustomClientPhone] = useState(initialQuote?.custom_client_phone || '');
   
   const [discountAmount, setDiscountAmount] = useState(initialQuote?.discount_amount || 0);
+  const [applyIva, setApplyIva] = useState(initialQuote?.apply_iva || false);
   const [status, setStatus] = useState(initialQuote?.status || 'Borrador');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialQuote?.orientation || 'portrait');
   
@@ -56,7 +57,9 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   };
 
   const subtotal = items.reduce((sum, item) => sum + Number(item.total_price), 0);
-  const totalAmount = Math.max(0, subtotal - Number(discountAmount));
+  const baseAmount = Math.max(0, subtotal - Number(discountAmount));
+  const taxAmount = applyIva ? baseAmount * 0.05 : 0;
+  const totalAmount = baseAmount + taxAmount;
 
   const buildPdfData = () => {
     let clientName, clientDocument, clientDocumentType, clientEmail, clientPhone;
@@ -92,6 +95,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       })),
       subtotal,
       discountAmount: Number(discountAmount),
+      taxAmount,
       totalAmount,
       validUntil: validUntil || '15 días',
       date: new Date().toLocaleDateString('es-CO'),
@@ -124,6 +128,8 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       orientation,
       total_amount: totalAmount,
       discount_amount: Number(discountAmount),
+      apply_iva: applyIva,
+      tax_amount: taxAmount,
       valid_until: validUntil ? new Date(validUntil).toISOString() : null,
       custom_client_name: clientId === 'custom' ? customClientName : null,
       custom_client_document: clientId === 'custom' ? customClientDocument : null,
@@ -384,6 +390,20 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 onChange={(e) => setDiscountAmount(e.target.value)}
                 className="w-32 p-2 bg-white border border-foreground/10 rounded-lg text-right font-mono focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
               />
+            </div>
+            <div className="flex justify-between items-center text-sm text-foreground/70">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={applyIva} 
+                  onChange={(e) => setApplyIva(e.target.checked)}
+                  className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]"
+                />
+                Incluir IVA (5%)
+              </label>
+              {applyIva && (
+                <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(taxAmount)}</span>
+              )}
             </div>
             <div className="pt-3 border-t border-foreground/10 flex justify-between items-center text-xl font-bold text-foreground">
               <span>Gran Total:</span>
