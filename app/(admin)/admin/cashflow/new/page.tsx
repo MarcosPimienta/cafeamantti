@@ -8,6 +8,7 @@ import { getDailySalesTotal, saveCashflow } from "../actions";
 
 const PREDEFINED_CATEGORIES = [
   "Costo de Ventas (Materia prima, insumos, empaques)", // PUC 61
+  "Costos de Producción (Maquila, Servicio de tostión)", // PUC 73
   "Gastos de Personal (Nómina, salud, pensión)", // PUC 5105 / 5205
   "Honorarios (Servicios profesionales)", // PUC 5110 / 5210
   "Impuestos (ICA, predial, etc.)", // PUC 5115 / 5215
