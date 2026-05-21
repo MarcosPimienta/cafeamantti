@@ -11,7 +11,13 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   
-  const [clientId, setClientId] = useState(initialQuote?.client_id || '');
+  const [clientId, setClientId] = useState(initialQuote?.client_id || (initialQuote?.custom_client_name ? 'custom' : ''));
+  const [customClientName, setCustomClientName] = useState(initialQuote?.custom_client_name || '');
+  const [customClientDocument, setCustomClientDocument] = useState(initialQuote?.custom_client_document || '');
+  const [customClientEmail, setCustomClientEmail] = useState(initialQuote?.custom_client_email || '');
+  const [customClientPhone, setCustomClientPhone] = useState(initialQuote?.custom_client_phone || '');
+  
+  const [discountAmount, setDiscountAmount] = useState(initialQuote?.discount_amount || 0);
   const [status, setStatus] = useState(initialQuote?.status || 'Borrador');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialQuote?.orientation || 'portrait');
   
@@ -49,16 +55,33 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const totalAmount = items.reduce((sum, item) => sum + Number(item.total_price), 0);
+  const subtotal = items.reduce((sum, item) => sum + Number(item.total_price), 0);
+  const totalAmount = Math.max(0, subtotal - Number(discountAmount));
 
   const buildPdfData = () => {
-    const client = clients.find(c => c.id === clientId);
+    let clientName, clientDocument, clientDocumentType, clientEmail, clientPhone;
+    
+    if (clientId === 'custom') {
+      clientName = customClientName || 'Cliente Personalizado';
+      clientDocument = customClientDocument || 'N/A';
+      clientDocumentType = 'Documento';
+      clientEmail = customClientEmail || 'N/A';
+      clientPhone = customClientPhone || 'N/A';
+    } else {
+      const client = clients.find(c => c.id === clientId);
+      clientName = client?.name || 'Cliente';
+      clientDocument = client?.document_number || 'N/A';
+      clientDocumentType = client?.document_type || 'Documento';
+      clientEmail = client?.email || 'N/A';
+      clientPhone = client?.phone || 'N/A';
+    }
+
     return {
-      clientName: client?.name || 'Cliente',
-      clientDocument: client?.document_number || 'N/A',
-      clientDocumentType: client?.document_type || 'Documento',
-      clientEmail: client?.email || 'N/A',
-      clientPhone: client?.phone || 'N/A',
+      clientName,
+      clientDocument,
+      clientDocumentType,
+      clientEmail,
+      clientPhone,
       sellerName: sellerName || 'Asesor Amantti',
       orientation,
       items: items.map(i => ({
@@ -67,6 +90,8 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
         unit_price: Number(i.unit_price) || 0,
         total_price: Number(i.total_price) || 0,
       })),
+      subtotal,
+      discountAmount: Number(discountAmount),
       totalAmount,
       validUntil: validUntil || '15 días',
       date: new Date().toLocaleDateString('es-CO'),
@@ -74,8 +99,8 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   };
 
   const generatePdfBlob = async () => {
-    const client = clients.find(c => c.id === clientId);
-    const filename = `Cotizacion_${(client?.name || 'Cliente').replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
+    const cName = clientId === 'custom' ? (customClientName || 'Cliente') : (clients.find(c => c.id === clientId)?.name || 'Cliente');
+    const filename = `Cotizacion_${cName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
     const data = buildPdfData();
     return await generateQuotePDF(data, filename, orientation);
   };
@@ -94,11 +119,16 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
     setIsSubmitting(true);
     
     const quoteData = {
-      client_id: clientId,
+      client_id: clientId === 'custom' ? null : clientId,
       status,
       orientation,
       total_amount: totalAmount,
+      discount_amount: Number(discountAmount),
       valid_until: validUntil ? new Date(validUntil).toISOString() : null,
+      custom_client_name: clientId === 'custom' ? customClientName : null,
+      custom_client_document: clientId === 'custom' ? customClientDocument : null,
+      custom_client_email: clientId === 'custom' ? customClientEmail : null,
+      custom_client_phone: clientId === 'custom' ? customClientPhone : null,
     };
 
     try {
@@ -115,12 +145,12 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
 
       // 2. Generate PDF if requested
       if (generatePdf) {
-        const client = clients.find(c => c.id === clientId);
+        const cName = clientId === 'custom' ? (customClientName || 'Nuevo') : (clients.find(c => c.id === clientId)?.name || 'Nuevo');
         const blob = await generatePdfBlob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Cotizacion_${client?.name?.replace(/\s+/g, '_') || 'Nuevo'}_${new Date().getTime()}.pdf`;
+        a.download = `Cotizacion_${cName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
         a.click();
         URL.revokeObjectURL(url);
       }
@@ -152,11 +182,54 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
               className="w-full p-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
             >
               <option value="">Selecciona un cliente del CRM</option>
+              <option value="custom" className="font-bold text-[#C59F59]">+ Cliente Personalizado (No en CRM)</option>
               {clients.map(c => (
                 <option key={c.id} value={c.id}>{c.name} {c.document_number ? `(${c.document_number})` : ''}</option>
               ))}
             </select>
           </div>
+
+          {clientId === 'custom' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-[#f9f7f0] p-4 rounded-xl border border-foreground/5">
+              <div className="col-span-full md:col-span-2">
+                <label className="block text-sm font-medium text-foreground/70 mb-1">Nombre Completo *</label>
+                <input 
+                  required 
+                  type="text" 
+                  value={customClientName} 
+                  onChange={e => setCustomClientName(e.target.value)} 
+                  className="w-full p-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground/70 mb-1">Documento (Opcional)</label>
+                <input 
+                  type="text" 
+                  value={customClientDocument} 
+                  onChange={e => setCustomClientDocument(e.target.value)} 
+                  className="w-full p-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground/70 mb-1">Email (Opcional)</label>
+                <input 
+                  type="email" 
+                  value={customClientEmail} 
+                  onChange={e => setCustomClientEmail(e.target.value)} 
+                  className="w-full p-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground/70 mb-1">Teléfono (Opcional)</label>
+                <input 
+                  type="text" 
+                  value={customClientPhone} 
+                  onChange={e => setCustomClientPhone(e.target.value)} 
+                  className="w-full p-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -297,8 +370,22 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
         </div>
 
         <div className="flex justify-end pt-4">
-          <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-[#C59F59]/20 w-full md:w-1/3">
-            <div className="flex justify-between items-center text-xl font-bold text-foreground">
+          <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-[#C59F59]/20 w-full md:w-1/3 space-y-3">
+            <div className="flex justify-between items-center text-sm text-foreground/70">
+              <span>Subtotal:</span>
+              <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(subtotal)}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm text-foreground/70">
+              <span>Descuento:</span>
+              <input 
+                type="number"
+                min="0"
+                value={discountAmount}
+                onChange={(e) => setDiscountAmount(e.target.value)}
+                className="w-32 p-2 bg-white border border-foreground/10 rounded-lg text-right font-mono focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+              />
+            </div>
+            <div className="pt-3 border-t border-foreground/10 flex justify-between items-center text-xl font-bold text-foreground">
               <span>Gran Total:</span>
               <span 
                 suppressHydrationWarning

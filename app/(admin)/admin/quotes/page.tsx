@@ -27,6 +27,7 @@ export default function QuotesListPage() {
 
   const filteredQuotes = quotes.filter(q => 
     q.clients?.name?.toLowerCase().includes(search.toLowerCase()) || 
+    q.custom_client_name?.toLowerCase().includes(search.toLowerCase()) ||
     q.id.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -119,8 +120,8 @@ export default function QuotesListPage() {
                   filteredQuotes.map((quote) => (
                     <tr key={quote.id} className="hover:bg-foreground/[0.02] transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-bold text-foreground">{quote.clients?.name || 'Cliente Eliminado'}</div>
-                        <div className="text-xs text-foreground/50">{quote.clients?.document_number}</div>
+                        <div className="font-bold text-foreground">{quote.clients?.name || quote.custom_client_name || 'Cliente Eliminado'}</div>
+                        <div className="text-xs text-foreground/50">{quote.clients?.document_number || quote.custom_client_document}</div>
                       </td>
                       <td className="px-6 py-4 text-xs text-foreground/60">
                         <div className="flex items-center gap-2">

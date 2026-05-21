@@ -14,6 +14,8 @@ export interface QuoteData {
   sellerName?: string;
   orientation: 'portrait' | 'landscape';
   items: QuoteItem[];
+  subtotal?: number;
+  discountAmount?: number;
   totalAmount: number;
   validUntil: string;
   quoteId?: string;
@@ -38,7 +40,7 @@ const H_TABLE_HEAD    = 46;
 const H_FOOTER        = 48;
 const H_COMPACT_HEADER = 56;
 const H_COMPACT_MARGIN = 24;
-const H_TOTAL         = 100;
+const H_TOTAL         = 150;
 
 const ROW_MIN = 40;
 const ROW_MAX = 80;
@@ -187,6 +189,17 @@ function buildHTMLString(data: QuoteData): string {
       </div>
       <div style="background-color:#292524;color:#fff;border-radius:12px;padding:18px 28px;min-width:260px;position:relative;overflow:hidden;">
         <div style="position:absolute;right:0;top:0;bottom:0;width:5px;background-color:#C59F59;"></div>
+        ${data.discountAmount ? `
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:#d6d3d1;">
+            <span>Subtotal:</span>
+            <span style="font-family:monospace;">${fmt(data.subtotal || 0)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#d6d3d1;">
+            <span>Descuento:</span>
+            <span style="font-family:monospace;color:#fca5a5;">-${fmt(data.discountAmount)}</span>
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.1);margin-bottom:12px;"></div>
+        ` : ''}
         <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#C59F59;text-transform:uppercase;letter-spacing:2px;">Total Cotizado</p>
         <p style="margin:0;font-size:26px;font-weight:900;color:#fff;">${fmt(data.totalAmount)}</p>
       </div>

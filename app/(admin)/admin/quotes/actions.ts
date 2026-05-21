@@ -36,11 +36,16 @@ export async function createQuote(quoteData: any, items: any[]) {
     const { data: quote, error: quoteError } = await supabase
       .from('quotes')
       .insert({
-        client_id: quoteData.client_id,
+        client_id: quoteData.client_id || null,
         status: quoteData.status,
         orientation: quoteData.orientation,
         total_amount: quoteData.total_amount,
-        valid_until: quoteData.valid_until
+        valid_until: quoteData.valid_until,
+        discount_amount: quoteData.discount_amount || 0,
+        custom_client_name: quoteData.custom_client_name || null,
+        custom_client_document: quoteData.custom_client_document || null,
+        custom_client_email: quoteData.custom_client_email || null,
+        custom_client_phone: quoteData.custom_client_phone || null
       })
       .select()
       .single();
@@ -101,11 +106,16 @@ export async function updateQuote(id: string, quoteData: any, items: any[]) {
     const { error: quoteError } = await supabase
       .from('quotes')
       .update({
-        client_id: quoteData.client_id,
+        client_id: quoteData.client_id || null,
         status: quoteData.status,
         orientation: quoteData.orientation,
         total_amount: quoteData.total_amount,
-        valid_until: quoteData.valid_until
+        valid_until: quoteData.valid_until,
+        discount_amount: quoteData.discount_amount || 0,
+        custom_client_name: quoteData.custom_client_name || null,
+        custom_client_document: quoteData.custom_client_document || null,
+        custom_client_email: quoteData.custom_client_email || null,
+        custom_client_phone: quoteData.custom_client_phone || null
       })
       .eq('id', id);
 
