@@ -420,6 +420,7 @@ export default function CashflowClient() {
         return (
           <button
             key={tab.id}
+            suppressHydrationWarning
             onClick={() => setActiveTab(tab.id as TabId)}
             className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
               isActive
@@ -676,7 +677,7 @@ export default function CashflowClient() {
                           </span>
                         </div>
                         <p className="text-sm text-foreground/70">
-                          Realizado por: <span className="font-semibold">{log.profiles?.full_name || log.profiles?.email || 'Admin'}</span>
+                          Realizado por: <span className="font-semibold">{log.profiles?.first_name ? `${log.profiles.first_name} ${log.profiles.last_name || ''}` : 'Admin'}</span>
                         </p>
                         <div className="mt-4 bg-white border border-foreground/5 rounded-lg p-3 overflow-x-auto text-xs font-mono text-foreground/60">
                           {log.details?.old && (

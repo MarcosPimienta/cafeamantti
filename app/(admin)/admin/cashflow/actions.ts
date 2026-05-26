@@ -252,8 +252,8 @@ export async function getCashflowHistory() {
     .select(`
       *,
       profiles:admin_id (
-        full_name,
-        email
+        first_name,
+        last_name
       ),
       cashflow:cashflow_id (
         date

@@ -48,9 +48,8 @@ export interface CashflowAuditLog {
   cashflow_id?: string;
   details: any;
   profiles?: {
-    full_name: string;
-    email: string;
+    first_name: string;
+    last_name: string;
   };
   cashflow?: DailyCashflow;
 }
-
