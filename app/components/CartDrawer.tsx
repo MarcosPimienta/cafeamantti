@@ -13,9 +13,10 @@ interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   profile?: any;
+  epaycoKey: string;
 }
 
-export function CartDrawer({ isOpen, onClose, profile }: CartDrawerProps) {
+export function CartDrawer({ isOpen, onClose, profile, epaycoKey }: CartDrawerProps) {
   const { items, removeItem, updateQuantity, subtotal, itemCount } = useCart();
   const { t } = useLanguage();
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -172,6 +173,7 @@ export function CartDrawer({ isOpen, onClose, profile }: CartDrawerProps) {
         subtotal={subtotal}
         userProfile={profile}
         items={items}
+        epaycoKey={epaycoKey}
       />
     </>
   );

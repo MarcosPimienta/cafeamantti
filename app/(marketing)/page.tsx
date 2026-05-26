@@ -419,7 +419,7 @@ export default function Home() {
         </div>
       </header>
 
-      <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} profile={profile} />
+      <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} profile={profile} epaycoKey={process.env.NEXT_PUBLIC_EPAYCO_PUBLIC_KEY || ""} />
 
       <main className="flex-1 pt-20">
         {/* Hero Section */}

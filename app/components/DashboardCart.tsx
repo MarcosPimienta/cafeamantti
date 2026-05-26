@@ -9,7 +9,7 @@ import Link from "next/link";
 import { TermsModal } from "@/app/components/TermsModal";
 import { CheckoutModal } from "@/app/components/CheckoutModal";
 
-export function DashboardCart({ profile }: { profile: any }) {
+export function DashboardCart({ profile, epaycoKey }: { profile: any; epaycoKey: string }) {
   const { items, removeItem, updateQuantity, subtotal, itemCount } = useCart();
   const { t } = useLanguage();
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -158,6 +158,7 @@ export function DashboardCart({ profile }: { profile: any }) {
         subtotal={subtotal}
         userProfile={profile}
         items={items}
+        epaycoKey={epaycoKey}
       />
     </div>
   );

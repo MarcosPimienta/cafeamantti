@@ -33,6 +33,7 @@ export default async function DashboardPage(props: {
 
   // Fetch the profile
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  const epaycoKey = process.env.NEXT_PUBLIC_EPAYCO_PUBLIC_KEY || "";
 
   let subscriptions: any[] = [];
   let orders: any[] = [];
@@ -118,7 +119,7 @@ export default async function DashboardPage(props: {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content Area */}
           <div className="lg:col-span-2 space-y-8">
-            <DashboardCart profile={profile} />
+            <DashboardCart profile={profile} epaycoKey={epaycoKey} />
             
             {tab === 'overview' && (
               <div className="bg-white rounded-3xl p-10 border border-foreground/5 shadow-xl">

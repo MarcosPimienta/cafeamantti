@@ -6,8 +6,8 @@ export async function POST(req: Request) {
   try {
     const data = await req.json();
 
-    const p_cust_id = process.env.EPAYCO_P_CUST_ID || '';
-    const p_key = process.env.EPAYCO_P_KEY || '';
+    const p_cust_id = process.env.P_CUST_ID_CLIENTE || '';
+    const p_key = process.env.P_KEY || '';
     
     // ePayco webhook validation parameters
     const x_ref_payco = data.x_ref_payco;

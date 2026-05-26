@@ -25,7 +25,16 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://api.stripe.com; frame-src 'self' blob:; object-src 'self' blob:;",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com https://checkout.epayco.co https://*.epayco.co",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "img-src 'self' blob: data: https:",
+              "font-src 'self' data: https://fonts.gstatic.com",
+              "connect-src 'self' https://*.supabase.co https://api.stripe.com https://*.epayco.co https://secure.epayco.co",
+              "frame-src 'self' blob: https://*.epayco.co https://secure.epayco.co",
+              "object-src 'self' blob:",
+            ].join('; '),
           },
           {
             key: 'Strict-Transport-Security',

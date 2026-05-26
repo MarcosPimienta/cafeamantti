@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import Script from "next/script";
 import { X, CreditCard, ShieldCheck, Loader2, ArrowRight, AlertCircle } from "lucide-react";
 import { updateUserProfile } from "@/app/(portal)/dashboard/actions";
 import { createPendingOrder } from "@/app/actions/checkout";
@@ -18,9 +19,10 @@ interface CheckoutModalProps {
   subtotal: number;
   userProfile: any;
   items: any[];
+  epaycoKey: string;
 }
 
-export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items, epaycoKey }: CheckoutModalProps) {
   const [cedula, setCedula] = useState(userProfile?.cedula_number || "");
   const [address, setAddress] = useState(userProfile?.address || "");
   const [city, setCity] = useState(userProfile?.city || "");
@@ -28,6 +30,14 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items }:
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
+
+  useEffect(() => {
+    // Check if ePayco was already loaded previously
+    if (typeof window !== "undefined" && window.ePayco) {
+      setScriptLoaded(true);
+    }
+  }, []);
 
   if (!isOpen) return null;
 
@@ -58,8 +68,8 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items }:
       // 3. Initialize ePayco Checkout
       if (typeof window !== "undefined" && window.ePayco) {
         const handler = window.ePayco.checkout.configure({
-          key: process.env.NEXT_PUBLIC_EPAYCO_PUBLIC_KEY || "",
-          test: true // Cambiar a false en producción
+          key: epaycoKey,
+          test: true // ⚠️ Cambiar a false cuando actives producción en ePayco
         });
 
         const data = {
@@ -101,17 +111,6 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items }:
     }
   };
 
-  // Cargar el script de ePayco al montar el componente
-  React.useEffect(() => {
-    if (typeof window !== "undefined" && !document.getElementById("epayco-script")) {
-      const script = document.createElement("script");
-      script.id = "epayco-script";
-      script.src = "https://checkout.epayco.co/checkout.js";
-      script.async = true;
-      document.body.appendChild(script);
-    }
-  }, []);
-
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
       style: "currency",
@@ -121,7 +120,13 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items }:
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+    <>
+      <Script 
+        src="https://checkout.epayco.co/checkout.js" 
+        strategy="lazyOnload"
+        onReady={() => setScriptLoaded(true)}
+      />
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="relative w-full max-w-lg bg-white rounded-[2.5rem] p-10 shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
         <button 
           onClick={onClose}
@@ -203,13 +208,18 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items }:
 
             <button
               type="submit"
-              disabled={isProcessing || !cedula}
+              disabled={isProcessing || !cedula || !scriptLoaded}
               className="w-full py-5 bg-foreground text-background text-xs font-bold uppercase tracking-[0.2em] rounded-2xl hover:bg-[#C59F59] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50 group"
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Conectando con ePayco...
+                </>
+              ) : !scriptLoaded ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Cargando pasarela...
                 </>
               ) : (
                 <>
@@ -227,5 +237,6 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items }:
         </div>
       </div>
     </div>
+    </>
   );
 }
