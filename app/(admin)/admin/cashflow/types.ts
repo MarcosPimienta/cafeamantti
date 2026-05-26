@@ -6,6 +6,7 @@ export interface DailyCashflow {
   final_balance: number;
   observations: string | null;
   created_at: string;
+  created_by?: string;
 }
 
 export interface CashflowExpense {
@@ -14,9 +15,25 @@ export interface CashflowExpense {
   concept: string;
   category: string;
   amount: number;
+  image_url?: string | null;
   created_at: string;
+  created_by?: string;
 }
 
 export interface CashflowWithExpenses extends DailyCashflow {
   expenses: CashflowExpense[];
+}
+
+export interface CashflowAuditLog {
+  id: string;
+  created_at: string;
+  admin_id: string;
+  action_type: string;
+  expense_id?: string;
+  cashflow_id?: string;
+  details: any;
+  profiles?: {
+    full_name: string;
+    email: string;
+  };
 }

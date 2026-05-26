@@ -1,44 +1,79 @@
 'use client';
 
 import React, { useState, useEffect } from "react";
-import { ArrowLeft, Save, Plus, Trash2, RefreshCw, Calculator } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, RefreshCw, Calculator, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getDailySalesTotal, saveCashflow } from "../actions";
+import { getDailySalesTotal, saveCashflow, getCashflowByDate } from "../actions";
+import { createClient } from "@/utils/supabase/client";
 
 const PREDEFINED_CATEGORIES = [
-  "Costo de Ventas (Materia prima, insumos, empaques)", // PUC 61
-  "Costos de Producción (Maquila, Servicio de tostión)", // PUC 73
-  "Gastos de Personal (Nómina, salud, pensión)", // PUC 5105 / 5205
-  "Honorarios (Servicios profesionales)", // PUC 5110 / 5210
-  "Impuestos (ICA, predial, etc.)", // PUC 5115 / 5215
-  "Arrendamientos (Local, equipos)", // PUC 5120 / 5220
-  "Servicios Públicos (Agua, luz, internet)", // PUC 5135 / 5235
-  "Software y Suscripciones (Hosting, licencias)", // PUC 5135 / 5195
-  "Gastos Legales (Cámara de comercio, notarías)", // PUC 5140 / 5240
-  "Mantenimiento y Reparaciones", // PUC 5145 / 5245
-  "Adecuación e Instalaciones", // PUC 5150 / 5250
-  "Gastos de Viaje y Transporte", // PUC 5155 / 5255
-  "Diversos (Aseo, papelería, caja menor)", // PUC 5195 / 5295
-  "Gastos Financieros (Comisiones, intereses)" // PUC 5305
+  "Costo de Ventas (Materia prima, insumos, empaques)",
+  "Costos de Producción (Maquila, Servicio de tostión)",
+  "Gastos de Personal (Nómina, salud, pensión)",
+  "Honorarios (Servicios profesionales)",
+  "Impuestos (ICA, predial, etc.)",
+  "Arrendamientos (Local, equipos)",
+  "Servicios Públicos (Agua, luz, internet)",
+  "Software y Suscripciones (Hosting, licencias)",
+  "Gastos Legales (Cámara de comercio, notarías)",
+  "Mantenimiento y Reparaciones",
+  "Adecuación e Instalaciones",
+  "Gastos de Viaje y Transporte",
+  "Diversos (Aseo, papelería, caja menor)",
+  "Gastos Financieros (Comisiones, intereses)"
 ];
+
+type ExpenseItem = { id?: string; concept: string; category: string; amount: number; image_url?: string | null; isUploading?: boolean };
 
 export default function NewCashflowPage() {
   const router = useRouter();
+  const supabase = createClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingDate, setIsLoadingDate] = useState(false);
   
   const [date, setDate] = useState("");
   const [initialBalance, setInitialBalance] = useState<number>(0);
   const [dailyIncome, setDailyIncome] = useState<number>(0);
   const [observations, setObservations] = useState("");
   
-  const [expenses, setExpenses] = useState<{ id: string; concept: string; category: string; amount: number }[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
+  const [mode, setMode] = useState<'new' | 'edit'>('new');
 
   useEffect(() => {
     // Set today's date only on the client after hydration
     const today = new Date().toISOString().split('T')[0];
     setDate(today);
   }, []);
+
+  // Effect to load existing data when date changes
+  useEffect(() => {
+    if (!date) return;
+    const fetchExisting = async () => {
+      setIsLoadingDate(true);
+      try {
+        const existing = await getCashflowByDate(date);
+        if (existing) {
+          setMode('edit');
+          setInitialBalance(existing.initial_balance);
+          setDailyIncome(existing.daily_income);
+          setObservations(existing.observations || "");
+          setExpenses(existing.expenses || []);
+        } else {
+          setMode('new');
+          setInitialBalance(0);
+          setDailyIncome(0);
+          setObservations("");
+          setExpenses([]);
+        }
+      } catch (err) {
+        console.error("Error loading date data:", err);
+      } finally {
+        setIsLoadingDate(false);
+      }
+    };
+    fetchExisting();
+  }, [date]);
 
   // Calculate final balance automatically
   const totalExpenses = expenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
@@ -60,15 +95,42 @@ export default function NewCashflowPage() {
   };
 
   const addExpense = () => {
-    setExpenses([...expenses, { id: Math.random().toString(), concept: "", category: "", amount: 0 }]);
+    // No ID means it's a new unsaved expense
+    setExpenses([...expenses, { concept: "", category: "", amount: 0, image_url: null }]);
   };
 
-  const removeExpense = (id: string) => {
-    setExpenses(expenses.filter(e => e.id !== id));
+  const removeExpense = (index: number) => {
+    setExpenses(expenses.filter((_, i) => i !== index));
   };
 
-  const updateExpense = (id: string, field: string, value: string | number) => {
-    setExpenses(expenses.map(e => e.id === id ? { ...e, [field]: value } : e));
+  const updateExpense = (index: number, field: keyof ExpenseItem, value: any) => {
+    setExpenses(expenses.map((e, i) => i === index ? { ...e, [field]: value } : e));
+  };
+
+  const handleFileUpload = async (index: number, file: File) => {
+    try {
+      updateExpense(index, 'isUploading', true);
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `${date}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('receipts')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage.from('receipts').getPublicUrl(filePath);
+      updateExpense(index, 'image_url', data.publicUrl);
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      alert('Error al subir la imagen.');
+    } finally {
+      updateExpense(index, 'isUploading', false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,9 +145,11 @@ export default function NewCashflowPage() {
         final_balance: finalBalance,
         observations,
         expenses: expenses.map(e => ({
+          id: e.id,
           concept: e.concept,
           category: e.category,
-          amount: e.amount
+          amount: e.amount,
+          image_url: e.image_url
         }))
       });
 
@@ -105,17 +169,24 @@ export default function NewCashflowPage() {
   return (
     <div className="space-y-8 pb-24">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link 
-          href="/admin/cashflow" 
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-foreground/10 text-foreground/60 hover:text-foreground hover:border-foreground/30 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="text-3xl font-serif text-foreground">Registro de Caja</h1>
-          <p className="text-foreground/60">Registra el cuadre de caja de una jornada.</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link 
+            href="/admin/cashflow" 
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-foreground/10 text-foreground/60 hover:text-foreground hover:border-foreground/30 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-3xl font-serif text-foreground">
+              {mode === 'edit' ? 'Editar Registro de Caja' : 'Nuevo Registro de Caja'}
+            </h1>
+            <p className="text-foreground/60">Registra o modifica el cuadre de caja de una jornada.</p>
+          </div>
         </div>
+        <Link href="/admin/cashflow/history" className="text-sm font-bold text-[#C59F59] hover:underline">
+          Ver Historial de Cambios &rarr;
+        </Link>
       </div>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -123,7 +194,12 @@ export default function NewCashflowPage() {
         {/* Left Column: Form Details */}
         <div className="lg:col-span-2 space-y-6">
           
-          <div className="bg-white rounded-3xl p-8 border border-foreground/5 shadow-sm space-y-6">
+          <div className="bg-white rounded-3xl p-8 border border-foreground/5 shadow-sm space-y-6 relative">
+            {isLoadingDate && (
+              <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-3xl">
+                <Loader2 className="w-8 h-8 text-[#C59F59] animate-spin" />
+              </div>
+            )}
             <h2 className="text-xl font-bold font-serif border-b border-foreground/5 pb-4">Datos del Día</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -185,7 +261,10 @@ export default function NewCashflowPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl p-8 border border-foreground/5 shadow-sm space-y-6">
+          <div className="bg-white rounded-3xl p-8 border border-foreground/5 shadow-sm space-y-6 relative">
+             {isLoadingDate && (
+              <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-3xl"></div>
+            )}
             <div className="flex justify-between items-center border-b border-foreground/5 pb-4">
               <h2 className="text-xl font-bold font-serif">Gastos 🧾</h2>
               <button 
@@ -204,64 +283,93 @@ export default function NewCashflowPage() {
             ) : (
               <div className="space-y-4">
                 {expenses.map((expense, index) => (
-                  <div key={expense.id} className="flex flex-col md:flex-row gap-4 items-start md:items-end p-4 bg-[#fdfbf7] border border-foreground/5 rounded-xl">
-                    <div className="w-full md:w-1/3 space-y-1">
-                      <label className="text-xs font-bold text-foreground/60 uppercase tracking-wide">Concepto</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ej. Compra de leche"
-                        value={expense.concept}
-                        onChange={(e) => updateExpense(expense.id, 'concept', e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
-                        required
-                      />
-                    </div>
-                    
-                    <div className="w-full md:w-1/3 space-y-1">
-                      <label className="text-xs font-bold text-foreground/60 uppercase tracking-wide">Categoría</label>
-                      <input 
-                        type="text" 
-                        list="categories"
-                        placeholder="Selecciona o escribe..."
-                        value={expense.category}
-                        onChange={(e) => updateExpense(expense.id, 'category', e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
-                        required
-                      />
-
-                    </div>
-
-                    <div className="w-full md:w-1/4 space-y-1">
-                      <label className="text-xs font-bold text-foreground/60 uppercase tracking-wide">Valor</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 text-sm">$</span>
+                  <div key={expense.id || index} className="flex flex-col md:flex-row gap-4 items-start p-4 bg-[#fdfbf7] border border-foreground/5 rounded-xl">
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-foreground/60 uppercase tracking-wide">Concepto</label>
                         <input 
-                          type="number" 
-                          min="0"
-                          step="0.01"
-                          value={expense.amount || ''}
-                          onChange={(e) => updateExpense(expense.id, 'amount', Number(e.target.value))}
-                          className="w-full pl-7 pr-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                          type="text" 
+                          placeholder="Ej. Compra de leche"
+                          value={expense.concept}
+                          onChange={(e) => updateExpense(index, 'concept', e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
                           required
                         />
                       </div>
+                      
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-foreground/60 uppercase tracking-wide">Categoría</label>
+                        <input 
+                          type="text" 
+                          list="categories"
+                          placeholder="Selecciona o escribe..."
+                          value={expense.category}
+                          onChange={(e) => updateExpense(index, 'category', e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-foreground/60 uppercase tracking-wide">Valor</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 text-sm">$</span>
+                          <input 
+                            type="number" 
+                            min="0"
+                            step="0.01"
+                            value={expense.amount || ''}
+                            onChange={(e) => updateExpense(index, 'amount', Number(e.target.value))}
+                            className="w-full pl-7 pr-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                            required
+                          />
+                        </div>
+                      </div>
                     </div>
 
-                    <button 
-                      type="button" 
-                      onClick={() => removeExpense(expense.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors mt-2 md:mt-0"
-                      title="Eliminar Gasto"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                    <div className="flex flex-row md:flex-col items-center justify-end gap-2 mt-4 md:mt-0 pt-6">
+                      {expense.image_url ? (
+                        <a 
+                          href={expense.image_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="p-2 text-[#C59F59] hover:bg-[#C59F59]/10 rounded-lg transition-colors border border-[#C59F59]/20"
+                          title="Ver Recibo"
+                        >
+                          <ImageIcon className="w-5 h-5" />
+                        </a>
+                      ) : (
+                        <label className={`p-2 rounded-lg transition-colors border border-dashed cursor-pointer ${expense.isUploading ? 'opacity-50 border-foreground/20' : 'text-foreground/40 hover:text-[#C59F59] hover:border-[#C59F59]/50 border-foreground/20'}`} title="Adjuntar Recibo">
+                          {expense.isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            accept="image/*"
+                            onChange={(e) => e.target.files?.[0] && handleFileUpload(index, e.target.files[0])}
+                            disabled={expense.isUploading}
+                          />
+                        </label>
+                      )}
+
+                      <button 
+                        type="button" 
+                        onClick={() => removeExpense(index)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Eliminar Gasto"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="bg-white rounded-3xl p-8 border border-foreground/5 shadow-sm space-y-4">
+          <div className="bg-white rounded-3xl p-8 border border-foreground/5 shadow-sm space-y-4 relative">
+             {isLoadingDate && (
+              <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-3xl"></div>
+            )}
             <h2 className="text-xl font-bold font-serif border-b border-foreground/5 pb-4">Observaciones 📝</h2>
             <textarea 
               value={observations}
@@ -305,7 +413,7 @@ export default function NewCashflowPage() {
 
             <button 
               type="submit" 
-              disabled={isSubmitting}
+              disabled={isSubmitting || isLoadingDate}
               className="w-full flex items-center justify-center gap-2 bg-[#C59F59] hover:bg-[#B38E4D] text-white py-4 rounded-xl font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed mt-8"
             >
               {isSubmitting ? (
@@ -313,7 +421,7 @@ export default function NewCashflowPage() {
               ) : (
                 <>
                   <Save className="w-5 h-5" />
-                  Guardar Cierre de Caja
+                  {mode === 'edit' ? 'Actualizar Cierre' : 'Guardar Cierre'}
                 </>
               )}
             </button>

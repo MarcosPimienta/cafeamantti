@@ -80,20 +80,29 @@ export async function saveCashflow(data: {
   daily_income: number;
   final_balance: number;
   observations: string | null;
-  expenses: { concept: string; category: string; amount: number }[];
+  expenses: { id?: string; concept: string; category: string; amount: number; image_url?: string | null }[];
 }) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const admin_id = user?.id;
 
-  // Upsert the parent record (using date as unique)
-  // Wait, Supabase upsert requires knowing the PK or having a unique constraint. We added UNIQUE to date.
+  // Fetch parent record first to check if it exists
+  const { data: existingCashflow } = await supabase
+    .from('daily_cashflows')
+    .select('id')
+    .eq('date', data.date)
+    .single();
+
   const { data: cashflow, error: cashflowError } = await supabase
     .from('daily_cashflows')
     .upsert({
+      ...(existingCashflow ? { id: existingCashflow.id } : {}),
       date: data.date,
       initial_balance: data.initial_balance,
       daily_income: data.daily_income,
       final_balance: data.final_balance,
       observations: data.observations,
+      ...(admin_id ? { created_by: admin_id } : {})
     }, { onConflict: 'date' })
     .select()
     .single();
@@ -103,31 +112,121 @@ export async function saveCashflow(data: {
     return { error: cashflowError.message };
   }
 
-  // Delete existing expenses to replace them (simplest way to handle dynamic rows)
-  await supabase
+  // Fetch existing expenses
+  const { data: existingExpenses } = await supabase
     .from('cashflow_expenses')
-    .delete()
+    .select('*')
     .eq('cashflow_id', cashflow.id);
 
-  // Insert new expenses
-  if (data.expenses && data.expenses.length > 0) {
-    const expensesToInsert = data.expenses.map(e => ({
-      cashflow_id: cashflow.id,
-      concept: e.concept,
-      category: e.category,
-      amount: e.amount,
-    }));
+  const existingMap = new Map((existingExpenses || []).map((e: any) => [e.id, e]));
+  const incomingIds = new Set<string>();
 
-    const { error: expensesError } = await supabase
-      .from('cashflow_expenses')
-      .insert(expensesToInsert);
+  for (const exp of data.expenses) {
+    // If id is valid UUID, consider it existing, otherwise treat as new
+    const isExisting = exp.id && exp.id.length === 36 && existingMap.has(exp.id);
 
-    if (expensesError) {
-      console.error('Error inserting expenses:', expensesError);
-      return { error: expensesError.message };
+    if (isExisting) {
+      incomingIds.add(exp.id!);
+      const oldExp = existingMap.get(exp.id!);
+      
+      // Check if data changed
+      const changed = oldExp.concept !== exp.concept || 
+                      oldExp.category !== exp.category || 
+                      Number(oldExp.amount) !== Number(exp.amount) ||
+                      (oldExp.image_url || null) !== (exp.image_url || null);
+
+      if (changed) {
+        const { error: updErr } = await supabase
+          .from('cashflow_expenses')
+          .update({
+            concept: exp.concept,
+            category: exp.category,
+            amount: exp.amount,
+            image_url: exp.image_url
+          })
+          .eq('id', exp.id);
+          
+        if (!updErr && admin_id) {
+          await supabase.from('cashflow_audit_logs').insert({
+            admin_id,
+            action_type: 'UPDATE_EXPENSE',
+            expense_id: exp.id,
+            cashflow_id: cashflow.id,
+            details: { old: oldExp, new: exp }
+          });
+        }
+      }
+    } else {
+      // Insert new expense
+      const { data: newExp, error: insErr } = await supabase
+        .from('cashflow_expenses')
+        .insert({
+          cashflow_id: cashflow.id,
+          concept: exp.concept,
+          category: exp.category,
+          amount: exp.amount,
+          image_url: exp.image_url,
+          ...(admin_id ? { created_by: admin_id } : {})
+        })
+        .select()
+        .single();
+        
+      if (!insErr && newExp && admin_id) {
+        await supabase.from('cashflow_audit_logs').insert({
+          admin_id,
+          action_type: 'CREATE_EXPENSE',
+          expense_id: newExp.id,
+          cashflow_id: cashflow.id,
+          details: { new: newExp }
+        });
+      }
+    }
+  }
+
+  // Handle deletes
+  for (const [id, oldExp] of existingMap.entries()) {
+    if (!incomingIds.has(id)) {
+      const { error: delErr } = await supabase
+        .from('cashflow_expenses')
+        .delete()
+        .eq('id', id);
+        
+      if (!delErr && admin_id) {
+        await supabase.from('cashflow_audit_logs').insert({
+          admin_id,
+          action_type: 'DELETE_EXPENSE',
+          expense_id: id,
+          cashflow_id: cashflow.id,
+          details: { old: oldExp }
+        });
+      }
     }
   }
 
   revalidatePath('/admin/cashflow');
   return { success: true };
+}
+
+export async function getCashflowHistory() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('cashflow_audit_logs')
+    .select(`
+      *,
+      profiles:admin_id (
+        full_name,
+        email
+      ),
+      cashflow:cashflow_id (
+        date
+      )
+    `)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.error('Error fetching cashflow history:', error);
+    return [];
+  }
+  return data;
 }
