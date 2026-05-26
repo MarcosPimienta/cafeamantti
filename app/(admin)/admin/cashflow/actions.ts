@@ -147,13 +147,14 @@ export async function saveCashflow(data: {
           .eq('id', exp.id);
           
         if (!updErr && admin_id) {
-          await supabase.from('cashflow_audit_logs').insert({
+          const { error: logErr } = await supabase.from('cashflow_audit_logs').insert({
             admin_id,
             action_type: 'UPDATE_EXPENSE',
             expense_id: exp.id,
             cashflow_id: cashflow.id,
             details: { old: oldExp, new: exp }
           });
+          if (logErr) console.error("Error logging UPDATE_EXPENSE:", logErr);
         }
       }
     } else {
@@ -172,13 +173,14 @@ export async function saveCashflow(data: {
         .single();
         
       if (!insErr && newExp && admin_id) {
-        await supabase.from('cashflow_audit_logs').insert({
+        const { error: logErr } = await supabase.from('cashflow_audit_logs').insert({
           admin_id,
           action_type: 'CREATE_EXPENSE',
           expense_id: newExp.id,
           cashflow_id: cashflow.id,
           details: { new: newExp }
         });
+        if (logErr) console.error("Error logging CREATE_EXPENSE:", logErr);
       }
     }
   }
@@ -192,13 +194,14 @@ export async function saveCashflow(data: {
         .eq('id', id);
         
       if (!delErr && admin_id) {
-        await supabase.from('cashflow_audit_logs').insert({
+        const { error: logErr } = await supabase.from('cashflow_audit_logs').insert({
           admin_id,
           action_type: 'DELETE_EXPENSE',
           expense_id: id,
           cashflow_id: cashflow.id,
           details: { old: oldExp }
         });
+        if (logErr) console.error("Error logging DELETE_EXPENSE:", logErr);
       }
     }
   }
