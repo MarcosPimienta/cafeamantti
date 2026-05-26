@@ -171,6 +171,7 @@ export function CartDrawer({ isOpen, onClose, profile }: CartDrawerProps) {
         onClose={() => setIsCheckoutOpen(false)} 
         subtotal={subtotal}
         userProfile={profile}
+        items={items}
       />
     </>
   );

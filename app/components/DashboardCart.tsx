@@ -157,6 +157,7 @@ export function DashboardCart({ profile }: { profile: any }) {
         onClose={() => setIsCheckoutOpen(false)} 
         subtotal={subtotal}
         userProfile={profile}
+        items={items}
       />
     </div>
   );

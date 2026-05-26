@@ -3,15 +3,24 @@
 import React, { useState } from "react";
 import { X, CreditCard, ShieldCheck, Loader2, ArrowRight, AlertCircle } from "lucide-react";
 import { updateUserProfile } from "@/app/(portal)/dashboard/actions";
+import { createPendingOrder } from "@/app/actions/checkout";
+
+// Extend the window object for ePayco
+declare global {
+  interface Window {
+    ePayco: any;
+  }
+}
 
 interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   subtotal: number;
   userProfile: any;
+  items: any[];
 }
 
-export function CheckoutModal({ isOpen, onClose, subtotal, userProfile }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items }: CheckoutModalProps) {
   const [cedula, setCedula] = useState(userProfile?.cedula_number || "");
   const [address, setAddress] = useState(userProfile?.address || "");
   const [city, setCity] = useState(userProfile?.city || "");
@@ -40,23 +49,68 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile }: Checko
       
       await updateUserProfile(formData);
 
-      // 2. Simulated ePayco handover
-      console.log("Handing over to ePayco with data:", { cedula, address, city, department });
-      
-      // Simulate delay
-      setTimeout(() => {
-        alert("Integración de ePayco: Se abriría el widget cargado con:\n" + 
-              `CC: ${cedula}\n` +
-              `Dirección: ${address}\n` +
-              `Ciudad: ${city}, ${department}`);
+      // 2. Create Pending Order in Database
+      const orderResponse = await createPendingOrder(items, 0); // 0 shipping cost for now
+      if (!orderResponse.success) {
+        throw new Error(orderResponse.error || "No se pudo generar el pedido.");
+      }
+
+      // 3. Initialize ePayco Checkout
+      if (typeof window !== "undefined" && window.ePayco) {
+        const handler = window.ePayco.checkout.configure({
+          key: process.env.NEXT_PUBLIC_EPAYCO_PUBLIC_KEY || "",
+          test: true // Cambiar a false en producción
+        });
+
+        const data = {
+          // Parámetros de compra
+          name: "Compra Café Amantti",
+          description: "Suscripción / Compra de productos",
+          invoice: orderResponse.orderId,
+          currency: "cop",
+          amount: subtotal.toString(),
+          tax_base: "0",
+          tax: "0",
+          country: "co",
+          lang: "es",
+
+          // Configuración del popup
+          external: "false", // Modal onpage
+
+          // URLs de respuesta y confirmación
+          response: `${window.location.origin}/checkout/response`,
+          confirmation: `${window.location.origin}/api/webhooks/epayco`,
+
+          // Atributos del cliente
+          name_billing: userProfile?.first_name ? `${userProfile.first_name} ${userProfile.last_name}` : "Cliente Amantti",
+          address_billing: address,
+          type_doc_billing: "cc",
+          mobilephone_billing: userProfile?.phone_number || "",
+          number_doc_billing: cedula
+        };
+
+        handler.open(data);
         setIsProcessing(false);
-      }, 1500);
+      } else {
+        throw new Error("El componente de pago no pudo ser cargado. Intenta de nuevo.");
+      }
 
     } catch (err: any) {
       setError("Error al procesar la información: " + err.message);
       setIsProcessing(false);
     }
   };
+
+  // Cargar el script de ePayco al montar el componente
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && !document.getElementById("epayco-script")) {
+      const script = document.createElement("script");
+      script.id = "epayco-script";
+      script.src = "https://checkout.epayco.co/checkout.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, []);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
