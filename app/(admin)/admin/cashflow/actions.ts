@@ -2,7 +2,79 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { DailyCashflow, CashflowExpense } from './types';
+import { DailyCashflow, CashflowExpense, CashflowIncome, CashflowAuditLog } from './types';
+
+export async function ensureCashflowDate(date: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  const { data: existing } = await supabase
+    .from('daily_cashflows')
+    .select('id')
+    .eq('date', date)
+    .single();
+
+  if (existing) return existing.id;
+
+  const { data, error } = await supabase
+    .from('daily_cashflows')
+    .upsert({ date, created_by: user?.id }, { onConflict: 'date' })
+    .select('id')
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data.id;
+}
+
+export async function getAllExpenses() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('cashflow_expenses')
+    .select('*, cashflow:cashflow_id(date)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching expenses:', error);
+    return [];
+  }
+  return data;
+}
+
+export async function getAllIncomes() {
+  const supabase = await createClient();
+  
+  // Manual incomes
+  const { data: manual, error: manErr } = await supabase
+    .from('cashflow_incomes')
+    .select('*, cashflow:cashflow_id(date)')
+    .order('created_at', { ascending: false });
+
+  if (manErr) console.error('Error fetching manual incomes:', manErr);
+
+  // Auto incomes (Sales orders)
+  const { data: orders, error: ordErr } = await supabase
+    .from('orders')
+    .select('id, total_amount, created_at, status')
+    .in('status', ['paid', 'processing', 'shipped', 'delivered'])
+    .order('created_at', { ascending: false });
+
+  if (ordErr) console.error('Error fetching sales:', ordErr);
+
+  const merged = [
+    ...(manual || []).map(m => ({ ...m, type: 'manual' })),
+    ...(orders || []).map(o => ({
+      id: o.id,
+      concept: `Venta Orden #${o.id.split('-')[0]}`,
+      category: 'Ventas Web',
+      amount: o.total_amount,
+      date: new Date(o.created_at).toISOString().split('T')[0],
+      created_at: o.created_at,
+      type: 'auto'
+    }))
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  return merged;
+}
 
 export async function getCashflows() {
   const supabase = await createClient();
@@ -11,200 +83,163 @@ export async function getCashflows() {
     .select('*')
     .order('date', { ascending: false });
 
-  if (error) {
-    console.error('Error fetching cashflows:', error);
-    return [];
-  }
+  if (error) return [];
   return data as DailyCashflow[];
 }
 
-export async function getCashflowByDate(date: string) {
-  const supabase = await createClient();
-  
-  // Fetch parent record
-  const { data: cashflow, error: cashflowError } = await supabase
-    .from('daily_cashflows')
-    .select('*')
-    .eq('date', date)
-    .single();
-
-  if (cashflowError && cashflowError.code !== 'PGRST116') {
-    console.error('Error fetching cashflow by date:', cashflowError);
-    return null;
-  }
-
-  if (!cashflow) return null;
-
-  // Fetch expenses
-  const { data: expenses, error: expensesError } = await supabase
-    .from('cashflow_expenses')
-    .select('*')
-    .eq('cashflow_id', cashflow.id);
-
-  if (expensesError) {
-    console.error('Error fetching cashflow expenses:', expensesError);
-  }
-
-  return {
-    ...cashflow,
-    expenses: expenses || [],
-  };
-}
-
-export async function getDailySalesTotal(date: string) {
-  const supabase = await createClient();
-  
-  // Date must be formatted as YYYY-MM-DD
-  const startOfDay = `${date}T00:00:00Z`;
-  const endOfDay = `${date}T23:59:59Z`;
-
-  const { data, error } = await supabase
-    .from('orders')
-    .select('total_amount')
-    .gte('created_at', startOfDay)
-    .lte('created_at', endOfDay)
-    .in('status', ['paid', 'processing', 'shipped', 'delivered']);
-
-  if (error) {
-    console.error('Error fetching daily sales:', error);
-    return 0;
-  }
-
-  const total = data.reduce((sum: number, order: any) => sum + Number(order.total_amount), 0);
-  return total;
-}
-
-export async function saveCashflow(data: {
-  date: string;
-  initial_balance: number;
-  daily_income: number;
-  final_balance: number;
-  observations: string | null;
-  expenses: { id?: string; concept: string; category: string; amount: number; image_url?: string | null }[];
-}) {
+export async function createExpenseDirect(date: string, expense: Partial<CashflowExpense>) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const admin_id = user?.id;
+  const cashflow_id = await ensureCashflowDate(date);
 
-  // Fetch parent record first to check if it exists
-  const { data: existingCashflow } = await supabase
-    .from('daily_cashflows')
-    .select('id')
-    .eq('date', data.date)
-    .single();
-
-  const { data: cashflow, error: cashflowError } = await supabase
-    .from('daily_cashflows')
-    .upsert({
-      ...(existingCashflow ? { id: existingCashflow.id } : {}),
-      date: data.date,
-      initial_balance: data.initial_balance,
-      daily_income: data.daily_income,
-      final_balance: data.final_balance,
-      observations: data.observations,
-      ...(admin_id ? { created_by: admin_id } : {})
-    }, { onConflict: 'date' })
+  const { data, error } = await supabase
+    .from('cashflow_expenses')
+    .insert({
+      ...expense,
+      cashflow_id,
+      created_by: user?.id
+    })
     .select()
     .single();
 
-  if (cashflowError) {
-    console.error('Error upserting cashflow:', cashflowError);
-    return { error: cashflowError.message };
-  }
+  if (error) return { error: error.message };
 
-  // Fetch existing expenses
-  const { data: existingExpenses } = await supabase
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: user?.id,
+    action_type: 'CREATE_EXPENSE',
+    expense_id: data.id,
+    cashflow_id,
+    details: { new: data }
+  });
+
+  revalidatePath('/admin/cashflow');
+  return { success: true, data };
+}
+
+export async function updateExpenseDirect(id: string, expense: Partial<CashflowExpense>) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: old, error: getErr } = await supabase.from('cashflow_expenses').select('*').eq('id', id).single();
+  if (getErr) return { error: getErr.message };
+
+  const { data, error } = await supabase
     .from('cashflow_expenses')
-    .select('*')
-    .eq('cashflow_id', cashflow.id);
+    .update(expense)
+    .eq('id', id)
+    .select()
+    .single();
 
-  const existingMap = new Map((existingExpenses || []).map((e: any) => [e.id, e]));
-  const incomingIds = new Set<string>();
+  if (error) return { error: error.message };
 
-  for (const exp of data.expenses) {
-    // If id is valid UUID, consider it existing, otherwise treat as new
-    const isExisting = exp.id && exp.id.length === 36 && existingMap.has(exp.id);
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: user?.id,
+    action_type: 'UPDATE_EXPENSE',
+    expense_id: id,
+    cashflow_id: old.cashflow_id,
+    details: { old, new: data }
+  });
 
-    if (isExisting) {
-      incomingIds.add(exp.id!);
-      const oldExp = existingMap.get(exp.id!);
-      
-      // Check if data changed
-      const changed = oldExp.concept !== exp.concept || 
-                      oldExp.category !== exp.category || 
-                      Number(oldExp.amount) !== Number(exp.amount) ||
-                      (oldExp.image_url || null) !== (exp.image_url || null);
+  revalidatePath('/admin/cashflow');
+  return { success: true, data };
+}
 
-      if (changed) {
-        const { error: updErr } = await supabase
-          .from('cashflow_expenses')
-          .update({
-            concept: exp.concept,
-            category: exp.category,
-            amount: exp.amount,
-            image_url: exp.image_url
-          })
-          .eq('id', exp.id);
-          
-        if (!updErr && admin_id) {
-          const { error: logErr } = await supabase.from('cashflow_audit_logs').insert({
-            admin_id,
-            action_type: 'UPDATE_EXPENSE',
-            expense_id: exp.id,
-            cashflow_id: cashflow.id,
-            details: { old: oldExp, new: exp }
-          });
-          if (logErr) console.error("Error logging UPDATE_EXPENSE:", logErr);
-        }
-      }
-    } else {
-      // Insert new expense
-      const { data: newExp, error: insErr } = await supabase
-        .from('cashflow_expenses')
-        .insert({
-          cashflow_id: cashflow.id,
-          concept: exp.concept,
-          category: exp.category,
-          amount: exp.amount,
-          image_url: exp.image_url,
-          ...(admin_id ? { created_by: admin_id } : {})
-        })
-        .select()
-        .single();
-        
-      if (!insErr && newExp && admin_id) {
-        const { error: logErr } = await supabase.from('cashflow_audit_logs').insert({
-          admin_id,
-          action_type: 'CREATE_EXPENSE',
-          expense_id: newExp.id,
-          cashflow_id: cashflow.id,
-          details: { new: newExp }
-        });
-        if (logErr) console.error("Error logging CREATE_EXPENSE:", logErr);
-      }
-    }
-  }
+export async function deleteExpenseDirect(id: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // Handle deletes
-  for (const [id, oldExp] of existingMap.entries()) {
-    if (!incomingIds.has(id)) {
-      const { error: delErr } = await supabase
-        .from('cashflow_expenses')
-        .delete()
-        .eq('id', id);
-        
-      if (!delErr && admin_id) {
-        const { error: logErr } = await supabase.from('cashflow_audit_logs').insert({
-          admin_id,
-          action_type: 'DELETE_EXPENSE',
-          expense_id: id,
-          cashflow_id: cashflow.id,
-          details: { old: oldExp }
-        });
-        if (logErr) console.error("Error logging DELETE_EXPENSE:", logErr);
-      }
-    }
-  }
+  const { data: old, error: getErr } = await supabase.from('cashflow_expenses').select('*').eq('id', id).single();
+  if (getErr) return { error: getErr.message };
+
+  const { error } = await supabase.from('cashflow_expenses').delete().eq('id', id);
+  if (error) return { error: error.message };
+
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: user?.id,
+    action_type: 'DELETE_EXPENSE',
+    expense_id: id,
+    cashflow_id: old.cashflow_id,
+    details: { old }
+  });
+
+  revalidatePath('/admin/cashflow');
+  return { success: true };
+}
+
+export async function createIncomeDirect(date: string, income: Partial<CashflowIncome>) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const cashflow_id = await ensureCashflowDate(date);
+
+  const { data, error } = await supabase
+    .from('cashflow_incomes')
+    .insert({
+      ...income,
+      cashflow_id,
+      created_by: user?.id
+    })
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: user?.id,
+    action_type: 'CREATE_INCOME',
+    income_id: data.id,
+    cashflow_id,
+    details: { new: data }
+  });
+
+  revalidatePath('/admin/cashflow');
+  return { success: true, data };
+}
+
+export async function updateIncomeDirect(id: string, income: Partial<CashflowIncome>) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: old, error: getErr } = await supabase.from('cashflow_incomes').select('*').eq('id', id).single();
+  if (getErr) return { error: getErr.message };
+
+  const { data, error } = await supabase
+    .from('cashflow_incomes')
+    .update(income)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: user?.id,
+    action_type: 'UPDATE_INCOME',
+    income_id: id,
+    cashflow_id: old.cashflow_id,
+    details: { old, new: data }
+  });
+
+  revalidatePath('/admin/cashflow');
+  return { success: true, data };
+}
+
+export async function deleteIncomeDirect(id: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: old, error: getErr } = await supabase.from('cashflow_incomes').select('*').eq('id', id).single();
+  if (getErr) return { error: getErr.message };
+
+  const { error } = await supabase.from('cashflow_incomes').delete().eq('id', id);
+  if (error) return { error: error.message };
+
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: user?.id,
+    action_type: 'DELETE_INCOME',
+    income_id: id,
+    cashflow_id: old.cashflow_id,
+    details: { old }
+  });
 
   revalidatePath('/admin/cashflow');
   return { success: true };
@@ -225,11 +260,18 @@ export async function getCashflowHistory() {
       )
     `)
     .order('created_at', { ascending: false })
-    .limit(100);
+    .limit(200);
 
   if (error) {
     console.error('Error fetching cashflow history:', error);
     return [];
   }
   return data;
+}
+
+export async function getCashflowReportData() {
+  const expenses = await getAllExpenses();
+  const incomes = await getAllIncomes();
+  
+  return { expenses, incomes };
 }

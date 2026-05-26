@@ -18,10 +18,24 @@ export interface CashflowExpense {
   image_url?: string | null;
   created_at: string;
   created_by?: string;
+  cashflow?: DailyCashflow;
+}
+
+export interface CashflowIncome {
+  id: string;
+  cashflow_id: string;
+  concept: string;
+  category: string;
+  amount: number;
+  image_url?: string | null;
+  created_at: string;
+  created_by?: string;
+  cashflow?: DailyCashflow;
 }
 
 export interface CashflowWithExpenses extends DailyCashflow {
   expenses: CashflowExpense[];
+  incomes: CashflowIncome[];
 }
 
 export interface CashflowAuditLog {
@@ -30,10 +44,13 @@ export interface CashflowAuditLog {
   admin_id: string;
   action_type: string;
   expense_id?: string;
+  income_id?: string;
   cashflow_id?: string;
   details: any;
   profiles?: {
     full_name: string;
     email: string;
   };
+  cashflow?: DailyCashflow;
 }
+
