@@ -2065,9 +2065,17 @@ function TostionTab({
                     <td className={`${tdCls} text-foreground/50 text-xs`}>{r.notes || "—"}</td>
                     <td className={tdCls}>
                       {!r.isLegacy ? (
-                        <button onClick={() => setDeletingId(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        deletingId === r.id ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-red-600">¿Eliminar?</span>
+                            <button onClick={() => handleDeleteBatch(r.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">Sí</button>
+                            <button onClick={() => setDeletingId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">No</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setDeletingId(r.id)} title="Eliminar" className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )
                       ) : (
                         <span className="text-[9px] font-bold text-foreground/20 uppercase tracking-tighter">Legacy</span>
                       )}
