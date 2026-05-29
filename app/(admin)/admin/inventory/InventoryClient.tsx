@@ -84,6 +84,7 @@ interface MovementRecord {
   responsable: string | null;
   entry_type: string | null;
   tab_source: string | null;
+  production_batch_id?: string | null;
   created_at: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inventory?: any;
@@ -1806,20 +1807,22 @@ function TostionTab({
         notes: b.notes,
         isLegacy: false
       })),
-      ...legacyRecords.map(r => {
-        const inv = getRelation(r.inventory);
-        const input = Math.abs(Number(r.quantity));
-        return {
-          id: r.id,
-          date: r.movement_date || r.created_at,
-          inputQty: input,
-          outputQty: input,
-          rend: 100,
-          loss: 0,
-          notes: r.reason || `Historial: ${inv?.product_name || 'Café'}`,
-          isLegacy: true
-        };
-      })
+      ...legacyRecords
+        .filter(r => !r.production_batch_id)
+        .map(r => {
+          const inv = getRelation(r.inventory);
+          const input = Math.abs(Number(r.quantity));
+          return {
+            id: r.id,
+            date: r.movement_date || r.created_at,
+            inputQty: input,
+            outputQty: input,
+            rend: 100,
+            loss: 0,
+            notes: r.reason || `Historial: ${inv?.product_name || 'Café'}`,
+            isLegacy: true
+          };
+        })
     ];
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [batches, legacyRecords]);

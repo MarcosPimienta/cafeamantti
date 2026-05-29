@@ -937,6 +937,7 @@ export async function getMovementsByTab(tabSource: string) {
     .select(`
       id, inventory_id, type, quantity, reason, lote,
       movement_date, responsable, entry_type, tab_source, created_at,
+      production_batch_id,
       inventory ( product_code, product_name, unit )
     `)
     .eq('tab_source', tabSource)
@@ -1194,7 +1195,7 @@ export async function createTrillaBatch(
     const weightLossPct = (1 - rendimientoPct) * 100;
 
     // Salida: Pergamino
-    await _insertMovement(supabase, user?.id ?? null, pergaminoInventoryId, 'salida', -inputQtyKg, {
+    const mId1 = await _insertMovement(supabase, user?.id ?? null, pergaminoInventoryId, 'salida', -inputQtyKg, {
       movement_date: date,
       reason: `Trilla → Café Verde${notes ? ` — ${notes}` : ''}`,
       tab_source: 'trilla',
@@ -1202,7 +1203,7 @@ export async function createTrillaBatch(
     const newPergaminoStock = await _updateStockBy(supabase, pergaminoInventoryId, -inputQtyKg);
 
     // Entrada: Verde
-    await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'entrada', outputQtyKg, {
+    const mId2 = await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'entrada', outputQtyKg, {
       movement_date: date,
       reason: `Trilla (rend. ${(rendimientoPct * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
       tab_source: 'trilla',
@@ -1223,6 +1224,11 @@ export async function createTrillaBatch(
       movement_date: date,
     }).select('id').single();
     if (batchErr) throw new Error(batchErr.message);
+
+    // Link movements to the production batch
+    await supabase.from('inventory_movements')
+      .update({ production_batch_id: batchData.id })
+      .in('id', [mId1, mId2]);
 
     await logAuditAction("CREATE", "TRILLA_BATCH", batchData.id, undefined, { inputQtyKg, outputQtyKg, rendimientoPct });
 
@@ -1263,7 +1269,7 @@ export async function createTostionBatch(
     const weightLossPct = (1 - rendimientoPct) * 100;
 
     // Salida: Verde
-    await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'salida', -inputQtyKg, {
+    const mId1 = await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'salida', -inputQtyKg, {
       movement_date: date,
       reason: `Tostión → Café Tostado${notes ? ` — ${notes}` : ''}`,
       tab_source: 'prod_consumo', // Keep using same tab_source or create 'tostion'
@@ -1271,7 +1277,7 @@ export async function createTostionBatch(
     const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, -inputQtyKg);
 
     // Entrada: Tostado
-    await _insertMovement(supabase, user?.id ?? null, tostadoInventoryId, 'entrada', outputQtyKg, {
+    const mId2 = await _insertMovement(supabase, user?.id ?? null, tostadoInventoryId, 'entrada', outputQtyKg, {
       movement_date: date,
       reason: `Tostión (rend. ${(rendimientoPct * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
       tab_source: 'prod_consumo',
@@ -1292,6 +1298,11 @@ export async function createTostionBatch(
       movement_date: date,
     }).select('id').single();
     if (batchErr) throw new Error(batchErr.message);
+
+    // Link movements to the production batch
+    await supabase.from('inventory_movements')
+      .update({ production_batch_id: batchData.id })
+      .in('id', [mId1, mId2]);
 
     await logAuditAction("CREATE", "TOSTION_BATCH", batchData.id, undefined, { inputQtyKg, outputQtyKg, rendimientoPct });
 
@@ -1453,10 +1464,29 @@ export async function deleteProductionBatch(batchId: string) {
 
   const { data: batch, error: selErr } = await supabase
     .from('production_batches')
-    .select('input_inventory_id, output_inventory_id, input_quantity_kg, output_quantity_kg')
+    .select('process_type, input_inventory_id, output_inventory_id, input_quantity_kg, output_quantity_kg')
     .eq('id', batchId)
     .single();
   if (selErr || !batch) throw new Error('Lote no encontrado');
+
+  // Validate stock before reversing:
+  // Reversing a production batch:
+  // - Adds back input quantity (this is an addition, so stock will increase; always safe since stock won't go below 0).
+  // - Subtracts output quantity from the output product. We must ensure the output product has enough stock!
+  const { data: outProduct, error: outProductErr } = await supabase
+    .from('inventory')
+    .select('current_stock, product_name')
+    .eq('id', batch.output_inventory_id)
+    .single();
+  if (outProductErr || !outProduct) throw new Error('Producto de salida no encontrado');
+  
+  const outputQty = Number(batch.output_quantity_kg);
+  const currentOutputStock = Number(outProduct.current_stock);
+  if (currentOutputStock < outputQty) {
+    throw new Error(
+      `No se puede eliminar el lote: el stock actual de '${outProduct.product_name}' (${currentOutputStock} kg) es menor que la cantidad a restar (${outputQty} kg).`
+    );
+  }
 
   // Delete any linked movements (if production_batch_id column exists)
   await supabase.from('inventory_movements').delete().eq('production_batch_id', batchId);
@@ -1475,7 +1505,8 @@ export async function deleteProductionBatch(batchId: string) {
     supabase, batch.output_inventory_id, -Number(batch.output_quantity_kg)
   );
 
-  await logAuditAction("DELETE", "TRILLA_BATCH", batchId, undefined, { 
+  const logEntityType = batch.process_type === 'trilla' ? 'TRILLA_BATCH' : 'TOSTION_BATCH';
+  await logAuditAction("DELETE", logEntityType, batchId, undefined, { 
     batch_details: batch 
   });
 
