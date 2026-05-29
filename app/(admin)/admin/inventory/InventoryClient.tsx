@@ -2243,16 +2243,26 @@ function ProdAltasTab({
     return 0;
   }
 
-  // Auto-calculate coffee consumption when product or qty changes
+  // Auto-calculate coffee, bag, and sticker consumption when product or qty changes
   useEffect(() => {
     const selectedProd = inventory.find(i => i.id === form.inventoryId);
-    if (!selectedProd || !selectedProd.product_code.startsWith("CAFT-") || selectedProd.product_code.endsWith("001")) return;
+    if (!selectedProd || !selectedProd.product_code.startsWith("CAFT-") || selectedProd.product_code.endsWith("001")) {
+      setConsumos([]);
+      return;
+    }
 
     const unitWeight = getUnitWeight(selectedProd.product_code);
     if (unitWeight === 0) return;
 
-    const totalCoffeeNeeded = (parseFloat(form.qty) || 0) * unitWeight;
-    
+    const qtyNum = parseFloat(form.qty) || 0;
+    if (qtyNum <= 0) {
+      setConsumos([]);
+      return;
+    }
+
+    const list: { id: string; qty: string }[] = [];
+
+    // 1. Bulk Coffee
     let bulkCode = "CAFT-001";
     if (selectedProd.product_code.includes("-HON-")) {
       bulkCode = "CAFT-HON-001";
@@ -2260,20 +2270,38 @@ function ProdAltasTab({
       bulkCode = "CAFT-MIC-001";
     }
     const bulkCoffee = inventory.find(i => i.product_code === bulkCode);
-
-    if (bulkCoffee && totalCoffeeNeeded > 0) {
-      setConsumos(prev => {
-        // Check if bulk coffee is already in the list
-        const existingIdx = prev.findIndex(c => c.id === bulkCoffee.id);
-        const newConsumos = [...prev];
-        if (existingIdx >= 0) {
-          newConsumos[existingIdx] = { id: bulkCoffee.id, qty: totalCoffeeNeeded.toFixed(3) };
-        } else {
-          newConsumos.push({ id: bulkCoffee.id, qty: totalCoffeeNeeded.toFixed(3) });
-        }
-        return newConsumos;
-      });
+    if (bulkCoffee) {
+      const coffeeNeeded = qtyNum * unitWeight;
+      list.push({ id: bulkCoffee.id, qty: coffeeNeeded.toFixed(3) });
     }
+
+    // 2. Bag
+    let flavor = "FIR";
+    if (selectedProd.product_code.includes("-HON-")) flavor = "HON";
+    else if (selectedProd.product_code.includes("-MIC-")) flavor = "MIC";
+
+    let size = "";
+    if (selectedProd.product_code.includes("125G")) size = "125G";
+    else if (selectedProd.product_code.includes("250G")) size = "250G";
+    else if (selectedProd.product_code.includes("500G")) size = "500G";
+    else if (selectedProd.product_code.includes("2K5")) size = "2K5";
+
+    if (size) {
+      const bagCode = `EMP-BOLSA-${flavor}-${size}`;
+      const bagItem = inventory.find(i => i.product_code === bagCode);
+      if (bagItem) {
+        list.push({ id: bagItem.id, qty: String(qtyNum) });
+      }
+    }
+
+    // 3. Sticker
+    const stickerCode = `STK-AMT-${flavor}`;
+    const stickerItem = inventory.find(i => i.product_code === stickerCode);
+    if (stickerItem) {
+      list.push({ id: stickerItem.id, qty: String(qtyNum) });
+    }
+
+    setConsumos(list);
   }, [form.inventoryId, form.qty, inventory]);
 
   return (
