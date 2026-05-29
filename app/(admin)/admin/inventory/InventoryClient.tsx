@@ -2105,6 +2105,16 @@ const FINISHED_CODES = [
   "CAFT-250G",
   "CAFT-500G",
   "CAFT-2K5",
+  // Honey Process Limitado
+  "CAFT-HON-001",
+  "CAFT-HON-125G",
+  "CAFT-HON-250G",
+  "CAFT-HON-500G",
+  // Microlote del Mes
+  "CAFT-MIC-001",
+  "CAFT-MIC-125G",
+  "CAFT-MIC-250G",
+  "CAFT-MIC-500G",
 ];
 
 function ProdAltasTab({
@@ -2236,17 +2246,24 @@ function ProdAltasTab({
   // Auto-calculate coffee consumption when product or qty changes
   useEffect(() => {
     const selectedProd = inventory.find(i => i.id === form.inventoryId);
-    if (!selectedProd || !selectedProd.product_code.startsWith("CAFT-") || selectedProd.product_code === "CAFT-001") return;
+    if (!selectedProd || !selectedProd.product_code.startsWith("CAFT-") || selectedProd.product_code.endsWith("001")) return;
 
     const unitWeight = getUnitWeight(selectedProd.product_code);
     if (unitWeight === 0) return;
 
     const totalCoffeeNeeded = (parseFloat(form.qty) || 0) * unitWeight;
-    const bulkCoffee = inventory.find(i => i.product_code === "CAFT-001");
+    
+    let bulkCode = "CAFT-001";
+    if (selectedProd.product_code.includes("-HON-")) {
+      bulkCode = "CAFT-HON-001";
+    } else if (selectedProd.product_code.includes("-MIC-")) {
+      bulkCode = "CAFT-MIC-001";
+    }
+    const bulkCoffee = inventory.find(i => i.product_code === bulkCode);
 
     if (bulkCoffee && totalCoffeeNeeded > 0) {
       setConsumos(prev => {
-        // Check if CAFT-001 is already in the list
+        // Check if bulk coffee is already in the list
         const existingIdx = prev.findIndex(c => c.id === bulkCoffee.id);
         const newConsumos = [...prev];
         if (existingIdx >= 0) {
@@ -2950,6 +2967,14 @@ function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
       "CAFT-500G": 0.5,
       "CAFT-2K5": 2.5,
       "CAFT-001": 1.0,
+      "CAFT-HON-125G": 0.125,
+      "CAFT-HON-250G": 0.25,
+      "CAFT-HON-500G": 0.5,
+      "CAFT-HON-001": 1.0,
+      "CAFT-MIC-125G": 0.125,
+      "CAFT-MIC-250G": 0.25,
+      "CAFT-MIC-500G": 0.5,
+      "CAFT-MIC-001": 1.0,
     };
 
     const weeks: Record<
@@ -2977,7 +3002,7 @@ function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
         weeks[key] = { name: key, Verde: 0, Tostado: 0, Rendimiento: null };
       }
 
-      if (m.tab_source === "prod_consumo" && inv.product_code === "CAFV-001") {
+      if (m.tab_source === "prod_consumo" && inv.product_code.startsWith("CAFV")) {
         weeks[key].Verde += Math.abs(m.quantity);
       } else if (m.tab_source === "prod_alta") {
         const weight = weightMap[inv.product_code];
