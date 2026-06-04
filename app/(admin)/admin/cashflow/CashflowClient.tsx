@@ -1,63 +1,37 @@
 'use client';
 
-import React, { useState, useTransition, useMemo, useEffect, useRef } from "react";
+import React, { useState, useTransition, useEffect, useRef, useCallback } from "react";
 import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  BarChart2,
-  History,
-  Plus,
-  Search,
-  Upload,
-  Image as ImageIcon,
-  Trash2,
-  X,
-  Loader2,
-  Check,
-  TrendingUp,
-  TrendingDown,
-  Calendar,
-  Wallet,
-  AlertTriangle,
-  Bell,
-  ChevronDown,
-  ChevronUp
+  ArrowDownCircle, ArrowUpCircle, BarChart2, History, Plus, Upload,
+  Image as ImageIcon, Trash2, X, Loader2, Check, Calendar, AlertTriangle,
+  ChevronDown, ChevronUp, TrendingUp, TrendingDown, DollarSign,
+  Activity, Layers, Zap, Package,
 } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Area,
 } from "recharts";
 import { createClient } from "@/utils/supabase/client";
 import {
-  getAllExpenses,
-  getAllIncomes,
-  getCashflowHistory,
-  createExpenseDirect,
-  deleteExpenseDirect,
-  createIncomeDirect,
-  deleteIncomeDirect,
-  getMissingCashflowDays
+  getAllExpenses, getAllIncomes, getCashflowHistory,
+  createExpenseDirect, deleteExpenseDirect,
+  createIncomeDirect, deleteIncomeDirect,
+  getMissingCashflowDays, getMonthlyPLReport,
+  type PLReportResult,
 } from "./actions";
+import { EXPENSE_CATEGORY_TYPE_MAP, type ExpenseType } from "./types";
 
-// --- Types ---
+// ─────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────
+
 type TabId = "gastos" | "ingresos" | "reportes" | "auditoria";
 
 const TABS = [
-  { id: "gastos", label: "Gastos", Icon: ArrowDownCircle },
-  { id: "ingresos", label: "Ingresos", Icon: ArrowUpCircle },
-  { id: "reportes", label: "Reportes", Icon: BarChart2 },
-  { id: "auditoria", label: "Auditoría", Icon: History },
+  { id: "gastos",    label: "Gastos",    Icon: ArrowDownCircle },
+  { id: "ingresos",  label: "Ingresos",  Icon: ArrowUpCircle   },
+  { id: "reportes",  label: "Reportes",  Icon: BarChart2       },
+  { id: "auditoria", label: "Auditoría", Icon: History          },
 ] as const;
 
 const PREDEFINED_CATEGORIES = [
@@ -74,24 +48,40 @@ const PREDEFINED_CATEGORIES = [
   "Adecuación e Instalaciones",
   "Gastos de Viaje y Transporte",
   "Diversos (Aseo, papelería, caja menor)",
-  "Gastos Financieros (Comisiones, intereses)"
+  "Gastos Financieros (Comisiones, intereses)",
 ];
 
-const INCOME_CATEGORIES = [
-  "Ventas Físicas",
-  "Ventas Web",
-  "Servicios",
-  "Otros Ingresos"
-];
+const INCOME_CATEGORIES = ["Ventas Físicas", "Ventas Web", "Servicios", "Otros Ingresos"];
 
-const COLORS = ['#C59F59', '#2E3A59', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+const PALETTE = {
+  gold:    "#C59F59",
+  navy:    "#2E3A59",
+  blue:    "#3B82F6",
+  green:   "#10B981",
+  amber:   "#F59E0B",
+  red:     "#EF4444",
+  purple:  "#8B5CF6",
+  teal:    "#14B8A6",
+};
+const CHART_COLORS = Object.values(PALETTE);
 
-// --- Components ---
+const EXPENSE_TYPE_META: Record<ExpenseType, { label: string; color: string; bg: string; desc: string }> = {
+  OPEX:  { label: "OPEX",  color: "text-blue-700",   bg: "bg-blue-100",   desc: "Gasto operativo corriente" },
+  COGS:  { label: "COGS",  color: "text-orange-700", bg: "bg-orange-100", desc: "Costo directo de ventas" },
+  CAPEX: { label: "CAPEX", color: "text-purple-700", bg: "bg-purple-100", desc: "Activo fijo / inversión" },
+};
+
+const fmt = (val: number) =>
+  new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(val);
+
+const fmtPct = (val: number) => `${val.toFixed(1)}%`;
+
+// ─────────────────────────────────────────────────────────────
+// DROPZONE
+// ─────────────────────────────────────────────────────────────
 
 function Dropzone({
-  onImageUploaded,
-  isUploading,
-  setIsUploading
+  onImageUploaded, isUploading, setIsUploading,
 }: {
   onImageUploaded: (url: string) => void;
   isUploading: boolean;
@@ -101,178 +91,239 @@ function Dropzone({
   const inputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
-  const handleUpload = async (file: File) => {
+  const handleUpload = useCallback(async (file: File) => {
     if (!file) return;
     try {
       setIsUploading(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${crypto.randomUUID()}.${fileExt}`;
-      const today = new Date().toISOString().split('T')[0];
-      const filePath = `${today}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('receipts')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from('receipts').getPublicUrl(filePath);
+      const ext      = file.name.split(".").pop();
+      const filePath = `${new Date().toISOString().split("T")[0]}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from("receipts").upload(filePath, file);
+      if (error) throw error;
+      const { data } = supabase.storage.from("receipts").getPublicUrl(filePath);
       onImageUploaded(data.publicUrl);
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      alert('Error al subir la imagen.');
+    } catch {
+      alert("Error al subir la imagen.");
     } finally {
       setIsUploading(false);
     }
-  };
+  }, [onImageUploaded, setIsUploading, supabase]);
 
-  const onDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
-    else if (e.type === "dragleave") setDragActive(false);
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleUpload(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    if (e.target.files && e.target.files[0]) {
-      handleUpload(e.target.files[0]);
-    }
-  };
-
-  // Handle paste anywhere in the window if modal is open (we attach event to window or div)
+  // window.paste escucha activa mientras el modal está montado
   useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
+    const onPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
       for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const file = items[i].getAsFile();
-          if (file) handleUpload(file);
+        if (items[i].type.startsWith("image/")) {
+          const f = items[i].getAsFile();
+          if (f) handleUpload(f);
         }
       }
     };
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, []);
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [handleUpload]);
+
+  const onDrag = (e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setDragActive(e.type === "dragenter" || e.type === "dragover");
+  };
 
   return (
     <div
-      className={`relative w-full h-32 rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-all ${
-        dragActive ? "border-[#C59F59] bg-[#C59F59]/5" : "border-foreground/20 hover:border-[#C59F59]/50 hover:bg-foreground/[0.02]"
-      } ${isUploading ? "opacity-50 pointer-events-none" : "cursor-pointer"}`}
-      onDragEnter={onDrag}
-      onDragLeave={onDrag}
-      onDragOver={onDrag}
-      onDrop={onDrop}
+      className={`relative w-full h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-all
+        ${dragActive ? "border-[#C59F59] bg-[#C59F59]/5" : "border-foreground/20 hover:border-[#C59F59]/50"}
+        ${isUploading ? "opacity-50 pointer-events-none" : "cursor-pointer"}`}
+      onDragEnter={onDrag} onDragLeave={onDrag} onDragOver={onDrag}
+      onDrop={(e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) handleUpload(e.dataTransfer.files[0]); }}
       onClick={() => inputRef.current?.click()}
     >
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleChange}
-      />
-      {isUploading ? (
-        <Loader2 className="w-8 h-8 text-[#C59F59] animate-spin mb-2" />
-      ) : (
-        <Upload className="w-8 h-8 text-foreground/40 mb-2" />
-      )}
-      <p className="text-sm font-bold text-foreground/60 text-center px-4">
-        {isUploading ? "Subiendo..." : "Haz clic, arrastra o pega (Ctrl+V) una imagen aquí"}
+      <input ref={inputRef} type="file" accept="image/*" className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) handleUpload(e.target.files[0]); }} />
+      {isUploading
+        ? <Loader2 className="w-7 h-7 text-[#C59F59] animate-spin mb-1" />
+        : <Upload className="w-7 h-7 text-foreground/40 mb-1" />}
+      <p className="text-xs font-bold text-foreground/50 text-center px-4">
+        {isUploading ? "Subiendo..." : "Clic, arrastra o Ctrl+V para pegar imagen"}
       </p>
     </div>
   );
 }
 
-// --- Modals ---
+// ─────────────────────────────────────────────────────────────
+// EXPENSE MODAL — con toggle OPEX/COGS/CAPEX + IVA
+// ─────────────────────────────────────────────────────────────
 
-function ExpenseModal({
-  onClose,
-  onSuccess
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [concept, setConcept] = useState("");
+function ExpenseModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const today = new Date().toISOString().split("T")[0];
+  const [date,     setDate]     = useState(today);
+  const [concept,  setConcept]  = useState("");
   const [category, setCategory] = useState("");
-  const [amount, setAmount] = useState("");
+  const [amount,   setAmount]   = useState("");
+  const [taxAmt,   setTaxAmt]   = useState("");
+  const [deprMos,  setDeprMos]  = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending,   startTransition] = useTransition();
+
+  // Inferir expense_type desde categoría y permitir override manual
+  const inferredType: ExpenseType = EXPENSE_CATEGORY_TYPE_MAP[category] ?? "OPEX";
+  const [expenseType, setExpenseType] = useState<ExpenseType>("OPEX");
+
+  // Sincronizar tipo con la categoría seleccionada (pero el usuario puede overridear)
+  useEffect(() => { setExpenseType(EXPENSE_CATEGORY_TYPE_MAP[category] ?? "OPEX"); }, [category]);
+
+  const isCapex = expenseType === "CAPEX";
+
+  // IVA auto-sugerido: 19% del monto si hay monto
+  const autoTax = amount ? (Number(amount) * 0.19).toFixed(0) : "";
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!concept || !category || !amount || !date) return;
-    
+    if (isCapex && (!deprMos || Number(deprMos) <= 0)) {
+      alert("Para un activo CAPEX debes indicar los meses de vida útil (> 0).");
+      return;
+    }
     startTransition(async () => {
       const res = await createExpenseDirect(date, {
         concept,
         category,
-        amount: Number(amount),
-        image_url: imageUrl
+        amount:              Number(amount),
+        expense_type:        expenseType,
+        tax_amount:          taxAmt ? Number(taxAmt) : 0,
+        net_amount:          Number(amount) - (taxAmt ? Number(taxAmt) : 0),
+        depreciation_months: isCapex ? Number(deprMos) : null,
+        image_url:           imageUrl,
       });
       if (res.error) alert(res.error);
-      else {
-        onSuccess();
-        onClose();
-      }
+      else { onSuccess(); onClose(); }
     });
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-8 pt-8 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4">
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden max-h-[92vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-8 pt-7 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4 shrink-0">
           <div>
             <h3 className="text-2xl font-serif">Nuevo Gasto</h3>
-            <p className="text-sm text-foreground/50 mt-1">Registra una salida de dinero.</p>
+            <p className="text-sm text-foreground/50 mt-0.5">Registra una salida de dinero con clasificación contable.</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5 shrink-0">
             <X className="w-5 h-5 text-foreground/40" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="p-8 space-y-5 overflow-y-auto">
+          {/* Fecha + Monto */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Fecha</label>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:ring-[#C59F59]/30" />
+              <label className="field-label">Fecha</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="field-input" />
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Valor ($)</label>
-              <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:ring-[#C59F59]/30" />
+              <label className="field-label">Valor total ($)</label>
+              <input type="number" min="0" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} required
+                placeholder="0" className="field-input" />
             </div>
           </div>
+
+          {/* Concepto */}
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Concepto</label>
-            <input type="text" value={concept} onChange={e => setConcept(e.target.value)} required placeholder="Ej. Compra de insumos" className="w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:ring-[#C59F59]/30" />
+            <label className="field-label">Concepto</label>
+            <input type="text" value={concept} onChange={(e) => setConcept(e.target.value)} required
+              placeholder="Ej. Compra de insumos" className="field-input" />
           </div>
+
+          {/* Categoría */}
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Categoría</label>
-            <input type="text" list="exp-categories" value={category} onChange={e => setCategory(e.target.value)} required placeholder="Seleccionar..." className="w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:ring-[#C59F59]/30" />
+            <label className="field-label">Categoría</label>
+            <input type="text" list="exp-categories" value={category}
+              onChange={(e) => setCategory(e.target.value)} required
+              placeholder="Seleccionar o escribir..." className="field-input" />
             <datalist id="exp-categories">
-              {PREDEFINED_CATEGORIES.map(c => <option key={c} value={c} />)}
+              {PREDEFINED_CATEGORIES.map((c) => <option key={c} value={c} />)}
             </datalist>
           </div>
+
+          {/* Toggle OPEX / COGS / CAPEX */}
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Soporte (Recibo/Factura)</label>
+            <label className="field-label">Clasificación contable</label>
+            <div className="flex gap-2 mt-1">
+              {(["OPEX", "COGS", "CAPEX"] as ExpenseType[]).map((t) => {
+                const m = EXPENSE_TYPE_META[t];
+                const active = expenseType === t;
+                return (
+                  <button key={t} type="button"
+                    onClick={() => setExpenseType(t)}
+                    className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition-all text-center ${
+                      active
+                        ? `border-current ${m.color} ${m.bg}`
+                        : "border-foreground/10 text-foreground/40 hover:border-foreground/20"
+                    }`}
+                  >
+                    <span className="text-xs font-black">{m.label}</span>
+                    <span className="text-[9px] leading-tight opacity-80">{m.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {inferredType !== expenseType && (
+              <p className="text-[10px] text-amber-600 mt-1.5">
+                ⚠️ La categoría sugiere <strong>{inferredType}</strong>, pero seleccionaste <strong>{expenseType}</strong>.
+              </p>
+            )}
+          </div>
+
+          {/* IVA */}
+          <div>
+            <label className="field-label">
+              IVA discriminado ($)
+              {autoTax && !taxAmt && (
+                <button type="button" onClick={() => setTaxAmt(autoTax)}
+                  className="ml-2 text-[10px] text-[#C59F59] font-bold underline-offset-2 underline">
+                  Sugerir 19% = ${Number(autoTax).toLocaleString("es-CO")}
+                </button>
+              )}
+            </label>
+            <input type="number" min="0" step="1" value={taxAmt} onChange={(e) => setTaxAmt(e.target.value)}
+              placeholder="0 si no aplica" className="field-input" />
+            {taxAmt && amount && (
+              <p className="text-[10px] text-foreground/50 mt-1">
+                Neto antes de IVA: <strong>{fmt(Number(amount) - Number(taxAmt))}</strong>
+              </p>
+            )}
+          </div>
+
+          {/* Meses de depreciación (solo CAPEX) */}
+          {isCapex && (
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl">
+              <label className="field-label text-purple-700">Vida útil del activo (meses)</label>
+              <input type="number" min="1" step="1" value={deprMos} onChange={(e) => setDeprMos(e.target.value)} required
+                placeholder="Ej. 36 meses = 3 años" className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
+              {deprMos && amount && (
+                <p className="text-[10px] text-purple-700 mt-1.5">
+                  Depreciación mensual: <strong>
+                    {fmt((Number(amount) - (taxAmt ? Number(taxAmt) : 0)) / Number(deprMos))}
+                  </strong> / mes durante {deprMos} meses
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Soporte */}
+          <div>
+            <label className="field-label">Soporte (Recibo/Factura)</label>
             {imageUrl ? (
-              <div className="relative rounded-xl border border-foreground/10 overflow-hidden group h-32">
+              <div className="relative rounded-xl border border-foreground/10 overflow-hidden group h-28">
                 <img src={imageUrl} alt="Soporte" className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button type="button" onClick={() => setImageUrl(null)} className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600">
+                  <button type="button" onClick={() => setImageUrl(null)}
+                    className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -281,7 +332,9 @@ function ExpenseModal({
               <Dropzone onImageUploaded={setImageUrl} isUploading={isUploading} setIsUploading={setIsUploading} />
             )}
           </div>
-          <button type="submit" disabled={isPending || isUploading} className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-xl transition-all disabled:opacity-60">
+
+          <button type="submit" disabled={isPending || isUploading}
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-xl transition-all disabled:opacity-60">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             Guardar Gasto
           </button>
@@ -291,82 +344,150 @@ function ExpenseModal({
   );
 }
 
-function IncomeModal({
-  onClose,
-  onSuccess
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [concept, setConcept] = useState("");
+// ─────────────────────────────────────────────────────────────
+// INCOME MODAL — con IVA, comisión y flete
+// ─────────────────────────────────────────────────────────────
+
+function IncomeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const today = new Date().toISOString().split("T")[0];
+  const [date,     setDate]     = useState(today);
+  const [concept,  setConcept]  = useState("");
   const [category, setCategory] = useState("");
-  const [amount, setAmount] = useState("");
+  const [gross,    setGross]    = useState("");
+  const [fee,      setFee]      = useState("");
+  const [shipping, setShipping] = useState("");
+  const [tax,      setTax]      = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending,   startTransition] = useTransition();
+
+  const isWebSale = category === "Ventas Web";
+
+  // Sugerir valores por defecto para Ventas Web
+  useEffect(() => {
+    if (isWebSale && gross) {
+      const g = Number(gross);
+      if (!fee)     setFee(     (g * 0.0356).toFixed(0));
+      if (!tax)     setTax(     (g * 0.19).toFixed(0));
+    }
+  }, [isWebSale, gross]);
+
+  const netRevenue = Math.max(0,
+    Number(gross || 0) - Number(fee || 0) - Number(shipping || 0) - Number(tax || 0)
+  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!concept || !category || !amount || !date) return;
-    
+    if (!concept || !category || !gross || !date) return;
     startTransition(async () => {
       const res = await createIncomeDirect(date, {
         concept,
         category,
-        amount: Number(amount),
-        image_url: imageUrl
+        amount:        Number(gross),
+        gross_amount:  Number(gross),
+        fee_amount:    fee      ? Number(fee)      : 0,
+        shipping_cost: shipping ? Number(shipping) : 0,
+        tax_amount:    tax      ? Number(tax)      : 0,
+        net_revenue:   netRevenue,
+        image_url:     imageUrl,
       });
       if (res.error) alert(res.error);
-      else {
-        onSuccess();
-        onClose();
-      }
+      else { onSuccess(); onClose(); }
     });
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-8 pt-8 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4">
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden max-h-[92vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-8 pt-7 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4 shrink-0">
           <div>
             <h3 className="text-2xl font-serif">Nuevo Ingreso Manual</h3>
-            <p className="text-sm text-foreground/50 mt-1">Registra una entrada de dinero manual (no ventas web).</p>
+            <p className="text-sm text-foreground/50 mt-0.5">Registra una entrada de dinero con desglose P&amp;L.</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5 shrink-0">
             <X className="w-5 h-5 text-foreground/40" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="p-8 space-y-5 overflow-y-auto">
+          {/* Fecha + Bruto */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Fecha</label>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:ring-[#C59F59]/30" />
+              <label className="field-label">Fecha</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="field-input" />
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Valor ($)</label>
-              <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:ring-[#C59F59]/30" />
+              <label className="field-label">Valor Bruto ($)</label>
+              <input type="number" min="0" step="1" value={gross} onChange={(e) => setGross(e.target.value)} required
+                placeholder="0" className="field-input" />
             </div>
           </div>
+
+          {/* Concepto */}
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Concepto</label>
-            <input type="text" value={concept} onChange={e => setConcept(e.target.value)} required placeholder="Ej. Aporte capital" className="w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:ring-[#C59F59]/30" />
+            <label className="field-label">Concepto</label>
+            <input type="text" value={concept} onChange={(e) => setConcept(e.target.value)} required
+              placeholder="Ej. Aporte capital" className="field-input" />
           </div>
+
+          {/* Categoría */}
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Categoría</label>
-            <input type="text" list="inc-categories" value={category} onChange={e => setCategory(e.target.value)} required placeholder="Seleccionar..." className="w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:ring-[#C59F59]/30" />
+            <label className="field-label">Categoría</label>
+            <input type="text" list="inc-categories" value={category}
+              onChange={(e) => setCategory(e.target.value)} required
+              placeholder="Seleccionar..." className="field-input" />
             <datalist id="inc-categories">
-              {INCOME_CATEGORIES.map(c => <option key={c} value={c} />)}
+              {INCOME_CATEGORIES.map((c) => <option key={c} value={c} />)}
             </datalist>
           </div>
+
+          {/* Desglose financiero */}
+          <div className="p-4 bg-[#f9f7f0] rounded-xl space-y-3 border border-foreground/5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-foreground/50">Desglose P&amp;L</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="field-label">
+                  Comisión pasarela ($)
+                  {isWebSale && <span className="ml-1 text-[9px] text-[#C59F59]">≈3.56%</span>}
+                </label>
+                <input type="number" min="0" step="1" value={fee}
+                  onChange={(e) => setFee(e.target.value)} placeholder="0" className="field-input text-xs" />
+              </div>
+              <div>
+                <label className="field-label">Flete / Envío ($)</label>
+                <input type="number" min="0" step="1" value={shipping}
+                  onChange={(e) => setShipping(e.target.value)} placeholder="0" className="field-input text-xs" />
+              </div>
+              <div>
+                <label className="field-label">
+                  IVA ($)
+                  {isWebSale && <span className="ml-1 text-[9px] text-[#C59F59]">19%</span>}
+                </label>
+                <input type="number" min="0" step="1" value={tax}
+                  onChange={(e) => setTax(e.target.value)} placeholder="0" className="field-input text-xs" />
+              </div>
+            </div>
+            {/* Net revenue preview */}
+            <div className="flex items-center justify-between pt-2 border-t border-foreground/10">
+              <span className="text-xs text-foreground/50">Ingreso neto estimado:</span>
+              <span className={`text-sm font-black font-mono ${netRevenue >= 0 ? "text-green-600" : "text-red-500"}`}>
+                {fmt(netRevenue)}
+              </span>
+            </div>
+          </div>
+
+          {/* Soporte */}
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block">Soporte (Opcional)</label>
+            <label className="field-label">Soporte (Opcional)</label>
             {imageUrl ? (
-              <div className="relative rounded-xl border border-foreground/10 overflow-hidden group h-32">
+              <div className="relative rounded-xl border border-foreground/10 overflow-hidden group h-28">
                 <img src={imageUrl} alt="Soporte" className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button type="button" onClick={() => setImageUrl(null)} className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600">
+                  <button type="button" onClick={() => setImageUrl(null)}
+                    className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -375,7 +496,9 @@ function IncomeModal({
               <Dropzone onImageUploaded={setImageUrl} isUploading={isUploading} setIsUploading={setIsUploading} />
             )}
           </div>
-          <button type="submit" disabled={isPending || isUploading} className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-xl transition-all disabled:opacity-60">
+
+          <button type="submit" disabled={isPending || isUploading}
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-xl transition-all disabled:opacity-60">
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             Guardar Ingreso
           </button>
@@ -385,83 +508,375 @@ function IncomeModal({
   );
 }
 
-// --- Main Client Component ---
+// ─────────────────────────────────────────────────────────────
+// P&L REPORT TAB CONTENT
+// ─────────────────────────────────────────────────────────────
 
-export default function CashflowClient() {
-  const [activeTab, setActiveTab] = useState<TabId>("gastos");
-  
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [incomes, setIncomes] = useState<any[]>([]);
-  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [missingDays, setMissingDays] = useState<string[]>([]);
-  const [alertExpanded, setAlertExpanded] = useState(false);
+function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => string }) {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year,  setYear]  = useState(now.getFullYear());
+  const [report, setReport] = useState<PLReportResult | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const [showExpenseModal, setShowExpenseModal] = useState(false);
-  const [showIncomeModal, setShowIncomeModal] = useState(false);
-
-  const loadData = async () => {
+  const loadReport = useCallback(async () => {
     setLoading(true);
-    const [exp, inc, hist, missing] = await Promise.all([
-      getAllExpenses(),
-      getAllIncomes(),
-      getCashflowHistory(),
-      getMissingCashflowDays()
-    ]);
-    setExpenses(exp || []);
-    setIncomes(inc || []);
-    setHistoryLogs(hist || []);
-    setMissingDays(missing || []);
-    setLoading(false);
-  };
+    try {
+      const r = await getMonthlyPLReport(month, year);
+      setReport(r);
+    } finally {
+      setLoading(false);
+    }
+  }, [month, year]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadReport(); }, [loadReport]);
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(val);
+  const MONTHS_ES = [
+    "", "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+  ];
 
-  const renderTabs = () => (
-    <div className="flex overflow-x-auto hide-scrollbar gap-2 mb-8 bg-[#f9f7f0] p-2 rounded-2xl border border-foreground/5">
-      {TABS.map((tab) => {
-        const isActive = activeTab === tab.id;
-        const Icon = tab.Icon;
-        return (
-          <button
-            key={tab.id}
-            suppressHydrationWarning
-            onClick={() => setActiveTab(tab.id as TabId)}
-            className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
-              isActive
-                ? "bg-white text-[#C59F59] shadow-sm border border-foreground/5"
-                : "text-foreground/50 hover:text-foreground hover:bg-foreground/5"
-            }`}
-          >
-            <Icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        );
-      })}
+  const costPieData = report ? [
+    { name: "COGS",         value: report.total_cogs         },
+    { name: "OPEX",         value: report.opex               },
+    { name: "Depreciación", value: report.monthly_depreciation},
+  ].filter((d) => d.value > 0) : [];
+
+  const waterfallData = report ? [
+    { name: "Ing. Bruto",   value: report.gross_revenue,   fill: PALETTE.green  },
+    { name: "Comisiones",   value: -report.gateway_fees,   fill: PALETTE.amber  },
+    { name: "IVA Ingreso",  value: -report.sales_tax,      fill: PALETTE.amber  },
+    { name: "Ing. Neto",    value: report.net_revenue,     fill: PALETTE.teal   },
+    { name: "− COGS",       value: -report.total_cogs,     fill: PALETTE.red    },
+    { name: "Ut. Bruta",    value: report.gross_profit,    fill: PALETTE.blue   },
+    { name: "− OPEX",       value: -report.opex,           fill: PALETTE.purple },
+    { name: "EBITDA",       value: report.ebitda,          fill: PALETTE.gold   },
+    { name: "− Deprec.",    value: -report.monthly_depreciation, fill: PALETTE.navy },
+    { name: "Ut. Operativa",value: report.operating_income, fill: PALETTE.green },
+  ] : [];
+
+  return (
+    <div className="space-y-6">
+      {/* Period selector */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <select value={month} onChange={(e) => setMonth(Number(e.target.value))}
+          className="field-input w-auto text-sm font-bold">
+          {MONTHS_ES.slice(1).map((m, i) => (
+            <option key={i+1} value={i+1}>{m}</option>
+          ))}
+        </select>
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))}
+          className="field-input w-auto text-sm font-bold">
+          {[2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <button onClick={loadReport} disabled={loading}
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#C59F59] text-white rounded-xl text-sm font-bold hover:bg-[#b08d4f] transition-colors disabled:opacity-60">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+          Calcular
+        </button>
+        {report && (
+          <span className="text-xs text-foreground/50 font-mono">
+            {MONTHS_ES[month]} {year}
+          </span>
+        )}
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-10 h-10 text-[#C59F59] animate-spin" />
+        </div>
+      )}
+
+      {!loading && report && (
+        <>
+          {/* KPI Cards row 1 — Ingresos */}
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-foreground/40 mb-3">
+              Ingresos del período
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Ingreso Bruto",    value: report.gross_revenue,    color: "text-green-600",  icon: TrendingUp    },
+                { label: "Comisiones Pasa.", value: report.gateway_fees,     color: "text-amber-600",  icon: DollarSign    },
+                { label: "IVA s/ Ingresos",  value: report.sales_tax,        color: "text-amber-600",  icon: Layers        },
+                { label: "Ingreso Neto",     value: report.net_revenue,      color: "text-teal-600",   icon: Check         },
+              ].map(({ label, value, color, icon: Icon }) => (
+                <div key={label} className="bg-white rounded-2xl p-5 border border-foreground/5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon className={`w-4 h-4 ${color}`} />
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{label}</p>
+                  </div>
+                  <p className={`text-xl font-serif font-bold ${color}`}>{formatCurrency(value)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* KPI Cards row 2 — P&L */}
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-foreground/40 mb-3">
+              Estado de Resultados
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                {
+                  label: "Margen Bruto",
+                  value: report.gross_profit,
+                  pct:   report.gross_margin_pct,
+                  color: report.gross_profit >= 0 ? "text-green-600" : "text-red-500",
+                  icon:  TrendingUp,
+                  desc:  `${fmtPct(report.gross_margin_pct)} del ingreso neto`,
+                },
+                {
+                  label: "EBITDA",
+                  value: report.ebitda,
+                  pct:   report.ebitda_margin_pct,
+                  color: report.ebitda >= 0 ? "text-blue-600" : "text-red-500",
+                  icon:  Zap,
+                  desc:  `${fmtPct(report.ebitda_margin_pct)} del ingreso neto`,
+                },
+                {
+                  label: "Utilidad Operativa",
+                  value: report.operating_income,
+                  pct:   null,
+                  color: report.operating_income >= 0 ? "text-[#C59F59]" : "text-red-500",
+                  icon:  Activity,
+                  desc:  `Depreciación: ${formatCurrency(report.monthly_depreciation)}`,
+                },
+              ].map(({ label, value, pct, color, icon: Icon, desc }) => (
+                <div key={label} className="bg-white rounded-2xl p-5 border border-foreground/5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className={`w-4 h-4 ${color}`} />
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{label}</p>
+                  </div>
+                  <p className={`text-2xl font-serif font-bold ${color}`}>{formatCurrency(value)}</p>
+                  <p className="text-[10px] text-foreground/50 mt-1">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Burn Rate + COGS breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Burn Rate card */}
+            <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingDown className="w-5 h-5 text-red-500" />
+                <h3 className="text-lg font-serif">Burn Rate Real</h3>
+              </div>
+              <p className="text-3xl font-serif font-bold text-red-500">{formatCurrency(report.burn_rate)}</p>
+              <p className="text-xs text-foreground/50 mt-1">Salidas reales de caja en el período (con IVA)</p>
+
+              <div className="mt-5 space-y-2">
+                {[
+                  { label: "COGS explícito",  val: report.explicit_cogs,         color: "bg-orange-400" },
+                  { label: "COGS inventario", val: report.inventory_cogs,        color: "bg-orange-200" },
+                  { label: "OPEX",            val: report.opex,                  color: "bg-blue-400"   },
+                  { label: "CAPEX pagado",    val: report.burn_rate - report.opex - report.explicit_cogs - report.inventory_cogs,
+                    color: "bg-purple-400" },
+                ].filter((r) => r.val > 0).map(({ label, val, color }) => (
+                  <div key={label} className="flex items-center gap-2 text-xs">
+                    <div className={`w-2.5 h-2.5 rounded-full ${color} shrink-0`} />
+                    <span className="text-foreground/60 flex-1">{label}</span>
+                    <span className="font-mono font-bold text-foreground/80">{formatCurrency(val)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Distribución de costos — PieChart */}
+            <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Package className="w-5 h-5 text-[#C59F59]" />
+                <h3 className="text-lg font-serif">Distribución de Costos</h3>
+              </div>
+              {costPieData.length === 0 ? (
+                <div className="flex items-center justify-center h-48 text-foreground/30 text-sm">
+                  Sin datos de costos para este período
+                </div>
+              ) : (
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={costPieData} cx="50%" cy="50%" outerRadius={80}
+                        labelLine={false} dataKey="value">
+                        {costPieData.map((_, idx) => (
+                          <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Waterfall P&L — BarChart */}
+          <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+            <h3 className="text-lg font-serif mb-6">Cascada P&amp;L del Período</h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={waterfallData} margin={{ top: 5, right: 10, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0ede6" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} />
+                  <YAxis tickFormatter={(v) => `${(v / 1_000_000).toFixed(1)}M`} tick={{ fontSize: 9 }} />
+                  <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {waterfallData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CASHFLOW REPORT VIEW (existing cash view)
+// ─────────────────────────────────────────────────────────────
+
+function CashflowReportView({
+  expenses, incomes, formatCurrency,
+}: {
+  expenses: any[]; incomes: any[]; formatCurrency: (v: number) => string;
+}) {
+  const totalInc  = incomes.reduce((s, i)  => s + Number(i.amount), 0);
+  const totalExp  = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const balance   = totalInc - totalExp;
+
+  const expByCategory = Object.entries(
+    expenses.reduce((acc, e) => {
+      acc[e.category] = (acc[e.category] || 0) + Number(e.amount);
+      return acc;
+    }, {} as Record<string, number>)
+  ).map(([name, value]) => ({ name, value }));
+
+  const incByType = Object.entries(
+    incomes.reduce((acc, i) => {
+      const k = String(i.type || "manual").toUpperCase();
+      acc[k] = (acc[k] || 0) + Number(i.amount);
+      return acc;
+    }, {} as Record<string, number>)
+  ).map(([name, value]) => ({ name, value }));
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">Total Ingresos</p>
+          <p className="text-3xl font-serif text-green-600">{formatCurrency(totalInc)}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">Total Gastos</p>
+          <p className="text-3xl font-serif text-red-500">{formatCurrency(totalExp)}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">Balance Neto</p>
+          <p className={`text-3xl font-serif ${balance >= 0 ? "text-[#C59F59]" : "text-red-500"}`}>
+            {formatCurrency(balance)}
+          </p>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+          <h3 className="text-lg font-serif mb-5">Gastos por Categoría</h3>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={expByCategory} cx="50%" cy="50%" outerRadius={90}
+                  labelLine={false} dataKey="value">
+                  {expByCategory.map((_, i) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+          <h3 className="text-lg font-serif mb-5">Ingresos por Tipo</h3>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={incByType} cx="50%" cy="50%" outerRadius={90}
+                  labelLine={false} dataKey="value">
+                  {incByType.map((_, i) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// MAIN CLIENT COMPONENT
+// ─────────────────────────────────────────────────────────────
+
+export default function CashflowClient() {
+  const [activeTab,      setActiveTab]      = useState<TabId>("gastos");
+  const [reportMode,     setReportMode]     = useState<"cash" | "pl">("cash");
+  const [expenses,       setExpenses]       = useState<any[]>([]);
+  const [incomes,        setIncomes]        = useState<any[]>([]);
+  const [historyLogs,    setHistoryLogs]    = useState<any[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [missingDays,    setMissingDays]    = useState<string[]>([]);
+  const [alertExpanded,  setAlertExpanded]  = useState(false);
+  const [showExpModal,   setShowExpModal]   = useState(false);
+  const [showIncModal,   setShowIncModal]   = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const [exp, inc, hist, missing] = await Promise.all([
+      getAllExpenses(), getAllIncomes(), getCashflowHistory(), getMissingCashflowDays(),
+    ]);
+    setExpenses(exp   || []);
+    setIncomes(inc    || []);
+    setHistoryLogs(hist  || []);
+    setMissingDays(missing || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(val);
 
   const formatMissingDate = (dateStr: string) => {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const d = new Date(year, month - 1, day);
-    return d.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("es-CO", {
+      weekday: "long", day: "numeric", month: "long",
+    });
   };
 
   return (
     <div className="space-y-6 pb-24">
+      {/* Title */}
       <div>
         <h1 className="text-3xl font-serif text-foreground mb-2">Flujo de Caja</h1>
         <p className="text-foreground/60">Gestiona y audita los ingresos, gastos y reportes financieros.</p>
       </div>
 
-      {/* ⚠️ ALERTA: Días sin registrar */}
+      {/* ⚠️ Missing days alert */}
       {!loading && missingDays.length > 0 && (
         <div className="rounded-2xl border-2 border-amber-400 bg-gradient-to-br from-amber-50 to-orange-50 shadow-lg overflow-hidden">
-          {/* Header de la alerta */}
           <div className="flex items-center justify-between px-6 py-4 bg-amber-400/20 border-b border-amber-300">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-400 flex items-center justify-center shrink-0 animate-pulse">
@@ -469,36 +884,28 @@ export default function CashflowClient() {
               </div>
               <div>
                 <p className="font-black text-amber-900 text-base leading-tight">
-                  ⚠️ {missingDays.length} {missingDays.length === 1 ? 'día sin registros' : 'días sin registros'} de Flujo de Caja
+                  ⚠️ {missingDays.length} {missingDays.length === 1 ? "día sin registros" : "días sin registros"} de Flujo de Caja
                 </p>
                 <p className="text-xs text-amber-700 mt-0.5">
                   Desde el 1 de Mayo 2026 hasta ayer — estos días no tienen gastos ni ingresos registrados.
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setAlertExpanded(v => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors"
-            >
-              {alertExpanded ? 'Ocultar' : 'Ver días'}
+            <button onClick={() => setAlertExpanded((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors">
+              {alertExpanded ? "Ocultar" : "Ver días"}
               {alertExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
           </div>
 
-          {/* Lista expandible de días faltantes */}
           {alertExpanded && (
             <div className="p-6">
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-700 mb-4">Días pendientes de registro:</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-700 mb-4">Días pendientes:</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {missingDays.map((day) => (
-                  <button
-                    key={day}
-                    onClick={() => {
-                      setActiveTab('gastos');
-                      setShowExpenseModal(true);
-                    }}
-                    className="group flex items-center gap-3 px-4 py-3 bg-white border border-amber-200 rounded-xl hover:border-amber-400 hover:bg-amber-50 transition-all text-left shadow-sm"
-                  >
+                  <button key={day}
+                    onClick={() => { setActiveTab("gastos"); setShowExpModal(true); }}
+                    className="group flex items-center gap-3 px-4 py-3 bg-white border border-amber-200 rounded-xl hover:border-amber-400 hover:bg-amber-50 transition-all text-left shadow-sm">
                     <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors">
                       <Calendar className="w-4 h-4 text-red-500" />
                     </div>
@@ -506,25 +913,21 @@ export default function CashflowClient() {
                       <p className="text-xs font-mono font-bold text-foreground/70">{day}</p>
                       <p className="text-[10px] text-foreground/50 capitalize truncate">{formatMissingDate(day)}</p>
                     </div>
-                    <span className="ml-auto text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0 group-hover:bg-amber-200 transition-colors">Registrar</span>
+                    <span className="ml-auto text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0 group-hover:bg-amber-200 transition-colors">
+                      Registrar
+                    </span>
                   </button>
                 ))}
               </div>
-              <div className="mt-4 pt-4 border-t border-amber-200 flex items-center justify-between">
-                <p className="text-xs text-amber-700">
-                  💡 Haz clic en cualquier día para abrir el formulario de registro rápido.
-                </p>
+              <div className="mt-4 pt-4 border-t border-amber-200 flex items-center justify-between flex-wrap gap-2">
+                <p className="text-xs text-amber-700">💡 Haz clic en cualquier día para abrir el formulario.</p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => { setActiveTab('gastos'); setShowExpenseModal(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-                  >
+                  <button onClick={() => { setActiveTab("gastos"); setShowExpModal(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
                     <ArrowDownCircle className="w-3.5 h-3.5" /> Nuevo Gasto
                   </button>
-                  <button
-                    onClick={() => { setActiveTab('ingresos'); setShowIncomeModal(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-                  >
+                  <button onClick={() => { setActiveTab("ingresos"); setShowIncModal(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
                     <ArrowUpCircle className="w-3.5 h-3.5" /> Nuevo Ingreso
                   </button>
                 </div>
@@ -534,7 +937,7 @@ export default function CashflowClient() {
         </div>
       )}
 
-      {/* ✅ Todos los días al día */}
+      {/* ✅ All up to date */}
       {!loading && missingDays.length === 0 && (
         <div className="flex items-center gap-3 px-6 py-4 bg-green-50 border border-green-200 rounded-2xl">
           <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center shrink-0">
@@ -547,20 +950,37 @@ export default function CashflowClient() {
         </div>
       )}
 
-      {renderTabs()}
+      {/* Tabs */}
+      <div className="flex overflow-x-auto hide-scrollbar gap-2 bg-[#f9f7f0] p-2 rounded-2xl border border-foreground/5">
+        {TABS.map(({ id, label, Icon }) => {
+          const isActive = activeTab === id;
+          return (
+            <button key={id} suppressHydrationWarning
+              onClick={() => setActiveTab(id as TabId)}
+              className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
+                isActive ? "bg-white text-[#C59F59] shadow-sm border border-foreground/5" : "text-foreground/50 hover:text-foreground hover:bg-foreground/5"
+              }`}>
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
+      {/* Tab content */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-10 h-10 text-[#C59F59] animate-spin" />
         </div>
       ) : (
         <>
-          {/* TAB: GASTOS */}
+          {/* ── GASTOS ── */}
           {activeTab === "gastos" && (
             <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
                 <h2 className="text-xl font-serif">Todos los Gastos</h2>
-                <button onClick={() => setShowExpenseModal(true)} className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
+                <button onClick={() => setShowExpModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
                   <Plus className="w-4 h-4" /> Nuevo Gasto
                 </button>
               </div>
@@ -568,54 +988,67 @@ export default function CashflowClient() {
                 <table className="w-full text-left text-sm text-foreground/80">
                   <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
                     <tr>
-                      <th className="px-6 py-4">Fecha</th>
-                      <th className="px-6 py-4">Concepto</th>
-                      <th className="px-6 py-4">Categoría</th>
-                      <th className="px-6 py-4 text-right">Valor</th>
-                      <th className="px-6 py-4 text-center">Soporte</th>
-                      <th className="px-6 py-4 text-center">Acciones</th>
+                      <th className="px-5 py-4">Fecha</th>
+                      <th className="px-5 py-4">Concepto</th>
+                      <th className="px-5 py-4">Categoría</th>
+                      <th className="px-5 py-4 text-center">Tipo</th>
+                      <th className="px-5 py-4 text-right">Bruto</th>
+                      <th className="px-5 py-4 text-right">Neto</th>
+                      <th className="px-5 py-4 text-center">Soporte</th>
+                      <th className="px-5 py-4 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-foreground/5">
                     {expenses.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center py-10">No hay gastos registrados.</td></tr>
-                    ) : expenses.map(exp => (
-                      <tr key={exp.id} className="hover:bg-foreground/[0.02]">
-                        <td className="px-6 py-4 font-mono text-xs">{exp.cashflow?.date}</td>
-                        <td className="px-6 py-4 font-bold">{exp.concept}</td>
-                        <td className="px-6 py-4 text-xs">{exp.category}</td>
-                        <td className="px-6 py-4 font-mono text-right text-red-500 font-bold">{formatCurrency(exp.amount)}</td>
-                        <td className="px-6 py-4 text-center">
-                          {exp.image_url ? (
-                            <a href={exp.image_url} target="_blank" rel="noreferrer" className="inline-block p-1.5 bg-[#C59F59]/10 text-[#C59F59] rounded-lg hover:bg-[#C59F59]/20 transition-colors">
-                              <ImageIcon className="w-4 h-4" />
-                            </a>
-                          ) : <span className="text-foreground/30">-</span>}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <button onClick={async () => {
-                            if(confirm("¿Eliminar este gasto?")) {
-                              await deleteExpenseDirect(exp.id);
-                              loadData();
-                            }
-                          }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                      <tr><td colSpan={8} className="text-center py-10 text-foreground/40">No hay gastos registrados.</td></tr>
+                    ) : expenses.map((exp) => {
+                      const meta = EXPENSE_TYPE_META[(exp.expense_type as ExpenseType) ?? "OPEX"];
+                      return (
+                        <tr key={exp.id} className="hover:bg-foreground/[0.02]">
+                          <td className="px-5 py-4 font-mono text-xs">{exp.cashflow?.date}</td>
+                          <td className="px-5 py-4 font-bold max-w-[180px] truncate">{exp.concept}</td>
+                          <td className="px-5 py-4 text-xs text-foreground/60 max-w-[160px] truncate">{exp.category}</td>
+                          <td className="px-5 py-4 text-center">
+                            <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${meta.bg} ${meta.color}`}>
+                              {meta.label}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 font-mono text-right text-red-500 font-bold">{formatCurrency(exp.amount)}</td>
+                          <td className="px-5 py-4 font-mono text-right text-foreground/60">{formatCurrency(exp.net_amount ?? exp.amount)}</td>
+                          <td className="px-5 py-4 text-center">
+                            {exp.image_url
+                              ? <a href={exp.image_url} target="_blank" rel="noreferrer"
+                                  className="inline-block p-1.5 bg-[#C59F59]/10 text-[#C59F59] rounded-lg hover:bg-[#C59F59]/20 transition-colors">
+                                  <ImageIcon className="w-4 h-4" />
+                                </a>
+                              : <span className="text-foreground/30">—</span>}
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <button onClick={async () => {
+                              if (confirm("¿Eliminar este gasto?")) {
+                                await deleteExpenseDirect(exp.id);
+                                loadData();
+                              }
+                            }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* TAB: INGRESOS */}
+          {/* ── INGRESOS ── */}
           {activeTab === "ingresos" && (
             <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
                 <h2 className="text-xl font-serif">Todos los Ingresos</h2>
-                <button onClick={() => setShowIncomeModal(true)} className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
+                <button onClick={() => setShowIncModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
                   <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
                 </button>
               </div>
@@ -623,45 +1056,48 @@ export default function CashflowClient() {
                 <table className="w-full text-left text-sm text-foreground/80">
                   <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
                     <tr>
-                      <th className="px-6 py-4">Fecha</th>
-                      <th className="px-6 py-4">Concepto</th>
-                      <th className="px-6 py-4">Categoría</th>
-                      <th className="px-6 py-4">Tipo</th>
-                      <th className="px-6 py-4 text-right">Valor</th>
-                      <th className="px-6 py-4 text-center">Soporte</th>
+                      <th className="px-5 py-4">Fecha</th>
+                      <th className="px-5 py-4">Concepto</th>
+                      <th className="px-5 py-4">Categoría</th>
+                      <th className="px-5 py-4 text-center">Tipo</th>
+                      <th className="px-5 py-4 text-right">Bruto</th>
+                      <th className="px-5 py-4 text-right">Neto</th>
+                      <th className="px-5 py-4 text-center">Soporte / Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-foreground/5">
                     {incomes.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center py-10">No hay ingresos registrados.</td></tr>
-                    ) : incomes.map(inc => (
+                      <tr><td colSpan={7} className="text-center py-10 text-foreground/40">No hay ingresos registrados.</td></tr>
+                    ) : incomes.map((inc) => (
                       <tr key={inc.id} className="hover:bg-foreground/[0.02]">
-                        <td className="px-6 py-4 font-mono text-xs">{inc.date || inc.cashflow?.date || new Date(inc.created_at).toISOString().split('T')[0]}</td>
-                        <td className="px-6 py-4 font-bold">{inc.concept}</td>
-                        <td className="px-6 py-4 text-xs">{inc.category}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 text-[10px] uppercase font-bold rounded-full ${inc.type === 'manual' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                        <td className="px-5 py-4 font-mono text-xs">{inc.date ?? inc.cashflow?.date ?? new Date(inc.created_at).toISOString().split("T")[0]}</td>
+                        <td className="px-5 py-4 font-bold max-w-[180px] truncate">{inc.concept}</td>
+                        <td className="px-5 py-4 text-xs text-foreground/60">{inc.category}</td>
+                        <td className="px-5 py-4 text-center">
+                          <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
+                            inc.type === "manual" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                          }`}>
                             {inc.type}
                           </span>
                         </td>
-                        <td className="px-6 py-4 font-mono text-right text-green-600 font-bold">{formatCurrency(inc.amount)}</td>
-                        <td className="px-6 py-4 text-center">
-                          {inc.image_url ? (
-                            <a href={inc.image_url} target="_blank" rel="noreferrer" className="inline-block p-1.5 bg-[#C59F59]/10 text-[#C59F59] rounded-lg hover:bg-[#C59F59]/20 transition-colors">
-                              <ImageIcon className="w-4 h-4" />
-                            </a>
-                          ) : (
-                            inc.type === 'manual' && (
-                              <button onClick={async () => {
-                                if(confirm("¿Eliminar este ingreso manual?")) {
-                                  await deleteIncomeDirect(inc.id);
-                                  loadData();
-                                }
-                              }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )
-                          )}
+                        <td className="px-5 py-4 font-mono text-right text-green-600 font-bold">{formatCurrency(inc.gross_amount ?? inc.amount)}</td>
+                        <td className="px-5 py-4 font-mono text-right text-foreground/60">{formatCurrency(inc.net_revenue ?? inc.amount)}</td>
+                        <td className="px-5 py-4 text-center">
+                          {inc.image_url
+                            ? <a href={inc.image_url} target="_blank" rel="noreferrer"
+                                className="inline-block p-1.5 bg-[#C59F59]/10 text-[#C59F59] rounded-lg hover:bg-[#C59F59]/20">
+                                <ImageIcon className="w-4 h-4" />
+                              </a>
+                            : inc.type === "manual" && (
+                                <button onClick={async () => {
+                                  if (confirm("¿Eliminar este ingreso manual?")) {
+                                    await deleteIncomeDirect(inc.id);
+                                    loadData();
+                                  }
+                                }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
                         </td>
                       </tr>
                     ))}
@@ -671,92 +1107,40 @@ export default function CashflowClient() {
             </div>
           )}
 
-          {/* TAB: REPORTES */}
+          {/* ── REPORTES ── */}
           {activeTab === "reportes" && (
             <div className="space-y-6">
-              {/* Aggregated Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="bg-white rounded-3xl p-6 border border-foreground/5 shadow-sm">
-                  <p className="text-xs font-bold uppercase text-foreground/40 mb-2">Total Ingresos Histórico</p>
-                  <p className="text-3xl font-serif text-green-600">{formatCurrency(incomes.reduce((s, i) => s + Number(i.amount), 0))}</p>
-                </div>
-                <div className="bg-white rounded-3xl p-6 border border-foreground/5 shadow-sm">
-                  <p className="text-xs font-bold uppercase text-foreground/40 mb-2">Total Gastos Histórico</p>
-                  <p className="text-3xl font-serif text-red-500">{formatCurrency(expenses.reduce((s, e) => s + Number(e.amount), 0))}</p>
-                </div>
-                <div className="bg-white rounded-3xl p-6 border border-foreground/5 shadow-sm">
-                  <p className="text-xs font-bold uppercase text-foreground/40 mb-2">Balance General</p>
-                  <p className="text-3xl font-serif text-[#C59F59]">{formatCurrency(incomes.reduce((s, i) => s + Number(i.amount), 0) - expenses.reduce((s, e) => s + Number(e.amount), 0))}</p>
-                </div>
+              {/* Mode toggle */}
+              <div className="inline-flex bg-[#f9f7f0] border border-foreground/5 p-1 rounded-2xl gap-1">
+                <button
+                  onClick={() => setReportMode("cash")}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    reportMode === "cash"
+                      ? "bg-white text-[#C59F59] shadow-sm border border-foreground/5"
+                      : "text-foreground/50 hover:text-foreground"
+                  }`}>
+                  <Activity className="w-4 h-4" />
+                  Flujo de Caja (Efectivo Real)
+                </button>
+                <button
+                  onClick={() => setReportMode("pl")}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    reportMode === "pl"
+                      ? "bg-white text-[#C59F59] shadow-sm border border-foreground/5"
+                      : "text-foreground/50 hover:text-foreground"
+                  }`}>
+                  <BarChart2 className="w-4 h-4" />
+                  Estado de Resultados (P&amp;L Contable)
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-3xl p-6 border border-foreground/5 shadow-sm">
-                  <h3 className="text-lg font-serif mb-6">Gastos por Categoría</h3>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={Object.entries(expenses.reduce((acc, curr) => {
-                            acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount);
-                            return acc;
-                          }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }))}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={100}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {Object.entries(expenses.reduce((acc, curr) => {
-                            acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount);
-                            return acc;
-                          }, {} as Record<string, number>)).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-3xl p-6 border border-foreground/5 shadow-sm">
-                  <h3 className="text-lg font-serif mb-6">Ingresos por Tipo</h3>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={Object.entries(incomes.reduce((acc, curr) => {
-                            acc[curr.type] = (acc[curr.type] || 0) + Number(curr.amount);
-                            return acc;
-                          }, {} as Record<string, number>)).map(([name, value]) => ({ name: name.toUpperCase(), value }))}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={100}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {Object.entries(incomes.reduce((acc, curr) => {
-                            acc[curr.type] = (acc[curr.type] || 0) + Number(curr.amount);
-                            return acc;
-                          }, {} as Record<string, number>)).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
+              {reportMode === "cash"
+                ? <CashflowReportView expenses={expenses} incomes={incomes} formatCurrency={formatCurrency} />
+                : <PLReportView formatCurrency={formatCurrency} />}
             </div>
           )}
 
-          {/* TAB: AUDITORIA */}
+          {/* ── AUDITORÍA ── */}
           {activeTab === "auditoria" && (
             <div className="bg-white rounded-3xl p-8 border border-foreground/5 shadow-sm">
               {historyLogs.length === 0 ? (
@@ -765,33 +1149,39 @@ export default function CashflowClient() {
                   <p>No hay registros en el historial todavía.</p>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {historyLogs.map((log: any) => (
                     <div key={log.id} className="flex gap-4 p-4 border border-foreground/5 rounded-xl bg-[#fdfbf7]">
                       <div className="mt-1">
-                        {log.action_type.includes('DELETE') ? <Trash2 className="w-5 h-5 text-red-500" /> : <History className="w-5 h-5 text-gray-500" />}
+                        {log.action_type.includes("DELETE")
+                          ? <Trash2 className="w-5 h-5 text-red-500" />
+                          : <History className="w-5 h-5 text-gray-400" />}
                       </div>
-                      <div className="flex-1 space-y-1">
-                        <div className="flex justify-between items-start">
-                          <p className="font-bold text-foreground">
-                            {log.action_type}
-                          </p>
-                          <span className="text-xs text-foreground/50">
-                            {new Date(log.created_at).toLocaleString('es-CO')}
+                      <div className="flex-1 space-y-1 min-w-0">
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="font-bold text-foreground text-sm">{log.action_type}</p>
+                          <span className="text-xs text-foreground/50 shrink-0">
+                            {new Date(log.created_at).toLocaleString("es-CO")}
                           </span>
                         </div>
-                        <p className="text-sm text-foreground/70">
-                          Realizado por: <span className="font-semibold">{log.profiles?.first_name ? `${log.profiles.first_name} ${log.profiles.last_name || ''}` : 'Admin'}</span>
+                        <p className="text-sm text-foreground/60">
+                          Por: <span className="font-semibold">
+                            {log.profiles?.first_name
+                              ? `${log.profiles.first_name} ${log.profiles.last_name || ""}`
+                              : "Admin"}
+                          </span>
                         </p>
-                        <div className="mt-4 bg-white border border-foreground/5 rounded-lg p-3 overflow-x-auto text-xs font-mono text-foreground/60">
+                        <div className="mt-3 bg-white border border-foreground/5 rounded-lg p-3 overflow-x-auto text-xs font-mono text-foreground/55">
                           {log.details?.old && (
-                            <div className="mb-2">
-                              <span className="text-red-500 font-bold">Anterior:</span> {JSON.stringify(log.details.old)}
+                            <div className="mb-1.5">
+                              <span className="text-red-500 font-bold">Anterior: </span>
+                              {JSON.stringify(log.details.old)}
                             </div>
                           )}
                           {log.details?.new && (
                             <div>
-                              <span className="text-green-500 font-bold">Nuevo:</span> {JSON.stringify(log.details.new)}
+                              <span className="text-green-500 font-bold">Nuevo: </span>
+                              {JSON.stringify(log.details.new)}
                             </div>
                           )}
                         </div>
@@ -805,8 +1195,16 @@ export default function CashflowClient() {
         </>
       )}
 
-      {showExpenseModal && <ExpenseModal onClose={() => setShowExpenseModal(false)} onSuccess={loadData} />}
-      {showIncomeModal && <IncomeModal onClose={() => setShowIncomeModal(false)} onSuccess={loadData} />}
+      {/* Modals */}
+      {showExpModal && <ExpenseModal onClose={() => setShowExpModal(false)} onSuccess={loadData} />}
+      {showIncModal && <IncomeModal  onClose={() => setShowIncModal(false)} onSuccess={loadData} />}
+
+      {/* Inline styles for reusable field classes */}
+      <style>{`
+        .field-label  { display:block; font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:rgba(0,0,0,.4); margin-bottom:6px; }
+        .field-input  { width:100%; padding:10px 14px; border:1px solid rgba(0,0,0,.1); border-radius:12px; font-size:13px; outline:none; transition:box-shadow .15s; }
+        .field-input:focus { box-shadow:0 0 0 3px rgba(197,159,89,.2); border-color:rgba(197,159,89,.4); }
+      `}</style>
     </div>
   );
 }
