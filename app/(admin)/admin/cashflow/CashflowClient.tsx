@@ -17,7 +17,11 @@ import {
   TrendingUp,
   TrendingDown,
   Calendar,
-  Wallet
+  Wallet,
+  AlertTriangle,
+  Bell,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import {
   BarChart,
@@ -42,7 +46,8 @@ import {
   createExpenseDirect,
   deleteExpenseDirect,
   createIncomeDirect,
-  deleteIncomeDirect
+  deleteIncomeDirect,
+  getMissingCashflowDays
 } from "./actions";
 
 // --- Types ---
@@ -389,20 +394,24 @@ export default function CashflowClient() {
   const [incomes, setIncomes] = useState<any[]>([]);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [missingDays, setMissingDays] = useState<string[]>([]);
+  const [alertExpanded, setAlertExpanded] = useState(false);
 
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
-    const [exp, inc, hist] = await Promise.all([
+    const [exp, inc, hist, missing] = await Promise.all([
       getAllExpenses(),
       getAllIncomes(),
-      getCashflowHistory()
+      getCashflowHistory(),
+      getMissingCashflowDays()
     ]);
     setExpenses(exp || []);
     setIncomes(inc || []);
     setHistoryLogs(hist || []);
+    setMissingDays(missing || []);
     setLoading(false);
   };
 
@@ -436,12 +445,107 @@ export default function CashflowClient() {
     </div>
   );
 
+  const formatMissingDate = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
+    return d.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
   return (
     <div className="space-y-6 pb-24">
       <div>
         <h1 className="text-3xl font-serif text-foreground mb-2">Flujo de Caja</h1>
         <p className="text-foreground/60">Gestiona y audita los ingresos, gastos y reportes financieros.</p>
       </div>
+
+      {/* ⚠️ ALERTA: Días sin registrar */}
+      {!loading && missingDays.length > 0 && (
+        <div className="rounded-2xl border-2 border-amber-400 bg-gradient-to-br from-amber-50 to-orange-50 shadow-lg overflow-hidden">
+          {/* Header de la alerta */}
+          <div className="flex items-center justify-between px-6 py-4 bg-amber-400/20 border-b border-amber-300">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-400 flex items-center justify-center shrink-0 animate-pulse">
+                <AlertTriangle className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="font-black text-amber-900 text-base leading-tight">
+                  ⚠️ {missingDays.length} {missingDays.length === 1 ? 'día sin registros' : 'días sin registros'} de Flujo de Caja
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Desde el 1 de Mayo 2026 hasta ayer — estos días no tienen gastos ni ingresos registrados.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAlertExpanded(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors"
+            >
+              {alertExpanded ? 'Ocultar' : 'Ver días'}
+              {alertExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          {/* Lista expandible de días faltantes */}
+          {alertExpanded && (
+            <div className="p-6">
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-700 mb-4">Días pendientes de registro:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {missingDays.map((day) => (
+                  <button
+                    key={day}
+                    onClick={() => {
+                      setActiveTab('gastos');
+                      setShowExpenseModal(true);
+                    }}
+                    className="group flex items-center gap-3 px-4 py-3 bg-white border border-amber-200 rounded-xl hover:border-amber-400 hover:bg-amber-50 transition-all text-left shadow-sm"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors">
+                      <Calendar className="w-4 h-4 text-red-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-mono font-bold text-foreground/70">{day}</p>
+                      <p className="text-[10px] text-foreground/50 capitalize truncate">{formatMissingDate(day)}</p>
+                    </div>
+                    <span className="ml-auto text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0 group-hover:bg-amber-200 transition-colors">Registrar</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-amber-200 flex items-center justify-between">
+                <p className="text-xs text-amber-700">
+                  💡 Haz clic en cualquier día para abrir el formulario de registro rápido.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setActiveTab('gastos'); setShowExpenseModal(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                  >
+                    <ArrowDownCircle className="w-3.5 h-3.5" /> Nuevo Gasto
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab('ingresos'); setShowIncomeModal(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                  >
+                    <ArrowUpCircle className="w-3.5 h-3.5" /> Nuevo Ingreso
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ✅ Todos los días al día */}
+      {!loading && missingDays.length === 0 && (
+        <div className="flex items-center gap-3 px-6 py-4 bg-green-50 border border-green-200 rounded-2xl">
+          <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center shrink-0">
+            <Check className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="font-bold text-green-800 text-sm">¡Flujo de caja al día!</p>
+            <p className="text-xs text-green-600">Todos los días desde el 1 de Mayo 2026 tienen registros. Buen trabajo.</p>
+          </div>
+        </div>
+      )}
 
       {renderTabs()}
 

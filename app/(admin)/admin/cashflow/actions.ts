@@ -275,3 +275,64 @@ export async function getCashflowReportData() {
   
   return { expenses, incomes };
 }
+
+/**
+ * Returns a list of calendar dates (YYYY-MM-DD) starting from START_DATE
+ * up to (but not including) today that have NO recorded expenses AND NO recorded incomes.
+ */
+export async function getMissingCashflowDays(): Promise<string[]> {
+  const START_DATE = '2026-05-01';
+  const supabase = await createClient();
+
+  // Build the range: from START_DATE to yesterday (inclusive)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  const start = new Date(START_DATE);
+  start.setHours(0, 0, 0, 0);
+
+  if (yesterday < start) return [];
+
+  // Generate all calendar days in range
+  const allDays: string[] = [];
+  const cursor = new Date(start);
+  while (cursor <= yesterday) {
+    allDays.push(cursor.toISOString().split('T')[0]);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  // Fetch all daily_cashflow dates that have at least one expense OR income
+  const { data: expenseDates } = await supabase
+    .from('cashflow_expenses')
+    .select('cashflow:cashflow_id(date)');
+
+  const { data: incomeDates } = await supabase
+    .from('cashflow_incomes')
+    .select('cashflow:cashflow_id(date)');
+
+  // Build a Set of dates that DO have records
+  const datesWithRecords = new Set<string>();
+
+  (expenseDates || []).forEach((row: any) => {
+    if (row.cashflow?.date) datesWithRecords.add(row.cashflow.date);
+  });
+  (incomeDates || []).forEach((row: any) => {
+    if (row.cashflow?.date) datesWithRecords.add(row.cashflow.date);
+  });
+
+  // Also consider orders (auto incomes) as "covered" days
+  const { data: orders } = await supabase
+    .from('orders')
+    .select('created_at')
+    .in('status', ['paid', 'processing', 'shipped', 'delivered']);
+
+  (orders || []).forEach((o: any) => {
+    const d = new Date(o.created_at).toISOString().split('T')[0];
+    datesWithRecords.add(d);
+  });
+
+  // Return days that have NO records at all
+  return allDays.filter(d => !datesWithRecords.has(d));
+}

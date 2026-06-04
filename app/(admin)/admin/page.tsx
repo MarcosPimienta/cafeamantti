@@ -1,11 +1,14 @@
 import React from "react";
 import { getDashboardMetrics, getRecentOrders } from "../actions";
-import { DollarSign, ShoppingBag, Coffee, ArrowUpRight } from "lucide-react";
+import { DollarSign, ShoppingBag, Coffee, ArrowUpRight, AlertTriangle, Bell } from "lucide-react";
 import Link from "next/link";
+import { getMissingCashflowDays } from "./cashflow/actions";
 
 export default async function AdminDashboardPage() {
   const metrics = await getDashboardMetrics();
   const recentOrders = await getRecentOrders();
+  const missingDays = await getMissingCashflowDays();
+
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("es-CO", {
@@ -45,6 +48,32 @@ export default async function AdminDashboardPage() {
         <h1 className="text-3xl font-serif text-foreground mb-2">Resumen General</h1>
         <p className="text-foreground/60">Bienvenido al panel de control de Amantti.</p>
       </div>
+
+      {/* 🚨 ALERTA DE FLUJO DE CAJA */}
+      {missingDays.length > 0 && (
+        <Link
+          href="/admin/cashflow"
+          className="group flex items-center gap-4 px-6 py-5 rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 shadow-md transition-all"
+        >
+          <div className="w-12 h-12 rounded-xl bg-amber-400 flex items-center justify-center shrink-0 animate-pulse group-hover:animate-none group-hover:scale-110 transition-transform">
+            <AlertTriangle className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-black text-amber-900 text-base">
+              ⚠️ {missingDays.length} {missingDays.length === 1 ? 'día sin registros' : 'días sin registros'} en Flujo de Caja
+            </p>
+            <p className="text-sm text-amber-700 mt-0.5 truncate">
+              Faltan registros desde el 1 mayo 2026 — último pendiente: <span className="font-bold font-mono">{missingDays[missingDays.length - 1]}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden sm:block text-xs font-bold text-amber-700 bg-amber-200 px-3 py-1.5 rounded-lg group-hover:bg-amber-300 transition-colors">
+              Ir a Flujo de Caja →
+            </span>
+            <ArrowUpRight className="w-5 h-5 text-amber-600 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+      )}
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
