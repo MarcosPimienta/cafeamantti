@@ -993,6 +993,164 @@ function DayActionsModal({
   );
 }
 
+interface DuplicateGroup {
+  key: string;
+  date: string;
+  concept: string;
+  amount: number;
+  items: any[];
+}
+
+function getDuplicateExpenses(expenses: any[]): DuplicateGroup[] {
+  const groups: Record<string, any[]> = {};
+  
+  expenses.forEach((e) => {
+    const date = e.cashflow?.date || "";
+    const concept = (e.concept || "").trim().toLowerCase();
+    const amount = Number(e.amount || 0);
+    const key = `${date}|${concept}|${amount}`;
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(e);
+  });
+
+  return Object.entries(groups)
+    .filter(([_, items]) => items.length > 1)
+    .map(([key, items]) => {
+      const [date, concept, amount] = key.split("|");
+      return {
+        key,
+        date,
+        concept: items[0].concept,
+        amount: Number(amount),
+        items,
+      };
+    });
+}
+
+function DuplicateExpensesModal({
+  expenses,
+  onClose,
+  onDeleteExpense,
+  formatCurrency,
+}: {
+  expenses: any[];
+  onClose: () => void;
+  onDeleteExpense: (id: string) => Promise<void>;
+  formatCurrency: (v: number) => string;
+}) {
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const duplicateGroups = getDuplicateExpenses(expenses);
+
+  const handleDelete = async (id: string) => {
+    if (confirm("¿Estás seguro de que deseas eliminar este gasto duplicado?")) {
+      setIsDeletingId(id);
+      try {
+        await onDeleteExpense(id);
+      } finally {
+        setIsDeletingId(null);
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-8 pt-7 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4 shrink-0">
+          <div>
+            <h3 className="text-2xl font-serif text-foreground">Revisar Gastos Duplicados</h3>
+            <p className="text-sm text-foreground/50 mt-0.5">
+              Se detectaron transacciones idénticas en fecha, concepto y valor. Puedes eliminar las copias innecesarias.
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5 shrink-0 transition-colors">
+            <X className="w-5 h-5 text-foreground/40" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-8 space-y-6 overflow-y-auto flex-1">
+          {duplicateGroups.length === 0 ? (
+            <div className="text-center py-12 text-foreground/40">
+              <Check className="w-12 h-12 mx-auto mb-3 text-green-500 bg-green-50 p-2.5 rounded-full" />
+              <p className="font-bold text-foreground/70">¡No quedan gastos duplicados!</p>
+              <p className="text-xs text-foreground/45 mt-1">Todos los duplicados han sido resueltos.</p>
+            </div>
+          ) : (
+            duplicateGroups.map((group) => (
+              <div key={group.key} className="border border-amber-200 bg-amber-50/15 rounded-2xl overflow-hidden shadow-sm">
+                {/* Group Summary Header */}
+                <div className="px-5 py-3.5 bg-amber-500/10 border-b border-amber-200/50 flex justify-between items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div>
+                      <span className="text-xs font-mono font-bold text-foreground/75 bg-white border border-amber-200 px-2.5 py-0.5 rounded-full mr-2">
+                        {group.date}
+                      </span>
+                      <strong className="text-sm text-foreground/90 font-serif">{group.concept}</strong>
+                    </div>
+                  </div>
+                  <span className="text-sm font-mono font-black text-amber-700 bg-white border border-amber-200 px-3 py-1 rounded-xl">
+                    {formatCurrency(group.amount)}
+                  </span>
+                </div>
+
+                {/* Group Items */}
+                <div className="divide-y divide-foreground/5 bg-white">
+                  {group.items.map((item) => (
+                    <div key={item.id} className="p-4 flex items-center justify-between gap-4 hover:bg-foreground/[0.01] transition-colors">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] uppercase font-bold text-foreground/40">Categoría:</span>
+                          <span className="text-xs font-semibold text-foreground/70">{item.category}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-foreground/50">
+                          <span>Registrado: {new Date(item.created_at).toLocaleString("es-CO")}</span>
+                          {item.profiles?.first_name && (
+                            <span>• Por: {item.profiles.first_name} {item.profiles.last_name || ""}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        disabled={isDeletingId === item.id}
+                        className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                        title="Eliminar este duplicado"
+                      >
+                        {isDeletingId === item.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-8 py-5 border-t border-foreground/5 bg-[#fdfbf7] flex justify-end shrink-0">
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 bg-foreground text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-foreground/80 transition-colors cursor-pointer shadow-sm"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // MAIN CLIENT COMPONENT
 // ─────────────────────────────────────────────────────────────
@@ -1010,6 +1168,7 @@ export default function CashflowClient() {
   const [showIncModal,   setShowIncModal]   = useState(false);
   const [selectedDate,   setSelectedDate]   = useState<string | undefined>(undefined);
   const [showDayActionsModal, setShowDayActionsModal] = useState(false);
+  const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -1153,6 +1312,27 @@ export default function CashflowClient() {
                   <Plus className="w-4 h-4" /> Nuevo Gasto
                 </button>
               </div>
+              {getDuplicateExpenses(expenses).length > 0 && (
+                <div className="mx-5 mt-5 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-4 flex-wrap animate-fadeIn">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                      <AlertTriangle className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-amber-800">Se detectaron posibles gastos duplicados</p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        Hay {getDuplicateExpenses(expenses).length} {getDuplicateExpenses(expenses).length === 1 ? "grupo" : "grupos"} de transacciones idénticas en fecha, concepto y valor.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowDuplicatesModal(true)}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer border-0"
+                  >
+                    Revisar Duplicados
+                  </button>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-foreground/80">
                   <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
@@ -1413,6 +1593,21 @@ export default function CashflowClient() {
             }
           }}
           formatMissingDate={formatMissingDate}
+        />
+      )}
+      {showDuplicatesModal && (
+        <DuplicateExpensesModal
+          expenses={expenses}
+          onClose={() => setShowDuplicatesModal(false)}
+          onDeleteExpense={async (id) => {
+            const res = await deleteExpenseDirect(id);
+            if (res.error) {
+              alert(res.error);
+            } else {
+              loadData();
+            }
+          }}
+          formatCurrency={formatCurrency}
         />
       )}
 
