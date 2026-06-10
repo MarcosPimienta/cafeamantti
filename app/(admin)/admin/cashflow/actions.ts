@@ -157,11 +157,19 @@ export async function ensureCashflowDate(date: string) {
   
   const { data: existing } = await supabase
     .from('daily_cashflows')
-    .select('id')
+    .select('id, observations')
     .eq('date', date)
     .single();
 
-  if (existing) return existing.id;
+  if (existing) {
+    if (existing.observations === 'no_movements') {
+      await supabase
+        .from('daily_cashflows')
+        .update({ observations: null })
+        .eq('id', existing.id);
+    }
+    return existing.id;
+  }
 
   const { data, error } = await supabase
     .from('daily_cashflows')
@@ -587,6 +595,12 @@ export async function getMissingCashflowDays(): Promise<string[]> {
     .from('cashflow_incomes')
     .select('cashflow:cashflow_id(date)');
 
+  // Also fetch daily cashflows marked as "no movements"
+  const { data: noMovementsCashflows } = await supabase
+    .from('daily_cashflows')
+    .select('date')
+    .eq('observations', 'no_movements');
+
   // Build a Set of dates that DO have records
   const datesWithRecords = new Set<string>();
 
@@ -606,6 +620,11 @@ export async function getMissingCashflowDays(): Promise<string[]> {
   (orders || []).forEach((o: any) => {
     const d = new Date(o.created_at).toISOString().split('T')[0];
     datesWithRecords.add(d);
+  });
+
+  // Add the no-movements dates
+  (noMovementsCashflows || []).forEach((row: any) => {
+    if (row.date) datesWithRecords.add(row.date);
   });
 
   // Return days that have NO records at all
@@ -911,4 +930,31 @@ export async function getMonthlyPLReport(
     // Burn Rate
     burn_rate,
   };
+}
+
+export async function markDateAsNoMovements(date: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Find or create the daily cashflow record for this date
+  const cashflowId = await ensureCashflowDate(date);
+
+  // Update its observations to 'no_movements'
+  const { error } = await supabase
+    .from('daily_cashflows')
+    .update({ observations: 'no_movements' })
+    .eq('id', cashflowId);
+
+  if (error) return { error: error.message };
+
+  // Add audit log
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id:    user?.id,
+    action_type: 'UPDATE_CASHFLOW',
+    cashflow_id: cashflowId,
+    details: { message: `Día marcado como sin movimientos: ${date}` },
+  });
+
+  revalidatePath('/admin/cashflow');
+  return { success: true };
 }

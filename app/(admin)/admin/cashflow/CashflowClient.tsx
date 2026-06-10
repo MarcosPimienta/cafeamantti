@@ -17,6 +17,7 @@ import {
   createExpenseDirect, deleteExpenseDirect,
   createIncomeDirect, deleteIncomeDirect,
   getMissingCashflowDays, getMonthlyPLReport,
+  markDateAsNoMovements,
   type PLReportResult,
 } from "./actions";
 import { EXPENSE_CATEGORY_TYPE_MAP, type ExpenseType } from "./types";
@@ -154,9 +155,9 @@ function Dropzone({
 // EXPENSE MODAL — con toggle OPEX/COGS/CAPEX + IVA
 // ─────────────────────────────────────────────────────────────
 
-function ExpenseModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void; onSuccess: () => void; initialDate?: string }) {
   const today = new Date().toISOString().split("T")[0];
-  const [date,     setDate]     = useState(today);
+  const [date,     setDate]     = useState(initialDate || today);
   const [concept,  setConcept]  = useState("");
   const [category, setCategory] = useState("");
   const [amount,   setAmount]   = useState("");
@@ -348,9 +349,9 @@ function ExpenseModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
 // INCOME MODAL — con IVA, comisión y flete
 // ─────────────────────────────────────────────────────────────
 
-function IncomeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void; onSuccess: () => void; initialDate?: string }) {
   const today = new Date().toISOString().split("T")[0];
-  const [date,     setDate]     = useState(today);
+  const [date,     setDate]     = useState(initialDate || today);
   const [concept,  setConcept]  = useState("");
   const [category, setCategory] = useState("");
   const [gross,    setGross]    = useState("");
@@ -826,6 +827,95 @@ function CashflowReportView({
   );
 }
 
+function DayActionsModal({
+  date,
+  onClose,
+  onRegisterExpense,
+  onRegisterIncome,
+  onMarkNoMovements,
+  formatMissingDate,
+}: {
+  date: string;
+  onClose: () => void;
+  onRegisterExpense: () => void;
+  onRegisterIncome: () => void;
+  onMarkNoMovements: () => Promise<void>;
+  formatMissingDate: (d: string) => string;
+}) {
+  const [isPending, startTransition] = useTransition();
+
+  const handleMarkNoMovements = () => {
+    if (confirm(`¿Marcar el día ${date} como día sin movimientos (ingresos ni egresos)?`)) {
+      startTransition(async () => {
+        await onMarkNoMovements();
+      });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-serif text-foreground">Acciones del Día</h3>
+            <p className="text-xs text-foreground/50 mt-1 capitalize">{formatMissingDate(date)} ({date})</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-foreground/5 text-foreground/45 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Action List */}
+        <div className="p-6 space-y-3">
+          <button
+            onClick={onRegisterExpense}
+            className="w-full flex items-center gap-4 p-4 rounded-2xl border border-red-100 hover:border-red-300 hover:bg-red-50/50 transition-all duration-200 text-left group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center text-red-600 group-hover:scale-110 transition-transform">
+              <ArrowDownCircle className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-foreground">Registrar Gasto</p>
+              <p className="text-xs text-foreground/55">Reportar egresos o compras realizadas este día.</p>
+            </div>
+          </button>
+
+          <button
+            onClick={onRegisterIncome}
+            className="w-full flex items-center gap-4 p-4 rounded-2xl border border-green-100 hover:border-green-300 hover:bg-green-50/50 transition-all duration-200 text-left group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform">
+              <ArrowUpCircle className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-foreground">Registrar Ingreso</p>
+              <p className="text-xs text-foreground/55">Reportar ventas manuales o entradas de dinero.</p>
+            </div>
+          </button>
+
+          <button
+            onClick={handleMarkNoMovements}
+            disabled={isPending}
+            className="w-full flex items-center gap-4 p-4 rounded-2xl border border-amber-100 hover:border-amber-300 hover:bg-amber-50/50 transition-all duration-200 text-left group disabled:opacity-50 cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
+              {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Activity className="w-5 h-5" />}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-foreground">Día Sin Movimientos</p>
+              <p className="text-xs text-foreground/55">Marcar que no hubo ingresos ni egresos en esta fecha.</p>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // MAIN CLIENT COMPONENT
 // ─────────────────────────────────────────────────────────────
@@ -841,6 +931,8 @@ export default function CashflowClient() {
   const [alertExpanded,  setAlertExpanded]  = useState(false);
   const [showExpModal,   setShowExpModal]   = useState(false);
   const [showIncModal,   setShowIncModal]   = useState(false);
+  const [selectedDate,   setSelectedDate]   = useState<string | undefined>(undefined);
+  const [showDayActionsModal, setShowDayActionsModal] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -904,7 +996,7 @@ export default function CashflowClient() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {missingDays.map((day) => (
                   <button key={day}
-                    onClick={() => { setActiveTab("gastos"); setShowExpModal(true); }}
+                    onClick={() => { setSelectedDate(day); setShowDayActionsModal(true); }}
                     className="group flex items-center gap-3 px-4 py-3 bg-white border border-amber-200 rounded-xl hover:border-amber-400 hover:bg-amber-50 transition-all text-left shadow-sm">
                     <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-200 transition-colors">
                       <Calendar className="w-4 h-4 text-red-500" />
@@ -922,11 +1014,11 @@ export default function CashflowClient() {
               <div className="mt-4 pt-4 border-t border-amber-200 flex items-center justify-between flex-wrap gap-2">
                 <p className="text-xs text-amber-700">💡 Haz clic en cualquier día para abrir el formulario.</p>
                 <div className="flex gap-2">
-                  <button onClick={() => { setActiveTab("gastos"); setShowExpModal(true); }}
+                  <button onClick={() => { setSelectedDate(undefined); setActiveTab("gastos"); setShowExpModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
                     <ArrowDownCircle className="w-3.5 h-3.5" /> Nuevo Gasto
                   </button>
-                  <button onClick={() => { setActiveTab("ingresos"); setShowIncModal(true); }}
+                  <button onClick={() => { setSelectedDate(undefined); setActiveTab("ingresos"); setShowIncModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
                     <ArrowUpCircle className="w-3.5 h-3.5" /> Nuevo Ingreso
                   </button>
@@ -979,7 +1071,7 @@ export default function CashflowClient() {
             <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
                 <h2 className="text-xl font-serif">Todos los Gastos</h2>
-                <button onClick={() => setShowExpModal(true)}
+                <button onClick={() => { setSelectedDate(undefined); setShowExpModal(true); }}
                   className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
                   <Plus className="w-4 h-4" /> Nuevo Gasto
                 </button>
@@ -1047,7 +1139,7 @@ export default function CashflowClient() {
             <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
                 <h2 className="text-xl font-serif">Todos los Ingresos</h2>
-                <button onClick={() => setShowIncModal(true)}
+                <button onClick={() => { setSelectedDate(undefined); setShowIncModal(true); }}
                   className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
                   <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
                 </button>
@@ -1196,8 +1288,56 @@ export default function CashflowClient() {
       )}
 
       {/* Modals */}
-      {showExpModal && <ExpenseModal onClose={() => setShowExpModal(false)} onSuccess={loadData} />}
-      {showIncModal && <IncomeModal  onClose={() => setShowIncModal(false)} onSuccess={loadData} />}
+      {showExpModal && (
+        <ExpenseModal
+          initialDate={selectedDate}
+          onClose={() => {
+            setShowExpModal(false);
+            setSelectedDate(undefined);
+          }}
+          onSuccess={loadData}
+        />
+      )}
+      {showIncModal && (
+        <IncomeModal
+          initialDate={selectedDate}
+          onClose={() => {
+            setShowIncModal(false);
+            setSelectedDate(undefined);
+          }}
+          onSuccess={loadData}
+        />
+      )}
+      {showDayActionsModal && selectedDate && (
+        <DayActionsModal
+          date={selectedDate}
+          onClose={() => {
+            setShowDayActionsModal(false);
+            setSelectedDate(undefined);
+          }}
+          onRegisterExpense={() => {
+            setShowDayActionsModal(false);
+            setActiveTab("gastos");
+            setShowExpModal(true);
+          }}
+          onRegisterIncome={() => {
+            setShowDayActionsModal(false);
+            setActiveTab("ingresos");
+            setShowIncModal(true);
+          }}
+          onMarkNoMovements={async () => {
+            const res = await markDateAsNoMovements(selectedDate);
+            if (res.error) {
+              alert(res.error);
+            } else {
+              setShowDayActionsModal(false);
+              setSelectedDate(undefined);
+              loadData();
+            }
+          }}
+          formatMissingDate={formatMissingDate}
+        />
+      )}
 
       {/* Inline styles for reusable field classes */}
       <style>{`
