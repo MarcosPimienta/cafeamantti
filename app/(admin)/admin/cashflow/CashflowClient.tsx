@@ -5,7 +5,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, BarChart2, History, Plus, Upload,
   Image as ImageIcon, Trash2, X, Loader2, Check, Calendar, AlertTriangle,
   ChevronDown, ChevronUp, TrendingUp, TrendingDown, DollarSign,
-  Activity, Layers, Zap, Package,
+  Activity, Layers, Zap, Package, Pencil,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -18,6 +18,7 @@ import {
   createIncomeDirect, deleteIncomeDirect,
   getMissingCashflowDays, getMonthlyPLReport,
   markDateAsNoMovements,
+  updateExpenseDirect, updateIncomeDirect,
   type PLReportResult,
 } from "./actions";
 import { EXPENSE_CATEGORY_TYPE_MAP, type ExpenseType } from "./types";
@@ -155,15 +156,25 @@ function Dropzone({
 // EXPENSE MODAL — con toggle OPEX/COGS/CAPEX + IVA
 // ─────────────────────────────────────────────────────────────
 
-function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void; onSuccess: () => void; initialDate?: string }) {
+function ExpenseModal({
+  onClose,
+  onSuccess,
+  initialDate,
+  expenseToEdit,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+  initialDate?: string;
+  expenseToEdit?: any;
+}) {
   const today = new Date().toISOString().split("T")[0];
-  const [date,     setDate]     = useState(initialDate || today);
-  const [concept,  setConcept]  = useState("");
-  const [category, setCategory] = useState("");
-  const [amount,   setAmount]   = useState("");
-  const [taxAmt,   setTaxAmt]   = useState("");
-  const [deprMos,  setDeprMos]  = useState("");
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [date,     setDate]     = useState(expenseToEdit?.cashflow?.date || initialDate || today);
+  const [concept,  setConcept]  = useState(expenseToEdit?.concept || "");
+  const [category, setCategory] = useState(expenseToEdit?.category || "");
+  const [amount,   setAmount]   = useState(expenseToEdit?.amount ? String(expenseToEdit.amount) : "");
+  const [taxAmt,   setTaxAmt]   = useState(expenseToEdit?.tax_amount ? String(expenseToEdit.tax_amount) : "");
+  const [deprMos,  setDeprMos]  = useState(expenseToEdit?.depreciation_months ? String(expenseToEdit.depreciation_months) : "");
+  const [imageUrl, setImageUrl] = useState<string | null>(expenseToEdit?.image_url || null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
   const [successMessage, setSuccessMessage] = useState("");
@@ -171,7 +182,7 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
 
   // Inferir expense_type desde categoría y permitir override manual
   const inferredType: ExpenseType = EXPENSE_CATEGORY_TYPE_MAP[category] ?? "OPEX";
-  const [expenseType, setExpenseType] = useState<ExpenseType>("OPEX");
+  const [expenseType, setExpenseType] = useState<ExpenseType>(expenseToEdit?.expense_type || "OPEX");
 
   // Sincronizar tipo con la categoría seleccionada (pero el usuario puede overridear)
   useEffect(() => { setExpenseType(EXPENSE_CATEGORY_TYPE_MAP[category] ?? "OPEX"); }, [category]);
@@ -189,7 +200,7 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
       return;
     }
     startTransition(async () => {
-      const res = await createExpenseDirect(date, {
+      const payload = {
         concept,
         category,
         amount:              Number(amount),
@@ -198,7 +209,12 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
         net_amount:          Number(amount) - (taxAmt ? Number(taxAmt) : 0),
         depreciation_months: isCapex ? Number(deprMos) : null,
         image_url:           imageUrl,
-      });
+      };
+
+      const res = expenseToEdit
+        ? await updateExpenseDirect(expenseToEdit.id, payload)
+        : await createExpenseDirect(date, payload);
+
       if (res.error) {
         alert(res.error);
       } else {
@@ -228,8 +244,10 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
         {/* Header */}
         <div className="px-8 pt-7 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4 shrink-0">
           <div>
-            <h3 className="text-2xl font-serif">Nuevo Gasto</h3>
-            <p className="text-sm text-foreground/50 mt-0.5">Registra una salida de dinero con clasificación contable.</p>
+            <h3 className="text-2xl font-serif">{expenseToEdit ? "Editar Gasto" : "Nuevo Gasto"}</h3>
+            <p className="text-sm text-foreground/50 mt-0.5">
+              {expenseToEdit ? "Modifica los datos de la salida de dinero registrada." : "Registra una salida de dinero con clasificación contable."}
+            </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5 shrink-0">
             <X className="w-5 h-5 text-foreground/40" />
@@ -357,26 +375,47 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
             </div>
           )}
 
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              onClick={() => setShouldClose(false)}
-              disabled={isPending || isUploading}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-[#C59F59] hover:bg-[#C59F59]/5 text-[#C59F59] font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
-            >
-              {isPending && !shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-              Guardar y agregar otro
-            </button>
-            <button
-              type="submit"
-              onClick={() => setShouldClose(true)}
-              disabled={isPending || isUploading}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
-            >
-              {isPending && shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-              Guardar y cerrar
-            </button>
-          </div>
+          {expenseToEdit ? (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-3 border border-foreground/15 text-foreground/70 font-bold uppercase tracking-wider text-xs rounded-xl hover:bg-foreground/5 cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                onClick={() => setShouldClose(true)}
+                disabled={isPending || isUploading}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Guardar Cambios
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                onClick={() => setShouldClose(false)}
+                disabled={isPending || isUploading}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-[#C59F59] hover:bg-[#C59F59]/5 text-[#C59F59] font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {isPending && !shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Guardar y agregar otro
+              </button>
+              <button
+                type="submit"
+                onClick={() => setShouldClose(true)}
+                disabled={isPending || isUploading}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {isPending && shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Guardar y cerrar
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>
@@ -387,16 +426,26 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
 // INCOME MODAL — con IVA, comisión y flete
 // ─────────────────────────────────────────────────────────────
 
-function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void; onSuccess: () => void; initialDate?: string }) {
+function IncomeModal({
+  onClose,
+  onSuccess,
+  initialDate,
+  incomeToEdit,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+  initialDate?: string;
+  incomeToEdit?: any;
+}) {
   const today = new Date().toISOString().split("T")[0];
-  const [date,     setDate]     = useState(initialDate || today);
-  const [concept,  setConcept]  = useState("");
-  const [category, setCategory] = useState("");
-  const [gross,    setGross]    = useState("");
-  const [fee,      setFee]      = useState("");
-  const [shipping, setShipping] = useState("");
-  const [tax,      setTax]      = useState("");
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [date,     setDate]     = useState(incomeToEdit?.date || incomeToEdit?.cashflow?.date || initialDate || today);
+  const [concept,  setConcept]  = useState(incomeToEdit?.concept || "");
+  const [category, setCategory] = useState(incomeToEdit?.category || "");
+  const [gross,    setGross]    = useState(incomeToEdit?.gross_amount ? String(incomeToEdit.gross_amount) : incomeToEdit?.amount ? String(incomeToEdit.amount) : "");
+  const [fee,      setFee]      = useState(incomeToEdit?.fee_amount ? String(incomeToEdit.fee_amount) : "");
+  const [shipping, setShipping] = useState(incomeToEdit?.shipping_cost ? String(incomeToEdit.shipping_cost) : "");
+  const [tax,      setTax]      = useState(incomeToEdit?.tax_amount ? String(incomeToEdit.tax_amount) : "");
+  const [imageUrl, setImageUrl] = useState<string | null>(incomeToEdit?.image_url || null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
   const [successMessage, setSuccessMessage] = useState("");
@@ -421,7 +470,7 @@ function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void;
     e.preventDefault();
     if (!concept || !category || !gross || !date) return;
     startTransition(async () => {
-      const res = await createIncomeDirect(date, {
+      const payload = {
         concept,
         category,
         amount:        Number(gross),
@@ -431,7 +480,12 @@ function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void;
         tax_amount:    tax      ? Number(tax)      : 0,
         net_revenue:   netRevenue,
         image_url:     imageUrl,
-      });
+      };
+
+      const res = incomeToEdit
+        ? await updateIncomeDirect(incomeToEdit.id, payload)
+        : await createIncomeDirect(date, payload);
+
       if (res.error) {
         alert(res.error);
       } else {
@@ -461,8 +515,10 @@ function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void;
       >
         <div className="px-8 pt-7 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4 shrink-0">
           <div>
-            <h3 className="text-2xl font-serif">Nuevo Ingreso Manual</h3>
-            <p className="text-sm text-foreground/50 mt-0.5">Registra una entrada de dinero con desglose P&amp;L.</p>
+            <h3 className="text-2xl font-serif">{incomeToEdit ? "Editar Ingreso Manual" : "Nuevo Ingreso Manual"}</h3>
+            <p className="text-sm text-foreground/50 mt-0.5">
+              {incomeToEdit ? "Modifica los datos de la entrada de dinero registrada." : "Registra una entrada de dinero con desglose P&amp;L."}
+            </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5 shrink-0">
             <X className="w-5 h-5 text-foreground/40" />
@@ -560,26 +616,47 @@ function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void;
             </div>
           )}
 
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              onClick={() => setShouldClose(false)}
-              disabled={isPending || isUploading}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-[#C59F59] hover:bg-[#C59F59]/5 text-[#C59F59] font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
-            >
-              {isPending && !shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-              Guardar y agregar otro
-            </button>
-            <button
-              type="submit"
-              onClick={() => setShouldClose(true)}
-              disabled={isPending || isUploading}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
-            >
-              {isPending && shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-              Guardar y cerrar
-            </button>
-          </div>
+          {incomeToEdit ? (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-3 border border-foreground/15 text-foreground/70 font-bold uppercase tracking-wider text-xs rounded-xl hover:bg-foreground/5 cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                onClick={() => setShouldClose(true)}
+                disabled={isPending || isUploading}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Guardar Cambios
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                onClick={() => setShouldClose(false)}
+                disabled={isPending || isUploading}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-[#C59F59] hover:bg-[#C59F59]/5 text-[#C59F59] font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {isPending && !shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Guardar y agregar otro
+              </button>
+              <button
+                type="submit"
+                onClick={() => setShouldClose(true)}
+                disabled={isPending || isUploading}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {isPending && shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Guardar y cerrar
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>
@@ -1151,6 +1228,50 @@ function DuplicateExpensesModal({
   );
 }
 
+function PaginationControls({
+  currentPage,
+  totalPages,
+  totalItems,
+  itemsPerPage,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+  onPageChange: (page: number) => void;
+}) {
+  const from = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const to = Math.min(currentPage * itemsPerPage, totalItems);
+
+  return (
+    <div className="px-5 py-4 border-t border-foreground/5 bg-[#fdfbf7] flex items-center justify-between gap-4 flex-wrap text-xs">
+      <span className="text-foreground/50">
+        Mostrando <strong className="text-foreground">{from}</strong> a <strong className="text-foreground">{to}</strong> de <strong className="text-foreground">{totalItems}</strong> registros
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-1.5 border border-foreground/10 rounded-lg hover:bg-foreground/5 text-foreground/70 font-bold transition-all disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
+        >
+          Anterior
+        </button>
+        <span className="text-foreground/60 font-medium">
+          Página {currentPage} de {totalPages}
+        </span>
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1.5 border border-foreground/10 rounded-lg hover:bg-foreground/5 text-foreground/70 font-bold transition-all disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // MAIN CLIENT COMPONENT
 // ─────────────────────────────────────────────────────────────
@@ -1169,6 +1290,24 @@ export default function CashflowClient() {
   const [selectedDate,   setSelectedDate]   = useState<string | undefined>(undefined);
   const [showDayActionsModal, setShowDayActionsModal] = useState(false);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
+
+  // Filters for Gastos
+  const [expSearch, setExpSearch] = useState("");
+  const [expCategory, setExpCategory] = useState("");
+  const [expStart, setExpStart] = useState("");
+  const [expEnd, setExpEnd] = useState("");
+  const [expPage, setExpPage] = useState(1);
+
+  // Filters for Ingresos
+  const [incSearch, setIncSearch] = useState("");
+  const [incCategory, setIncCategory] = useState("");
+  const [incStart, setIncStart] = useState("");
+  const [incEnd, setIncEnd] = useState("");
+  const [incPage, setIncPage] = useState(1);
+
+  // Edit states
+  const [expenseToEdit, setExpenseToEdit] = useState<any | null>(null);
+  const [incomeToEdit, setIncomeToEdit] = useState<any | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -1303,158 +1442,368 @@ export default function CashflowClient() {
       ) : (
         <>
           {/* ── GASTOS ── */}
-          {activeTab === "gastos" && (
-            <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
-              <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
-                <h2 className="text-xl font-serif">Todos los Gastos</h2>
-                <button onClick={() => { setSelectedDate(undefined); setShowExpModal(true); }}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
-                  <Plus className="w-4 h-4" /> Nuevo Gasto
-                </button>
-              </div>
-              {getDuplicateExpenses(expenses).length > 0 && (
-                <div className="mx-5 mt-5 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-4 flex-wrap animate-fadeIn">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-                      <AlertTriangle className="w-5 h-5 animate-pulse" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-amber-800">Se detectaron posibles gastos duplicados</p>
-                      <p className="text-xs text-amber-600 mt-0.5">
-                        Hay {getDuplicateExpenses(expenses).length} {getDuplicateExpenses(expenses).length === 1 ? "grupo" : "grupos"} de transacciones idénticas en fecha, concepto y valor.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowDuplicatesModal(true)}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer border-0"
-                  >
-                    Revisar Duplicados
+          {activeTab === "gastos" && (() => {
+            const filteredExpenses = expenses.filter((e) => {
+              const matchConcept = !expSearch || (e.concept || "").toLowerCase().includes(expSearch.toLowerCase());
+              const matchCategory = !expCategory || e.category === expCategory;
+              const matchStart = !expStart || (e.cashflow?.date && e.cashflow.date >= expStart);
+              const matchEnd = !expEnd || (e.cashflow?.date && e.cashflow.date <= expEnd);
+              return matchConcept && matchCategory && matchStart && matchEnd;
+            });
+
+            const expPerPage = 10;
+            const expTotalPages = Math.ceil(filteredExpenses.length / expPerPage) || 1;
+            const paginatedExpenses = filteredExpenses.slice(
+              (expPage - 1) * expPerPage,
+              expPage * expPerPage
+            );
+
+            return (
+              <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
+                <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
+                  <h2 className="text-xl font-serif">Todos los Gastos</h2>
+                  <button onClick={() => { setSelectedDate(undefined); setExpenseToEdit(null); setShowExpModal(true); }}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
+                    <Plus className="w-4 h-4" /> Nuevo Gasto
                   </button>
                 </div>
-              )}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-foreground/80">
-                  <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
-                    <tr>
-                      <th className="px-5 py-4">Fecha</th>
-                      <th className="px-5 py-4">Concepto</th>
-                      <th className="px-5 py-4">Categoría</th>
-                      <th className="px-5 py-4 text-center">Tipo</th>
-                      <th className="px-5 py-4 text-right">Bruto</th>
-                      <th className="px-5 py-4 text-right">Neto</th>
-                      <th className="px-5 py-4 text-center">Soporte</th>
-                      <th className="px-5 py-4 text-center">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-foreground/5">
-                    {expenses.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center py-10 text-foreground/40">No hay gastos registrados.</td></tr>
-                    ) : expenses.map((exp) => {
-                      const meta = EXPENSE_TYPE_META[(exp.expense_type as ExpenseType) ?? "OPEX"];
-                      return (
-                        <tr key={exp.id} className="hover:bg-foreground/[0.02]">
-                          <td className="px-5 py-4 font-mono text-xs">{exp.cashflow?.date}</td>
-                          <td className="px-5 py-4 font-bold max-w-[180px] truncate">{exp.concept}</td>
-                          <td className="px-5 py-4 text-xs text-foreground/60 max-w-[160px] truncate">{exp.category}</td>
-                          <td className="px-5 py-4 text-center">
-                            <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${meta.bg} ${meta.color}`}>
-                              {meta.label}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4 font-mono text-right text-red-500 font-bold">{formatCurrency(exp.amount)}</td>
-                          <td className="px-5 py-4 font-mono text-right text-foreground/60">{formatCurrency(exp.net_amount ?? exp.amount)}</td>
-                          <td className="px-5 py-4 text-center">
-                            {exp.image_url
-                              ? <a href={exp.image_url} target="_blank" rel="noreferrer"
-                                  className="inline-block p-1.5 bg-[#C59F59]/10 text-[#C59F59] rounded-lg hover:bg-[#C59F59]/20 transition-colors">
-                                  <ImageIcon className="w-4 h-4" />
-                                </a>
-                              : <span className="text-foreground/30">—</span>}
-                          </td>
-                          <td className="px-5 py-4 text-center">
-                            <button onClick={async () => {
-                              if (confirm("¿Eliminar este gasto?")) {
-                                await deleteExpenseDirect(exp.id);
-                                loadData();
-                              }
-                            }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
-          {/* ── INGRESOS ── */}
-          {activeTab === "ingresos" && (
-            <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
-              <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
-                <h2 className="text-xl font-serif">Todos los Ingresos</h2>
-                <button onClick={() => { setSelectedDate(undefined); setShowIncModal(true); }}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
-                  <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
-                </button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-foreground/80">
-                  <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
-                    <tr>
-                      <th className="px-5 py-4">Fecha</th>
-                      <th className="px-5 py-4">Concepto</th>
-                      <th className="px-5 py-4">Categoría</th>
-                      <th className="px-5 py-4 text-center">Tipo</th>
-                      <th className="px-5 py-4 text-right">Bruto</th>
-                      <th className="px-5 py-4 text-right">Neto</th>
-                      <th className="px-5 py-4 text-center">Soporte / Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-foreground/5">
-                    {incomes.length === 0 ? (
-                      <tr><td colSpan={7} className="text-center py-10 text-foreground/40">No hay ingresos registrados.</td></tr>
-                    ) : incomes.map((inc) => (
-                      <tr key={inc.id} className="hover:bg-foreground/[0.02]">
-                        <td className="px-5 py-4 font-mono text-xs">{inc.date ?? inc.cashflow?.date ?? new Date(inc.created_at).toISOString().split("T")[0]}</td>
-                        <td className="px-5 py-4 font-bold max-w-[180px] truncate">{inc.concept}</td>
-                        <td className="px-5 py-4 text-xs text-foreground/60">{inc.category}</td>
-                        <td className="px-5 py-4 text-center">
-                          <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
-                            inc.type === "manual" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
-                          }`}>
-                            {inc.type}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 font-mono text-right text-green-600 font-bold">{formatCurrency(inc.gross_amount ?? inc.amount)}</td>
-                        <td className="px-5 py-4 font-mono text-right text-foreground/60">{formatCurrency(inc.net_revenue ?? inc.amount)}</td>
-                        <td className="px-5 py-4 text-center">
-                          {inc.image_url
-                            ? <a href={inc.image_url} target="_blank" rel="noreferrer"
-                                className="inline-block p-1.5 bg-[#C59F59]/10 text-[#C59F59] rounded-lg hover:bg-[#C59F59]/20">
-                                <ImageIcon className="w-4 h-4" />
-                              </a>
-                            : inc.type === "manual" && (
+                {/* Filter controls */}
+                <div className="p-5 border-b border-foreground/5 bg-foreground/[0.01] grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+                  <div>
+                    <label className="field-label">Concepto</label>
+                    <input
+                      type="text"
+                      value={expSearch}
+                      onChange={(e) => { setExpSearch(e.target.value); setExpPage(1); }}
+                      placeholder="Buscar concepto..."
+                      className="field-input py-2 px-3 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Categoría</label>
+                    <select
+                      value={expCategory}
+                      onChange={(e) => { setExpCategory(e.target.value); setExpPage(1); }}
+                      className="field-input py-2 px-3 text-xs font-bold"
+                    >
+                      <option value="">Todas las categorías</option>
+                      {PREDEFINED_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label">Desde</label>
+                    <input
+                      type="date"
+                      value={expStart}
+                      onChange={(e) => { setExpStart(e.target.value); setExpPage(1); }}
+                      className="field-input py-2 px-3 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Hasta</label>
+                    <input
+                      type="date"
+                      value={expEnd}
+                      onChange={(e) => { setExpEnd(e.target.value); setExpPage(1); }}
+                      className="field-input py-2 px-3 text-xs"
+                    />
+                  </div>
+                </div>
+
+                {(expSearch || expCategory || expStart || expEnd) && (
+                  <div className="px-5 py-2.5 bg-amber-50/20 border-b border-foreground/5 flex justify-end">
+                    <button
+                      onClick={() => {
+                        setExpSearch("");
+                        setExpCategory("");
+                        setExpStart("");
+                        setExpEnd("");
+                        setExpPage(1);
+                      }}
+                      className="text-xs font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer"
+                    >
+                      Limpiar Filtros
+                    </button>
+                  </div>
+                )}
+
+                {getDuplicateExpenses(expenses).length > 0 && (
+                  <div className="mx-5 mt-5 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                        <AlertTriangle className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-amber-800">Se detectaron posibles gastos duplicados</p>
+                        <p className="text-xs text-amber-600 mt-0.5">
+                          Hay {getDuplicateExpenses(expenses).length} {getDuplicateExpenses(expenses).length === 1 ? "grupo" : "grupos"} de transacciones idénticas en fecha, concepto y valor.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowDuplicatesModal(true)}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer border-0"
+                    >
+                      Revisar Duplicados
+                    </button>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-foreground/80">
+                    <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
+                      <tr>
+                        <th className="px-5 py-4">Fecha</th>
+                        <th className="px-5 py-4">Concepto</th>
+                        <th className="px-5 py-4">Categoría</th>
+                        <th className="px-5 py-4 text-center">Tipo</th>
+                        <th className="px-5 py-4 text-right">Bruto</th>
+                        <th className="px-5 py-4 text-right">Neto</th>
+                        <th className="px-5 py-4 text-center">Soporte</th>
+                        <th className="px-5 py-4 text-center">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-foreground/5">
+                      {paginatedExpenses.length === 0 ? (
+                        <tr><td colSpan={8} className="text-center py-10 text-foreground/40">No hay gastos registrados que coincidan.</td></tr>
+                      ) : paginatedExpenses.map((exp) => {
+                        const meta = EXPENSE_TYPE_META[(exp.expense_type as ExpenseType) ?? "OPEX"];
+                        return (
+                          <tr key={exp.id} className="hover:bg-foreground/[0.02]">
+                            <td className="px-5 py-4 font-mono text-xs">{exp.cashflow?.date}</td>
+                            <td className="px-5 py-4 font-bold max-w-[180px] truncate">{exp.concept}</td>
+                            <td className="px-5 py-4 text-xs text-foreground/60 max-w-[160px] truncate">{exp.category}</td>
+                            <td className="px-5 py-4 text-center">
+                              <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${meta.bg} ${meta.color}`}>
+                                {meta.label}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 font-mono text-right text-red-500 font-bold">{formatCurrency(exp.amount)}</td>
+                            <td className="px-5 py-4 font-mono text-right text-foreground/60">{formatCurrency(exp.net_amount ?? exp.amount)}</td>
+                            <td className="px-5 py-4 text-center">
+                              {exp.image_url
+                                ? <a href={exp.image_url} target="_blank" rel="noreferrer"
+                                    className="inline-block p-1.5 bg-[#C59F59]/10 text-[#C59F59] rounded-lg hover:bg-[#C59F59]/20 transition-colors">
+                                    <ImageIcon className="w-4 h-4" />
+                                  </a>
+                                : <span className="text-foreground/30">—</span>}
+                            </td>
+                            <td className="px-5 py-4 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setExpenseToEdit(exp);
+                                    setShowExpModal(true);
+                                  }}
+                                  className="text-[#C59F59] hover:bg-amber-50 p-2 rounded-lg transition-colors cursor-pointer"
+                                  title="Editar gasto"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
                                 <button onClick={async () => {
-                                  if (confirm("¿Eliminar este ingreso manual?")) {
-                                    await deleteIncomeDirect(inc.id);
+                                  if (confirm("¿Eliminar este gasto?")) {
+                                    await deleteExpenseDirect(exp.id);
                                     loadData();
                                   }
-                                }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
+                                }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors cursor-pointer">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-                              )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <PaginationControls
+                  currentPage={expPage}
+                  totalPages={expTotalPages}
+                  totalItems={filteredExpenses.length}
+                  itemsPerPage={expPerPage}
+                  onPageChange={setExpPage}
+                />
               </div>
-            </div>
-          )}
+            );
+          })()}
+
+          {/* ── INGRESOS ── */}
+          {activeTab === "ingresos" && (() => {
+            const filteredIncomes = incomes.filter((inc) => {
+              const dateStr = inc.date || inc.cashflow?.date || new Date(inc.created_at).toISOString().split("T")[0];
+              const matchConcept = !incSearch || (inc.concept || "").toLowerCase().includes(incSearch.toLowerCase());
+              const matchCategory = !incCategory || inc.category === incCategory;
+              const matchStart = !incStart || (dateStr && dateStr >= incStart);
+              const matchEnd = !incEnd || (dateStr && dateStr <= incEnd);
+              return matchConcept && matchCategory && matchStart && matchEnd;
+            });
+
+            const incPerPage = 10;
+            const incTotalPages = Math.ceil(filteredIncomes.length / incPerPage) || 1;
+            const paginatedIncomes = filteredIncomes.slice(
+              (incPage - 1) * incPerPage,
+              incPage * incPerPage
+            );
+
+            return (
+              <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
+                <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
+                  <h2 className="text-xl font-serif">Todos los Ingresos</h2>
+                  <button onClick={() => { setSelectedDate(undefined); setIncomeToEdit(null); setShowIncModal(true); }}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
+                    <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
+                  </button>
+                </div>
+
+                {/* Filter controls */}
+                <div className="p-5 border-b border-foreground/5 bg-foreground/[0.01] grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+                  <div>
+                    <label className="field-label">Concepto</label>
+                    <input
+                      type="text"
+                      value={incSearch}
+                      onChange={(e) => { setIncSearch(e.target.value); setIncPage(1); }}
+                      placeholder="Buscar concepto..."
+                      className="field-input py-2 px-3 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Categoría</label>
+                    <select
+                      value={incCategory}
+                      onChange={(e) => { setIncCategory(e.target.value); setIncPage(1); }}
+                      className="field-input py-2 px-3 text-xs font-bold"
+                    >
+                      <option value="">Todas las categorías</option>
+                      {INCOME_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label">Desde</label>
+                    <input
+                      type="date"
+                      value={incStart}
+                      onChange={(e) => { setIncStart(e.target.value); setIncPage(1); }}
+                      className="field-input py-2 px-3 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Hasta</label>
+                    <input
+                      type="date"
+                      value={incEnd}
+                      onChange={(e) => { setIncEnd(e.target.value); setIncPage(1); }}
+                      className="field-input py-2 px-3 text-xs"
+                    />
+                  </div>
+                </div>
+
+                {(incSearch || incCategory || incStart || incEnd) && (
+                  <div className="px-5 py-2.5 bg-amber-50/20 border-b border-foreground/5 flex justify-end">
+                    <button
+                      onClick={() => {
+                        setIncSearch("");
+                        setIncCategory("");
+                        setIncStart("");
+                        setIncEnd("");
+                        setIncPage(1);
+                      }}
+                      className="text-xs font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer"
+                    >
+                      Limpiar Filtros
+                    </button>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-foreground/80">
+                    <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
+                      <tr>
+                        <th className="px-5 py-4">Fecha</th>
+                        <th className="px-5 py-4">Concepto</th>
+                        <th className="px-5 py-4">Categoría</th>
+                        <th className="px-5 py-4 text-center">Tipo</th>
+                        <th className="px-5 py-4 text-right">Bruto</th>
+                        <th className="px-5 py-4 text-right">Neto</th>
+                        <th className="px-5 py-4 text-center">Soporte / Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-foreground/5">
+                      {paginatedIncomes.length === 0 ? (
+                        <tr><td colSpan={7} className="text-center py-10 text-foreground/40">No hay ingresos registrados que coincidan.</td></tr>
+                      ) : paginatedIncomes.map((inc) => (
+                        <tr key={inc.id} className="hover:bg-foreground/[0.02]">
+                          <td className="px-5 py-4 font-mono text-xs">{inc.date ?? inc.cashflow?.date ?? new Date(inc.created_at).toISOString().split("T")[0]}</td>
+                          <td className="px-5 py-4 font-bold max-w-[180px] truncate">{inc.concept}</td>
+                          <td className="px-5 py-4 text-xs text-foreground/60">{inc.category}</td>
+                          <td className="px-5 py-4 text-center">
+                            <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
+                              inc.type === "manual" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                            }`}>
+                              {inc.type}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 font-mono text-right text-green-600 font-bold">{formatCurrency(inc.gross_amount ?? inc.amount)}</td>
+                          <td className="px-5 py-4 font-mono text-right text-foreground/60">{formatCurrency(inc.net_revenue ?? inc.amount)}</td>
+                          <td className="px-5 py-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {inc.image_url ? (
+                                <a href={inc.image_url} target="_blank" rel="noreferrer"
+                                    className="inline-block p-1.5 bg-[#C59F59]/10 text-[#C59F59] rounded-lg hover:bg-[#C59F59]/20 transition-colors">
+                                    <ImageIcon className="w-4 h-4" />
+                                </a>
+                              ) : (
+                                <span className="text-foreground/30 px-2">—</span>
+                              )}
+                              
+                              {inc.type === "manual" && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setIncomeToEdit(inc);
+                                      setShowIncModal(true);
+                                    }}
+                                    className="text-[#C59F59] hover:bg-amber-50 p-2 rounded-lg transition-colors cursor-pointer"
+                                    title="Editar ingreso"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm("¿Eliminar este ingreso manual?")) {
+                                        await deleteIncomeDirect(inc.id);
+                                        loadData();
+                                      }
+                                    }}
+                                    className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors cursor-pointer"
+                                    title="Eliminar ingreso"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <PaginationControls
+                  currentPage={incPage}
+                  totalPages={incTotalPages}
+                  totalItems={filteredIncomes.length}
+                  itemsPerPage={incPerPage}
+                  onPageChange={setIncPage}
+                />
+              </div>
+            );
+          })()}
 
           {/* ── REPORTES ── */}
           {activeTab === "reportes" && (
@@ -1548,9 +1897,11 @@ export default function CashflowClient() {
       {showExpModal && (
         <ExpenseModal
           initialDate={selectedDate}
+          expenseToEdit={expenseToEdit}
           onClose={() => {
             setShowExpModal(false);
             setSelectedDate(undefined);
+            setExpenseToEdit(null);
           }}
           onSuccess={loadData}
         />
@@ -1558,9 +1909,11 @@ export default function CashflowClient() {
       {showIncModal && (
         <IncomeModal
           initialDate={selectedDate}
+          incomeToEdit={incomeToEdit}
           onClose={() => {
             setShowIncModal(false);
             setSelectedDate(undefined);
+            setIncomeToEdit(null);
           }}
           onSuccess={loadData}
         />
