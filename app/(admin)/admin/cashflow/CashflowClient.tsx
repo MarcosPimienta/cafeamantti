@@ -166,6 +166,8 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
+  const [successMessage, setSuccessMessage] = useState("");
+  const [shouldClose, setShouldClose] = useState(true);
 
   // Inferir expense_type desde categoría y permitir override manual
   const inferredType: ExpenseType = EXPENSE_CATEGORY_TYPE_MAP[category] ?? "OPEX";
@@ -197,8 +199,23 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
         depreciation_months: isCapex ? Number(deprMos) : null,
         image_url:           imageUrl,
       });
-      if (res.error) alert(res.error);
-      else { onSuccess(); onClose(); }
+      if (res.error) {
+        alert(res.error);
+      } else {
+        onSuccess();
+        if (shouldClose) {
+          onClose();
+        } else {
+          setConcept("");
+          setCategory("");
+          setAmount("");
+          setTaxAmt("");
+          setDeprMos("");
+          setImageUrl(null);
+          setSuccessMessage("¡Gasto registrado con éxito!");
+          setTimeout(() => setSuccessMessage(""), 4000);
+        }
+      }
     });
   }
 
@@ -334,11 +351,32 @@ function ExpenseModal({ onClose, onSuccess, initialDate }: { onClose: () => void
             )}
           </div>
 
-          <button type="submit" disabled={isPending || isUploading}
-            className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-xl transition-all disabled:opacity-60">
-            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Guardar Gasto
-          </button>
+          {successMessage && (
+            <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-xs font-bold rounded-xl text-center">
+              {successMessage}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              onClick={() => setShouldClose(false)}
+              disabled={isPending || isUploading}
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-[#C59F59] hover:bg-[#C59F59]/5 text-[#C59F59] font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+            >
+              {isPending && !shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Guardar y agregar otro
+            </button>
+            <button
+              type="submit"
+              onClick={() => setShouldClose(true)}
+              disabled={isPending || isUploading}
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+            >
+              {isPending && shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Guardar y cerrar
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -361,6 +399,8 @@ function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void;
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
+  const [successMessage, setSuccessMessage] = useState("");
+  const [shouldClose, setShouldClose] = useState(true);
 
   const isWebSale = category === "Ventas Web";
 
@@ -392,8 +432,24 @@ function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void;
         net_revenue:   netRevenue,
         image_url:     imageUrl,
       });
-      if (res.error) alert(res.error);
-      else { onSuccess(); onClose(); }
+      if (res.error) {
+        alert(res.error);
+      } else {
+        onSuccess();
+        if (shouldClose) {
+          onClose();
+        } else {
+          setConcept("");
+          setCategory("");
+          setGross("");
+          setFee("");
+          setShipping("");
+          setTax("");
+          setImageUrl(null);
+          setSuccessMessage("¡Ingreso registrado con éxito!");
+          setTimeout(() => setSuccessMessage(""), 4000);
+        }
+      }
     });
   }
 
@@ -498,11 +554,32 @@ function IncomeModal({ onClose, onSuccess, initialDate }: { onClose: () => void;
             )}
           </div>
 
-          <button type="submit" disabled={isPending || isUploading}
-            className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-xl transition-all disabled:opacity-60">
-            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Guardar Ingreso
-          </button>
+          {successMessage && (
+            <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-xs font-bold rounded-xl text-center">
+              {successMessage}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              onClick={() => setShouldClose(false)}
+              disabled={isPending || isUploading}
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-[#C59F59] hover:bg-[#C59F59]/5 text-[#C59F59] font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+            >
+              {isPending && !shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Guardar y agregar otro
+            </button>
+            <button
+              type="submit"
+              onClick={() => setShouldClose(true)}
+              disabled={isPending || isUploading}
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+            >
+              {isPending && shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Guardar y cerrar
+            </button>
+          </div>
         </form>
       </div>
     </div>
