@@ -19,6 +19,7 @@ import {
   getMissingCashflowDays, getMonthlyPLReport,
   markDateAsNoMovements,
   updateExpenseDirect, updateIncomeDirect,
+  getInventory,
   type PLReportResult,
 } from "./actions";
 import { EXPENSE_CATEGORY_TYPE_MAP, type ExpenseType } from "./types";
@@ -431,11 +432,13 @@ function IncomeModal({
   onSuccess,
   initialDate,
   incomeToEdit,
+  inventoryList = [],
 }: {
   onClose: () => void;
   onSuccess: () => void;
   initialDate?: string;
   incomeToEdit?: any;
+  inventoryList?: any[];
 }) {
   const today = new Date().toISOString().split("T")[0];
   const [date,     setDate]     = useState(incomeToEdit?.date || incomeToEdit?.cashflow?.date || initialDate || today);
@@ -446,10 +449,14 @@ function IncomeModal({
   const [shipping, setShipping] = useState(incomeToEdit?.shipping_cost ? String(incomeToEdit.shipping_cost) : "");
   const [tax,      setTax]      = useState(incomeToEdit?.tax_amount ? String(incomeToEdit.tax_amount) : "");
   const [imageUrl, setImageUrl] = useState<string | null>(incomeToEdit?.image_url || null);
+  const [inventoryId, setInventoryId]   = useState(incomeToEdit?.inventory_id || "");
+  const [quantitySold, setQuantitySold] = useState(incomeToEdit?.quantity_sold ? String(incomeToEdit.quantity_sold) : "");
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
   const [successMessage, setSuccessMessage] = useState("");
   const [shouldClose, setShouldClose] = useState(true);
+
+  const selectedProduct = inventoryList.find((p) => p.id === inventoryId);
 
   const isWebSale = category === "Ventas Web";
 
@@ -469,6 +476,10 @@ function IncomeModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!concept || !category || !gross || !date) return;
+    if (inventoryId && (!quantitySold || Number(quantitySold) <= 0)) {
+      alert("Por favor ingresa una cantidad vendida válida (mayor a cero).");
+      return;
+    }
     startTransition(async () => {
       const payload = {
         concept,
@@ -480,6 +491,8 @@ function IncomeModal({
         tax_amount:    tax      ? Number(tax)      : 0,
         net_revenue:   netRevenue,
         image_url:     imageUrl,
+        inventory_id:  inventoryId || null,
+        quantity_sold: inventoryId ? Number(quantitySold || 0) : 0,
       };
 
       const res = incomeToEdit
@@ -500,6 +513,8 @@ function IncomeModal({
           setShipping("");
           setTax("");
           setImageUrl(null);
+          setInventoryId("");
+          setQuantitySold("");
           setSuccessMessage("¡Ingreso registrado con éxito!");
           setTimeout(() => setSuccessMessage(""), 4000);
         }
@@ -590,6 +605,50 @@ function IncomeModal({
                 {fmt(netRevenue)}
               </span>
             </div>
+          </div>
+
+          {/* Vincular con Inventario (Opcional) */}
+          <div className="p-4 bg-[#f9f7f0] rounded-xl space-y-3 border border-foreground/5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-foreground/50">Vincular con Inventario (Salida de Stock)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="field-label">Producto Vendido</label>
+                <select
+                  value={inventoryId}
+                  onChange={(e) => {
+                    setInventoryId(e.target.value);
+                    if (!e.target.value) setQuantitySold("");
+                  }}
+                  className="field-input text-xs font-bold"
+                >
+                  <option value="">Ninguno / Sin stock asociado</option>
+                  {inventoryList?.map((prod) => (
+                    <option key={prod.id} value={prod.id}>
+                      {prod.product_name} ({prod.product_code}) - Stock: {prod.current_stock} {prod.unit || 'und'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="field-label">Cantidad Vendida</label>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="any"
+                  value={quantitySold}
+                  onChange={(e) => setQuantitySold(e.target.value)}
+                  disabled={!inventoryId}
+                  required={!!inventoryId}
+                  placeholder={selectedProduct ? `En ${selectedProduct.unit || 'unidades'}` : "Cantidad"}
+                  className="field-input text-xs"
+                />
+              </div>
+            </div>
+            {selectedProduct && (
+              <p className="text-[10px] text-foreground/50 italic">
+                Nota: Se registrará una salida de {quantitySold || 0} {selectedProduct.unit || 'unidades'} de '{selectedProduct.product_name}' (Stock actual: {selectedProduct.current_stock} {selectedProduct.unit || 'und'}).
+              </p>
+            )}
           </div>
 
           {/* Soporte */}
@@ -1282,6 +1341,7 @@ export default function CashflowClient() {
   const [expenses,       setExpenses]       = useState<any[]>([]);
   const [incomes,        setIncomes]        = useState<any[]>([]);
   const [historyLogs,    setHistoryLogs]    = useState<any[]>([]);
+  const [inventory,      setInventory]      = useState<any[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [missingDays,    setMissingDays]    = useState<string[]>([]);
   const [alertExpanded,  setAlertExpanded]  = useState(false);
@@ -1311,13 +1371,14 @@ export default function CashflowClient() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [exp, inc, hist, missing] = await Promise.all([
-      getAllExpenses(), getAllIncomes(), getCashflowHistory(), getMissingCashflowDays(),
+    const [exp, inc, hist, missing, inv] = await Promise.all([
+      getAllExpenses(), getAllIncomes(), getCashflowHistory(), getMissingCashflowDays(), getInventory(),
     ]);
     setExpenses(exp   || []);
     setIncomes(inc    || []);
     setHistoryLogs(hist  || []);
     setMissingDays(missing || []);
+    setInventory(inv || []);
     setLoading(false);
   }, []);
 
@@ -1739,7 +1800,17 @@ export default function CashflowClient() {
                       ) : paginatedIncomes.map((inc) => (
                         <tr key={inc.id} className="hover:bg-foreground/[0.02]">
                           <td className="px-5 py-4 font-mono text-xs">{inc.date ?? inc.cashflow?.date ?? new Date(inc.created_at).toISOString().split("T")[0]}</td>
-                          <td className="px-5 py-4 font-bold max-w-[180px] truncate">{inc.concept}</td>
+                          <td className="px-5 py-4 font-bold max-w-[180px] truncate">
+                            <div>{inc.concept}</div>
+                            {inc.inventory && (
+                              <div className="text-[10px] font-normal text-[#C59F59] mt-0.5 flex items-center gap-1">
+                                <Package className="w-3 h-3 text-[#C59F59]" />
+                                <span>
+                                  {inc.inventory.product_name} ({inc.quantity_sold} {inc.inventory.unit || 'und'})
+                                </span>
+                              </div>
+                            )}
+                          </td>
                           <td className="px-5 py-4 text-xs text-foreground/60">{inc.category}</td>
                           <td className="px-5 py-4 text-center">
                             <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
@@ -1910,6 +1981,7 @@ export default function CashflowClient() {
         <IncomeModal
           initialDate={selectedDate}
           incomeToEdit={incomeToEdit}
+          inventoryList={inventory}
           onClose={() => {
             setShowIncModal(false);
             setSelectedDate(undefined);

@@ -170,6 +170,15 @@ export interface CashflowIncome {
   // ── Soporte documental ───────────────────────────────────
   image_url?:    string | null;
 
+  // ── Asociación con Inventario ────────────────────────────
+  inventory_id?:  string | null;
+  quantity_sold?: number | null;
+  inventory?: {
+    product_code: string;
+    product_name: string;
+    unit?: string;
+  } | null;
+
   // ── Metadatos ────────────────────────────────────────────
   created_at:    string;
   created_by?:   string;
