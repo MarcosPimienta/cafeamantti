@@ -644,9 +644,16 @@ export async function getInventoryMovements(inventoryId?: string) {
       type,
       quantity,
       reason,
+      lote,
+      movement_date,
+      responsable,
+      entry_type,
+      tab_source,
+      production_batch_id,
       created_at,
       inventory ( product_code, product_name )
     `)
+    .order('movement_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(100);
 

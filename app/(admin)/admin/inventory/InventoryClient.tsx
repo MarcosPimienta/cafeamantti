@@ -141,6 +141,14 @@ function today() {
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("es-CO", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
   return new Date(iso).toLocaleDateString("es-CO", {
     year: "numeric",
     month: "short",

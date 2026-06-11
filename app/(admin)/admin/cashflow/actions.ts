@@ -452,6 +452,18 @@ export async function createIncomeDirect(
       const newStock = Number(invItem.current_stock) - payload.quantity_sold;
       await supabase.from('inventory').update({ current_stock: newStock }).eq('id', payload.inventory_id);
 
+      let adminName = 'Flujo de Caja';
+      if (user?.id) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', user.id)
+          .single();
+        if (prof) {
+          adminName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || 'Flujo de Caja';
+        }
+      }
+
       await supabase.from('inventory_movements').insert({
         inventory_id: payload.inventory_id,
         type: 'salida',
@@ -459,6 +471,7 @@ export async function createIncomeDirect(
         movement_date: date,
         reason: `Salida por venta física (Ingreso: ${payload.concept})`,
         created_by: user?.id,
+        responsable: adminName,
         tab_source: 'salida',
         income_id: data.id
       });
@@ -476,6 +489,7 @@ export async function createIncomeDirect(
 
   revalidatePath('/admin/cashflow');
   revalidatePath('/admin/inventory');
+  revalidatePath('/admin/inventory', 'page');
   return { success: true, data };
 }
 
@@ -545,6 +559,18 @@ export async function updateIncomeDirect(
       const newStock = Number(newInvItem.current_stock) - newQty;
       await supabase.from('inventory').update({ current_stock: newStock }).eq('id', newInvId);
 
+      let adminName = 'Flujo de Caja';
+      if (user?.id) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', user.id)
+          .single();
+        if (prof) {
+          adminName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || 'Flujo de Caja';
+        }
+      }
+
       await supabase.from('inventory_movements').insert({
         inventory_id: newInvId,
         type: 'salida',
@@ -552,16 +578,30 @@ export async function updateIncomeDirect(
         movement_date: oldData.cashflow?.date || new Date().toISOString().split('T')[0],
         reason: `Salida por venta física (Ingreso modificado: ${payload.concept})`,
         created_by: user?.id,
+        responsable: adminName,
         tab_source: 'salida',
         income_id: id
       });
     }
   } else if (!isInvChanged && newInvId && newQty > 0) {
+    let adminName = 'Flujo de Caja';
+    if (user?.id) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', user.id)
+        .single();
+      if (prof) {
+        adminName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || 'Flujo de Caja';
+      }
+    }
+
     // Si no cambió la asociación de inventario pero sí el concepto o fecha, actualizar el movimiento
     await supabase.from('inventory_movements')
       .update({
         reason: `Salida por venta física (Ingreso modificado: ${payload.concept})`,
-        movement_date: oldData.cashflow?.date || new Date().toISOString().split('T')[0]
+        movement_date: oldData.cashflow?.date || new Date().toISOString().split('T')[0],
+        responsable: adminName
       })
       .eq('income_id', id);
   }
@@ -577,6 +617,7 @@ export async function updateIncomeDirect(
 
   revalidatePath('/admin/cashflow');
   revalidatePath('/admin/inventory');
+  revalidatePath('/admin/inventory', 'page');
   return { success: true, data: newData };
 }
 
@@ -611,6 +652,7 @@ export async function deleteIncomeDirect(id: string) {
 
   revalidatePath('/admin/cashflow');
   revalidatePath('/admin/inventory');
+  revalidatePath('/admin/inventory', 'page');
   return { success: true };
 }
 
