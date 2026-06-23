@@ -14,6 +14,8 @@ export interface ProposalBlock {
   text?: string;
   items?: PriceTableItem[];
   checklistItems?: string[];
+  showPvp?: boolean;
+  showMargin?: boolean;
 }
 
 export interface PriceTableItem {

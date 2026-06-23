@@ -37,6 +37,9 @@ function RenderBlock({ block, index }: { block: ProposalBlock; index: number }) 
 
   if (block.type === 'price-table') {
     const items = block.items || [];
+    const displayPvp = block.showPvp !== false;
+    const displayMargin = displayPvp && block.showMargin !== false;
+
     return (
       <div>
         <h3 style={titleStyle}>{index + 1}. {block.title}</h3>
@@ -45,8 +48,12 @@ function RenderBlock({ block, index }: { block: ProposalBlock; index: number }) 
             <tr style={{ backgroundColor: '#292524' }}>
               <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'left', fontWeight: 700, fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase' }}>Producto</th>
               <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>Costo</th>
-              <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>PVP Sugerido</th>
-              <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>Margen</th>
+              {displayPvp && (
+                <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>PVP Sugerido</th>
+              )}
+              {displayMargin && (
+                <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>Margen</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -56,8 +63,12 @@ function RenderBlock({ block, index }: { block: ProposalBlock; index: number }) 
                 <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#fafaf9' }}>
                   <td style={{ padding: '10px 14px', borderBottom: '1px solid #e7e5e4', fontWeight: 500, color: '#292524' }}>{row.item}</td>
                   <td style={{ padding: '10px 14px', borderBottom: '1px solid #e7e5e4', textAlign: 'right', color: '#57534e', fontFamily: 'monospace' }}>{formatCurrency(row.cost)}</td>
-                  <td style={{ padding: '10px 14px', borderBottom: '1px solid #e7e5e4', textAlign: 'right', color: '#292524', fontWeight: 700, fontFamily: 'monospace' }}>{formatCurrency(row.pvp)}</td>
-                  <td style={{ padding: '10px 14px', borderBottom: '1px solid #e7e5e4', textAlign: 'right', color: '#C59F59', fontWeight: 700 }}>{margin}%</td>
+                  {displayPvp && (
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid #e7e5e4', textAlign: 'right', color: '#292524', fontWeight: 700, fontFamily: 'monospace' }}>{formatCurrency(row.pvp)}</td>
+                  )}
+                  {displayMargin && (
+                    <td style={{ padding: '10px 14px', borderBottom: '1px solid #e7e5e4', textAlign: 'right', color: '#C59F59', fontWeight: 700 }}>{margin}%</td>
+                  )}
                 </tr>
               );
             })}

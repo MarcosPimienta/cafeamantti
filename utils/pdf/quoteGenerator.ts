@@ -334,6 +334,8 @@ export interface ProposalBlock {
   text?: string;
   items?: PriceTableItem[];
   checklistItems?: string[];
+  showPvp?: boolean;
+  showMargin?: boolean;
 }
 
 export interface ProposalData {
@@ -377,13 +379,16 @@ function buildBlockHtml(block: ProposalBlock, index: number): string {
   const titleHtml = `<h3 style="font-size:16px; font-weight:800; text-transform:uppercase; color:#292524; border-bottom:1px solid rgba(197, 159, 89, 0.3); padding-bottom:8px; margin-bottom:15px; letter-spacing:1px;">${index + 1}. ${block.title}</h3>`;
 
   if (block.type === 'price-table' && block.items) {
+    const displayPvp = block.showPvp !== false;
+    const displayMargin = displayPvp && block.showMargin !== false;
+
     const rows = block.items.map((row, i) => {
       const margin = row.pvp > 0 ? ((row.pvp - row.cost) / row.pvp * 100).toFixed(1) + '%' : '—';
       return `<tr style="background-color:${i % 2 === 0 ? '#fff' : '#fafaf9'};">
         <td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; font-weight:500; color:#292524;">${row.item}</td>
         <td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; text-align:right; color:#57534e; font-family:monospace;">${fmtCOP(row.cost)}</td>
-        <td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; text-align:right; color:#292524; font-weight:700; font-family:monospace;">${fmtCOP(row.pvp)}</td>
-        <td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; text-align:right; color:#C59F59; font-weight:700;">${margin}</td>
+        ${displayPvp ? `<td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; text-align:right; color:#292524; font-weight:700; font-family:monospace;">${fmtCOP(row.pvp)}</td>` : ''}
+        ${displayMargin ? `<td style="padding:10px 14px; border-bottom:1px solid #e7e5e4; text-align:right; color:#C59F59; font-weight:700;">${margin}</td>` : ''}
       </tr>`;
     }).join('');
 
@@ -393,8 +398,8 @@ function buildBlockHtml(block: ProposalBlock, index: number): string {
         <thead><tr style="background-color:#292524;">
           <th style="padding:10px 14px; color:#fff; text-align:left; font-weight:700; font-size:11px; letter-spacing:1px; text-transform:uppercase;">Producto</th>
           <th style="padding:10px 14px; color:#fff; text-align:right; font-weight:700; font-size:11px; letter-spacing:1px;">Costo</th>
-          <th style="padding:10px 14px; color:#fff; text-align:right; font-weight:700; font-size:11px; letter-spacing:1px;">PVP Sugerido</th>
-          <th style="padding:10px 14px; color:#fff; text-align:right; font-weight:700; font-size:11px; letter-spacing:1px;">Margen</th>
+          ${displayPvp ? `<th style="padding:10px 14px; color:#fff; text-align:right; font-weight:700; font-size:11px; letter-spacing:1px;">PVP Sugerido</th>` : ''}
+          ${displayMargin ? `<th style="padding:10px 14px; color:#fff; text-align:right; font-weight:700; font-size:11px; letter-spacing:1px;">Margen</th>` : ''}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
