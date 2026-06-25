@@ -122,3 +122,22 @@ export function formatCOP(val: number): string {
     maximumFractionDigits: 0
   }).format(val);
 }
+
+/**
+ * Convert an image URL to a base64 encoded string.
+ */
+export async function imageUrlToBase64(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return url; // fallback to original URL
+  }
+}
+

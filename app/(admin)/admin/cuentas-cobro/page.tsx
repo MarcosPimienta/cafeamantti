@@ -9,7 +9,7 @@ import {
   getCuentasCobro, getClients, createCuentaCobro, 
   deleteCuentaCobro, registerCuentaCobroExpense 
 } from "./actions";
-import { formatCOP, numeroALetras } from "@/utils/pdf/cuentasCobroHelpers";
+import { formatCOP, numeroALetras, imageUrlToBase64 } from "@/utils/pdf/cuentasCobroHelpers";
 
 export default function CuentasCobroPage() {
   const [list, setList] = useState<any[]>([]);
@@ -185,6 +185,10 @@ export default function CuentasCobroPage() {
   const handleDownloadPDF = async (doc: any) => {
     const html2pdf = (await import('html2pdf.js')).default;
 
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const bgBase64 = await imageUrlToBase64(`${baseUrl}/images/Main_Background.jpg`);
+    const logoBase64 = await imageUrlToBase64(`${baseUrl}/images/logo-amantti.png`);
+
     const opt = {
       margin: 15,
       filename: `Cuenta_de_Cobro_${doc.number}_${doc.issuer_name.replace(/\s+/g, '_')}.pdf`,
@@ -195,93 +199,99 @@ export default function CuentasCobroPage() {
 
     const element = document.createElement('div');
     element.innerHTML = `
-      <div style="font-family: Arial, sans-serif; padding: 20px; color: #1c1917; line-height: 1.5; font-size: 13px; max-width: 800px; margin: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e7e5e4; padding-bottom: 20px; margin-bottom: 30px;">
-          <div>
-            <h1 style="font-size: 24px; font-weight: bold; margin: 0; color: #292524; font-family: Georgia, serif;">CUENTA DE COBRO</h1>
-            <p style="font-size: 14px; color: #78716c; margin: 5px 0 0 0;">Número: CC-${String(doc.number).padStart(5, '0')}</p>
-            <p style="font-size: 13px; color: #78716c; margin: 2px 0 0 0;">Fecha de Emisión: ${new Date(doc.created_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            ${doc.signed_at ? `<p style="font-size: 13px; color: #78716c; margin: 2px 0 0 0;">Fecha de Firma: ${new Date(doc.signed_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
-          </div>
-          <div style="text-align: right;">
-            <p style="font-weight: bold; margin: 0; font-size: 16px;">CAFÉ AMANTTI</p>
-            <p style="margin: 3px 0 0 0; color: #57534e;">Alma Trading Group SAS</p>
-            <p style="margin: 2px 0 0 0; color: #57534e;">NIT: 901752308-8</p>
-            <p style="margin: 2px 0 0 0; color: #57534e;">Contacto: cafeamantti@gmail.com</p>
-          </div>
-        </div>
+      <div style="font-family: Arial, sans-serif; background-color: #ffffff; color: #1c1917; padding: 25px 30px; box-sizing: border-box; position: relative; overflow: hidden; min-height: 250mm; max-width: 800px; margin: auto; border: 1px solid #e7e5e4; border-radius: 8px;">
+        <!-- Background Image with low opacity -->
+        <div style="position: absolute; inset: 0; background-image: url(${bgBase64}); background-size: cover; background-position: center; opacity: 0.12; z-index: 0;"></div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-          <div style="background-color: #fafaf9; border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
-            <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">DEUDOR (PAGADOR)</h3>
-            <p style="margin: 0; font-weight: bold;">Alma Trading Group SAS</p>
-            <p style="margin: 3px 0 0 0;">NIT: 901752308-8</p>
-            <p style="margin: 3px 0 0 0;">Medellín, Colombia</p>
+        <div style="position: relative; z-index: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e7e5e4; padding-bottom: 20px; margin-bottom: 30px;">
+            <div>
+              <img src="${logoBase64}" style="width: 140px; height: auto; object-fit: contain; margin-bottom: 12px;" />
+              <h1 style="font-size: 22px; font-weight: bold; margin: 0; color: #292524; font-family: Georgia, serif; letter-spacing: 0.5px;">CUENTA DE COBRO</h1>
+              <p style="font-size: 13px; color: #78716c; margin: 4px 0 0 0;">Número: CC-${String(doc.number).padStart(5, '0')}</p>
+              <p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Emisión: ${new Date(doc.created_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              ${doc.signed_at ? `<p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Firma: ${new Date(doc.signed_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
+            </div>
+            <div style="text-align: right; padding-top: 10px;">
+              <p style="font-weight: bold; margin: 0; font-size: 15px; letter-spacing: 0.5px; color: #292524;">CAFÉ AMANTTI</p>
+              <p style="margin: 3px 0 0 0; color: #57534e; font-size: 12px;">Alma Trading Group SAS</p>
+              <p style="margin: 2px 0 0 0; color: #57534e; font-size: 12px;">NIT: 901752308-8</p>
+              <p style="margin: 2px 0 0 0; color: #57534e; font-size: 12px;">Contacto: cafeamantti@gmail.com</p>
+            </div>
           </div>
-          <div style="background-color: #fafaf9; border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
-            <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">ACREEDOR (EMISOR)</h3>
-            <p style="margin: 0; font-weight: bold;">${doc.issuer_name}</p>
-            <p style="margin: 3px 0 0 0;">C.C. / Documento: ${doc.issuer_document}</p>
-            <p style="margin: 3px 0 0 0;">Email: ${doc.issuer_email}</p>
-            <p style="margin: 3px 0 0 0;">Teléfono: ${doc.issuer_phone}</p>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+            <div style="background-color: rgba(250, 250, 249, 0.8); border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
+              <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">DEUDOR (PAGADOR)</h3>
+              <p style="margin: 0; font-weight: bold;">Alma Trading Group SAS</p>
+              <p style="margin: 3px 0 0 0;">NIT: 901752308-8</p>
+              <p style="margin: 3px 0 0 0;">Medellín, Colombia</p>
+            </div>
+            <div style="background-color: rgba(250, 250, 249, 0.8); border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
+              <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">ACREEDOR (EMISOR)</h3>
+              <p style="margin: 0; font-weight: bold;">${doc.issuer_name}</p>
+              <p style="margin: 3px 0 0 0;">C.C. / Documento: ${doc.issuer_document}</p>
+              <p style="margin: 3px 0 0 0;">Email: ${doc.issuer_email}</p>
+              <p style="margin: 3px 0 0 0;">Teléfono: ${doc.issuer_phone}</p>
+            </div>
           </div>
-        </div>
 
-        <div style="margin-bottom: 30px;">
-          <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
-            DEBE A: <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
-          </p>
-          <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
-            Por concepto de: <strong>${doc.concept || 'Servicios Prestados'}</strong>
-          </p>
-        </div>
+          <div style="margin-bottom: 30px;">
+            <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
+              DEBE A: <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
+            </p>
+            <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
+              Por concepto de: <strong>${doc.concept || 'Servicios Prestados'}</strong>
+            </p>
+          </div>
 
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px;">
-          <thead>
-            <tr style="background-color: #f5f5f4; border-bottom: 2px solid #e7e5e4;">
-              <th style="padding: 10px; text-align: left; font-weight: bold; width: 60%;">Descripción del Servicio / Producto</th>
-              <th style="padding: 10px; text-align: center; font-weight: bold; width: 10%;">Cant.</th>
-              <th style="padding: 10px; text-align: right; font-weight: bold; width: 15%;">Valor Unitario</th>
-              <th style="padding: 10px; text-align: right; font-weight: bold; width: 15%;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(doc.items || []).map((item: any, idx: number) => `
-              <tr style="border-bottom: 1px solid #e7e5e4;">
-                <td style="padding: 10px; text-align: left;">${item.description}</td>
-                <td style="padding: 10px; text-align: center;">${item.quantity}</td>
-                <td style="padding: 10px; text-align: right;">${formatCOP(item.unit_price)}</td>
-                <td style="padding: 10px; text-align: right; font-weight: bold;">${formatCOP(item.total_price)}</td>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px; background-color: rgba(255, 255, 255, 0.6);">
+            <thead>
+              <tr style="background-color: #f5f5f4; border-bottom: 2px solid #e7e5e4;">
+                <th style="padding: 10px; text-align: left; font-weight: bold; width: 60%;">Descripción del Servicio / Producto</th>
+                <th style="padding: 10px; text-align: center; font-weight: bold; width: 10%;">Cant.</th>
+                <th style="padding: 10px; text-align: right; font-weight: bold; width: 15%;">Valor Unitario</th>
+                <th style="padding: 10px; text-align: right; font-weight: bold; width: 15%;">Total</th>
               </tr>
-            `).join('')}
-            <tr style="background-color: #fafaf9; font-weight: bold; font-size: 14px; border-top: 2px solid #e7e5e4;">
-              <td colspan="3" style="padding: 12px 10px; text-align: right;">TOTAL A PAGAR:</td>
-              <td style="padding: 12px 10px; text-align: right; color: #1c1917;">${formatCOP(doc.total_amount)} COP</td>
-            </tr>
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${(doc.items || []).map((item: any, idx: number) => `
+                <tr style="border-bottom: 1px solid #e7e5e4;">
+                  <td style="padding: 10px; text-align: left;">${item.description}</td>
+                  <td style="padding: 10px; text-align: center;">${item.quantity}</td>
+                  <td style="padding: 10px; text-align: right;">${formatCOP(item.unit_price)}</td>
+                  <td style="padding: 10px; text-align: right; font-weight: bold;">${formatCOP(item.total_price)}</td>
+                </tr>
+              `).join('')}
+              <tr style="background-color: rgba(250, 250, 249, 0.8); font-weight: bold; font-size: 14px; border-top: 2px solid #e7e5e4;">
+                <td colspan="3" style="padding: 12px 10px; text-align: right;">TOTAL A PAGAR:</td>
+                <td style="padding: 12px 10px; text-align: right; color: #1c1917;">${formatCOP(doc.total_amount)} COP</td>
+              </tr>
+            </tbody>
+          </table>
 
-        <div style="background-color: #fafaf9; border-left: 4px solid #C59F59; padding: 15px; margin-bottom: 40px; border-radius: 0 8px 8px 0; text-align: justify; font-size: 12px; color: #44403c;">
-          <p style="margin: 0; font-weight: bold; color: #292524; font-size: 13px; margin-bottom: 5px;">DECLARACIÓN JURAMENTADA Y DATOS DE PAGO</p>
-          <p style="margin: 0 0 10px 0;">
-            Manifiesto bajo la gravedad del juramento que los datos personales y bancarios aquí consignados son correctos. De igual forma, declaro que pertenezco al régimen de no responsables de IVA (Artículo 437 del Estatuto Tributario).
-          </p>
-          <p style="margin: 0; font-weight: bold; color: #292524;">
-            Instrucción de Pago: Consignar a ${doc.bank_name} - Cuenta de ${doc.bank_account_type} No. ${doc.bank_account_number}.
-          </p>
-        </div>
-
-        <div style="margin-top: 50px; display: flex; flex-direction: column; align-items: flex-start; max-width: 320px;">
-          <p style="margin: 0 0 10px 0; font-size: 12px; color: #78716c; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">Firma Digital del Emisor</p>
-          <div style="border-bottom: 1.5px solid #a8a29e; width: 100%; min-height: 80px; display: flex; align-items: center; justify-content: center; padding-bottom: 5px;">
-            ${doc.signature_type === 'scribble' 
-              ? `<img src="${doc.signature_data}" style="max-height: 80px; max-width: 250px; object-fit: contain;" />`
-              : `<span style="font-family: 'Brush Script MT', 'Dancing Script', 'Caveat', cursive, sans-serif; font-size: 32px; font-style: italic; font-weight: 500; color: #0c0a09; text-shadow: 1px 1px 1px rgba(0,0,0,0.05);">${doc.signature_data}</span>`
-            }
+          <div style="page-break-inside: avoid; break-inside: avoid; background-color: rgba(250, 250, 249, 0.85); border-left: 4px solid #C59F59; padding: 15px; margin-bottom: 40px; border-radius: 0 8px 8px 0; text-align: justify; font-size: 12px; color: #44403c;">
+            <p style="margin: 0; font-weight: bold; color: #292524; font-size: 13px; margin-bottom: 5px;">DECLARACIÓN JURAMENTADA Y DATOS DE PAGO</p>
+            <p style="margin: 0 0 10px 0;">
+              Manifiesto bajo la gravedad del juramento que los datos personales y bancarios aquí consignados son correctos. De igual forma, declaro que pertenezco al régimen de no responsables de IVA (Artículo 437 del Estatuto Tributario).
+            </p>
+            <p style="margin: 0; font-weight: bold; color: #292524;">
+              Instrucción de Pago: Consignar a ${doc.bank_name} - Cuenta de ${doc.bank_account_type} No. ${doc.bank_account_number}.
+            </p>
           </div>
-          <p style="margin: 10px 0 0 0; font-weight: bold; font-size: 13px; color: #292524;">${doc.issuer_name}</p>
-          <p style="margin: 2px 0 0 0; font-size: 12px; color: #57534e;">C.C. / Documento: ${doc.issuer_document}</p>
-          <p style="margin: 2px 0 0 0; font-size: 11px; color: #78716c; font-style: italic;">Firmado digitalmente el ${new Date(doc.signed_at).toLocaleString('es-CO')}</p>
+
+          <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 50px; display: flex; flex-direction: column; align-items: flex-start; max-width: 320px;">
+            <p style="margin: 0 0 10px 0; font-size: 12px; color: #78716c; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">Firma Digital del Emisor</p>
+            <div style="border-bottom: 1.5px solid #a8a29e; width: 100%; min-height: 80px; display: flex; align-items: center; justify-content: center; padding-bottom: 5px;">
+              ${doc.signature_type === 'scribble' 
+                ? `<img src="${doc.signature_data}" style="max-height: 80px; max-width: 250px; object-fit: contain;" />`
+                : `<span style="font-family: 'Brush Script MT', 'Dancing Script', 'Caveat', cursive, sans-serif; font-size: 32px; font-style: italic; font-weight: 500; color: #0c0a09; text-shadow: 1px 1px 1px rgba(0,0,0,0.05);">${doc.signature_data}</span>`
+              }
+            </div>
+            <p style="margin: 10px 0 0 0; font-weight: bold; font-size: 13px; color: #292524;">${doc.issuer_name}</p>
+            <p style="margin: 2px 0 0 0; font-size: 12px; color: #57534e;">C.C. / Documento: ${doc.issuer_document}</p>
+            <p style="margin: 2px 0 0 0; font-size: 11px; color: #78716c; font-style: italic;">Firmado digitalmente el ${new Date(doc.signed_at).toLocaleString('es-CO')}</p>
+          </div>
         </div>
       </div>
     `;
