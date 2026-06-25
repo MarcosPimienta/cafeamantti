@@ -909,10 +909,10 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
                   Sin datos de costos para este período
                 </div>
               ) : (
-                <div className="h-52">
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={costPieData} cx="50%" cy="50%" outerRadius={80}
+                      <Pie data={costPieData} cx="50%" cy="50%" outerRadius={65}
                         labelLine={false} dataKey="value">
                         {costPieData.map((_, idx) => (
                           <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
@@ -1002,10 +1002,10 @@ function CashflowReportView({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
           <h3 className="text-lg font-serif mb-5">Gastos por Categoría</h3>
-          <div className="h-72">
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={expByCategory} cx="50%" cy="50%" outerRadius={90}
+                <Pie data={expByCategory} cx="50%" cy="50%" outerRadius={70}
                   labelLine={false} dataKey="value">
                   {expByCategory.map((_, i) => (
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
@@ -1020,10 +1020,10 @@ function CashflowReportView({
 
         <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
           <h3 className="text-lg font-serif mb-5">Ingresos por Tipo</h3>
-          <div className="h-72">
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={incByType} cx="50%" cy="50%" outerRadius={90}
+                <Pie data={incByType} cx="50%" cy="50%" outerRadius={70}
                   labelLine={false} dataKey="value">
                   {incByType.map((_, i) => (
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
