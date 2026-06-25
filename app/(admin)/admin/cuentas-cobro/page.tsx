@@ -238,7 +238,7 @@ export default function CuentasCobroPage() {
 
           <div style="margin-bottom: 30px;">
             <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
-              DEBE A: <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
+              <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> DEBE A: <strong>${doc.issuer_name}</strong> con C.C. / Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
             </p>
             <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
               Por concepto de: <strong>${doc.concept || 'Servicios Prestados'}</strong>
