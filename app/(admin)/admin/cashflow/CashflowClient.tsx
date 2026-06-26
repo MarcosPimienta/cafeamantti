@@ -959,19 +959,36 @@ function CashflowReportView({
 }: {
   expenses: any[]; incomes: any[]; formatCurrency: (v: number) => string;
 }) {
-  const totalInc  = incomes.reduce((s, i)  => s + Number(i.amount), 0);
-  const totalExp  = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const filteredExpenses = expenses.filter((e) => {
+    const dateStr = e.cashflow?.date || (e.created_at ? new Date(e.created_at).toISOString().split("T")[0] : "");
+    const matchStart = !startDate || dateStr >= startDate;
+    const matchEnd = !endDate || dateStr <= endDate;
+    return matchStart && matchEnd;
+  });
+
+  const filteredIncomes = incomes.filter((i) => {
+    const dateStr = i.date || i.cashflow?.date || (i.created_at ? new Date(i.created_at).toISOString().split("T")[0] : "");
+    const matchStart = !startDate || dateStr >= startDate;
+    const matchEnd = !endDate || dateStr <= endDate;
+    return matchStart && matchEnd;
+  });
+
+  const totalInc  = filteredIncomes.reduce((s, i)  => s + Number(i.amount), 0);
+  const totalExp  = filteredExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const balance   = totalInc - totalExp;
 
   const expByCategory = Object.entries(
-    expenses.reduce((acc, e) => {
+    filteredExpenses.reduce((acc, e) => {
       acc[e.category] = (acc[e.category] || 0) + Number(e.amount);
       return acc;
     }, {} as Record<string, number>)
   ).map(([name, value]) => ({ name, value }));
 
   const incByType = Object.entries(
-    incomes.reduce((acc, i) => {
+    filteredIncomes.reduce((acc, i) => {
       const k = String(i.type || "manual").toUpperCase();
       acc[k] = (acc[k] || 0) + Number(i.amount);
       return acc;
@@ -980,6 +997,40 @@ function CashflowReportView({
 
   return (
     <div className="space-y-6">
+      {/* Date Filters */}
+      <div className="bg-white rounded-3xl p-5 border border-foreground/5 shadow-sm flex flex-wrap md:flex-nowrap items-end gap-4">
+        <div className="flex-1 min-w-[150px]">
+          <label className="field-label">Fecha Inicio (Desde)</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="field-input py-2 px-3 text-xs"
+          />
+        </div>
+        <div className="flex-1 min-w-[150px]">
+          <label className="field-label">Fecha Fin (Hasta)</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="field-input py-2 px-3 text-xs"
+          />
+        </div>
+        {(startDate || endDate) && (
+          <button
+            onClick={() => {
+              setStartDate("");
+              setEndDate("");
+            }}
+            className="px-4 py-2 border border-foreground/10 rounded-xl hover:bg-foreground/5 text-foreground/70 font-bold text-xs transition-all h-[38px] flex items-center gap-1 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+            Limpiar Filtro
+          </button>
+        )}
+      </div>
+
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
