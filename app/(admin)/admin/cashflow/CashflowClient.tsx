@@ -1420,6 +1420,14 @@ export default function CashflowClient() {
   const [expenseToEdit, setExpenseToEdit] = useState<any | null>(null);
   const [incomeToEdit, setIncomeToEdit] = useState<any | null>(null);
 
+  // Sorting for Gastos
+  const [expSortField, setExpSortField] = useState<"date" | "amount" | "net_amount">("date");
+  const [expSortDirection, setExpSortDirection] = useState<"asc" | "desc">("desc");
+
+  // Sorting for Ingresos
+  const [incSortField, setIncSortField] = useState<"date" | "amount" | "net_amount">("date");
+  const [incSortDirection, setIncSortDirection] = useState<"asc" | "desc">("desc");
+
   const loadData = useCallback(async () => {
     setLoading(true);
     const [exp, inc, hist, missing, inv] = await Promise.all([
@@ -1563,9 +1571,29 @@ export default function CashflowClient() {
               return matchConcept && matchCategory && matchStart && matchEnd;
             });
 
+            const sortedExpenses = [...filteredExpenses].sort((a, b) => {
+              let valA: any;
+              let valB: any;
+
+              if (expSortField === "date") {
+                valA = a.cashflow?.date || (a.created_at ? new Date(a.created_at).toISOString().split("T")[0] : "");
+                valB = b.cashflow?.date || (b.created_at ? new Date(b.created_at).toISOString().split("T")[0] : "");
+              } else if (expSortField === "amount") {
+                valA = Number(a.amount) || 0;
+                valB = Number(b.amount) || 0;
+              } else if (expSortField === "net_amount") {
+                valA = Number(a.net_amount) || 0;
+                valB = Number(b.net_amount) || 0;
+              }
+
+              if (valA < valB) return expSortDirection === "asc" ? -1 : 1;
+              if (valA > valB) return expSortDirection === "asc" ? 1 : -1;
+              return 0;
+            });
+
             const expPerPage = 10;
-            const expTotalPages = Math.ceil(filteredExpenses.length / expPerPage) || 1;
-            const paginatedExpenses = filteredExpenses.slice(
+            const expTotalPages = Math.ceil(sortedExpenses.length / expPerPage) || 1;
+            const paginatedExpenses = sortedExpenses.slice(
               (expPage - 1) * expPerPage,
               expPage * expPerPage
             );
@@ -1668,12 +1696,69 @@ export default function CashflowClient() {
                   <table className="w-full text-left text-sm text-foreground/80">
                     <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
                       <tr>
-                        <th className="px-5 py-4">Fecha</th>
+                        <th className="px-5 py-4 cursor-pointer hover:bg-foreground/[0.03] transition-colors select-none group"
+                          onClick={() => {
+                            if (expSortField === "date") {
+                              setExpSortDirection(expSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setExpSortField("date");
+                              setExpSortDirection("desc");
+                            }
+                            setExpPage(1);
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Fecha</span>
+                            {expSortField === "date" ? (
+                              expSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-40 transition-opacity" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-5 py-4">Concepto</th>
                         <th className="px-5 py-4">Categoría</th>
                         <th className="px-5 py-4 text-center">Tipo</th>
-                        <th className="px-5 py-4 text-right">Bruto</th>
-                        <th className="px-5 py-4 text-right">Neto</th>
+                        <th className="px-5 py-4 text-right cursor-pointer hover:bg-foreground/[0.03] transition-colors select-none group"
+                          onClick={() => {
+                            if (expSortField === "amount") {
+                              setExpSortDirection(expSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setExpSortField("amount");
+                              setExpSortDirection("desc");
+                            }
+                            setExpPage(1);
+                          }}
+                        >
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span>Bruto</span>
+                            {expSortField === "amount" ? (
+                              expSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-40 transition-opacity" />
+                            )}
+                          </div>
+                        </th>
+                        <th className="px-5 py-4 text-right cursor-pointer hover:bg-foreground/[0.03] transition-colors select-none group"
+                          onClick={() => {
+                            if (expSortField === "net_amount") {
+                              setExpSortDirection(expSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setExpSortField("net_amount");
+                              setExpSortDirection("desc");
+                            }
+                            setExpPage(1);
+                          }}
+                        >
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span>Neto</span>
+                            {expSortField === "net_amount" ? (
+                              expSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-40 transition-opacity" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-5 py-4 text-center">Soporte</th>
                         <th className="px-5 py-4 text-center">Acciones</th>
                       </tr>
@@ -1753,9 +1838,29 @@ export default function CashflowClient() {
               return matchConcept && matchCategory && matchStart && matchEnd;
             });
 
+            const sortedIncomes = [...filteredIncomes].sort((a, b) => {
+              let valA: any;
+              let valB: any;
+
+              if (incSortField === "date") {
+                valA = a.date || a.cashflow?.date || (a.created_at ? new Date(a.created_at).toISOString().split("T")[0] : "");
+                valB = b.date || b.cashflow?.date || (b.created_at ? new Date(b.created_at).toISOString().split("T")[0] : "");
+              } else if (incSortField === "amount") {
+                valA = Number(a.gross_amount ?? a.amount) || 0;
+                valB = Number(b.gross_amount ?? b.amount) || 0;
+              } else if (incSortField === "net_amount") {
+                valA = Number(a.net_revenue ?? a.amount) || 0;
+                valB = Number(b.net_revenue ?? b.amount) || 0;
+              }
+
+              if (valA < valB) return incSortDirection === "asc" ? -1 : 1;
+              if (valA > valB) return incSortDirection === "asc" ? 1 : -1;
+              return 0;
+            });
+
             const incPerPage = 10;
-            const incTotalPages = Math.ceil(filteredIncomes.length / incPerPage) || 1;
-            const paginatedIncomes = filteredIncomes.slice(
+            const incTotalPages = Math.ceil(sortedIncomes.length / incPerPage) || 1;
+            const paginatedIncomes = sortedIncomes.slice(
               (incPage - 1) * incPerPage,
               incPage * incPerPage
             );
@@ -1836,12 +1941,69 @@ export default function CashflowClient() {
                   <table className="w-full text-left text-sm text-foreground/80">
                     <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
                       <tr>
-                        <th className="px-5 py-4">Fecha</th>
+                        <th className="px-5 py-4 cursor-pointer hover:bg-foreground/[0.03] transition-colors select-none group"
+                          onClick={() => {
+                            if (incSortField === "date") {
+                              setIncSortDirection(incSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setIncSortField("date");
+                              setIncSortDirection("desc");
+                            }
+                            setIncPage(1);
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Fecha</span>
+                            {incSortField === "date" ? (
+                              incSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-40 transition-opacity" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-5 py-4">Concepto</th>
                         <th className="px-5 py-4">Categoría</th>
                         <th className="px-5 py-4 text-center">Tipo</th>
-                        <th className="px-5 py-4 text-right">Bruto</th>
-                        <th className="px-5 py-4 text-right">Neto</th>
+                        <th className="px-5 py-4 text-right cursor-pointer hover:bg-foreground/[0.03] transition-colors select-none group"
+                          onClick={() => {
+                            if (incSortField === "amount") {
+                              setIncSortDirection(incSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setIncSortField("amount");
+                              setIncSortDirection("desc");
+                            }
+                            setIncPage(1);
+                          }}
+                        >
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span>Bruto</span>
+                            {incSortField === "amount" ? (
+                              incSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-40 transition-opacity" />
+                            )}
+                          </div>
+                        </th>
+                        <th className="px-5 py-4 text-right cursor-pointer hover:bg-foreground/[0.03] transition-colors select-none group"
+                          onClick={() => {
+                            if (incSortField === "net_amount") {
+                              setIncSortDirection(incSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setIncSortField("net_amount");
+                              setIncSortDirection("desc");
+                            }
+                            setIncPage(1);
+                          }}
+                        >
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span>Neto</span>
+                            {incSortField === "net_amount" ? (
+                              incSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-40 transition-opacity" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-5 py-4 text-center">Soporte / Acciones</th>
                       </tr>
                     </thead>
