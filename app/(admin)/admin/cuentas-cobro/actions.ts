@@ -2,7 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { createExpenseDirect } from '../cashflow/actions';
+import { createExpenseDirect, createIncomeDirect } from '../cashflow/actions';
 import { ExpenseType } from '../cashflow/types';
 
 // Helper to verify if current user is admin
@@ -100,6 +100,7 @@ export async function getClients() {
  * Create a new Cuenta de Cobro (draft).
  */
 export async function createCuentaCobro(
+  type: 'gasto' | 'ingreso',
   issuerData: {
     issuer_name: string;
     issuer_document: string;
@@ -112,7 +113,13 @@ export async function createCuentaCobro(
     quantity: number;
     unit_price: number;
     total_price: number;
-  }>
+  }>,
+  debtorData?: {
+    debtor_name?: string;
+    debtor_document?: string;
+    debtor_email?: string;
+    debtor_phone?: string;
+  }
 ) {
   const supabase = await createClient();
   try {
@@ -123,6 +130,7 @@ export async function createCuentaCobro(
     const { data, error } = await supabase
       .from('cuentas_cobro')
       .insert({
+        type,
         status: 'pendiente',
         issuer_name: issuerData.issuer_name,
         issuer_document: issuerData.issuer_document,
@@ -131,6 +139,10 @@ export async function createCuentaCobro(
         concept: issuerData.concept || 'Servicios Prestados',
         items,
         total_amount,
+        debtor_name: debtorData?.debtor_name || null,
+        debtor_document: debtorData?.debtor_document || null,
+        debtor_email: debtorData?.debtor_email || null,
+        debtor_phone: debtorData?.debtor_phone || null,
       })
       .select()
       .single();
@@ -150,6 +162,7 @@ export async function createCuentaCobro(
  */
 export async function updateCuentaCobro(
   id: string,
+  type: 'gasto' | 'ingreso',
   issuerData: {
     issuer_name: string;
     issuer_document: string;
@@ -162,7 +175,13 @@ export async function updateCuentaCobro(
     quantity: number;
     unit_price: number;
     total_price: number;
-  }>
+  }>,
+  debtorData?: {
+    debtor_name?: string;
+    debtor_document?: string;
+    debtor_email?: string;
+    debtor_phone?: string;
+  }
 ) {
   const supabase = await createClient();
   try {
@@ -184,6 +203,7 @@ export async function updateCuentaCobro(
     const { error } = await supabase
       .from('cuentas_cobro')
       .update({
+        type,
         issuer_name: issuerData.issuer_name,
         issuer_document: issuerData.issuer_document,
         issuer_email: issuerData.issuer_email,
@@ -191,6 +211,10 @@ export async function updateCuentaCobro(
         concept: issuerData.concept || 'Servicios Prestados',
         items,
         total_amount,
+        debtor_name: debtorData?.debtor_name || null,
+        debtor_document: debtorData?.debtor_document || null,
+        debtor_email: debtorData?.debtor_email || null,
+        debtor_phone: debtorData?.debtor_phone || null,
       })
       .eq('id', id);
 
@@ -322,6 +346,10 @@ export async function registerCuentaCobroExpense(
       return { success: false, error: 'La cuenta de cobro debe estar firmada para registrarse en contabilidad.' };
     }
 
+    if (cc.type !== 'gasto') {
+      return { success: false, error: 'Este documento no es de tipo gasto (egreso).' };
+    }
+
     if (cc.expense_id) {
       return { success: false, error: 'Esta cuenta de cobro ya se encuentra asociada a un gasto contable.' };
     }
@@ -358,6 +386,80 @@ export async function registerCuentaCobroExpense(
     return { success: true };
   } catch (err: any) {
     console.error('Error registering cashflow expense for CC:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Admin action: Register a signed Cuenta de Cobro as a cashflow income.
+ */
+export async function registerCuentaCobroIncome(
+  id: string,
+  incomeParams: {
+    date: string;
+    category: string;
+  }
+) {
+  const supabase = await createClient();
+  try {
+    await checkAdmin(supabase);
+
+    // 1. Fetch the signed Cuenta de Cobro
+    const { data: cc, error: ccErr } = await supabase
+      .from('cuentas_cobro')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (ccErr || !cc) {
+      return { success: false, error: 'Cuenta de cobro no encontrada.' };
+    }
+
+    if (cc.status !== 'firmada') {
+      return { success: false, error: 'La cuenta de cobro debe estar firmada para registrarse en contabilidad.' };
+    }
+
+    if (cc.type !== 'ingreso') {
+      return { success: false, error: 'Este documento no es de tipo ingreso (entrada).' };
+    }
+
+    if (cc.income_id) {
+      return { success: false, error: 'Esta cuenta de cobro ya se encuentra asociada a un ingreso contable.' };
+    }
+
+    // 2. Create the cashflow income
+    const concept = `Cuenta de Cobro No. ${cc.number} - ${cc.debtor_name} - ${cc.concept || 'Servicios'}`;
+    const result = await createIncomeDirect(incomeParams.date, {
+      concept,
+      category: incomeParams.category,
+      amount: Number(cc.total_amount),
+      gross_amount: Number(cc.total_amount),
+      fee_amount: 0,
+      shipping_cost: 0,
+      tax_amount: 0,
+    });
+
+    if ('error' in result && result.error) {
+      return { success: false, error: result.error };
+    }
+
+    const incomeData = (result as any).data;
+    if (!incomeData?.id) {
+      return { success: false, error: 'No se pudo obtener el ID del ingreso creado.' };
+    }
+
+    // 3. Link the income back to the Cuenta de Cobro
+    const { error: linkErr } = await supabase
+      .from('cuentas_cobro')
+      .update({ income_id: incomeData.id })
+      .eq('id', id);
+
+    if (linkErr) throw linkErr;
+
+    revalidatePath('/admin/cuentas-cobro');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error registering cashflow income for CC:', err.message);
     return { success: false, error: err.message };
   }
 }

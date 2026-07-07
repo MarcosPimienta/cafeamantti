@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { 
   getCuentasCobro, getClients, createCuentaCobro, 
-  deleteCuentaCobro, registerCuentaCobroExpense 
+  deleteCuentaCobro, registerCuentaCobroExpense, registerCuentaCobroIncome
 } from "./actions";
 import { formatCOP, numeroALetras, imageUrlToBase64 } from "@/utils/pdf/cuentasCobroHelpers";
 
@@ -17,6 +17,7 @@ export default function CuentasCobroPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<'all' | 'pendiente' | 'firmada'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'gasto' | 'ingreso'>('all');
 
   // Modal states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -24,20 +25,49 @@ export default function CuentasCobroPage() {
   const [selectedCC, setSelectedCC] = useState<any>(null);
 
   // Form: Create CC
+  const [formType, setFormType] = useState<'gasto' | 'ingreso'>('gasto');
   const [selectedClientId, setSelectedClientId] = useState("");
   const [issuerName, setIssuerName] = useState("");
   const [issuerDocument, setIssuerDocument] = useState("");
   const [issuerEmail, setIssuerEmail] = useState("");
   const [issuerPhone, setIssuerPhone] = useState("");
+  const [debtorName, setDebtorName] = useState("");
+  const [debtorDocument, setDebtorDocument] = useState("");
+  const [debtorEmail, setDebtorEmail] = useState("");
+  const [debtorPhone, setDebtorPhone] = useState("");
   const [concept, setConcept] = useState("");
   const [items, setItems] = useState<any[]>([{ description: "", quantity: 1, unit_price: 0, total_price: 0 }]);
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
 
-  // Form: Register Expense
+  // Form: Register Expense/Income
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [expenseCategory, setExpenseCategory] = useState("Honorarios (Servicios profesionales)");
   const [expenseType, setExpenseType] = useState<'OPEX' | 'COGS' | 'CAPEX'>("OPEX");
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
+
+  // Sync Form Type changes
+  useEffect(() => {
+    if (formType === 'ingreso') {
+      setIssuerName("Alma Trading Group SAS");
+      setIssuerDocument("901752308-8");
+      setIssuerEmail("cafeamantti@gmail.com");
+      setIssuerPhone("3001234567");
+      setDebtorName("");
+      setDebtorDocument("");
+      setDebtorEmail("");
+      setDebtorPhone("");
+    } else {
+      setIssuerName("");
+      setIssuerDocument("");
+      setIssuerEmail("");
+      setIssuerPhone("");
+      setDebtorName("");
+      setDebtorDocument("");
+      setDebtorEmail("");
+      setDebtorPhone("");
+    }
+    setSelectedClientId("");
+  }, [formType]);
 
   // Load list and CRM clients
   async function loadData() {
@@ -58,10 +88,17 @@ export default function CuentasCobroPage() {
     if (!clientId) return;
     const client = clients.find(c => c.id === clientId);
     if (client) {
-      setIssuerName(client.name);
-      setIssuerDocument(client.document_number || "");
-      setIssuerEmail(client.email || "");
-      setIssuerPhone(client.phone || "");
+      if (formType === 'ingreso') {
+        setDebtorName(client.name);
+        setDebtorDocument(client.document_number || "");
+        setDebtorEmail(client.email || "");
+        setDebtorPhone(client.phone || "");
+      } else {
+        setIssuerName(client.name);
+        setIssuerDocument(client.document_number || "");
+        setIssuerEmail(client.email || "");
+        setIssuerPhone(client.phone || "");
+      }
     }
   };
 
@@ -91,8 +128,12 @@ export default function CuentasCobroPage() {
   // Submit new CC
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!issuerName || !issuerDocument || !issuerEmail || !issuerPhone) {
-      alert("Por favor completa los datos obligatorios.");
+    if (formType === 'gasto' && (!issuerName || !issuerDocument || !issuerEmail || !issuerPhone)) {
+      alert("Por favor completa los datos obligatorios del emisor.");
+      return;
+    }
+    if (formType === 'ingreso' && (!debtorName || !debtorDocument || !debtorEmail || !debtorPhone)) {
+      alert("Por favor completa los datos obligatorios del deudor (cliente).");
       return;
     }
 
@@ -104,6 +145,7 @@ export default function CuentasCobroPage() {
 
     setIsSubmittingCreate(true);
     const res = await createCuentaCobro(
+      formType,
       {
         issuer_name: issuerName,
         issuer_document: issuerDocument,
@@ -111,17 +153,28 @@ export default function CuentasCobroPage() {
         issuer_phone: issuerPhone,
         concept: concept || 'Servicios Prestados'
       },
-      validItems
+      validItems,
+      formType === 'ingreso' ? {
+        debtor_name: debtorName,
+        debtor_document: debtorDocument,
+        debtor_email: debtorEmail,
+        debtor_phone: debtorPhone
+      } : undefined
     );
 
     if (res.success) {
       setIsCreateOpen(false);
       // reset form
       setSelectedClientId("");
+      setFormType("gasto");
       setIssuerName("");
       setIssuerDocument("");
       setIssuerEmail("");
       setIssuerPhone("");
+      setDebtorName("");
+      setDebtorDocument("");
+      setDebtorEmail("");
+      setDebtorPhone("");
       setConcept("");
       setItems([{ description: "", quantity: 1, unit_price: 0, total_price: 0 }]);
       await loadData();
@@ -143,18 +196,21 @@ export default function CuentasCobroPage() {
   };
 
   // Copy shareable link
-  const copyLink = (id: string) => {
+  const copyLink = (id: string, type: 'gasto' | 'ingreso') => {
     const link = `${window.location.origin}/cuentas-cobro/${id}`;
     navigator.clipboard.writeText(link);
-    alert("Enlace copiado al portapapeles. Envíaselo al proveedor.");
+    alert(`Enlace copiado al portapapeles. Envíaselo al ${type === 'ingreso' ? 'cliente' : 'proveedor'}.`);
   };
 
   // Open Expense modal
-  const openExpenseModal = (cc: any) => {
+  const openRegisterModal = (cc: any) => {
     setSelectedCC(cc);
-    // Suggest expense category from mapped defaults or professionals fees
-    setExpenseCategory("Honorarios (Servicios profesionales)");
-    setExpenseType("OPEX");
+    if (cc.type === 'ingreso') {
+      setExpenseCategory("Servicios");
+    } else {
+      setExpenseCategory("Honorarios (Servicios profesionales)");
+      setExpenseType("OPEX");
+    }
     setIsExpenseOpen(true);
   };
 
@@ -164,19 +220,35 @@ export default function CuentasCobroPage() {
     if (!selectedCC) return;
 
     setIsSubmittingExpense(true);
-    const res = await registerCuentaCobroExpense(selectedCC.id, {
-      date: expenseDate,
-      category: expenseCategory,
-      expenseType
-    });
+    if (selectedCC.type === 'ingreso') {
+      const res = await registerCuentaCobroIncome(selectedCC.id, {
+        date: expenseDate,
+        category: expenseCategory,
+      });
 
-    if (res.success) {
-      setIsExpenseOpen(false);
-      setSelectedCC(null);
-      await loadData();
-      alert("¡Gasto registrado exitosamente en el Flujo de Caja!");
+      if (res.success) {
+        setIsExpenseOpen(false);
+        setSelectedCC(null);
+        await loadData();
+        alert("¡Ingreso registrado exitosamente en el Flujo de Caja!");
+      } else {
+        alert(res.error || "Ocurrió un error al registrar el ingreso.");
+      }
     } else {
-      alert(res.error || "Ocurrió un error al registrar el gasto.");
+      const res = await registerCuentaCobroExpense(selectedCC.id, {
+        date: expenseDate,
+        category: expenseCategory,
+        expenseType
+      });
+
+      if (res.success) {
+        setIsExpenseOpen(false);
+        setSelectedCC(null);
+        await loadData();
+        alert("¡Gasto registrado exitosamente en el Flujo de Caja!");
+      } else {
+        alert(res.error || "Ocurrió un error al registrar el gasto.");
+      }
     }
     setIsSubmittingExpense(false);
   };
@@ -223,14 +295,21 @@ export default function CuentasCobroPage() {
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
             <div style="background-color: rgba(250, 250, 249, 0.8); border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
               <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">DEUDOR (PAGADOR)</h3>
-              <p style="margin: 0; font-weight: bold;">Alma Trading Group SAS</p>
-              <p style="margin: 3px 0 0 0;">NIT: 901752308-8</p>
-              <p style="margin: 3px 0 0 0;">Medellín, Colombia</p>
+              ${doc.type === 'ingreso' ? `
+                <p style="margin: 0; font-weight: bold;">${doc.debtor_name}</p>
+                <p style="margin: 3px 0 0 0;">Documento: ${doc.debtor_document}</p>
+                ${doc.debtor_email ? `<p style="margin: 3px 0 0 0;">Email: ${doc.debtor_email}</p>` : ''}
+                ${doc.debtor_phone ? `<p style="margin: 3px 0 0 0;">Teléfono: ${doc.debtor_phone}</p>` : ''}
+              ` : `
+                <p style="margin: 0; font-weight: bold;">Alma Trading Group SAS</p>
+                <p style="margin: 3px 0 0 0;">NIT: 901752308-8</p>
+                <p style="margin: 3px 0 0 0;">Medellín, Colombia</p>
+              `}
             </div>
             <div style="background-color: rgba(250, 250, 249, 0.8); border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
               <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">ACREEDOR (EMISOR)</h3>
               <p style="margin: 0; font-weight: bold;">${doc.issuer_name}</p>
-              <p style="margin: 3px 0 0 0;">C.C. / Documento: ${doc.issuer_document}</p>
+              <p style="margin: 3px 0 0 0;">NIT / Documento: ${doc.issuer_document}</p>
               <p style="margin: 3px 0 0 0;">Email: ${doc.issuer_email}</p>
               <p style="margin: 3px 0 0 0;">Teléfono: ${doc.issuer_phone}</p>
             </div>
@@ -238,7 +317,11 @@ export default function CuentasCobroPage() {
 
           <div style="margin-bottom: 30px;">
             <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
-              <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> DEBE A: <strong>${doc.issuer_name}</strong> con C.C. / Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
+              ${doc.type === 'ingreso' ? `
+                <strong>${doc.debtor_name}</strong> con Documento <strong>${doc.debtor_document}</strong> DEBE A: <strong>${doc.issuer_name}</strong> con NIT/Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
+              ` : `
+                <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> DEBE A: <strong>${doc.issuer_name}</strong> con C.C. / Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
+              `}
             </p>
             <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
               Por concepto de: <strong>${doc.concept || 'Servicios Prestados'}</strong>
@@ -309,10 +392,14 @@ export default function CuentasCobroPage() {
       cc.issuer_name.toLowerCase().includes(search.toLowerCase()) ||
       cc.issuer_document.includes(search) ||
       (cc.concept && cc.concept.toLowerCase().includes(search.toLowerCase())) ||
+      (cc.debtor_name && cc.debtor_name.toLowerCase().includes(search.toLowerCase())) ||
+      (cc.debtor_document && cc.debtor_document.includes(search)) ||
       String(cc.number).includes(search);
       
-    if (activeTab === 'all') return matchesSearch;
-    return matchesSearch && cc.status === activeTab;
+    const matchesTab = activeTab === 'all' ? true : cc.status === activeTab;
+    const matchesType = filterType === 'all' ? true : cc.type === filterType;
+    
+    return matchesSearch && matchesTab && matchesType;
   });
 
   return (
@@ -357,16 +444,28 @@ export default function CuentasCobroPage() {
             </button>
           </div>
 
-          <div className="p-6">
+          <div className="p-6 flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:w-96">
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
               <input
                 type="text"
-                placeholder="Buscar por emisor, documento o concepto..."
+                placeholder="Buscar por emisor, deudor o concepto..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-11 pr-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
               />
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <span className="text-xs font-bold text-foreground/50 whitespace-nowrap">Tipo:</span>
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as any)}
+                className="px-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all w-full md:w-56"
+              >
+                <option value="all">Todos los movimientos</option>
+                <option value="gasto">A Proveedores (Gasto)</option>
+                <option value="ingreso">A Clientes (Ingreso)</option>
+              </select>
             </div>
           </div>
         </div>
@@ -382,12 +481,13 @@ export default function CuentasCobroPage() {
               <thead>
                 <tr className="border-b border-foreground/5 bg-stone-50/50 text-left text-xs font-bold uppercase tracking-wider text-foreground/50">
                   <th className="p-4 w-16">No.</th>
-                  <th className="p-4">Emisor</th>
+                  <th className="p-4">Tipo</th>
+                  <th className="p-4">Tercero (Cliente/Prov)</th>
                   <th className="p-4">Identificación</th>
                   <th className="p-4">Concepto</th>
                   <th className="p-4">Monto</th>
                   <th className="p-4">Estado</th>
-                  <th className="p-4">Integración Gasto</th>
+                  <th className="p-4">Integración Contable</th>
                   <th className="p-4 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -395,8 +495,23 @@ export default function CuentasCobroPage() {
                 {filteredList.map((cc) => (
                   <tr key={cc.id} className="hover:bg-stone-50/40 transition-colors">
                     <td className="p-4 font-bold text-foreground/45">CC-{String(cc.number).padStart(5, '0')}</td>
-                    <td className="p-4 font-semibold text-foreground">{cc.issuer_name}</td>
-                    <td className="p-4 text-foreground/75">{cc.issuer_document}</td>
+                    <td className="p-4">
+                      {cc.type === 'ingreso' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-[#C59F59] rounded-md border border-amber-100 uppercase tracking-wide">
+                          Ingreso
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold bg-stone-50 text-stone-600 rounded-md border border-stone-100 uppercase tracking-wide">
+                          Gasto
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4 font-semibold text-foreground">
+                      {cc.type === 'ingreso' ? cc.debtor_name : cc.issuer_name}
+                    </td>
+                    <td className="p-4 text-foreground/75 text-xs font-mono">
+                      {cc.type === 'ingreso' ? cc.debtor_document : cc.issuer_document}
+                    </td>
                     <td className="p-4 text-foreground/70 max-w-xs truncate">{cc.concept || 'Servicios Prestados'}</td>
                     <td className="p-4 font-bold text-[#C59F59]">{formatCOP(cc.total_amount)}</td>
                     <td className="p-4">
@@ -413,27 +528,45 @@ export default function CuentasCobroPage() {
                       )}
                     </td>
                     <td className="p-4">
-                      {cc.expense_id ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-600 rounded-md border border-blue-100">
-                          Registrado
-                        </span>
-                      ) : cc.status === 'firmada' ? (
-                        <button
-                          onClick={() => openExpenseModal(cc)}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-stone-50 hover:bg-stone-100 border border-foreground/10 hover:border-foreground/20 text-[#C59F59] text-xs font-bold rounded-lg transition-colors shadow-sm"
-                        >
-                          <Wallet className="w-3.5 h-3.5" />
-                          Registrar Gasto
-                        </button>
+                      {cc.type === 'ingreso' ? (
+                        cc.income_id ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-600 rounded-md border border-blue-100">
+                            Registrado
+                          </span>
+                        ) : cc.status === 'firmada' ? (
+                          <button
+                            onClick={() => openRegisterModal(cc)}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-stone-50 hover:bg-stone-100 border border-foreground/10 hover:border-foreground/20 text-[#C59F59] text-xs font-bold rounded-lg transition-colors shadow-sm"
+                          >
+                            <Wallet className="w-3.5 h-3.5" />
+                            Registrar Ingreso
+                          </button>
+                        ) : (
+                          <span className="text-xs text-foreground/30 italic">Requiere firma</span>
+                        )
                       ) : (
-                        <span className="text-xs text-foreground/30 italic">Requiere firma</span>
+                        cc.expense_id ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-600 rounded-md border border-blue-100">
+                            Registrado
+                          </span>
+                        ) : cc.status === 'firmada' ? (
+                          <button
+                            onClick={() => openRegisterModal(cc)}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-stone-50 hover:bg-stone-100 border border-foreground/10 hover:border-foreground/20 text-[#C59F59] text-xs font-bold rounded-lg transition-colors shadow-sm"
+                          >
+                            <Wallet className="w-3.5 h-3.5" />
+                            Registrar Gasto
+                          </button>
+                        ) : (
+                          <span className="text-xs text-foreground/30 italic">Requiere firma</span>
+                        )
                       )}
                     </td>
                     <td className="p-4 text-right space-x-2">
                       {cc.status === 'pendiente' ? (
                         <>
                           <button
-                            onClick={() => copyLink(cc.id)}
+                            onClick={() => copyLink(cc.id, cc.type)}
                             title="Copiar Enlace de Firma"
                             className="p-2 hover:bg-stone-100 text-foreground/60 hover:text-[#C59F59] rounded-lg transition-colors border border-transparent hover:border-foreground/5 inline-flex"
                           >
@@ -481,7 +614,7 @@ export default function CuentasCobroPage() {
             <div className="p-6 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
               <div>
                 <h2 className="text-xl font-serif font-bold text-foreground">Crear Solicitud de Cuenta de Cobro</h2>
-                <p className="text-xs text-foreground/50">Genera una solicitud para ser enviada al proveedor para su firma.</p>
+                <p className="text-xs text-foreground/50">Genera una cuenta de cobro de egreso (a proveedor) o ingreso (a cliente).</p>
               </div>
               <button onClick={() => setIsCreateOpen(false)} className="p-2 hover:bg-stone-200/50 rounded-full transition-colors">
                 <X className="w-5 h-5 text-foreground/50" />
@@ -490,9 +623,32 @@ export default function CuentasCobroPage() {
 
             <form onSubmit={handleCreateSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
               
+              {/* Form Type Selector Toggle */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-foreground/75">Tipo de Cuenta de Cobro *</label>
+                <div className="flex bg-[#fafaf9] border border-foreground/10 p-1 rounded-xl w-full md:w-96">
+                  <button
+                    type="button"
+                    onClick={() => setFormType('gasto')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-colors ${formType === 'gasto' ? 'bg-white text-foreground shadow-sm' : 'text-foreground/40 hover:text-foreground/60'}`}
+                  >
+                    A Proveedor (Gasto)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormType('ingreso')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-colors ${formType === 'ingreso' ? 'bg-white text-foreground shadow-sm' : 'text-foreground/40 hover:text-foreground/60'}`}
+                  >
+                    A Cliente (Ingreso)
+                  </button>
+                </div>
+              </div>
+
               {/* CRM Autofill Selector */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-foreground/75">Seleccionar Cliente / Proveedor del CRM (Opcional)</label>
+                <label className="text-xs font-bold text-foreground/75">
+                  {formType === 'ingreso' ? 'Autocompletar Cliente desde CRM (Opcional)' : 'Autocompletar Proveedor desde CRM (Opcional)'}
+                </label>
                 <select
                   value={selectedClientId}
                   onChange={(e) => handleClientSelect(e.target.value)}
@@ -507,28 +663,32 @@ export default function CuentasCobroPage() {
 
               {/* Personal Info fields */}
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">Información del Emisor</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">
+                  {formType === 'ingreso' ? 'Información del Emisor (Nosotros)' : 'Información del Emisor (Proveedor)'}
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Nombre del Proveedor *</label>
+                    <label className="text-xs font-bold text-foreground/60">Nombre del Emisor *</label>
                     <input
                       type="text"
                       required
+                      disabled={formType === 'ingreso'}
                       value={issuerName}
                       onChange={(e) => setIssuerName(e.target.value)}
                       placeholder="Ej. Juan Pérez"
-                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Cédula de Ciudadanía *</label>
+                    <label className="text-xs font-bold text-foreground/60">NIT o Documento *</label>
                     <input
                       type="text"
                       required
+                      disabled={formType === 'ingreso'}
                       value={issuerDocument}
                       onChange={(e) => setIssuerDocument(e.target.value)}
                       placeholder="Ej. 102345678"
-                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
                     />
                   </div>
                   <div className="space-y-1">
@@ -536,10 +696,11 @@ export default function CuentasCobroPage() {
                     <input
                       type="email"
                       required
+                      disabled={formType === 'ingreso'}
                       value={issuerEmail}
                       onChange={(e) => setIssuerEmail(e.target.value)}
-                      placeholder="juan@ejemplo.com"
-                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      placeholder="correo@ejemplo.com"
+                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
                     />
                   </div>
                   <div className="space-y-1">
@@ -547,14 +708,68 @@ export default function CuentasCobroPage() {
                     <input
                       type="tel"
                       required
+                      disabled={formType === 'ingreso'}
                       value={issuerPhone}
                       onChange={(e) => setIssuerPhone(e.target.value)}
                       placeholder="Ej. 3001234567"
-                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
                     />
                   </div>
                 </div>
               </div>
+
+              {/* Debtor Info fields for Client (Only for type === 'ingreso') */}
+              {formType === 'ingreso' && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">Información del Deudor (Cliente)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-foreground/60">Nombre del Cliente *</label>
+                      <input
+                        type="text"
+                        required
+                        value={debtorName}
+                        onChange={(e) => setDebtorName(e.target.value)}
+                        placeholder="Ej. Juan Pérez"
+                        className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-foreground/60">Documento / Cédula / NIT *</label>
+                      <input
+                        type="text"
+                        required
+                        value={debtorDocument}
+                        onChange={(e) => setDebtorDocument(e.target.value)}
+                        placeholder="Ej. 102345678"
+                        className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-foreground/60">Correo Electrónico *</label>
+                      <input
+                        type="email"
+                        required
+                        value={debtorEmail}
+                        onChange={(e) => setDebtorEmail(e.target.value)}
+                        placeholder="juan@ejemplo.com"
+                        className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-foreground/60">Teléfono *</label>
+                      <input
+                        type="tel"
+                        required
+                        value={debtorPhone}
+                        onChange={(e) => setDebtorPhone(e.target.value)}
+                        placeholder="Ej. 3001234567"
+                        className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* General details */}
               <div className="space-y-2">
@@ -664,14 +879,20 @@ export default function CuentasCobroPage() {
         </div>
       )}
 
-      {/* Modal: Register Gasto en Flujo de Caja */}
+      {/* Modal: Register Gasto/Ingreso en Flujo de Caja */}
       {isExpenseOpen && selectedCC && (
         <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-md w-full border border-foreground/5 shadow-2xl flex flex-col">
             <div className="p-6 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0] rounded-t-3xl">
               <div>
-                <h2 className="text-xl font-serif font-bold text-foreground">Registrar Gasto</h2>
-                <p className="text-xs text-foreground/50">Asocia esta cuenta de cobro firmada al flujo de caja contable.</p>
+                <h2 className="text-xl font-serif font-bold text-foreground">
+                  {selectedCC.type === 'ingreso' ? 'Registrar Ingreso' : 'Registrar Gasto'}
+                </h2>
+                <p className="text-xs text-foreground/50">
+                  {selectedCC.type === 'ingreso' 
+                    ? 'Asocia esta cuenta de cobro firmada al flujo de caja contable como un ingreso.' 
+                    : 'Asocia esta cuenta de cobro firmada al flujo de caja contable como un gasto.'}
+                </p>
               </div>
               <button onClick={() => setIsExpenseOpen(false)} className="p-2 hover:bg-stone-200/50 rounded-full transition-colors">
                 <X className="w-5 h-5 text-foreground/50" />
@@ -681,9 +902,12 @@ export default function CuentasCobroPage() {
             <form onSubmit={handleExpenseSubmit} className="p-6 space-y-4">
               <div className="space-y-1 bg-stone-50 p-4 rounded-xl border border-stone-200/50 text-xs text-foreground/75 space-y-1.5">
                 <p><span className="font-bold text-foreground/50">Cuenta de Cobro:</span> CC-{String(selectedCC.number).padStart(5, '0')}</p>
-                <p><span className="font-bold text-foreground/50">Emisor:</span> {selectedCC.issuer_name}</p>
+                <p><span className="font-bold text-foreground/50">Tercero:</span> {selectedCC.type === 'ingreso' ? selectedCC.debtor_name : selectedCC.issuer_name}</p>
                 <p><span className="font-bold text-foreground/50">Concepto:</span> {selectedCC.concept}</p>
-                <p><span className="font-bold text-foreground/50">Monto Gasto:</span> <strong className="text-[#C59F59]">{formatCOP(selectedCC.total_amount)}</strong></p>
+                <p>
+                  <span className="font-bold text-foreground/50">Monto {selectedCC.type === 'ingreso' ? 'Ingreso' : 'Gasto'}:</span>{' '}
+                  <strong className="text-[#C59F59]">{formatCOP(selectedCC.total_amount)}</strong>
+                </p>
               </div>
 
               <div className="space-y-1">
@@ -704,35 +928,48 @@ export default function CuentasCobroPage() {
                   onChange={(e) => setExpenseCategory(e.target.value)}
                   className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                 >
-                  <option value="Honorarios (Servicios profesionales)">Honorarios (Servicios profesionales)</option>
-                  <option value="Costo de Ventas (Materia prima, insumos, empaques)">Costo de Ventas (Materia prima, insumos, empaques)</option>
-                  <option value="Costos de Producción (Maquila, Servicio de tostión)">Costos de Producción (Maquila, Servicio de tostión)</option>
-                  <option value="Gastos de Personal (Nómina, salud, pensión)">Gastos de Personal (Nómina, salud, pensión)</option>
-                  <option value="Impuestos (ICA, predial, etc.)">Impuestos (ICA, predial, etc.)</option>
-                  <option value="Arrendamientos (Local, equipos)">Arrendamientos (Local, equipos)</option>
-                  <option value="Servicios Públicos (Agua, luz, internet)">Servicios Públicos (Agua, luz, internet)</option>
-                  <option value="Software y Suscripciones (Hosting, licencias)">Software y Suscripciones (Hosting, licencias)</option>
-                  <option value="Gastos Legales (Cámara de comercio, notarías)">Gastos Legales (Cámara de comercio, notarías)</option>
-                  <option value="Mantenimiento y Reparaciones">Mantenimiento y Reparaciones</option>
-                  <option value="Adecuación e Instalaciones">Adecuación e Instalaciones</option>
-                  <option value="Gastos de Viaje y Transporte">Gastos de Viaje y Transporte</option>
-                  <option value="Diversos (Aseo, papelería, caja menor)">Diversos (Aseo, papelería, caja menor)</option>
-                  <option value="Gastos Financieros (Comisiones, intereses)">Gastos Financieros (Comisiones, intereses)</option>
+                  {selectedCC.type === 'ingreso' ? (
+                    <>
+                      <option value="Servicios">Servicios</option>
+                      <option value="Ventas Físicas">Ventas Físicas</option>
+                      <option value="Ventas Web">Ventas Web</option>
+                      <option value="Otros Ingresos">Otros Ingresos</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Honorarios (Servicios profesionales)">Honorarios (Servicios profesionales)</option>
+                      <option value="Costo de Ventas (Materia prima, insumos, empaques)">Costo de Ventas (Materia prima, insumos, empaques)</option>
+                      <option value="Costos de Producción (Maquila, Servicio de tostión)">Costos de Producción (Maquila, Servicio de tostión)</option>
+                      <option value="Gastos de Personal (Nómina, salud, pensión)">Gastos de Personal (Nómina, salud, pensión)</option>
+                      <option value="Impuestos (ICA, predial, etc.)">Impuestos (ICA, predial, etc.)</option>
+                      <option value="Arrendamientos (Local, equipos)">Arrendamientos (Local, equipos)</option>
+                      <option value="Servicios Públicos (Agua, luz, internet)">Servicios Públicos (Agua, luz, internet)</option>
+                      <option value="Software y Suscripciones (Hosting, licencias)">Software y Suscripciones (Hosting, licencias)</option>
+                      <option value="Gastos Legales (Cámara de comercio, notarías)">Gastos Legales (Cámara de comercio, notarías)</option>
+                      <option value="Mantenimiento y Reparaciones">Mantenimiento y Reparaciones</option>
+                      <option value="Adecuación e Instalaciones">Adecuación e Instalaciones</option>
+                      <option value="Gastos de Viaje y Transporte">Gastos de Viaje y Transporte</option>
+                      <option value="Diversos (Aseo, papelería, caja menor)">Diversos (Aseo, papelería, caja menor)</option>
+                      <option value="Gastos Financieros (Comisiones, intereses)">Gastos Financieros (Comisiones, intereses)</option>
+                    </>
+                  )}
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-foreground/60">Tipo Contable (P&L) *</label>
-                <select
-                  value={expenseType}
-                  onChange={(e) => setExpenseType(e.target.value as any)}
-                  className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
-                >
-                  <option value="OPEX">OPEX (Gasto Operacional Corriente)</option>
-                  <option value="COGS">COGS (Costo de Venta Directo)</option>
-                  <option value="CAPEX">CAPEX (Activo Fijo / Propiedades)</option>
-                </select>
-              </div>
+              {selectedCC.type !== 'ingreso' && (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-foreground/60">Tipo Contable (P&L) *</label>
+                  <select
+                    value={expenseType}
+                    onChange={(e) => setExpenseType(e.target.value as any)}
+                    className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                  >
+                    <option value="OPEX">OPEX (Gasto Operacional Corriente)</option>
+                    <option value="COGS">COGS (Costo de Venta Directo)</option>
+                    <option value="CAPEX">CAPEX (Activo Fijo / Propiedades)</option>
+                  </select>
+                </div>
+              )}
 
               <div className="pt-4 border-t border-foreground/5 flex justify-end gap-3 -mx-6 -mb-6 p-6 bg-stone-50 rounded-b-3xl">
                 <button
@@ -747,7 +984,7 @@ export default function CuentasCobroPage() {
                   disabled={isSubmittingExpense}
                   className="px-5 py-2.5 bg-[#C59F59] hover:bg-[#B38E4D] text-white text-xs font-bold rounded-xl shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  {isSubmittingExpense ? "Registrando..." : "Registrar Gasto"}
+                  {isSubmittingExpense ? "Registrando..." : (selectedCC.type === 'ingreso' ? "Registrar Ingreso" : "Registrar Gasto")}
                 </button>
               </div>
             </form>

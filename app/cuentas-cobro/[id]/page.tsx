@@ -45,9 +45,9 @@ export default function PublicCuentaCobroSignPage() {
         setIssuerDocument(data.issuer_document || "");
         setIssuerEmail(data.issuer_email || "");
         setIssuerPhone(data.issuer_phone || "");
-        setBankName(data.bank_name || "");
+        setBankName(data.bank_name || (data.type === 'ingreso' ? "Bancolombia" : ""));
         setBankAccountType(data.bank_account_type || "Ahorros");
-        setBankAccountNumber(data.bank_account_number || "");
+        setBankAccountNumber(data.bank_account_number || (data.type === 'ingreso' ? "9017523088" : ""));
         if (data.status === 'firmada') {
           setSuccess(true);
         }
@@ -249,14 +249,21 @@ export default function PublicCuentaCobroSignPage() {
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
             <div style="background-color: rgba(250, 250, 249, 0.8); border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
               <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">DEUDOR (PAGADOR)</h3>
-              <p style="margin: 0; font-weight: bold;">Alma Trading Group SAS</p>
-              <p style="margin: 3px 0 0 0;">NIT: 901752308-8</p>
-              <p style="margin: 3px 0 0 0;">Medellín, Colombia</p>
+              ${doc.type === 'ingreso' ? `
+                <p style="margin: 0; font-weight: bold;">${doc.debtor_name}</p>
+                <p style="margin: 3px 0 0 0;">Documento: ${doc.debtor_document}</p>
+                ${doc.debtor_email ? `<p style="margin: 3px 0 0 0;">Email: ${doc.debtor_email}</p>` : ''}
+                ${doc.debtor_phone ? `<p style="margin: 3px 0 0 0;">Teléfono: ${doc.debtor_phone}</p>` : ''}
+              ` : `
+                <p style="margin: 0; font-weight: bold;">Alma Trading Group SAS</p>
+                <p style="margin: 3px 0 0 0;">NIT: 901752308-8</p>
+                <p style="margin: 3px 0 0 0;">Medellín, Colombia</p>
+              `}
             </div>
             <div style="background-color: rgba(250, 250, 249, 0.8); border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
               <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">ACREEDOR (EMISOR)</h3>
               <p style="margin: 0; font-weight: bold;">${doc.issuer_name}</p>
-              <p style="margin: 3px 0 0 0;">C.C. / Documento: ${doc.issuer_document}</p>
+              <p style="margin: 3px 0 0 0;">NIT / Documento: ${doc.issuer_document}</p>
               <p style="margin: 3px 0 0 0;">Email: ${doc.issuer_email}</p>
               <p style="margin: 3px 0 0 0;">Teléfono: ${doc.issuer_phone}</p>
             </div>
@@ -264,7 +271,11 @@ export default function PublicCuentaCobroSignPage() {
 
           <div style="margin-bottom: 30px;">
             <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
-              <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> DEBE A: <strong>${doc.issuer_name}</strong> con C.C. / Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
+              ${doc.type === 'ingreso' ? `
+                <strong>${doc.debtor_name}</strong> con Documento <strong>${doc.debtor_document}</strong> DEBE A: <strong>${doc.issuer_name}</strong> con NIT/Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
+              ` : `
+                <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> DEBE A: <strong>${doc.issuer_name}</strong> con C.C. / Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
+              `}
             </p>
             <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
               Por concepto de: <strong>${doc.concept || 'Servicios Prestados'}</strong>
@@ -411,34 +422,44 @@ export default function PublicCuentaCobroSignPage() {
             <form onSubmit={handleSubmit} className="lg:col-span-2 bg-white rounded-3xl border border-foreground/5 shadow-sm p-8 space-y-8">
               
               <div className="border-b border-foreground/5 pb-4">
-                <h2 className="text-2xl font-serif text-foreground mb-2">Completar Datos del Emisor</h2>
-                <p className="text-foreground/60 text-sm">Ingresa tus datos personales y bancarios para que podamos emitir tu pago.</p>
+                <h2 className="text-2xl font-serif text-foreground mb-2">
+                  {doc.type === 'ingreso' ? 'Completar Firma de Café Amantti' : 'Completar Datos del Emisor'}
+                </h2>
+                <p className="text-foreground/60 text-sm">
+                  {doc.type === 'ingreso' 
+                    ? 'Ingresa los datos bancarios de Café Amantti y tu firma digital para formalizar la cuenta de cobro.' 
+                    : 'Ingresa tus datos personales y bancarios para que podamos emitir tu pago.'}
+                </p>
               </div>
 
               {/* Personal Info Grid */}
               <div className="space-y-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-[#C59F59]">1. Información Personal</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[#C59F59]">
+                  {doc.type === 'ingreso' ? '1. Información del Emisor (Café Amantti)' : '1. Información Personal'}
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-foreground/75">Nombre Completo *</label>
                     <input
                       type="text"
                       required
+                      disabled={doc.type === 'ingreso'}
                       value={issuerName}
                       onChange={(e) => setIssuerName(e.target.value)}
                       placeholder="Ej. Juan Pérez"
-                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-foreground/75">Número de Cédula *</label>
+                    <label className="text-xs font-bold text-foreground/75">Número de Identificación / NIT / Cédula *</label>
                     <input
                       type="text"
                       required
+                      disabled={doc.type === 'ingreso'}
                       value={issuerDocument}
                       onChange={(e) => setIssuerDocument(e.target.value)}
                       placeholder="Ej. 102345678"
-                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
                     />
                   </div>
                   <div className="space-y-2">
@@ -446,10 +467,11 @@ export default function PublicCuentaCobroSignPage() {
                     <input
                       type="email"
                       required
+                      disabled={doc.type === 'ingreso'}
                       value={issuerEmail}
                       onChange={(e) => setIssuerEmail(e.target.value)}
                       placeholder="juan@ejemplo.com"
-                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
                     />
                   </div>
                   <div className="space-y-2">
@@ -457,10 +479,11 @@ export default function PublicCuentaCobroSignPage() {
                     <input
                       type="tel"
                       required
+                      disabled={doc.type === 'ingreso'}
                       value={issuerPhone}
                       onChange={(e) => setIssuerPhone(e.target.value)}
                       placeholder="Ej. 3001234567"
-                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
                     />
                   </div>
                 </div>
@@ -468,7 +491,9 @@ export default function PublicCuentaCobroSignPage() {
 
               {/* Payment Details */}
               <div className="space-y-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-[#C59F59]">2. Datos para Consignación</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[#C59F59]">
+                  {doc.type === 'ingreso' ? '2. Datos para Recibir Consignación (Cuenta Amantti)' : '2. Datos para Consignación'}
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-foreground/75">Banco *</label>
@@ -589,7 +614,11 @@ export default function PublicCuentaCobroSignPage() {
                   className="mt-1 accent-[#C59F59] rounded"
                 />
                 <label htmlFor="declaration" className="text-xs text-foreground/60 text-justify leading-relaxed cursor-pointer select-none">
-                  Declaro bajo la gravedad de juramento que pertenezco al régimen de no responsables de IVA (Artículo 437 del E.T.) y que la información suministrada en este documento es verídica y correcta. Acepto estampar mi firma digital para validar esta cuenta de cobro.
+                  {doc.type === 'ingreso' ? (
+                    "Declaro bajo la gravedad de juramento que la información suministrada en este documento es verídica y correcta. Acepto estampar mi firma digital para validar esta cuenta de cobro en representación de Alma Trading Group SAS."
+                  ) : (
+                    "Declaro bajo la gravedad de juramento que pertenezco al régimen de no responsables de IVA (Artículo 437 del E.T.) y que la información suministrada en este documento es verídica y correcta. Acepto estampar mi firma digital para validar esta cuenta de cobro."
+                  )}
                 </label>
               </div>
 
@@ -619,6 +648,15 @@ export default function PublicCuentaCobroSignPage() {
                 <div>
                   <h3 className="text-sm font-bold text-foreground/40 uppercase tracking-widest mb-1">Detalle de Cobro</h3>
                   <h4 className="text-lg font-serif font-bold text-foreground border-b border-foreground/5 pb-2">CC-{String(doc.number).padStart(5, '0')}</h4>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-foreground/75 uppercase tracking-wider text-[#C59F59]">
+                    {doc.type === 'ingreso' ? 'Deudor (Cliente):' : 'Acreedor (Proveedor):'}
+                  </p>
+                  <p className="text-sm text-foreground/80 bg-[#fafaf9] p-3 rounded-xl border border-foreground/5 font-semibold">
+                    {doc.type === 'ingreso' ? doc.debtor_name : doc.issuer_name}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
