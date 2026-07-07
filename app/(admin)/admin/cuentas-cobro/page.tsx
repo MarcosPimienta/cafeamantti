@@ -672,11 +672,10 @@ export default function CuentasCobroPage() {
                     <input
                       type="text"
                       required
-                      disabled={formType === 'ingreso'}
                       value={issuerName}
                       onChange={(e) => setIssuerName(e.target.value)}
                       placeholder="Ej. Juan Pérez"
-                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
+                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
@@ -684,11 +683,10 @@ export default function CuentasCobroPage() {
                     <input
                       type="text"
                       required
-                      disabled={formType === 'ingreso'}
                       value={issuerDocument}
                       onChange={(e) => setIssuerDocument(e.target.value)}
                       placeholder="Ej. 102345678"
-                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
+                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
@@ -696,11 +694,10 @@ export default function CuentasCobroPage() {
                     <input
                       type="email"
                       required
-                      disabled={formType === 'ingreso'}
                       value={issuerEmail}
                       onChange={(e) => setIssuerEmail(e.target.value)}
                       placeholder="correo@ejemplo.com"
-                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
+                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
                   <div className="space-y-1">
@@ -708,11 +705,10 @@ export default function CuentasCobroPage() {
                     <input
                       type="tel"
                       required
-                      disabled={formType === 'ingreso'}
                       value={issuerPhone}
                       onChange={(e) => setIssuerPhone(e.target.value)}
                       placeholder="Ej. 3001234567"
-                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
+                      className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
                 </div>

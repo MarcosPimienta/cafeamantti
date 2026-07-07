@@ -443,11 +443,10 @@ export default function PublicCuentaCobroSignPage() {
                     <input
                       type="text"
                       required
-                      disabled={doc.type === 'ingreso'}
                       value={issuerName}
                       onChange={(e) => setIssuerName(e.target.value)}
                       placeholder="Ej. Juan Pérez"
-                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
+                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
@@ -455,11 +454,10 @@ export default function PublicCuentaCobroSignPage() {
                     <input
                       type="text"
                       required
-                      disabled={doc.type === 'ingreso'}
                       value={issuerDocument}
                       onChange={(e) => setIssuerDocument(e.target.value)}
                       placeholder="Ej. 102345678"
-                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
+                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
@@ -467,11 +465,10 @@ export default function PublicCuentaCobroSignPage() {
                     <input
                       type="email"
                       required
-                      disabled={doc.type === 'ingreso'}
                       value={issuerEmail}
                       onChange={(e) => setIssuerEmail(e.target.value)}
                       placeholder="juan@ejemplo.com"
-                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
+                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
                   <div className="space-y-2">
@@ -479,11 +476,10 @@ export default function PublicCuentaCobroSignPage() {
                     <input
                       type="tel"
                       required
-                      disabled={doc.type === 'ingreso'}
                       value={issuerPhone}
                       onChange={(e) => setIssuerPhone(e.target.value)}
                       placeholder="Ej. 3001234567"
-                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all disabled:opacity-60"
+                      className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
                 </div>
@@ -650,13 +646,26 @@ export default function PublicCuentaCobroSignPage() {
                   <h4 className="text-lg font-serif font-bold text-foreground border-b border-foreground/5 pb-2">CC-{String(doc.number).padStart(5, '0')}</h4>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-foreground/75 uppercase tracking-wider text-[#C59F59]">
-                    {doc.type === 'ingreso' ? 'Deudor (Cliente):' : 'Acreedor (Proveedor):'}
-                  </p>
-                  <p className="text-sm text-foreground/80 bg-[#fafaf9] p-3 rounded-xl border border-foreground/5 font-semibold">
-                    {doc.type === 'ingreso' ? doc.debtor_name : doc.issuer_name}
-                  </p>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-foreground/50 uppercase tracking-wider">Acreedor (Emisor):</p>
+                    <div className="bg-[#fafaf9] p-3 rounded-xl border border-foreground/5 text-sm text-foreground/80">
+                      <p className="font-semibold text-foreground">{doc.issuer_name}</p>
+                      <p className="text-xs text-foreground/50 mt-0.5">NIT/C.C.: {doc.issuer_document}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-foreground/50 uppercase tracking-wider">Deudor (Pagador):</p>
+                    <div className="bg-[#fafaf9] p-3 rounded-xl border border-foreground/5 text-sm text-foreground/80">
+                      <p className="font-semibold text-foreground">
+                        {doc.type === 'ingreso' ? doc.debtor_name : 'Alma Trading Group SAS'}
+                      </p>
+                      <p className="text-xs text-foreground/50 mt-0.5">
+                        NIT/C.C.: {doc.type === 'ingreso' ? doc.debtor_document : '901752308-8'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
