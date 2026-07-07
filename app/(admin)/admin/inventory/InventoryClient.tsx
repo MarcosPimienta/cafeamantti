@@ -1385,8 +1385,33 @@ function TrillaTab({
   inventory: InventoryItem[];
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
 }) {
-  const pergamino = inventory.find((i) => i.product_code === "CAPG-001") ?? null;
-  const verde = inventory.find((i) => i.product_code === "CAFV-001") ?? null;
+  const pergaminoOptions = useMemo(() => {
+    return inventory.filter((i) => i.category === "cafe" && i.product_code.startsWith("CAPG"));
+  }, [inventory]);
+
+  const [selectedPergaminoId, setSelectedPergaminoId] = useState(() => {
+    const defaultPerg = inventory.find((i) => i.product_code === "CAPG-001");
+    return defaultPerg?.id || "";
+  });
+
+  // Keep state in sync if inventory loads later
+  useEffect(() => {
+    if (!selectedPergaminoId && inventory.length > 0) {
+      const defaultPerg = inventory.find((i) => i.product_code === "CAPG-001");
+      if (defaultPerg) {
+        setSelectedPergaminoId(defaultPerg.id);
+      } else if (pergaminoOptions.length > 0) {
+        setSelectedPergaminoId(pergaminoOptions[0].id);
+      }
+    }
+  }, [inventory, selectedPergaminoId, pergaminoOptions]);
+
+  const selectedPergamino = inventory.find((i) => i.id === selectedPergaminoId) ?? null;
+  const selectedVerde = useMemo(() => {
+    if (!selectedPergamino) return null;
+    const expectedVerdeCode = selectedPergamino.product_code.replace("CAPG", "CAFV");
+    return inventory.find((i) => i.product_code === expectedVerdeCode) ?? null;
+  }, [selectedPergamino, inventory]);
 
   const [inputQty, setInputQty] = useState("");
   const [rendimiento, setRendimiento] = useState("73.5");
@@ -1447,10 +1472,10 @@ function TrillaTab({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!pergamino || !verde) {
+    if (!selectedPergamino || !selectedVerde) {
       setFeedback({
         type: "error",
-        msg: "No se encontró CAPG-001 o CAFV-001 en el inventario",
+        msg: "No se encontró el pergamino o su café verde correspondiente en el inventario",
       });
       return;
     }
@@ -1464,8 +1489,8 @@ function TrillaTab({
     startTransition(async () => {
       try {
         const res = await createTrillaBatch(
-          pergamino.id,
-          verde.id,
+          selectedPergamino.id,
+          selectedVerde.id,
           inputNum,
           rendNum,
           date,
@@ -1478,8 +1503,8 @@ function TrillaTab({
         }
 
         onStocksUpdate([
-          { id: pergamino.id, newStock: res.newPergaminoStock ?? 0 },
-          { id: verde.id, newStock: res.newVerdeStock ?? 0 },
+          { id: selectedPergamino.id, newStock: res.newPergaminoStock ?? 0 },
+          { id: selectedVerde.id, newStock: res.newVerdeStock ?? 0 },
         ]);
 
         setFeedback({
@@ -1520,7 +1545,7 @@ function TrillaTab({
   const lossKg = inputNum - outputNum;
   const lossPct = inputNum > 0 ? (lossKg / inputNum) * 100 : 0;
 
-  if (!pergamino || !verde) {
+  if (pergaminoOptions.length === 0) {
     return (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-12 text-center">
         <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
@@ -1528,7 +1553,7 @@ function TrillaTab({
           Productos no encontrados
         </p>
         <p className="text-sm text-foreground/50 mt-2">
-          Asegúrate que CAPG-001 y CAFV-001 existen en el inventario.
+          Asegúrate de que existen productos Café Pergamino (ej. CAPG-001) en el inventario.
         </p>
       </div>
     );
@@ -1548,23 +1573,46 @@ function TrillaTab({
         {/* Live stock minicard */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-[#f9f7f0] rounded-2xl p-4">
-            <p className={`${labelCls} text-[9px]`}>Pergamino disponible (CAPG-001)</p>
+            <p className={`${labelCls} text-[9px]`}>
+              Pergamino disponible ({selectedPergamino?.product_code || "—"})
+            </p>
             <p className="text-2xl font-serif font-bold">
-              {pergamino.current_stock}{" "}
+              {selectedPergamino ? selectedPergamino.current_stock : 0}{" "}
               <span className="text-sm font-sans text-foreground/50">kg</span>
             </p>
           </div>
           <div className="bg-[#f9f7f0] rounded-2xl p-4">
-            <p className={`${labelCls} text-[9px]`}>Verde disponible (CAFV-001)</p>
+            <p className={`${labelCls} text-[9px]`}>
+              Verde disponible ({selectedVerde?.product_code || "—"})
+            </p>
             <p className="text-2xl font-serif font-bold">
-              {verde.current_stock}{" "}
+              {selectedVerde ? selectedVerde.current_stock : 0}{" "}
               <span className="text-sm font-sans text-foreground/50">kg</span>
             </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+            <div>
+              <label htmlFor="tri-product" className={labelCls}>
+                Tipo de Café <span className="text-red-400">*</span>
+              </label>
+              <select
+                id="tri-product"
+                value={selectedPergaminoId}
+                onChange={(e) => setSelectedPergaminoId(e.target.value)}
+                className={`${inputCls} appearance-none cursor-pointer`}
+                required
+              >
+                <option value="">Seleccionar café...</option>
+                {pergaminoOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.product_name} ({item.product_code})
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label htmlFor="tri-date" className={labelCls}>
                 Fecha <span className="text-red-400">*</span>
@@ -1708,6 +1756,7 @@ function TrillaTab({
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                   <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Café / Tipo" field="input_inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Pergamino (kg)" field="input_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Rendimiento" field="rendimiento_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Verde (kg)" field="output_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
@@ -1723,6 +1772,9 @@ function TrillaTab({
                       {b.movement_date
                         ? fmtDate(b.movement_date)
                         : fmtDate(b.created_at)}
+                    </td>
+                    <td className={tdCls}>
+                      {b.input_inventory?.product_name || "—"}
                     </td>
                     <td className={`${tdCls} text-right font-mono`}>
                       {Number(b.input_quantity_kg).toFixed(2)}
