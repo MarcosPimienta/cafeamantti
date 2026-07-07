@@ -238,12 +238,14 @@ export default function PublicCuentaCobroSignPage() {
               <p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Emisión: ${new Date(doc.created_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
               ${doc.signed_at ? `<p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Firma: ${new Date(doc.signed_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
             </div>
-            <div style="text-align: right; padding-top: 10px;">
-              <p style="font-weight: bold; margin: 0; font-size: 15px; letter-spacing: 0.5px; color: #292524;">CAFÉ AMANTTI</p>
-              <p style="margin: 3px 0 0 0; color: #57534e; font-size: 12px;">Alma Trading Group SAS</p>
-              <p style="margin: 2px 0 0 0; color: #57534e; font-size: 12px;">NIT: 901752308-8</p>
-              <p style="margin: 2px 0 0 0; color: #57534e; font-size: 12px;">Contacto: cafeamantti@gmail.com</p>
-            </div>
+            ${doc.type === 'ingreso' ? `
+              <div style="text-align: right; padding-top: 10px;">
+                <p style="font-weight: bold; margin: 0; font-size: 15px; letter-spacing: 0.5px; color: #292524;">CAFÉ AMANTTI</p>
+                <p style="margin: 3px 0 0 0; color: #57534e; font-size: 12px;">Alma Trading Group SAS</p>
+                <p style="margin: 2px 0 0 0; color: #57534e; font-size: 12px;">NIT: 901752308-8</p>
+                <p style="margin: 2px 0 0 0; color: #57534e; font-size: 12px;">Contacto: cafeamantti@gmail.com</p>
+              </div>
+            ` : '<div style="flex-grow: 1;"></div>'}
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
