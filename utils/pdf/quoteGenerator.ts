@@ -303,6 +303,19 @@ export async function generateQuotePDF(
         onclone: (_doc: Document) => {
           _doc.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.parentNode?.removeChild(el));
           _doc.querySelectorAll('style').forEach(el => el.parentNode?.removeChild(el));
+          const resetStyle = _doc.createElement('style');
+          resetStyle.innerHTML = `
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              min-height: 100% !important;
+              background: transparent !important;
+            }
+            * {
+              box-sizing: border-box !important;
+            }
+          `;
+          _doc.head.appendChild(resetStyle);
         },
       },
       jsPDF: {
@@ -569,6 +582,19 @@ export async function generateProposalPDF(
         onclone: (_doc: Document) => {
           _doc.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.parentNode?.removeChild(el));
           _doc.querySelectorAll('style').forEach(el => el.parentNode?.removeChild(el));
+          const resetStyle = _doc.createElement('style');
+          resetStyle.innerHTML = `
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              min-height: 100% !important;
+              background: transparent !important;
+            }
+            * {
+              box-sizing: border-box !important;
+            }
+          `;
+          _doc.head.appendChild(resetStyle);
         },
       },
       jsPDF: { unit: 'px' as const, format: [816, 1056] as [number, number], orientation: 'portrait' as const, hotfixes: ['px_scaling'] },
