@@ -242,7 +242,7 @@ function buildHTMLString(data: QuoteData): string {
       color: #1c1917;
       position: relative;
       width: ${pageW}px;
-      height: ${pageH}px;
+      height: ${pageH - 2}px;
       padding: ${padV}px ${PAD_H}px;
       box-sizing: border-box;
       overflow: hidden;
@@ -265,7 +265,7 @@ function buildHTMLString(data: QuoteData): string {
     `;
   }).join('');
 
-  return `<div style="display: flex; flex-direction: column; width: ${pageW}px; overflow: hidden;">${pagesHtml}</div>`;
+  return `<div style="width: ${pageW}px; overflow: hidden;">${pagesHtml}</div>`;
 }
 
 export async function generateQuotePDF(
@@ -528,7 +528,7 @@ export async function generateProposalPDF(
     `;
 
     return `
-      <div style="font-family:Arial, sans-serif; background-color:#fff; color:#1c1917; width:816px; height:1056px; padding:64px 72px; box-sizing:border-box; position:relative; overflow:hidden; ${isLast ? '' : 'page-break-after:always;'}">
+      <div style="font-family:Arial, sans-serif; background-color:#fff; color:#1c1917; width:816px; height:1054px; padding:64px 72px; box-sizing:border-box; position:relative; overflow:hidden; ${isLast ? '' : 'page-break-after:always;'}">
         <div style="position:absolute; inset:0; background-image:url(${bgBase64}); background-size:cover; background-position:center; opacity:${opacity}; z-index:0;"></div>
         <div style="position:relative; z-index:1; display:flex; flex-direction:column; height:100%;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:40px;">
@@ -547,7 +547,7 @@ export async function generateProposalPDF(
   }).join('');
 
   const container = document.createElement('div');
-  container.innerHTML = `<div style="display:flex; flex-direction:column; width:816px; overflow:hidden;">${pagesHtml}</div>`;
+  container.innerHTML = `<div style="width:816px; overflow:hidden;">${pagesHtml}</div>`;
   container.style.position = 'fixed';
   container.style.left = '-10000px';
   container.style.top = '0';
