@@ -33,6 +33,7 @@ export default function QuotesListPage() {
 
   const filteredProposals = proposals.filter(p => 
     p.clients?.name?.toLowerCase().includes(search.toLowerCase()) || 
+    p.custom_client_name?.toLowerCase().includes(search.toLowerCase()) ||
     p.title.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -171,7 +172,7 @@ export default function QuotesListPage() {
                   filteredProposals.map((proposal) => (
                     <tr key={proposal.id} className="hover:bg-foreground/[0.02] transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-bold text-foreground">{proposal.clients?.name || 'Cliente Eliminado'}</div>
+                        <div className="font-bold text-foreground">{proposal.clients?.name || proposal.custom_client_name || 'Cliente Eliminado'}</div>
                         <div className="text-xs text-[#C59F59] font-medium">{proposal.title}</div>
                       </td>
                       <td className="px-6 py-4 text-xs text-foreground/60">

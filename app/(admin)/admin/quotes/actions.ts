@@ -234,7 +234,11 @@ export async function createProposal(data: any) {
     const { data: proposal, error } = await supabase
       .from('proposals')
       .insert({
-        client_id: data.client_id,
+        client_id: data.client_id || null,
+        custom_client_name: data.custom_client_name || null,
+        custom_client_document: data.custom_client_document || null,
+        custom_client_email: data.custom_client_email || null,
+        custom_client_phone: data.custom_client_phone || null,
         title: data.title,
         subtitle: data.subtitle,
         content: data.content,
@@ -262,7 +266,11 @@ export async function updateProposal(id: string, data: any) {
     const { error } = await supabase
       .from('proposals')
       .update({
-        client_id: data.client_id,
+        client_id: data.client_id || null,
+        custom_client_name: data.custom_client_name || null,
+        custom_client_document: data.custom_client_document || null,
+        custom_client_email: data.custom_client_email || null,
+        custom_client_phone: data.custom_client_phone || null,
         title: data.title,
         subtitle: data.subtitle,
         content: data.content,

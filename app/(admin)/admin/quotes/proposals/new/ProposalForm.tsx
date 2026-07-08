@@ -52,7 +52,13 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
   }, []);
 
   // Meta fields
-  const [clientId, setClientId] = useState(initialProposal?.client_id || '');
+  const [clientId, setClientId] = useState(
+    initialProposal?.client_id || (initialProposal?.custom_client_name ? 'custom' : '')
+  );
+  const [customClientName, setCustomClientName] = useState(initialProposal?.custom_client_name || '');
+  const [customClientDocument, setCustomClientDocument] = useState(initialProposal?.custom_client_document || '');
+  const [customClientEmail, setCustomClientEmail] = useState(initialProposal?.custom_client_email || '');
+  const [customClientPhone, setCustomClientPhone] = useState(initialProposal?.custom_client_phone || '');
   const [title, setTitle] = useState(initialProposal?.title || 'Propuesta de Alianza Comercial y Exclusividad');
   const [subtitle, setSubtitle] = useState(initialProposal?.subtitle || 'Café Amantti × Cliente');
   const [status, setStatus] = useState(initialProposal?.status || 'Borrador');
@@ -99,7 +105,16 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
   // Debounced preview data
   const [debouncedPreview, setDebouncedPreview] = useState<ProposalData | null>(null);
 
-  const client = clients.find(c => c.id === clientId);
+  const client = useMemo(() => {
+    return clientId === 'custom'
+      ? {
+          name: customClientName,
+          document_number: customClientDocument,
+          email: customClientEmail,
+          phone: customClientPhone
+        }
+      : clients.find(c => c.id === clientId);
+  }, [clientId, customClientName, customClientDocument, customClientEmail, customClientPhone, clients]);
 
   const buildProposalData = useCallback((): ProposalData => ({
     clientName: client?.name || 'Cliente',
@@ -191,7 +206,11 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
     try {
       const { createProposal, updateProposal } = await import('../../actions');
       const data = {
-        client_id: clientId,
+        client_id: clientId === 'custom' ? null : clientId,
+        custom_client_name: clientId === 'custom' ? customClientName : null,
+        custom_client_document: clientId === 'custom' ? customClientDocument : null,
+        custom_client_email: clientId === 'custom' ? customClientEmail : null,
+        custom_client_phone: clientId === 'custom' ? customClientPhone : null,
         title,
         subtitle,
         content: blocks,
@@ -258,11 +277,53 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
                   className="w-full p-3 bg-foreground/[0.03] border border-foreground/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all text-sm"
                 >
                   <option value="">Selecciona un cliente...</option>
+                  <option value="custom" className="font-bold text-[#C59F59]">+ Cliente Personalizado (No en CRM)</option>
                   {clients.map(c => (
                     <option key={c.id} value={c.id}>{c.name} {c.document_number ? `(${c.document_number})` : ''}</option>
                   ))}
                 </select>
               </div>
+              {clientId === 'custom' && (
+                <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 bg-foreground/[0.01] p-4 rounded-xl border border-foreground/5">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Nombre Completo *</label>
+                    <input
+                      required
+                      type="text"
+                      value={customClientName}
+                      onChange={e => setCustomClientName(e.target.value)}
+                      className="w-full p-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Documento (Opcional)</label>
+                    <input
+                      type="text"
+                      value={customClientDocument}
+                      onChange={e => setCustomClientDocument(e.target.value)}
+                      className="w-full p-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Teléfono (Opcional)</label>
+                    <input
+                      type="text"
+                      value={customClientPhone}
+                      onChange={e => setCustomClientPhone(e.target.value)}
+                      className="w-full p-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                    />
+                  </div>
+                  <div className="col-span-full">
+                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Email (Opcional)</label>
+                    <input
+                      type="email"
+                      value={customClientEmail}
+                      onChange={e => setCustomClientEmail(e.target.value)}
+                      className="w-full p-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+                    />
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Estado</label>
                 <select
