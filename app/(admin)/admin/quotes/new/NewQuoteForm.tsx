@@ -18,22 +18,21 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   const [customClientPhone, setCustomClientPhone] = useState(initialQuote?.custom_client_phone || '');
   
   const [discountAmount, setDiscountAmount] = useState(initialQuote?.discount_amount || 0);
-  const [applyIva, setApplyIva] = useState(initialQuote?.apply_iva || false);
-  const [ivaRate, setIvaRate] = useState<number>(() => {
-    if (initialQuote?.apply_iva) {
-      return initialQuote.iva_rate ? Number(initialQuote.iva_rate) : 5;
-    }
-    return 5;
-  });
   const [status, setStatus] = useState(initialQuote?.status || 'Borrador');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialQuote?.orientation || 'portrait');
   
   const formattedDate = initialQuote?.valid_until ? new Date(initialQuote.valid_until).toISOString().split('T')[0] : '';
   const [validUntil, setValidUntil] = useState(formattedDate);
   
-  const [items, setItems] = useState<any[]>(initialQuote?.quote_items || [
-    { product_id: '', description: '', quantity: 1, unit_price: 0, total_price: 0 }
-  ]);
+  const [items, setItems] = useState<any[]>(() => {
+    if (initialQuote?.quote_items) {
+      return initialQuote.quote_items.map((qi: any) => ({
+        ...qi,
+        iva_rate: qi.iva_rate ? Number(qi.iva_rate) : (initialQuote.apply_iva ? (initialQuote.iva_rate || 5) : 0)
+      }));
+    }
+    return [{ product_id: '', description: '', quantity: 1, unit_price: 0, iva_rate: 0, total_price: 0 }];
+  });
 
   const handleItemChange = (index: number, field: string, value: any) => {
     const newItems = [...items];
@@ -55,7 +54,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   };
 
   const addItem = () => {
-    setItems([...items, { product_id: '', description: '', quantity: 1, unit_price: 0, total_price: 0 }]);
+    setItems([...items, { product_id: '', description: '', quantity: 1, unit_price: 0, iva_rate: 0, total_price: 0 }]);
   };
 
   const removeItem = (index: number) => {
@@ -63,8 +62,26 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   };
 
   const subtotal = items.reduce((sum, item) => sum + Number(item.total_price), 0);
-  const baseAmount = Math.max(0, subtotal - Number(discountAmount));
-  const taxAmount = applyIva ? baseAmount * (ivaRate / 100) : 0;
+  const discountVal = Number(discountAmount) || 0;
+  const baseAmount = Math.max(0, subtotal - discountVal);
+  const discountFactor = subtotal > 0 ? baseAmount / subtotal : 1;
+
+  let tax5 = 0;
+  let tax19 = 0;
+  items.forEach(item => {
+    const itemSubtotal = Number(item.total_price) || 0;
+    const itemTaxBase = itemSubtotal * discountFactor;
+    const rate = Number(item.iva_rate) || 0;
+    if (rate === 5) {
+      tax5 += itemTaxBase * 0.05;
+    } else if (rate === 19) {
+      tax19 += itemTaxBase * 0.19;
+    }
+  });
+
+  const taxAmount = tax5 + tax19;
+  const applyIva = taxAmount > 0;
+  const ivaRate = tax19 > 0 ? 19 : (tax5 > 0 ? 5 : 0);
   const totalAmount = baseAmount + taxAmount;
 
   const buildPdfData = () => {
@@ -97,12 +114,15 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
         description: i.description || 'Sin descripción',
         quantity: Number(i.quantity) || 1,
         unit_price: Number(i.unit_price) || 0,
+        iva_rate: Number(i.iva_rate) || 0,
         total_price: Number(i.total_price) || 0,
       })),
       subtotal,
       discountAmount: Number(discountAmount),
       taxAmount,
       ivaRate: applyIva ? ivaRate : 0,
+      tax5,
+      tax19,
       totalAmount,
       validUntil: validUntil || '15 días',
       date: new Date().toLocaleDateString('es-CO'),
@@ -360,6 +380,19 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                   className="w-full p-2 bg-white border border-foreground/10 rounded-lg text-sm text-right"
                 />
               </div>
+              <div className="w-full md:w-24">
+                <label className="block text-xs font-medium text-foreground/50 mb-1">IVA</label>
+                <select 
+                  value={item.iva_rate ?? 0}
+                  onChange={(e) => handleItemChange(index, 'iva_rate', Number(e.target.value))}
+                  suppressHydrationWarning
+                  className="w-full p-2 bg-white border border-foreground/10 rounded-lg text-sm font-bold text-[#C59F59]"
+                >
+                  <option value={0}>0%</option>
+                  <option value={5}>5%</option>
+                  <option value={19}>19%</option>
+                </select>
+              </div>
               <div className="w-full md:w-32">
                 <label className="block text-xs font-bold text-foreground/70 mb-1">Total</label>
                 <div 
@@ -399,35 +432,18 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 className="w-32 p-2 bg-white border border-foreground/10 rounded-lg text-right font-mono focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
               />
             </div>
-            <div className="flex flex-col gap-2 pt-2">
+            {tax5 > 0 && (
               <div className="flex justify-between items-center text-sm text-foreground/70">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={applyIva} 
-                    onChange={(e) => setApplyIva(e.target.checked)}
-                    className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]"
-                  />
-                  Aplicar IVA
-                </label>
-                {applyIva && (
-                  <select
-                    value={ivaRate}
-                    onChange={(e) => setIvaRate(Number(e.target.value))}
-                    className="p-1.5 px-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 font-bold text-[#C59F59]"
-                  >
-                    <option value={5}>5%</option>
-                    <option value={19}>19%</option>
-                  </select>
-                )}
+                <span>IVA (5%):</span>
+                <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(tax5)}</span>
               </div>
-              {applyIva && (
-                <div className="flex justify-between items-center text-sm text-foreground/70 pl-6">
-                  <span>Valor IVA ({ivaRate}%):</span>
-                  <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(taxAmount)}</span>
-                </div>
-              )}
-            </div>
+            )}
+            {tax19 > 0 && (
+              <div className="flex justify-between items-center text-sm text-foreground/70">
+                <span>IVA (19%):</span>
+                <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(tax19)}</span>
+              </div>
+            )}
             <div className="pt-3 border-t border-foreground/10 flex justify-between items-center text-xl font-bold text-foreground">
               <span>Gran Total:</span>
               <span 

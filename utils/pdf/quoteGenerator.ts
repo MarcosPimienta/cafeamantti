@@ -2,6 +2,7 @@ export interface QuoteItem {
   description: string;
   quantity: number;
   unit_price: number;
+  iva_rate?: number;
   total_price: number;
 }
 
@@ -18,6 +19,8 @@ export interface QuoteData {
   discountAmount?: number;
   taxAmount?: number;
   ivaRate?: number;
+  tax5?: number;
+  tax19?: number;
   totalAmount: number;
   validUntil: string;
   quoteId?: string;
@@ -124,6 +127,7 @@ function buildHTMLString(data: QuoteData): string {
         <th style="padding:0 16px;height:${H_TABLE_HEAD}px;font-size:12px;font-weight:700;color:#fff;text-align:left;letter-spacing:1px;">Descripción</th>
         <th style="padding:0 16px;height:${H_TABLE_HEAD}px;font-size:12px;font-weight:700;color:#fff;text-align:right;letter-spacing:1px;">Cant.</th>
         <th style="padding:0 16px;height:${H_TABLE_HEAD}px;font-size:12px;font-weight:700;color:#fff;text-align:right;letter-spacing:1px;">Precio Unit.</th>
+        <th style="padding:0 16px;height:${H_TABLE_HEAD}px;font-size:12px;font-weight:700;color:#fff;text-align:right;letter-spacing:1px;">IVA</th>
         <th style="padding:0 16px;height:${H_TABLE_HEAD}px;font-size:12px;font-weight:700;color:#fff;text-align:right;letter-spacing:1px;">Total</th>
       </tr>
     </thead>
@@ -202,11 +206,24 @@ function buildHTMLString(data: QuoteData): string {
             <span style="font-family:monospace;color:#fca5a5;">-${fmt(data.discountAmount)}</span>
           </div>
           ` : ''}
-          ${data.taxAmount ? `
-          <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#d6d3d1;">
-            <span>IVA (${data.ivaRate || 5}%):</span>
-            <span style="font-family:monospace;">${fmt(data.taxAmount)}</span>
-          </div>
+          ${(data.tax5 || data.tax19) ? `
+            ${data.tax5 ? `
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:#d6d3d1;">
+              <span>IVA (5%):</span>
+              <span style="font-family:monospace;">${fmt(data.tax5)}</span>
+            </div>
+            ` : ''}
+            ${data.tax19 ? `
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:#d6d3d1;">
+              <span>IVA (19%):</span>
+              <span style="font-family:monospace;">${fmt(data.tax19)}</span>
+            </div>
+            ` : ''}
+          ` : data.taxAmount ? `
+            <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#d6d3d1;">
+              <span>IVA (${data.ivaRate || 5}%):</span>
+              <span style="font-family:monospace;">${fmt(data.taxAmount)}</span>
+            </div>
           ` : ''}
           <div style="border-top:1px solid rgba(255,255,255,0.1);margin-bottom:12px;"></div>
         ` : ''}
@@ -227,6 +244,7 @@ function buildHTMLString(data: QuoteData): string {
         <td style="padding:0 16px;height:${rh}px;font-size:${fs};color:#292524;font-weight:500;border-bottom:1px solid #e7e5e4;vertical-align:middle;">${item.description}</td>
         <td style="padding:0 16px;height:${rh}px;font-size:${fs};text-align:right;color:#57534e;border-bottom:1px solid #e7e5e4;vertical-align:middle;">${item.quantity}</td>
         <td style="padding:0 16px;height:${rh}px;font-size:${fs};text-align:right;color:#57534e;border-bottom:1px solid #e7e5e4;vertical-align:middle;">${fmt(item.unit_price)}</td>
+        <td style="padding:0 16px;height:${rh}px;font-size:${fs};text-align:right;color:#57534e;border-bottom:1px solid #e7e5e4;vertical-align:middle;">${item.iva_rate ? `${item.iva_rate}%` : '0%'}</td>
         <td style="padding:0 16px;height:${rh}px;font-size:${fs};text-align:right;font-weight:700;color:#292524;border-bottom:1px solid #e7e5e4;vertical-align:middle;">${fmt(item.total_price)}</td>
       </tr>
     `).join('');

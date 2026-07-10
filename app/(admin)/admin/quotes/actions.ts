@@ -62,6 +62,7 @@ export async function createQuote(quoteData: any, items: any[]) {
       description: item.description,
       quantity: item.quantity,
       unit_price: item.unit_price,
+      iva_rate: item.iva_rate || 0,
       total_price: item.total_price
     }));
 
@@ -142,6 +143,7 @@ export async function updateQuote(id: string, quoteData: any, items: any[]) {
       description: item.description,
       quantity: item.quantity,
       unit_price: item.unit_price,
+      iva_rate: item.iva_rate || 0,
       total_price: item.total_price
     }));
 

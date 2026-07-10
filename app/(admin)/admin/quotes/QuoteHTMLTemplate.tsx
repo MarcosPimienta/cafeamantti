@@ -111,7 +111,7 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
   const TableHead = () => (
     <thead>
       <tr style={{ backgroundColor: '#292524' }}>
-        {(['Descripción', 'Cant.', 'Precio Unit.', 'Total'] as const).map((h, i) => (
+        {(['Descripción', 'Cant.', 'Precio Unit.', 'IVA', 'Total'] as const).map((h, i) => (
           <th key={h} style={{
             padding: '0 16px',
             height: `${H_TABLE_HEAD}px`,
@@ -144,6 +144,9 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
             </td>
             <td style={{ padding: `0 16px`, height: `${rh}px`, fontSize, textAlign: 'right', color: '#57534e', borderBottom: '1px solid #e7e5e4', verticalAlign: 'middle' }}>
               {fmt(item.unit_price)}
+            </td>
+            <td style={{ padding: `0 16px`, height: `${rh}px`, fontSize, textAlign: 'right', color: '#57534e', borderBottom: '1px solid #e7e5e4', verticalAlign: 'middle' }}>
+              {item.iva_rate ? `${item.iva_rate}%` : '0%'}
             </td>
             <td style={{ padding: `0 16px`, height: `${rh}px`, fontSize, textAlign: 'right', fontWeight: 700, color: '#292524', borderBottom: '1px solid #e7e5e4', verticalAlign: 'middle' }}>
               {fmt(item.total_price)}
@@ -181,7 +184,22 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
                 <span style={{ fontFamily: 'monospace', color: '#fca5a5' }}>-{fmt(data.discountAmount)}</span>
               </div>
             ) : null}
-            {data.taxAmount ? (
+            {data.tax5 || data.tax19 ? (
+              <>
+                {data.tax5 ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: '#d6d3d1' }}>
+                    <span>IVA (5%):</span>
+                    <span style={{ fontFamily: 'monospace' }}>{fmt(data.tax5)}</span>
+                  </div>
+                ) : null}
+                {data.tax19 ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: '#d6d3d1' }}>
+                    <span>IVA (19%):</span>
+                    <span style={{ fontFamily: 'monospace' }}>{fmt(data.tax19)}</span>
+                  </div>
+                ) : null}
+              </>
+            ) : data.taxAmount ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px', color: '#d6d3d1' }}>
                 <span>IVA ({data.ivaRate || 5}%):</span>
                 <span style={{ fontFamily: 'monospace' }}>{fmt(data.taxAmount)}</span>
