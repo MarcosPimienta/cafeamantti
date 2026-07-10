@@ -17,6 +17,7 @@ export interface QuoteData {
   subtotal?: number;
   discountAmount?: number;
   taxAmount?: number;
+  ivaRate?: number;
   totalAmount: number;
   validUntil: string;
   quoteId?: string;
@@ -203,7 +204,7 @@ function buildHTMLString(data: QuoteData): string {
           ` : ''}
           ${data.taxAmount ? `
           <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#d6d3d1;">
-            <span>IVA (5%):</span>
+            <span>IVA (${data.ivaRate || 5}%):</span>
             <span style="font-family:monospace;">${fmt(data.taxAmount)}</span>
           </div>
           ` : ''}

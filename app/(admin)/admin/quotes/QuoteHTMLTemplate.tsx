@@ -183,7 +183,7 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
             ) : null}
             {data.taxAmount ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px', color: '#d6d3d1' }}>
-                <span>IVA (5%):</span>
+                <span>IVA ({data.ivaRate || 5}%):</span>
                 <span style={{ fontFamily: 'monospace' }}>{fmt(data.taxAmount)}</span>
               </div>
             ) : null}

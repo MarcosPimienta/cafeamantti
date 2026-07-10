@@ -19,6 +19,12 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   
   const [discountAmount, setDiscountAmount] = useState(initialQuote?.discount_amount || 0);
   const [applyIva, setApplyIva] = useState(initialQuote?.apply_iva || false);
+  const [ivaRate, setIvaRate] = useState<number>(() => {
+    if (initialQuote?.apply_iva) {
+      return initialQuote.iva_rate ? Number(initialQuote.iva_rate) : 5;
+    }
+    return 5;
+  });
   const [status, setStatus] = useState(initialQuote?.status || 'Borrador');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(initialQuote?.orientation || 'portrait');
   
@@ -58,7 +64,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
 
   const subtotal = items.reduce((sum, item) => sum + Number(item.total_price), 0);
   const baseAmount = Math.max(0, subtotal - Number(discountAmount));
-  const taxAmount = applyIva ? baseAmount * 0.05 : 0;
+  const taxAmount = applyIva ? baseAmount * (ivaRate / 100) : 0;
   const totalAmount = baseAmount + taxAmount;
 
   const buildPdfData = () => {
@@ -96,6 +102,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       subtotal,
       discountAmount: Number(discountAmount),
       taxAmount,
+      ivaRate: applyIva ? ivaRate : 0,
       totalAmount,
       validUntil: validUntil || '15 días',
       date: new Date().toLocaleDateString('es-CO'),
@@ -129,6 +136,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       total_amount: totalAmount,
       discount_amount: Number(discountAmount),
       apply_iva: applyIva,
+      iva_rate: applyIva ? ivaRate : 0,
       tax_amount: taxAmount,
       valid_until: validUntil ? new Date(validUntil).toISOString() : null,
       custom_client_name: clientId === 'custom' ? customClientName : null,
@@ -391,18 +399,33 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 className="w-32 p-2 bg-white border border-foreground/10 rounded-lg text-right font-mono focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
               />
             </div>
-            <div className="flex justify-between items-center text-sm text-foreground/70">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={applyIva} 
-                  onChange={(e) => setApplyIva(e.target.checked)}
-                  className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]"
-                />
-                Incluir IVA (5%)
-              </label>
+            <div className="flex flex-col gap-2 pt-2">
+              <div className="flex justify-between items-center text-sm text-foreground/70">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={applyIva} 
+                    onChange={(e) => setApplyIva(e.target.checked)}
+                    className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]"
+                  />
+                  Aplicar IVA
+                </label>
+                {applyIva && (
+                  <select
+                    value={ivaRate}
+                    onChange={(e) => setIvaRate(Number(e.target.value))}
+                    className="p-1.5 px-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 font-bold text-[#C59F59]"
+                  >
+                    <option value={5}>5%</option>
+                    <option value={19}>19%</option>
+                  </select>
+                )}
+              </div>
               {applyIva && (
-                <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(taxAmount)}</span>
+                <div className="flex justify-between items-center text-sm text-foreground/70 pl-6">
+                  <span>Valor IVA ({ivaRate}%):</span>
+                  <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(taxAmount)}</span>
+                </div>
               )}
             </div>
             <div className="pt-3 border-t border-foreground/10 flex justify-between items-center text-xl font-bold text-foreground">
