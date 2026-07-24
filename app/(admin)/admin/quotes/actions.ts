@@ -313,3 +313,165 @@ export async function deleteProposal(id: string) {
   }
 }
 
+// ============================================================
+// COFFEE TECH SHEETS ACTIONS
+// ============================================================
+
+export interface CoffeeTechSheetData {
+  id?: string;
+  title: string;
+  subtitle?: string;
+  history_title?: string;
+  history_text?: string;
+  origin?: string;
+  farm_name?: string;
+  location?: string;
+  altitude?: string;
+  variety?: string;
+  process?: string;
+  roast_level?: string;
+  sca_score?: number;
+  sensory_profile?: string;
+  acidity?: string;
+  body?: string;
+  sweetness?: string;
+  image_url?: string;
+  logo_url?: string;
+  primary_color?: string;
+  bg_color?: string;
+  status?: string;
+}
+
+export async function getTechSheets() {
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from('coffee_tech_sheets')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching coffee_tech_sheets:', err);
+    return [];
+  }
+}
+
+export async function getTechSheetById(id: string) {
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from('coffee_tech_sheets')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('Error fetching tech sheet:', err);
+    return null;
+  }
+}
+
+export async function createTechSheet(data: CoffeeTechSheetData) {
+  const supabase = await createClient();
+  try {
+    const { data: sheet, error } = await supabase
+      .from('coffee_tech_sheets')
+      .insert({
+        title: data.title,
+        subtitle: data.subtitle || 'FICHA TÉCNICA',
+        history_title: data.history_title || 'Historia',
+        history_text: data.history_text || '',
+        origin: data.origin || '',
+        farm_name: data.farm_name || '',
+        location: data.location || '',
+        altitude: data.altitude || '',
+        variety: data.variety || '',
+        process: data.process || '',
+        roast_level: data.roast_level || '',
+        sca_score: data.sca_score || null,
+        sensory_profile: data.sensory_profile || '',
+        acidity: data.acidity || '',
+        body: data.body || '',
+        sweetness: data.sweetness || '',
+        image_url: data.image_url || null,
+        logo_url: data.logo_url || null,
+        primary_color: data.primary_color || '#717861',
+        bg_color: data.bg_color || '#f2f0eb',
+        status: data.status || 'Publicado'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath('/admin/quotes');
+    return { success: true, id: sheet.id };
+  } catch (err: any) {
+    console.error('Error creating tech sheet:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateTechSheet(id: string, data: CoffeeTechSheetData) {
+  const supabase = await createClient();
+  try {
+    const { error } = await supabase
+      .from('coffee_tech_sheets')
+      .update({
+        title: data.title,
+        subtitle: data.subtitle || 'FICHA TÉCNICA',
+        history_title: data.history_title || 'Historia',
+        history_text: data.history_text || '',
+        origin: data.origin || '',
+        farm_name: data.farm_name || '',
+        location: data.location || '',
+        altitude: data.altitude || '',
+        variety: data.variety || '',
+        process: data.process || '',
+        roast_level: data.roast_level || '',
+        sca_score: data.sca_score || null,
+        sensory_profile: data.sensory_profile || '',
+        acidity: data.acidity || '',
+        body: data.body || '',
+        sweetness: data.sweetness || '',
+        image_url: data.image_url || null,
+        logo_url: data.logo_url || null,
+        primary_color: data.primary_color || '#717861',
+        bg_color: data.bg_color || '#f2f0eb',
+        status: data.status || 'Publicado'
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/admin/quotes');
+    return { success: true, id };
+  } catch (err: any) {
+    console.error('Error updating tech sheet:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteTechSheet(id: string) {
+  const supabase = await createClient();
+  try {
+    const { error } = await supabase
+      .from('coffee_tech_sheets')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/admin/quotes');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error deleting tech sheet:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+
