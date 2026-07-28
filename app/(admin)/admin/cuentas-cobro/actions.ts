@@ -74,6 +74,83 @@ export async function getCuentaCobroById(id: string) {
 }
 
 /**
+ * Get Suppliers to auto-fill issuer details if selected.
+ */
+export async function getSuppliers() {
+  const supabase = await createClient();
+  try {
+    await checkAdmin(supabase);
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('id, name, document_number, email, phone, bank_name, bank_account_type, bank_account_number')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching suppliers:', error);
+      return [];
+    }
+    return data || [];
+  } catch (err: any) {
+    console.error('Exception fetching suppliers:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Helper to auto-register a supplier or client if they don't exist in DB.
+ */
+async function autoRegisterSupplierOrClient(
+  supabase: any,
+  type: 'gasto' | 'ingreso',
+  issuerData: { issuer_name: string; issuer_document: string; issuer_email: string; issuer_phone: string },
+  debtorData?: { debtor_name?: string; debtor_document?: string; debtor_email?: string; debtor_phone?: string }
+) {
+  try {
+    if (type === 'gasto' && issuerData.issuer_name && issuerData.issuer_document) {
+      const doc = issuerData.issuer_document.trim();
+      const nameStr = issuerData.issuer_name.trim();
+
+      const { data: existing } = await supabase
+        .from('suppliers')
+        .select('id')
+        .or(`document_number.eq.${doc},name.ilike.${nameStr}`)
+        .limit(1);
+
+      if (!existing || existing.length === 0) {
+        await supabase.from('suppliers').insert({
+          name: nameStr,
+          document_number: doc,
+          email: issuerData.issuer_email?.trim() || null,
+          phone: issuerData.issuer_phone?.trim() || null,
+        });
+        revalidatePath('/admin/suppliers');
+      }
+    } else if (type === 'ingreso' && debtorData?.debtor_name && debtorData?.debtor_document) {
+      const doc = debtorData.debtor_document.trim();
+      const nameStr = debtorData.debtor_name.trim();
+
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('id')
+        .or(`document_number.eq.${doc},name.ilike.${nameStr}`)
+        .limit(1);
+
+      if (!existing || existing.length === 0) {
+        await supabase.from('clients').insert({
+          name: nameStr,
+          document_number: doc,
+          email: debtorData.debtor_email?.trim() || null,
+          phone: debtorData.debtor_phone?.trim() || null,
+        });
+        revalidatePath('/admin/customers');
+      }
+    }
+  } catch (err: any) {
+    console.error('Error auto-registering supplier/client:', err.message);
+  }
+}
+
+/**
  * Get B2B/CRM Clients to auto-fill issuer details if selected.
  */
 export async function getClients() {
@@ -156,6 +233,9 @@ export async function createCuentaCobro(
 
     if (error) throw error;
 
+    // Auto-register supplier or client if not present
+    await autoRegisterSupplierOrClient(supabase, type, issuerData, debtorData);
+
     revalidatePath('/admin/cuentas-cobro');
     return { success: true, id: data.id };
   } catch (err: any) {
@@ -233,6 +313,9 @@ export async function updateCuentaCobro(
       .eq('id', id);
 
     if (error) throw error;
+
+    // Auto-register supplier or client if not present
+    await autoRegisterSupplierOrClient(supabase, type, issuerData, debtorData);
 
     revalidatePath('/admin/cuentas-cobro');
     return { success: true };

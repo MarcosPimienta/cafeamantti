@@ -6,7 +6,7 @@ import {
   ExternalLink, FileText, CheckCircle2, Clock, Wallet, X, Check 
 } from "lucide-react";
 import { 
-  getCuentasCobro, getClients, createCuentaCobro, 
+  getCuentasCobro, getClients, getSuppliers, createCuentaCobro, 
   deleteCuentaCobro, registerCuentaCobroExpense, registerCuentaCobroIncome
 } from "./actions";
 import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@/utils/pdf/cuentasCobroHelpers";
@@ -14,6 +14,7 @@ import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@
 export default function CuentasCobroPage() {
   const [list, setList] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<'all' | 'pendiente' | 'firmada'>('all');
@@ -28,6 +29,7 @@ export default function CuentasCobroPage() {
   const [formType, setFormType] = useState<'gasto' | 'ingreso'>('gasto');
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [issuerName, setIssuerName] = useState("");
   const [issuerDocument, setIssuerDocument] = useState("");
   const [issuerEmail, setIssuerEmail] = useState("");
@@ -68,14 +70,20 @@ export default function CuentasCobroPage() {
       setDebtorPhone("");
     }
     setSelectedClientId("");
+    setSelectedSupplierId("");
   }, [formType]);
 
-  // Load list and CRM clients
+  // Load list, CRM clients, and Suppliers
   async function loadData() {
     setIsLoading(true);
-    const [cList, clientsList] = await Promise.all([getCuentasCobro(), getClients()]);
+    const [cList, clientsList, suppliersList] = await Promise.all([
+      getCuentasCobro(), 
+      getClients(), 
+      getSuppliers()
+    ]);
     setList(cList);
     setClients(clientsList);
+    setSuppliers(suppliersList);
     setIsLoading(false);
   }
 
@@ -89,17 +97,23 @@ export default function CuentasCobroPage() {
     if (!clientId) return;
     const client = clients.find(c => c.id === clientId);
     if (client) {
-      if (formType === 'ingreso') {
-        setDebtorName(client.name);
-        setDebtorDocument(client.document_number || "");
-        setDebtorEmail(client.email || "");
-        setDebtorPhone(client.phone || "");
-      } else {
-        setIssuerName(client.name);
-        setIssuerDocument(client.document_number || "");
-        setIssuerEmail(client.email || "");
-        setIssuerPhone(client.phone || "");
-      }
+      setDebtorName(client.name);
+      setDebtorDocument(client.document_number || "");
+      setDebtorEmail(client.email || "");
+      setDebtorPhone(client.phone || "");
+    }
+  };
+
+  // Supplier selection autofill
+  const handleSupplierSelect = (supplierId: string) => {
+    setSelectedSupplierId(supplierId);
+    if (!supplierId) return;
+    const supplier = suppliers.find(s => s.id === supplierId);
+    if (supplier) {
+      setIssuerName(supplier.name);
+      setIssuerDocument(supplier.document_number || "");
+      setIssuerEmail(supplier.email || "");
+      setIssuerPhone(supplier.phone || "");
     }
   };
 
@@ -666,21 +680,34 @@ export default function CuentasCobroPage() {
                 </div>
               </div>
 
-              {/* CRM Autofill Selector */}
+              {/* Autofill Selector (Suppliers for gasto, Clients for ingreso) */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-foreground/75">
-                  {formType === 'ingreso' ? 'Autocompletar Cliente desde CRM (Opcional)' : 'Autocompletar Proveedor desde CRM (Opcional)'}
+                  {formType === 'ingreso' ? 'Autocompletar Cliente desde CRM (Opcional)' : 'Autocompletar Proveedor desde Directorio (Opcional)'}
                 </label>
-                <select
-                  value={selectedClientId}
-                  onChange={(e) => handleClientSelect(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
-                >
-                  <option value="">-- Rellenar manualmente --</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.document_number})</option>
-                  ))}
-                </select>
+                {formType === 'ingreso' ? (
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => handleClientSelect(e.target.value)}
+                    className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                  >
+                    <option value="">-- Rellenar manualmente (o auto-registrar) --</option>
+                    {clients.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.document_number || 'Sin documento'})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <select
+                    value={selectedSupplierId}
+                    onChange={(e) => handleSupplierSelect(e.target.value)}
+                    className="w-full px-4 py-3 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                  >
+                    <option value="">-- Rellenar manualmente (o auto-registrar) --</option>
+                    {suppliers.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.document_number || 'Sin documento'})</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Personal Info fields */}

@@ -10,7 +10,8 @@ import {
   Settings,
   Package,
   FileText,
-  Wallet
+  Wallet,
+  Building2
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/admin/subscriptions", label: "Suscripciones", Icon: Coffee },
   { href: "/admin/users", label: "Usuarios", Icon: Users },
   { href: "/admin/customers", label: "Clientes (B2B)", Icon: Users },
+  { href: "/admin/suppliers", label: "Proveedores", Icon: Building2 },
   { href: "/admin/quotes", label: "Cotizaciones", Icon: FileText },
   { href: "/admin/cuentas-cobro", label: "Cuentas de Cobro", Icon: FileText },
   { href: "/admin/cashflow", label: "Flujo de Caja", Icon: Wallet },
