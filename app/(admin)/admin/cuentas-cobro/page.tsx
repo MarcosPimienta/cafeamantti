@@ -9,7 +9,7 @@ import {
   getCuentasCobro, getClients, createCuentaCobro, 
   deleteCuentaCobro, registerCuentaCobroExpense, registerCuentaCobroIncome
 } from "./actions";
-import { formatCOP, numeroALetras, imageUrlToBase64 } from "@/utils/pdf/cuentasCobroHelpers";
+import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@/utils/pdf/cuentasCobroHelpers";
 
 export default function CuentasCobroPage() {
   const [list, setList] = useState<any[]>([]);
@@ -26,6 +26,7 @@ export default function CuentasCobroPage() {
 
   // Form: Create CC
   const [formType, setFormType] = useState<'gasto' | 'ingreso'>('gasto');
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [issuerName, setIssuerName] = useState("");
   const [issuerDocument, setIssuerDocument] = useState("");
@@ -159,7 +160,8 @@ export default function CuentasCobroPage() {
         debtor_document: debtorDocument,
         debtor_email: debtorEmail,
         debtor_phone: debtorPhone
-      } : undefined
+      } : undefined,
+      issueDate
     );
 
     if (res.success) {
@@ -167,6 +169,7 @@ export default function CuentasCobroPage() {
       // reset form
       setSelectedClientId("");
       setFormType("gasto");
+      setIssueDate(new Date().toISOString().split('T')[0]);
       setIssuerName("");
       setIssuerDocument("");
       setIssuerEmail("");
@@ -281,7 +284,7 @@ export default function CuentasCobroPage() {
               <img src="${logoBase64}" style="width: 140px; height: auto; object-fit: contain; margin-bottom: 12px;" />
               <h1 style="font-size: 22px; font-weight: bold; margin: 0; color: #292524; font-family: Georgia, serif; letter-spacing: 0.5px;">CUENTA DE COBRO</h1>
               <p style="font-size: 13px; color: #78716c; margin: 4px 0 0 0;">Número: CC-${String(doc.number).padStart(5, '0')}</p>
-              <p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Emisión: ${new Date(doc.created_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Emisión: ${formatDateSpanish(doc.issue_date || doc.created_at)}</p>
               ${doc.signed_at ? `<p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Firma: ${new Date(doc.signed_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
             </div>
             ${doc.type === 'ingreso' ? `
@@ -484,6 +487,7 @@ export default function CuentasCobroPage() {
                 <tr className="border-b border-foreground/5 bg-stone-50/50 text-left text-xs font-bold uppercase tracking-wider text-foreground/50">
                   <th className="p-4 w-16">No.</th>
                   <th className="p-4">Tipo</th>
+                  <th className="p-4">Fecha Emisión</th>
                   <th className="p-4">Tercero (Cliente/Prov)</th>
                   <th className="p-4">Identificación</th>
                   <th className="p-4">Concepto</th>
@@ -507,6 +511,9 @@ export default function CuentasCobroPage() {
                           Gasto
                         </span>
                       )}
+                    </td>
+                    <td className="p-4 text-xs font-medium text-foreground/75 whitespace-nowrap">
+                      {formatDateSpanish(cc.issue_date || cc.created_at)}
                     </td>
                     <td className="p-4 font-semibold text-foreground">
                       {cc.type === 'ingreso' ? cc.debtor_name : cc.issuer_name}
@@ -625,24 +632,37 @@ export default function CuentasCobroPage() {
 
             <form onSubmit={handleCreateSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
               
-              {/* Form Type Selector Toggle */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-foreground/75">Tipo de Cuenta de Cobro *</label>
-                <div className="flex bg-[#fafaf9] border border-foreground/10 p-1 rounded-xl w-full md:w-96">
-                  <button
-                    type="button"
-                    onClick={() => setFormType('gasto')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-colors ${formType === 'gasto' ? 'bg-white text-foreground shadow-sm' : 'text-foreground/40 hover:text-foreground/60'}`}
-                  >
-                    A Proveedor (Gasto)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormType('ingreso')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-colors ${formType === 'ingreso' ? 'bg-white text-foreground shadow-sm' : 'text-foreground/40 hover:text-foreground/60'}`}
-                  >
-                    A Cliente (Ingreso)
-                  </button>
+              {/* Form Type Selector Toggle & Issue Date */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-foreground/75">Tipo de Cuenta de Cobro *</label>
+                  <div className="flex bg-[#fafaf9] border border-foreground/10 p-1 rounded-xl w-full">
+                    <button
+                      type="button"
+                      onClick={() => setFormType('gasto')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-colors ${formType === 'gasto' ? 'bg-white text-foreground shadow-sm' : 'text-foreground/40 hover:text-foreground/60'}`}
+                    >
+                      A Proveedor (Gasto)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormType('ingreso')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-colors ${formType === 'ingreso' ? 'bg-white text-foreground shadow-sm' : 'text-foreground/40 hover:text-foreground/60'}`}
+                    >
+                      A Cliente (Ingreso)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-foreground/75">Fecha de Emisión *</label>
+                  <input
+                    type="date"
+                    required
+                    value={issueDate}
+                    onChange={(e) => setIssueDate(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                  />
                 </div>
               </div>
 

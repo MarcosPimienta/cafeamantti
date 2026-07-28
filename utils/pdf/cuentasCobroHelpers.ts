@@ -141,3 +141,22 @@ export async function imageUrlToBase64(url: string): Promise<string> {
   }
 }
 
+/**
+ * Format date string (YYYY-MM-DD or ISO string) safely in Spanish format without UTC timezone offsets.
+ */
+export function formatDateSpanish(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('T')[0].split('-');
+  if (parts.length === 3) {
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const day = Number(parts[2]);
+    if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+      const date = new Date(year, month, day);
+      return date.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  }
+  return new Date(dateStr).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { Check, Clipboard, Download, ShieldAlert, SquarePen, Type, RotateCcw } from "lucide-react";
 import { getCuentaCobroById, signCuentaCobro } from "@/app/(admin)/admin/cuentas-cobro/actions";
-import { formatCOP, numeroALetras, imageUrlToBase64 } from "@/utils/pdf/cuentasCobroHelpers";
+import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@/utils/pdf/cuentasCobroHelpers";
 
 export default function PublicCuentaCobroSignPage() {
   const { id } = useParams() as { id: string };
@@ -235,7 +235,7 @@ export default function PublicCuentaCobroSignPage() {
               <img src="${logoBase64}" style="width: 140px; height: auto; object-fit: contain; margin-bottom: 12px;" />
               <h1 style="font-size: 22px; font-weight: bold; margin: 0; color: #292524; font-family: Georgia, serif; letter-spacing: 0.5px;">CUENTA DE COBRO</h1>
               <p style="font-size: 13px; color: #78716c; margin: 4px 0 0 0;">Número: CC-${String(doc.number).padStart(5, '0')}</p>
-              <p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Emisión: ${new Date(doc.created_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Emisión: ${formatDateSpanish(doc.issue_date || doc.created_at)}</p>
               ${doc.signed_at ? `<p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Firma: ${new Date(doc.signed_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
             </div>
             ${doc.type === 'ingreso' ? `
@@ -646,6 +646,7 @@ export default function PublicCuentaCobroSignPage() {
                 <div>
                   <h3 className="text-sm font-bold text-foreground/40 uppercase tracking-widest mb-1">Detalle de Cobro</h3>
                   <h4 className="text-lg font-serif font-bold text-foreground border-b border-foreground/5 pb-2">CC-{String(doc.number).padStart(5, '0')}</h4>
+                  <p className="text-xs text-foreground/50 mt-1">Fecha de Emisión: <strong className="text-foreground">{formatDateSpanish(doc.issue_date || doc.created_at)}</strong></p>
                 </div>
 
                 <div className="space-y-3">

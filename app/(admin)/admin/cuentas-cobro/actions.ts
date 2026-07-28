@@ -119,7 +119,8 @@ export async function createCuentaCobro(
     debtor_document?: string;
     debtor_email?: string;
     debtor_phone?: string;
-  }
+  },
+  issueDate?: string
 ) {
   const supabase = await createClient();
   try {
@@ -127,23 +128,29 @@ export async function createCuentaCobro(
 
     const total_amount = items.reduce((acc, item) => acc + Number(item.total_price), 0);
 
+    const insertPayload: any = {
+      type,
+      status: 'pendiente',
+      issuer_name: issuerData.issuer_name,
+      issuer_document: issuerData.issuer_document,
+      issuer_email: issuerData.issuer_email,
+      issuer_phone: issuerData.issuer_phone,
+      concept: issuerData.concept || 'Servicios Prestados',
+      items,
+      total_amount,
+      debtor_name: debtorData?.debtor_name || null,
+      debtor_document: debtorData?.debtor_document || null,
+      debtor_email: debtorData?.debtor_email || null,
+      debtor_phone: debtorData?.debtor_phone || null,
+    };
+
+    if (issueDate) {
+      insertPayload.issue_date = issueDate;
+    }
+
     const { data, error } = await supabase
       .from('cuentas_cobro')
-      .insert({
-        type,
-        status: 'pendiente',
-        issuer_name: issuerData.issuer_name,
-        issuer_document: issuerData.issuer_document,
-        issuer_email: issuerData.issuer_email,
-        issuer_phone: issuerData.issuer_phone,
-        concept: issuerData.concept || 'Servicios Prestados',
-        items,
-        total_amount,
-        debtor_name: debtorData?.debtor_name || null,
-        debtor_document: debtorData?.debtor_document || null,
-        debtor_email: debtorData?.debtor_email || null,
-        debtor_phone: debtorData?.debtor_phone || null,
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -181,7 +188,8 @@ export async function updateCuentaCobro(
     debtor_document?: string;
     debtor_email?: string;
     debtor_phone?: string;
-  }
+  },
+  issueDate?: string
 ) {
   const supabase = await createClient();
   try {
@@ -200,22 +208,28 @@ export async function updateCuentaCobro(
 
     const total_amount = items.reduce((acc, item) => acc + Number(item.total_price), 0);
 
+    const updatePayload: any = {
+      type,
+      issuer_name: issuerData.issuer_name,
+      issuer_document: issuerData.issuer_document,
+      issuer_email: issuerData.issuer_email,
+      issuer_phone: issuerData.issuer_phone,
+      concept: issuerData.concept || 'Servicios Prestados',
+      items,
+      total_amount,
+      debtor_name: debtorData?.debtor_name || null,
+      debtor_document: debtorData?.debtor_document || null,
+      debtor_email: debtorData?.debtor_email || null,
+      debtor_phone: debtorData?.debtor_phone || null,
+    };
+
+    if (issueDate) {
+      updatePayload.issue_date = issueDate;
+    }
+
     const { error } = await supabase
       .from('cuentas_cobro')
-      .update({
-        type,
-        issuer_name: issuerData.issuer_name,
-        issuer_document: issuerData.issuer_document,
-        issuer_email: issuerData.issuer_email,
-        issuer_phone: issuerData.issuer_phone,
-        concept: issuerData.concept || 'Servicios Prestados',
-        items,
-        total_amount,
-        debtor_name: debtorData?.debtor_name || null,
-        debtor_document: debtorData?.debtor_document || null,
-        debtor_email: debtorData?.debtor_email || null,
-        debtor_phone: debtorData?.debtor_phone || null,
-      })
+      .update(updatePayload)
       .eq('id', id);
 
     if (error) throw error;
