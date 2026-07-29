@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { Check, Clipboard, Download, ShieldAlert, SquarePen, Type, RotateCcw } from "lucide-react";
 import { getCuentaCobroById, signCuentaCobro } from "@/app/(admin)/admin/cuentas-cobro/actions";
 import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@/utils/pdf/cuentasCobroHelpers";
+import { downloadCuentaCobroPDF } from "@/utils/pdf/cuentasCobroPdf";
 
 export default function PublicCuentaCobroSignPage() {
   const { id } = useParams() as { id: string };
@@ -26,7 +27,7 @@ export default function PublicCuentaCobroSignPage() {
 
   // Canvas drawing ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawingRef = useRef(false);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -57,7 +58,7 @@ export default function PublicCuentaCobroSignPage() {
     loadDocument();
   }, [id]);
 
-  // Setup canvas event listeners
+  // Setup canvas event listeners for Touch and Mouse with scale factor calculations
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || signatureType !== 'scribble' || success) return;
@@ -71,40 +72,52 @@ export default function PublicCuentaCobroSignPage() {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
+    const getCanvasCoords = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / (rect.width || 1);
+      const scaleY = canvas.height / (rect.height || 1);
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    };
+
     // Touch events for mobile
     const handleTouchStart = (e: TouchEvent) => {
       e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
+      if (e.touches.length === 0) return;
       const touch = e.touches[0];
+      const { x, y } = getCanvasCoords(touch.clientX, touch.clientY);
       ctx.beginPath();
-      ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
-      setIsDrawing(true);
+      ctx.moveTo(x, y);
+      isDrawingRef.current = true;
       setHasDrawn(true);
     };
 
     const handleTouchMove = (e: TouchEvent) => {
       e.preventDefault();
-      if (!isDrawing) return;
-      const rect = canvas.getBoundingClientRect();
+      if (!isDrawingRef.current || e.touches.length === 0) return;
       const touch = e.touches[0];
-      ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
+      const { x, y } = getCanvasCoords(touch.clientX, touch.clientY);
+      ctx.lineTo(x, y);
       ctx.stroke();
     };
 
-    const handleTouchEnd = () => {
-      setIsDrawing(false);
+    const handleTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      isDrawingRef.current = false;
     };
 
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
     canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd);
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
 
     return () => {
       canvas.removeEventListener('touchstart', handleTouchStart);
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [signatureType, isDrawing, success]);
+  }, [signatureType, success]);
 
   // Mouse canvas actions
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -114,26 +127,32 @@ export default function PublicCuentaCobroSignPage() {
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / (rect.width || 1);
+    const scaleY = canvas.height / (rect.height || 1);
+
     ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-    setIsDrawing(true);
+    ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+    isDrawingRef.current = true;
     setHasDrawn(true);
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawingRef.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    const scaleX = canvas.width / (rect.width || 1);
+    const scaleY = canvas.height / (rect.height || 1);
+
+    ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
     ctx.stroke();
   };
 
   const stopDrawing = () => {
-    setIsDrawing(false);
+    isDrawingRef.current = false;
   };
 
   const clearCanvas = () => {
@@ -143,6 +162,7 @@ export default function PublicCuentaCobroSignPage() {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setHasDrawn(false);
+    isDrawingRef.current = false;
   };
 
   // Submit flow
@@ -196,9 +216,15 @@ export default function PublicCuentaCobroSignPage() {
 
     if (res.success) {
       setSuccess(true);
-      // Reload page state
+      // Reload updated document state
       const updated = await getCuentaCobroById(id);
-      if (updated) setDoc(updated);
+      if (updated) {
+        setDoc(updated);
+        // Automatically download PDF for user upon signing
+        setTimeout(() => {
+          downloadCuentaCobroPDF(updated);
+        }, 300);
+      }
     } else {
       alert(res.error || "Ocurrió un error al firmar el documento.");
     }
@@ -208,139 +234,7 @@ export default function PublicCuentaCobroSignPage() {
   // Render PDF function
   const handleDownloadPDF = async () => {
     if (!doc) return;
-    const html2pdf = (await import('html2pdf.js')).default;
-
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    const bgBase64 = await imageUrlToBase64(`${baseUrl}/images/Main_Background.jpg`);
-    const logoBase64 = await imageUrlToBase64(`${baseUrl}/images/logo-amantti.png`);
-
-    const opt = {
-      margin: 15,
-      filename: `Cuenta_de_Cobro_${doc.number}_${doc.issuer_name.replace(/\s+/g, '_')}.pdf`,
-      image: { type: 'jpeg' as const, quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm' as const, format: 'letter' as const, orientation: 'portrait' as const }
-    };
-
-    // Construct a beautiful HTML template specifically optimized for PDF generation
-    const element = document.createElement('div');
-    element.innerHTML = `
-      <div style="font-family: Arial, sans-serif; background-color: #ffffff; color: #1c1917; padding: 25px 30px; box-sizing: border-box; position: relative; overflow: hidden; min-height: 250mm; max-width: 800px; margin: auto; border: 1px solid #e7e5e4; border-radius: 8px;">
-        <!-- Background Image with low opacity -->
-        <div style="position: absolute; inset: 0; background-image: url(${bgBase64}); background-size: cover; background-position: center; opacity: 0.12; z-index: 0;"></div>
-
-        <div style="position: relative; z-index: 1;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e7e5e4; padding-bottom: 20px; margin-bottom: 30px;">
-            <div>
-              <img src="${logoBase64}" style="width: 140px; height: auto; object-fit: contain; margin-bottom: 12px;" />
-              <h1 style="font-size: 22px; font-weight: bold; margin: 0; color: #292524; font-family: Georgia, serif; letter-spacing: 0.5px;">CUENTA DE COBRO</h1>
-              <p style="font-size: 13px; color: #78716c; margin: 4px 0 0 0;">Número: CC-${String(doc.number).padStart(5, '0')}</p>
-              <p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Emisión: ${formatDateSpanish(doc.issue_date || doc.created_at)}</p>
-              ${doc.signed_at ? `<p style="font-size: 12px; color: #78716c; margin: 2px 0 0 0;">Fecha de Firma: ${new Date(doc.signed_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
-            </div>
-            ${doc.type === 'ingreso' ? `
-              <div style="text-align: right; padding-top: 10px;">
-                <p style="font-weight: bold; margin: 0; font-size: 15px; letter-spacing: 0.5px; color: #292524;">CAFÉ AMANTTI</p>
-                <p style="margin: 3px 0 0 0; color: #57534e; font-size: 12px;">Alma Trading Group SAS</p>
-                <p style="margin: 2px 0 0 0; color: #57534e; font-size: 12px;">NIT: 901752308-8</p>
-                <p style="margin: 2px 0 0 0; color: #57534e; font-size: 12px;">Contacto: cafeamantti@gmail.com</p>
-              </div>
-            ` : '<div style="flex-grow: 1;"></div>'}
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-            <div style="background-color: rgba(250, 250, 249, 0.8); border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
-              <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">DEUDOR (PAGADOR)</h3>
-              ${doc.type === 'ingreso' ? `
-                <p style="margin: 0; font-weight: bold;">${doc.debtor_name}</p>
-                <p style="margin: 3px 0 0 0;">Documento: ${doc.debtor_document}</p>
-                ${doc.debtor_email ? `<p style="margin: 3px 0 0 0;">Email: ${doc.debtor_email}</p>` : ''}
-                ${doc.debtor_phone ? `<p style="margin: 3px 0 0 0;">Teléfono: ${doc.debtor_phone}</p>` : ''}
-              ` : `
-                <p style="margin: 0; font-weight: bold;">Alma Trading Group SAS</p>
-                <p style="margin: 3px 0 0 0;">NIT: 901752308-8</p>
-                <p style="margin: 3px 0 0 0;">Medellín, Colombia</p>
-              `}
-            </div>
-            <div style="background-color: rgba(250, 250, 249, 0.8); border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px;">
-              <h3 style="font-size: 13px; font-weight: bold; margin: 0 0 10px 0; border-bottom: 1px solid #e7e5e4; padding-bottom: 5px; text-transform: uppercase; color: #78716c;">ACREEDOR (EMISOR)</h3>
-              <p style="margin: 0; font-weight: bold;">${doc.issuer_name}</p>
-              <p style="margin: 3px 0 0 0;">NIT / Documento: ${doc.issuer_document}</p>
-              <p style="margin: 3px 0 0 0;">Email: ${doc.issuer_email}</p>
-              <p style="margin: 3px 0 0 0;">Teléfono: ${doc.issuer_phone}</p>
-            </div>
-          </div>
-
-          <div style="margin-bottom: 30px;">
-            <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
-              ${doc.type === 'ingreso' ? `
-                <strong>${doc.debtor_name}</strong> con Documento <strong>${doc.debtor_document}</strong> DEBE A: <strong>${doc.issuer_name}</strong> con NIT/Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
-              ` : `
-                <strong>Alma Trading Group SAS</strong> con NIT <strong>901752308-8</strong> DEBE A: <strong>${doc.issuer_name}</strong> con C.C. / Documento <strong>${doc.issuer_document}</strong> la suma de <strong>${formatCOP(doc.total_amount)} COP</strong> (${numeroALetras(doc.total_amount)}).
-              `}
-            </p>
-            <p style="font-size: 14px; text-align: justify; margin: 0 0 20px 0;">
-              Por concepto de: <strong>${doc.concept || 'Servicios Prestados'}</strong>
-            </p>
-          </div>
-
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px; background-color: rgba(255, 255, 255, 0.6);">
-            <thead>
-              <tr style="background-color: #f5f5f4; border-bottom: 2px solid #e7e5e4;">
-                <th style="padding: 10px; text-align: left; font-weight: bold; width: 60%;">Descripción del Servicio / Producto</th>
-                <th style="padding: 10px; text-align: center; font-weight: bold; width: 10%;">Cant.</th>
-                <th style="padding: 10px; text-align: right; font-weight: bold; width: 15%;">Valor Unitario</th>
-                <th style="padding: 10px; text-align: right; font-weight: bold; width: 15%;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${(doc.items || []).map((item: any, idx: number) => `
-                <tr style="border-bottom: 1px solid #e7e5e4;">
-                  <td style="padding: 10px; text-align: left;">${item.description}</td>
-                  <td style="padding: 10px; text-align: center;">${item.quantity}</td>
-                  <td style="padding: 10px; text-align: right;">${formatCOP(item.unit_price)}</td>
-                  <td style="padding: 10px; text-align: right; font-weight: bold;">${formatCOP(item.total_price)}</td>
-                </tr>
-              `).join('')}
-              <tr style="background-color: rgba(250, 250, 249, 0.8); font-weight: bold; font-size: 14px; border-top: 2px solid #e7e5e4;">
-                <td colspan="3" style="padding: 12px 10px; text-align: right;">TOTAL A PAGAR:</td>
-                <td style="padding: 12px 10px; text-align: right; color: #1c1917;">${formatCOP(doc.total_amount)} COP</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div style="page-break-inside: avoid; break-inside: avoid; background-color: rgba(250, 250, 249, 0.85); border-left: 4px solid #C59F59; padding: 15px; margin-bottom: 40px; border-radius: 0 8px 8px 0; text-align: justify; font-size: 12px; color: #44403c;">
-            <p style="margin: 0; font-weight: bold; color: #292524; font-size: 13px; margin-bottom: 5px;">DECLARACIÓN JURAMENTADA Y DATOS DE PAGO</p>
-            <p style="margin: 0 0 10px 0;">
-              Manifiesto bajo la gravedad del juramento que los datos personales y bancarios aquí consignados son correctos. De igual forma, declaro que pertenezco al régimen de no responsables de IVA (Artículo 437 del Estatuto Tributario).
-            </p>
-            <p style="margin: 0; font-weight: bold; color: #292524;">
-              Instrucción de Pago: Consignar a ${doc.bank_name || bankName} - Cuenta de ${doc.bank_account_type || bankAccountType} No. ${doc.bank_account_number || bankAccountNumber}.
-            </p>
-          </div>
-
-          <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 50px; display: flex; flex-direction: column; align-items: flex-start; max-width: 320px;">
-            <p style="margin: 0 0 10px 0; font-size: 12px; color: #78716c; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">Firma Digital del Emisor</p>
-            <div style="border-bottom: 1.5px solid #a8a29e; width: 100%; min-height: 80px; display: flex; align-items: center; justify-content: center; padding-bottom: 5px;">
-              ${doc.signature_type === 'scribble' 
-                ? `<img src="${doc.signature_data}" style="max-height: 80px; max-width: 250px; object-fit: contain;" />`
-                : `<span style="font-family: 'Brush Script MT', 'Dancing Script', 'Caveat', cursive, sans-serif; font-size: 32px; font-style: italic; font-weight: 500; color: #0c0a09; text-shadow: 1px 1px 1px rgba(0,0,0,0.05);">${doc.signature_data}</span>`
-              }
-            </div>
-            <p style="margin: 10px 0 0 0; font-weight: bold; font-size: 13px; color: #292524;">${doc.issuer_name}</p>
-            <p style="margin: 2px 0 0 0; font-size: 12px; color: #57534e;">C.C. / Documento: ${doc.issuer_document}</p>
-            <p style="margin: 2px 0 0 0; font-size: 11px; color: #78716c; font-style: italic;">Firmado digitalmente el ${new Date(doc.signed_at).toLocaleString('es-CO')}</p>
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(element);
-    try {
-      await html2pdf().set(opt).from(element).save();
-    } finally {
-      document.body.removeChild(element);
-    }
+    await downloadCuentaCobroPDF(doc);
   };
 
   if (isLoading) {

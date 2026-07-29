@@ -368,9 +368,17 @@ export async function signCuentaCobro(
     issuer_phone: string;
   }
 ) {
-  const supabase = await createClient();
+  let supabase: any;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (serviceRoleKey && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    const { createClient: createSupabaseJsClient } = await import('@supabase/supabase-js');
+    supabase = createSupabaseJsClient(process.env.NEXT_PUBLIC_SUPABASE_URL, serviceRoleKey);
+  } else {
+    supabase = await createClient();
+  }
+
   try {
-    // 1. Fetch document and verify it is still 'pendiente' (Double Check RLS constraint)
+    // 1. Fetch document and verify it is still 'pendiente'
     const { data: current, error: fetchErr } = await supabase
       .from('cuentas_cobro')
       .select('status')
@@ -406,6 +414,7 @@ export async function signCuentaCobro(
     if (updateErr) throw updateErr;
 
     revalidatePath('/admin/cuentas-cobro');
+    revalidatePath(`/cuentas-cobro/${id}`);
     return { success: true };
   } catch (err: any) {
     console.error('Error signing cuenta_cobro:', err.message);
