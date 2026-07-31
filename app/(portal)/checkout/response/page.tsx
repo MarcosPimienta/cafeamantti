@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { 
   CheckCircle2, 
@@ -26,10 +26,14 @@ function CheckoutResponseContent() {
   const [txData, setTxData] = useState<any>(null);
   const [isSubscription, setIsSubscription] = useState(false);
 
+  const mockStatus = searchParams.get("mock_status");
+  const mockType = searchParams.get("type");
+  const ref_payco = searchParams.get("ref_payco");
+  const hasProcessed = useRef(false);
+
   useEffect(() => {
-    const mockStatus = searchParams.get("mock_status");
-    const mockType = searchParams.get("type");
-    const ref_payco = searchParams.get("ref_payco");
+    if (hasProcessed.current) return;
+    hasProcessed.current = true;
 
     // Enable Mock Test Harness for Developers / Testers
     if (mockStatus) {
@@ -78,7 +82,7 @@ function CheckoutResponseContent() {
           setTxData(data.data);
           const stateCode = data.data.x_cod_transaction_state;
           const invoiceStr = String(data.data.x_id_invoice || "").toUpperCase();
-          setIsSubscription(invoiceStr.startsWith("SUB") || searchParams.get("type") === "subscription");
+          setIsSubscription(invoiceStr.startsWith("SUB") || mockType === "subscription");
 
           if (stateCode === 1) { // Aceptada
             setStatus("success");
@@ -99,7 +103,7 @@ function CheckoutResponseContent() {
     };
 
     verifyTransaction();
-  }, [searchParams, clearCart]);
+  }, [mockStatus, mockType, ref_payco, clearCart]);
 
   const formatCurrency = (val: string | number) => {
     const num = typeof val === "string" ? parseFloat(val) : val;
