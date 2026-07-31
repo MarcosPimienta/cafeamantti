@@ -106,6 +106,14 @@ export const es: Record<TranslationKey, string> = {
   "plans.curatorDifference": "Envío prioritario de los lotes más escasos del año e invitación a una sesión de cata virtual privada con el tostador cada trimestre.",
   "plans.curatorFrequency": "Mensual.",
   "plans.curatorIdeal": "Coleccionistas de sabores y conocedores que exigen lo que el mercado masivo no puede ver.",
+
+  "plans.customTitle": "Plan Crea Tu Suscripción",
+  "plans.customSubtitle": "",
+  "plans.customQuote": "Diseña tu propia suscripción eligiendo las cantidades exactas de tus cafés favoritos.",
+  "plans.customContent": "Combinación libre de Selección Amantti, Honey Process y Microlote del Mes.",
+  "plans.customDifference": "Control total sobre las cantidades de cada producto y verificación de inventario en tiempo real.",
+  "plans.customFrequency": "Semanal, Quincenal o Mensual.",
+  "plans.customIdeal": "Quienes desean personalizar totalmente su volumen y variedad de café.",
   
   "plans.contentLabel": "Contenido",
   "plans.differenceLabel": "La Diferencia",

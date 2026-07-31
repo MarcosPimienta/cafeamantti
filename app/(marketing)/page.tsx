@@ -25,6 +25,7 @@ import {
   Check,
   Truck,
   Leaf,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useCart } from "@/app/context/CartContext";
@@ -637,7 +638,7 @@ export default function Home() {
               <div className="w-24 h-1 bg-[#C59F59] mx-auto mb-8"></div>
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
               {/* Plan I: Devoción Esencial */}
               <div className="group relative bg-white border border-foreground/5 rounded-3xl p-8 shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 flex flex-col overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -819,6 +820,58 @@ export default function Home() {
                   href={getSubscribeHref('curator')}
                   suppressHydrationWarning
                   className="w-full py-4 bg-white text-black hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl text-center"
+                >
+                  {t("plans.subscribe")}
+                </Link>
+              </div>
+
+              {/* Plan IV: Crea Tu Suscripción */}
+              <div className="group relative bg-white border border-[#C59F59]/30 rounded-3xl p-8 shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 flex flex-col overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <SlidersHorizontal className="w-24 h-24 rotate-12 text-[#C59F59]" />
+                </div>
+                
+                {/* Visual Representation of Plan */}
+                <div className="relative w-full h-40 mb-6 flex items-center justify-center">
+                  <div className="w-24 h-24 rounded-3xl bg-[#C59F59]/10 border border-[#C59F59]/20 flex flex-col items-center justify-center p-4 text-[#C59F59] group-hover:scale-110 transition-transform duration-500 shadow-inner">
+                    <SlidersHorizontal className="w-10 h-10 mb-1" />
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-center">A tu medida</span>
+                  </div>
+                </div>
+
+                <div className="mb-8">
+                  <span className="text-[#C59F59] font-bold text-sm tracking-widest uppercase mb-2 block">Plan IV</span>
+                  <h3 suppressHydrationWarning className="text-3xl font-serif mb-2">{t("plans.customTitle")}</h3>
+                  <p suppressHydrationWarning className="text-foreground/40 text-sm italic mb-6">{t("plans.customSubtitle")}</p>
+                  <p suppressHydrationWarning className="text-lg font-bodoni italic text-foreground/80 leading-relaxed border-l-2 border-[#C59F59] pl-4">
+                    {t("plans.customQuote")}
+                  </p>
+                </div>
+
+                <div className="space-y-6 mb-10 flex-1">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.contentLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.customContent")}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.differenceLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.customDifference")}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#C59F59] mb-2">{t("plans.frequencyLabel")}</h4>
+                    <p className="text-foreground/70">{t("plans.customFrequency")}</p>
+                  </div>
+                  <div className="pt-4 border-t border-foreground/5">
+                    <p className="text-sm font-medium text-foreground/50">
+                      <span className="text-foreground/80 italic">{t("plans.idealLabel")}:</span> {t("plans.customIdeal")}
+                    </p>
+                  </div>
+                </div>
+
+                <Link 
+                  href={getSubscribeHref('custom')}
+                  suppressHydrationWarning
+                  className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl text-center"
                 >
                   {t("plans.subscribe")}
                 </Link>

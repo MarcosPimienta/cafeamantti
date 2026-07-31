@@ -105,6 +105,14 @@ export const en = {
   "plans.curatorFrequency": "Monthly.",
   "plans.curatorIdeal": "Flavor collectors and connoisseurs who demand what the mass market cannot see.",
 
+  "plans.customTitle": "Make Your Own Subscription Plan",
+  "plans.customSubtitle": "",
+  "plans.customQuote": "Design your custom subscription by choosing the exact quantities of your favorite coffees.",
+  "plans.customContent": "Flexible combination of Amantti Selection, Honey Process, and Microlot of the Month.",
+  "plans.customDifference": "Complete control over item quantities with real-time stock validation.",
+  "plans.customFrequency": "Weekly, Bi-Weekly, or Monthly.",
+  "plans.customIdeal": "Coffee lovers wanting full customization over their volume and varieties.",
+
   "plans.contentLabel": "Content",
   "plans.differenceLabel": "The Difference",
   "plans.frequencyLabel": "Frequency",
