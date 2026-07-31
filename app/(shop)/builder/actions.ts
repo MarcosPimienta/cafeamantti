@@ -26,6 +26,26 @@ export async function getSubscription(id: string) {
   return data
 }
 
+export async function getSubscriptionStock() {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('inventory')
+    .select('id, product_code, product_name, current_stock')
+    .in('category', ['cafe'])
+
+  if (error) {
+    console.error('Error fetching inventory stock:', error)
+    return {}
+  }
+
+  const stockMap: Record<string, number> = {}
+  for (const item of data || []) {
+    stockMap[item.product_code] = Number(item.current_stock || 0)
+    stockMap[item.id] = Number(item.current_stock || 0)
+  }
+  return stockMap
+}
+
 export async function upsertSubscription(formData: FormData, subscriptionId?: string | null) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -39,7 +59,17 @@ export async function upsertSubscription(formData: FormData, subscriptionId?: st
   const weight = formData.get('weight') as string
   const grind = formData.get('grind') as string
   const grind_level = formData.get('grind_level') as string
+  const custom_items_raw = formData.get('custom_items') as string
   
+  let custom_items: any[] = [];
+  if (custom_items_raw) {
+    try {
+      custom_items = JSON.parse(custom_items_raw);
+    } catch (e) {
+      console.error('Failed to parse custom_items:', e);
+    }
+  }
+
   const shipping_state = formData.get('shipping_state') as string
   const shipping_city = formData.get('shipping_city') as string
   const shipping_address = formData.get('shipping_address') as string
@@ -52,6 +82,7 @@ export async function upsertSubscription(formData: FormData, subscriptionId?: st
     weight,
     grind,
     grind_level: grind === 'ground' ? grind_level : null,
+    custom_items,
     shipping_state,
     shipping_city,
     shipping_address,

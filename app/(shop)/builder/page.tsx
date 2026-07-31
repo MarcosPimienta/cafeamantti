@@ -11,11 +11,16 @@ import {
   Calendar, 
   ChevronRight,
   Info,
-  Loader2
+  Loader2,
+  Plus,
+  Minus,
+  AlertTriangle,
+  Sparkles,
+  SlidersHorizontal
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { upsertSubscription, getSubscription } from "./actions";
+import { upsertSubscription, getSubscription, getSubscriptionStock } from "./actions";
 import { CheckoutModal } from "@/app/components/CheckoutModal";
 
 const PLANS = [
@@ -40,6 +45,37 @@ const PLANS = [
     image: "/images/Amantti_Coffee_Bag.png",
     description: "Una selección privada de los cafés más excepcionales de Amantti.",
   },
+  {
+    id: "custom",
+    name: "Crea Tu Suscripción",
+    price: 0,
+    image: "/images/Amantti_Coffee_Bag.png",
+    description: "Arma tu combinación personalizada eligiendo cantidades de cualquier café.",
+  },
+];
+
+const CUSTOM_PRODUCTS = [
+  {
+    id: "essential",
+    name: "Devoción Esencial (Tradicional)",
+    basePrice: 35000,
+    image: "/images/Front_Paper_Traditional_Coffee_Bag.png",
+    codePrefix: "CAFT"
+  },
+  {
+    id: "alchemy",
+    name: "Alquimia & Contraste (Honey)",
+    basePrice: 48000,
+    image: "/images/Front_White_Honey_Coffee_Bag.png",
+    codePrefix: "CAFT-HON"
+  },
+  {
+    id: "curator",
+    name: "Curaduría Privada (Microlote)",
+    basePrice: 65000,
+    image: "/images/Amantti_Coffee_Bag.png",
+    codePrefix: "CAFT-MIC"
+  }
 ];
 
 const WEIGHTS = ["250g", "500g", "2.5kg"];
@@ -72,10 +108,25 @@ function BuilderForm() {
     shipping_address: "",
     shipping_details: "",
   });
+
+  const [customQuantities, setCustomQuantities] = useState<Record<string, number>>({
+    essential: 1,
+    alchemy: 0,
+    curator: 0,
+  });
+
+  const [stockMap, setStockMap] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(!!subscriptionId);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeSubId, setActiveSubId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch live inventory stock
+    getSubscriptionStock().then(data => {
+      if (data) setStockMap(data);
+    });
+  }, []);
 
   useEffect(() => {
     if (subscriptionId) {
@@ -84,8 +135,8 @@ function BuilderForm() {
         if (data) {
           setSelection({
             plan_id: data.plan_id,
-            weight: data.weight,
-            grind: data.grind,
+            weight: data.weight || "250g",
+            grind: data.grind || "whole",
             grind_level: data.grind_level || "drip",
             frequency: data.frequency,
             shipping_state: data.shipping_state || "",
@@ -93,6 +144,15 @@ function BuilderForm() {
             shipping_address: data.shipping_address || "",
             shipping_details: data.shipping_details || "",
           });
+
+          if (data.custom_items && Array.isArray(data.custom_items)) {
+            const loadedQty: Record<string, number> = { essential: 0, alchemy: 0, curator: 0 };
+            data.custom_items.forEach((ci: any) => {
+              if (ci.id) loadedQty[ci.id] = ci.quantity;
+            });
+            setCustomQuantities(loadedQty);
+          }
+
           setIsLoading(false);
         } else {
           // If ID is provided but no data (IDOR attempt or deleted), redirect
@@ -111,12 +171,63 @@ function BuilderForm() {
 
   const currentPlan = PLANS.find((p) => p.id === selection.plan_id)!;
 
+  // Helper to check stock availability for a custom item
+  const getAvailableStock = (productId: string) => {
+    const prod = CUSTOM_PRODUCTS.find(p => p.id === productId);
+    if (!prod) return 50;
+    const weightCode = selection.weight === "125g" ? "125G" : selection.weight === "250g" ? "250G" : selection.weight === "500g" ? "500G" : "2K5";
+    const fullCode = `${prod.codePrefix}-${weightCode}`;
+    return stockMap[fullCode] ?? 50; // Fallback stock if inventory not seeded
+  };
+
+  const handleCustomQuantityChange = (productId: string, delta: number) => {
+    const current = customQuantities[productId] || 0;
+    const next = Math.max(0, current + delta);
+    const maxStock = getAvailableStock(productId);
+
+    if (delta > 0 && next > maxStock) {
+      return; // Restrict if stock is insufficient
+    }
+
+    setCustomQuantities(prev => ({
+      ...prev,
+      [productId]: next
+    }));
+  };
+
+  const getPrice = () => {
+    if (selection.plan_id === "custom") {
+      let total = 0;
+      CUSTOM_PRODUCTS.forEach(p => {
+        const qty = customQuantities[p.id] || 0;
+        if (qty > 0) {
+          const mult = selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 8;
+          total += (p.basePrice * mult) * qty;
+        }
+      });
+      return total > 0 ? total : 35000;
+    }
+    const multiplier = selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 8;
+    return currentPlan.price * multiplier;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
       const formData = new FormData();
       Object.entries(selection).forEach(([key, value]) => formData.append(key, value));
+
+      if (selection.plan_id === "custom") {
+        const customItemsList = CUSTOM_PRODUCTS.map(p => ({
+          id: p.id,
+          name: p.name,
+          quantity: customQuantities[p.id] || 0
+        })).filter(item => item.quantity > 0);
+
+        formData.append("custom_items", JSON.stringify(customItemsList));
+      }
+
       const res = await upsertSubscription(formData, subscriptionId);
       if (res && res.subscriptionId) {
         setActiveSubId(res.subscriptionId);
@@ -137,11 +248,6 @@ function BuilderForm() {
     );
   }
 
-  const getPrice = () => {
-    const multiplier = selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 8;
-    return currentPlan.price * multiplier;
-  };
-
   return (
     <main className="min-h-screen bg-[#fdfbf7] pt-32 pb-20 font-sans text-foreground">
       <div className="container mx-auto px-6 max-w-6xl">
@@ -158,7 +264,7 @@ function BuilderForm() {
             <div>
               <h1 className="text-4xl md:text-6xl font-serif mb-4">Personaliza tu Suscripción</h1>
               <p className="text-foreground/40 text-lg font-light tracking-wide max-w-xl">
-                Ajusta cada detalle de tu experiencia Amantti. Cambia tu plan, molienda o frecuencia en un solo lugar.
+                Ajusta cada detalle de tu experiencia Amantti. Elije un plan predefinido o arma tu combinación a la medida.
               </p>
             </div>
           </div>
@@ -174,42 +280,48 @@ function BuilderForm() {
                 <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">1</span>
                 <h2 className="text-2xl font-serif">Selecciona tu Plan</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {PLANS.map((plan) => (
                   <button
                     key={plan.id}
                     type="button"
                     onClick={() => setSelection({ ...selection, plan_id: plan.id })}
-                    className={`relative p-6 rounded-3xl border transition-all duration-500 text-left flex flex-col items-center group ${
+                    className={`relative p-5 rounded-3xl border transition-all duration-500 text-left flex flex-col items-center group ${
                       selection.plan_id === plan.id 
                         ? "bg-white border-[#C59F59] shadow-2xl scale-[1.02]" 
                         : "bg-white/50 border-foreground/5 hover:border-[#C59F59]/40 hover:bg-white"
                     }`}
                   >
-                    <div className="relative w-32 h-40 mb-6 transition-transform duration-700 group-hover:scale-110">
+                    <div className="relative w-24 h-32 mb-4 transition-transform duration-700 group-hover:scale-110">
                       {plan.id === 'essential' && (
                         <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt={plan.name} fill className="object-contain drop-shadow-xl" />
                       )}
                       {plan.id === 'alchemy' && (
                         <>
-                          <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt="Bag 1" fill className="object-contain drop-shadow-lg -rotate-12 -translate-x-4 translate-y-2 opacity-90" />
-                          <Image src="/images/Front_White_Honey_Coffee_Bag.png" alt="Bag 2" fill className="object-contain drop-shadow-2xl rotate-6 translate-x-4 -translate-y-1" />
+                          <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt="Bag 1" fill className="object-contain drop-shadow-lg -rotate-12 -translate-x-3 translate-y-2 opacity-90" />
+                          <Image src="/images/Front_White_Honey_Coffee_Bag.png" alt="Bag 2" fill className="object-contain drop-shadow-2xl rotate-6 translate-x-3 -translate-y-1" />
                         </>
                       )}
                       {plan.id === 'curator' && (
                         <>
-                          <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt="Bag 1" fill className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-8 translate-y-4 opacity-80" />
-                          <Image src="/images/Front_White_Honey_Coffee_Bag.png" alt="Bag 2" fill className="object-contain drop-shadow-xl rotate-[20deg] translate-x-8 translate-y-4 opacity-80" />
-                          <Image src="/images/Amantti_Coffee_Bag.png" alt="Bag 3" fill className="object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.4)] scale-110 brightness-110 z-10" />
+                          <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt="Bag 1" fill className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-5 translate-y-3 opacity-80" />
+                          <Image src="/images/Front_White_Honey_Coffee_Bag.png" alt="Bag 2" fill className="object-contain drop-shadow-xl rotate-[20deg] translate-x-5 translate-y-3 opacity-80" />
+                          <Image src="/images/Amantti_Coffee_Bag.png" alt="Bag 3" fill className="object-contain drop-shadow-2xl scale-110 brightness-110 z-10" />
                         </>
                       )}
+                      {plan.id === 'custom' && (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-[#C59F59]/10 rounded-2xl p-2 text-[#C59F59]">
+                          <SlidersHorizontal className="w-8 h-8 mb-1" />
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-center">Crea Tu Plan</span>
+                        </div>
+                      )}
                     </div>
-                    <h3 className="text-lg font-serif mb-2 text-center">{plan.name}</h3>
-                    <p className="text-[10px] text-foreground/40 text-center leading-relaxed">
+                    <h3 className="text-base font-serif mb-1.5 text-center leading-snug">{plan.name}</h3>
+                    <p className="text-[9px] text-foreground/40 text-center leading-relaxed">
                       {plan.description}
                     </p>
                     {selection.plan_id === plan.id && (
-                      <div className="absolute top-4 right-4 w-6 h-6 bg-[#C59F59] rounded-full flex items-center justify-center shadow-lg animate-in zoom-in duration-300">
+                      <div className="absolute top-3 right-3 w-5 h-5 bg-[#C59F59] rounded-full flex items-center justify-center shadow-lg animate-in zoom-in duration-300">
                         <Check className="w-3 h-3 text-white" />
                       </div>
                     )}
@@ -225,6 +337,76 @@ function BuilderForm() {
                 <h2 className="text-2xl font-serif">Personaliza tu Café</h2>
               </div>
               
+              {/* Custom Plan Product Quantity Builder */}
+              {selection.plan_id === "custom" && (
+                <div className="space-y-6 bg-white p-6 sm:p-8 rounded-3xl border border-[#C59F59]/30 shadow-xl animate-in fade-in duration-300">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sparkles className="w-4 h-4 text-[#C59F59]" />
+                      <h3 className="text-lg font-serif text-foreground">Elige las Cantidades de tu Suscripción</h3>
+                    </div>
+                    <p className="text-xs text-foreground/50">Selecciona cuántas unidades de cada producto deseas incluir. Validamos la disponibilidad en inventario en tiempo real.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {CUSTOM_PRODUCTS.map((prod) => {
+                      const qty = customQuantities[prod.id] || 0;
+                      const availableStock = getAvailableStock(prod.id);
+                      const isOutOfStock = availableStock <= 0;
+                      const isMaxStockReached = qty >= availableStock;
+
+                      return (
+                        <div key={prod.id} className="p-4 bg-[#fdfbf7] rounded-2xl border border-foreground/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="relative w-12 h-16 shrink-0 bg-white p-1 rounded-xl ring-1 ring-black/5">
+                              <Image src={prod.image} alt={prod.name} fill className="object-contain" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-foreground">{prod.name}</p>
+                              <p className="text-xs text-[#C59F59] font-serif font-bold">
+                                {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(
+                                  prod.basePrice * (selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 8)
+                                )} / unidad
+                              </p>
+                              {isOutOfStock ? (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full mt-1">
+                                  <AlertTriangle className="w-3 h-3" /> Agotado en Inventario
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-foreground/40 block mt-0.5">
+                                  Stock disponible: <strong className="text-foreground/70">{availableStock}</strong> unidades
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quantity Controller */}
+                          <div className="flex items-center gap-3 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => handleCustomQuantityChange(prod.id, -1)}
+                              disabled={qty === 0}
+                              className="w-9 h-9 rounded-xl border border-foreground/10 bg-white flex items-center justify-center text-foreground hover:bg-foreground/5 disabled:opacity-30 transition-all"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="w-8 text-center font-bold text-sm">{qty}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCustomQuantityChange(prod.id, 1)}
+                              disabled={isOutOfStock || isMaxStockReached}
+                              className="w-9 h-9 rounded-xl border border-foreground/10 bg-white flex items-center justify-center text-foreground hover:bg-[#C59F59] hover:text-white disabled:opacity-30 transition-all"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="grid md:grid-cols-2 gap-12">
                 <div className="space-y-6">
                   <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 block">Presentación</label>
@@ -406,7 +588,7 @@ function BuilderForm() {
                 
                 <div className="space-y-8 relative z-10">
                   <div className="flex items-center gap-6">
-                    <div className="relative w-20 h-24 shrink-0 bg-[#fdfbf7] rounded-2xl p-2 ring-1 ring-black/5">
+                    <div className="relative w-20 h-24 shrink-0 bg-[#fdfbf7] rounded-2xl p-2 ring-1 ring-black/5 flex items-center justify-center">
                       {selection.plan_id === 'essential' && (
                         <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt="Bag" fill className="object-contain" />
                       )}
@@ -416,6 +598,11 @@ function BuilderForm() {
                       {selection.plan_id === 'curator' && (
                         <Image src="/images/Amantti_Coffee_Bag.png" alt="Bag" fill className="object-contain scale-110" />
                       )}
+                      {selection.plan_id === 'custom' && (
+                        <div className="flex flex-col items-center justify-center text-[#C59F59]">
+                          <SlidersHorizontal className="w-8 h-8" />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <p className="text-xl font-serif leading-tight mb-1">{currentPlan.name}</p>
@@ -423,7 +610,23 @@ function BuilderForm() {
                     </div>
                   </div>
 
-                  <div className="space-y-4 pt-8 border-t border-foreground/5">
+                  {selection.plan_id === "custom" && (
+                    <div className="pt-4 border-t border-foreground/5 space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/40">Resumen de Productos</p>
+                      {CUSTOM_PRODUCTS.map(p => {
+                        const qty = customQuantities[p.id] || 0;
+                        if (qty === 0) return null;
+                        return (
+                          <div key={p.id} className="flex justify-between items-center text-xs">
+                            <span className="text-foreground/70 truncate max-w-[170px]">{p.name}</span>
+                            <span className="font-bold text-[#C59F59]">{qty} x</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="space-y-4 pt-6 border-t border-foreground/5">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-foreground/40">Frecuencia</span>
                       <span className="font-medium">{FREQUENCIES.find(f => f.id === selection.frequency)?.label}</span>
