@@ -23,6 +23,7 @@ interface CheckoutModalProps {
   isSubscription?: boolean;
   subscriptionId?: string;
   subscriptionPlanName?: string;
+  subscriptionFrequency?: string;
 }
 
 export function CheckoutModal({ 
@@ -34,7 +35,8 @@ export function CheckoutModal({
   epaycoKey,
   isSubscription = false,
   subscriptionId,
-  subscriptionPlanName
+  subscriptionPlanName,
+  subscriptionFrequency = "monthly"
 }: CheckoutModalProps) {
   const [cedula, setCedula] = useState(userProfile?.cedula_number || "");
   const [address, setAddress] = useState(userProfile?.address || "");
@@ -85,6 +87,11 @@ export function CheckoutModal({
         invoiceId = orderResponse.orderId;
       }
 
+      // Compute ePayco periodicity format for recurring charges
+      let periodicity = "1 month";
+      if (subscriptionFrequency === "weekly") periodicity = "7 days";
+      if (subscriptionFrequency === "bi-weekly") periodicity = "14 days";
+
       // 3. Initialize ePayco Checkout
       if (typeof window !== "undefined" && window.ePayco) {
         const handler = window.ePayco.checkout.configure({
@@ -92,10 +99,10 @@ export function CheckoutModal({
           test: true // ⚠️ Cambiar a false cuando actives producción en ePayco
         });
 
-        const data = {
+        const data: any = {
           // Parámetros de compra
           name: isSubscription ? `Suscripción Café Amantti — ${subscriptionPlanName || "Plan Café"}` : "Compra Café Amantti",
-          description: isSubscription ? "Suscripción Recurrente de Café Amantti" : "Compra de productos en tienda",
+          description: isSubscription ? `Suscripción Recurrente (${subscriptionFrequency})` : "Compra de productos en tienda",
           invoice: invoiceId,
           currency: "cop",
           amount: subtotal.toString(),
@@ -107,8 +114,13 @@ export function CheckoutModal({
           // Configuración del popup
           external: "false", // Modal onpage
 
+          // Configuración de recurrencia y suscripción automática ePayco
+          subscription: isSubscription ? "true" : "false",
+          periodicity: isSubscription ? periodicity : undefined,
+
           // Parámetros extra para webhook
           extra1: subscriptionId || "",
+          extra2: subscriptionFrequency || "monthly",
 
           // URLs de respuesta y confirmación
           response: `${window.location.origin}/checkout/response${isSubscription ? "?type=subscription" : ""}`,

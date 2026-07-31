@@ -488,6 +488,7 @@ function BuilderForm() {
         isSubscription={true}
         subscriptionId={activeSubId || undefined}
         subscriptionPlanName={currentPlan.name}
+        subscriptionFrequency={selection.frequency}
       />
     </main>
   );
