@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { upsertSubscription, getSubscription } from "./actions";
+import { CheckoutModal } from "@/app/components/CheckoutModal";
 
 const PLANS = [
   {
@@ -73,6 +74,8 @@ function BuilderForm() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(!!subscriptionId);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [activeSubId, setActiveSubId] = useState<string | null>(null);
 
   useEffect(() => {
     if (subscriptionId) {
@@ -114,9 +117,14 @@ function BuilderForm() {
     try {
       const formData = new FormData();
       Object.entries(selection).forEach(([key, value]) => formData.append(key, value));
-      await upsertSubscription(formData, subscriptionId);
+      const res = await upsertSubscription(formData, subscriptionId);
+      if (res && res.subscriptionId) {
+        setActiveSubId(res.subscriptionId);
+        setIsCheckoutOpen(true);
+      }
     } catch (error) {
       console.error(error);
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -469,6 +477,18 @@ function BuilderForm() {
           </div>
         </div>
       </div>
+
+      <CheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        subtotal={getPrice()}
+        userProfile={null}
+        items={[]}
+        epaycoKey={process.env.NEXT_PUBLIC_EPAYCO_PUBLIC_KEY || "452445a6435c2491a27e7b8971f11e9f"}
+        isSubscription={true}
+        subscriptionId={activeSubId || undefined}
+        subscriptionPlanName={currentPlan.name}
+      />
     </main>
   );
 }

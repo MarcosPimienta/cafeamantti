@@ -65,17 +65,23 @@ export async function upsertSubscription(formData: FormData, subscriptionId?: st
       .from('subscriptions')
       .update({
         ...subscriptionData,
+        payment_status: 'pending',
         updated_at: new Date().toISOString()
       })
       .eq('id', subscriptionId)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .select('id')
+      .single();
   } else {
     result = await supabase
       .from('subscriptions')
       .insert({
         ...subscriptionData,
+        payment_status: 'pending',
         next_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      });
+      })
+      .select('id')
+      .single();
   }
 
   if (result.error) {
@@ -84,7 +90,7 @@ export async function upsertSubscription(formData: FormData, subscriptionId?: st
   }
 
   revalidatePath('/dashboard')
-  redirect('/dashboard')
+  return { success: true, subscriptionId: result.data?.id || subscriptionId }
 }
 
 export async function updateSubscriptionStatus(subscriptionId: string, status: 'active' | 'paused' | 'cancelled') {

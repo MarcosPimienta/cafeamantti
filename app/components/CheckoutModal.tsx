@@ -20,9 +20,22 @@ interface CheckoutModalProps {
   userProfile: any;
   items: any[];
   epaycoKey: string;
+  isSubscription?: boolean;
+  subscriptionId?: string;
+  subscriptionPlanName?: string;
 }
 
-export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items, epaycoKey }: CheckoutModalProps) {
+export function CheckoutModal({ 
+  isOpen, 
+  onClose, 
+  subtotal, 
+  userProfile, 
+  items, 
+  epaycoKey,
+  isSubscription = false,
+  subscriptionId,
+  subscriptionPlanName
+}: CheckoutModalProps) {
   const [cedula, setCedula] = useState(userProfile?.cedula_number || "");
   const [address, setAddress] = useState(userProfile?.address || "");
   const [city, setCity] = useState(userProfile?.city || "");
@@ -59,10 +72,17 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items, e
       
       await updateUserProfile(formData);
 
-      // 2. Create Pending Order in Database
-      const orderResponse = await createPendingOrder(items, 0); // 0 shipping cost for now
-      if (!orderResponse.success) {
-        throw new Error(orderResponse.error || "No se pudo generar el pedido.");
+      let invoiceId = "";
+
+      if (isSubscription) {
+        invoiceId = subscriptionId ? `SUB-${subscriptionId}` : `SUB-${Date.now()}`;
+      } else {
+        // 2. Create Pending Order in Database for regular cart purchases
+        const orderResponse = await createPendingOrder(items, 0); // 0 shipping cost for now
+        if (!orderResponse.success) {
+          throw new Error(orderResponse.error || "No se pudo generar el pedido.");
+        }
+        invoiceId = orderResponse.orderId;
       }
 
       // 3. Initialize ePayco Checkout
@@ -74,9 +94,9 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items, e
 
         const data = {
           // Parámetros de compra
-          name: "Compra Café Amantti",
-          description: "Suscripción / Compra de productos",
-          invoice: orderResponse.orderId,
+          name: isSubscription ? `Suscripción Café Amantti — ${subscriptionPlanName || "Plan Café"}` : "Compra Café Amantti",
+          description: isSubscription ? "Suscripción Recurrente de Café Amantti" : "Compra de productos en tienda",
+          invoice: invoiceId,
           currency: "cop",
           amount: subtotal.toString(),
           tax_base: "0",
@@ -87,8 +107,11 @@ export function CheckoutModal({ isOpen, onClose, subtotal, userProfile, items, e
           // Configuración del popup
           external: "false", // Modal onpage
 
+          // Parámetros extra para webhook
+          extra1: subscriptionId || "",
+
           // URLs de respuesta y confirmación
-          response: `${window.location.origin}/checkout/response`,
+          response: `${window.location.origin}/checkout/response${isSubscription ? "?type=subscription" : ""}`,
           confirmation: `${window.location.origin}/api/webhooks/epayco`,
 
           // Atributos del cliente
