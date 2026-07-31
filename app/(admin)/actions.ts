@@ -1707,3 +1707,40 @@ export async function migrateLegacyAltas() {
     return { success: false, message: "ERROR: " + err.message };
   }
 }
+
+export async function createInventoryProduct(data: {
+  product_code: string;
+  product_name: string;
+  category: 'cafe' | 'empaque' | 'accesorio';
+  unit: string;
+  min_stock?: number;
+  current_stock?: number;
+  notes?: string;
+}) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+
+  const { data: newItem, error } = await supabase
+    .from('inventory')
+    .insert({
+      product_code: data.product_code.toUpperCase().trim(),
+      product_name: data.product_name.trim(),
+      category: data.category,
+      unit: data.unit,
+      current_stock: data.current_stock || 0,
+      min_stock: data.min_stock || 5,
+      notes: data.notes || null,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath('/admin/inventory');
+  return { success: true, item: newItem };
+}
+
