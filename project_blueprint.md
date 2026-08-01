@@ -384,11 +384,25 @@ To replicate this project from scratch:
 
 ---
 
-## 15. Subscription & Product Pricing Matrix
+## 15. Subscription Model & Dynamic Pricing Matrix
 
-| Plan / Coffee Variety | 250g | 500g | 2.5kg |
+Amantti uses a single flexible subscription model (**Crea Tu Suscripción**), allowing subscribers to pick exact quantities of any coffee line.
+
+### Transportation Fee Rule
+- Store product prices include **$10.000 COP** transportation.
+- **Net Coffee Value** per bag = Store Price - $10.000 COP.
+- Subscription deliveries charge a single **$10.000 COP flat shipping fee** per shipment:
+
+$$\text{Subscription Total} = \sum \left( \text{Net Coffee Value} \times \text{Quantity} \right) + \$10.000\text{ COP}$$
+
+| Presentation | Variety / Product | Store Price | Net Coffee Value |
 |---|---|---|---|
-| `essential` / Premium | 35,000 | 63,000 | 165,000 |
-| `alchemy` / Honey | 48,000 | 86,400 | *N/A (Solo Premium)* |
-| `curator` / Microl | 65,000 | 117,000 | *N/A (Solo Premium)* |
+| **250g** | **Premium** | $35.000 | **$25.000** |
+| **250g** | **Honey** | $48.000 | **$38.000** |
+| **250g** | **Microl** | $65.000 | **$55.000** |
+| **500g** | **Premium** | $63.000 | **$53.000** |
+| **500g** | **Honey** | $86.400 | **$76.400** |
+| **500g** | **Microl** | $117.000 | **$107.000** |
+| **2.5kg** | **Premium** | $165.000 | **$155.000** *(Solo Premium)* |
+
 

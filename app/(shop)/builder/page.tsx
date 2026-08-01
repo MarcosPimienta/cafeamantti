@@ -120,7 +120,7 @@ function BuilderForm() {
   const subscriptionId = searchParams.get("id");
 
   const [selection, setSelection] = useState({
-    plan_id: "essential",
+    plan_id: "custom",
     weight: "250g",
     grind: "whole",
     grind_level: "drip",
@@ -156,7 +156,7 @@ function BuilderForm() {
         const data = await getSubscription(subscriptionId);
         if (data) {
           setSelection({
-            plan_id: data.plan_id,
+            plan_id: "custom",
             weight: data.weight || "250g",
             grind: data.grind || "whole",
             grind_level: data.grind_level || "drip",
@@ -173,6 +173,11 @@ function BuilderForm() {
               if (ci.id) loadedQty[ci.id] = ci.quantity;
             });
             setCustomQuantities(loadedQty);
+          } else if (data.plan_id) {
+            // Map legacy plan_id to custom quantities
+            if (data.plan_id === 'essential') setCustomQuantities({ essential: 1, alchemy: 0, curator: 0 });
+            else if (data.plan_id === 'alchemy') setCustomQuantities({ essential: 1, alchemy: 1, curator: 0 });
+            else if (data.plan_id === 'curator') setCustomQuantities({ essential: 1, alchemy: 1, curator: 1 });
           }
 
           setIsLoading(false);
@@ -183,15 +188,11 @@ function BuilderForm() {
       };
       loadSubscription();
     } else {
-      // For new subscriptions, check if a plan was pre-selected in the URL
-      const planFromUrl = searchParams.get("plan");
-      if (planFromUrl && PLANS.some(p => p.id === planFromUrl)) {
-        setSelection(prev => ({ ...prev, plan_id: planFromUrl }));
-      }
+      setIsLoading(false);
     }
-  }, [subscriptionId, searchParams]);
+  }, [subscriptionId]);
 
-  const currentPlan = PLANS.find((p) => p.id === selection.plan_id)!;
+  const currentPlan = PLANS.find((p) => p.id === "custom")!;
 
   // Helper to check stock availability for a custom item
   const getAvailableStock = (productId: string) => {
@@ -218,18 +219,20 @@ function BuilderForm() {
   };
 
   const getPrice = () => {
-    if (selection.plan_id === "custom") {
-      let total = 0;
-      CUSTOM_PRODUCTS.forEach(p => {
-        const qty = customQuantities[p.id] || 0;
-        if (qty > 0) {
-          const itemPrice = calculateCoffeePrice(p.id, selection.weight);
-          total += itemPrice * qty;
-        }
-      });
-      return total > 0 ? total : 35000;
-    }
-    return calculateCoffeePrice(selection.plan_id, selection.weight) || 35000;
+    let netCoffeeTotal = 0;
+    let totalItems = 0;
+
+    CUSTOM_PRODUCTS.forEach(p => {
+      const qty = customQuantities[p.id] || 0;
+      if (qty > 0) {
+        totalItems += qty;
+        const storePrice = calculateCoffeePrice(p.id, selection.weight);
+        const netValue = Math.max(0, storePrice - 10000);
+        netCoffeeTotal += netValue * qty;
+      }
+    });
+
+    return totalItems > 0 ? netCoffeeTotal + 10000 : 35000;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -295,81 +298,25 @@ function BuilderForm() {
           {/* Main Configuration Area */}
           <div className="lg:col-span-8 space-y-16">
             
-            {/* Section 1: Plan Selection */}
+            {/* Section 1: Coffee Quantity Selection */}
             <section className="space-y-8">
               <div className="flex items-center gap-4">
                 <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">1</span>
-                <h2 className="text-2xl font-serif">Selecciona tu Plan</h2>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {PLANS.map((plan) => (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    onClick={() => setSelection({ ...selection, plan_id: plan.id })}
-                    className={`relative p-5 rounded-3xl border transition-all duration-500 text-left flex flex-col items-center group ${
-                      selection.plan_id === plan.id 
-                        ? "bg-white border-[#C59F59] shadow-2xl scale-[1.02]" 
-                        : "bg-white/50 border-foreground/5 hover:border-[#C59F59]/40 hover:bg-white"
-                    }`}
-                  >
-                    <div className="relative w-24 h-32 mb-4 transition-transform duration-700 group-hover:scale-110">
-                      {plan.id === 'essential' && (
-                        <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt={plan.name} fill className="object-contain drop-shadow-xl" />
-                      )}
-                      {plan.id === 'alchemy' && (
-                        <>
-                          <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt="Bag 1" fill className="object-contain drop-shadow-lg -rotate-12 -translate-x-3 translate-y-2 opacity-90" />
-                          <Image src="/images/Front_White_Honey_Coffee_Bag.png" alt="Bag 2" fill className="object-contain drop-shadow-2xl rotate-6 translate-x-3 -translate-y-1" />
-                        </>
-                      )}
-                      {plan.id === 'curator' && (
-                        <>
-                          <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt="Bag 1" fill className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-5 translate-y-3 opacity-80" />
-                          <Image src="/images/Front_White_Honey_Coffee_Bag.png" alt="Bag 2" fill className="object-contain drop-shadow-xl rotate-[20deg] translate-x-5 translate-y-3 opacity-80" />
-                          <Image src="/images/Amantti_Coffee_Bag.png" alt="Bag 3" fill className="object-contain drop-shadow-2xl scale-110 brightness-110 z-10" />
-                        </>
-                      )}
-                      {plan.id === 'custom' && (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-[#C59F59]/10 rounded-2xl p-2 text-[#C59F59]">
-                          <SlidersHorizontal className="w-8 h-8 mb-1" />
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-center">Crea Tu Plan</span>
-                        </div>
-                      )}
-                    </div>
-                    <h3 className="text-base font-serif mb-1.5 text-center leading-snug">{plan.name}</h3>
-                    <p className="text-[9px] text-foreground/40 text-center leading-relaxed">
-                      {plan.description}
-                    </p>
-                    {selection.plan_id === plan.id && (
-                      <div className="absolute top-3 right-3 w-5 h-5 bg-[#C59F59] rounded-full flex items-center justify-center shadow-lg animate-in zoom-in duration-300">
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* Section 2: Presentation & Grind */}
-            <section className="space-y-12">
-              <div className="flex items-center gap-4">
-                <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">2</span>
-                <h2 className="text-2xl font-serif">Personaliza tu Café</h2>
+                <h2 className="text-2xl font-serif">Selecciona tus Cafés y Cantidades</h2>
               </div>
               
-              {/* Custom Plan Product Quantity Builder */}
-              {selection.plan_id === "custom" && (
-                <div className="space-y-6 bg-white p-6 sm:p-8 rounded-3xl border border-[#C59F59]/30 shadow-xl animate-in fade-in duration-300">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Sparkles className="w-4 h-4 text-[#C59F59]" />
-                      <h3 className="text-lg font-serif text-foreground">Elige las Cantidades de tu Suscripción</h3>
-                    </div>
-                    <p className="text-xs text-foreground/50">Selecciona cuántas unidades de cada producto deseas incluir. Validamos la disponibilidad en inventario en tiempo real.</p>
+              <div className="space-y-6 bg-white p-6 sm:p-8 rounded-3xl border border-[#C59F59]/30 shadow-xl">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sparkles className="w-4 h-4 text-[#C59F59]" />
+                    <h3 className="text-lg font-serif text-foreground">Elige las Cantidades de tu Suscripción</h3>
                   </div>
+                  <p className="text-xs text-foreground/50">
+                    Arma tu pedido agregando las bolsas que desees. Solo pagas <strong className="text-[#C59F59]">$10.000 COP</strong> de envío por todo el paquete.
+                  </p>
+                </div>
 
-                  <div className="space-y-4">
+                <div className="space-y-4">
                     {CUSTOM_PRODUCTS.map((prod) => {
                       const qty = customQuantities[prod.id] || 0;
                       const availableStock = getAvailableStock(prod.id);
@@ -434,7 +381,14 @@ function BuilderForm() {
                     })}
                   </div>
                 </div>
-              )}
+            </section>
+
+            {/* Section 2: Presentation & Grind */}
+            <section className="space-y-12">
+              <div className="flex items-center gap-4">
+                <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">2</span>
+                <h2 className="text-2xl font-serif">Personaliza tu Café</h2>
+              </div>
 
               <div className="grid md:grid-cols-2 gap-12">
                 <div className="space-y-6">
@@ -626,42 +580,33 @@ function BuilderForm() {
                 <div className="space-y-8 relative z-10">
                   <div className="flex items-center gap-6">
                     <div className="relative w-20 h-24 shrink-0 bg-[#fdfbf7] rounded-2xl p-2 ring-1 ring-black/5 flex items-center justify-center">
-                      {selection.plan_id === 'essential' && (
-                        <Image src="/images/Front_Paper_Traditional_Coffee_Bag.png" alt="Bag" fill className="object-contain" />
-                      )}
-                      {selection.plan_id === 'alchemy' && (
-                        <Image src="/images/Front_White_Honey_Coffee_Bag.png" alt="Bag" fill className="object-contain" />
-                      )}
-                      {selection.plan_id === 'curator' && (
-                        <Image src="/images/Amantti_Coffee_Bag.png" alt="Bag" fill className="object-contain scale-110" />
-                      )}
-                      {selection.plan_id === 'custom' && (
-                        <div className="flex flex-col items-center justify-center text-[#C59F59]">
-                          <SlidersHorizontal className="w-8 h-8" />
-                        </div>
-                      )}
+                      <div className="flex flex-col items-center justify-center text-[#C59F59]">
+                        <SlidersHorizontal className="w-8 h-8" />
+                      </div>
                     </div>
                     <div>
-                      <p className="text-xl font-serif leading-tight mb-1">{currentPlan.name}</p>
+                      <p className="text-xl font-serif leading-tight mb-1">Crea Tu Suscripción</p>
                       <p className="text-xs text-foreground/40 font-medium">{selection.weight} • {selection.grind === "whole" ? "Grano" : "Molido"}</p>
                     </div>
                   </div>
 
-                  {selection.plan_id === "custom" && (
-                    <div className="pt-4 border-t border-foreground/5 space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/40">Resumen de Productos</p>
-                      {CUSTOM_PRODUCTS.map(p => {
-                        const qty = customQuantities[p.id] || 0;
-                        if (qty === 0) return null;
-                        return (
-                          <div key={p.id} className="flex justify-between items-center text-xs">
-                            <span className="text-foreground/70 truncate max-w-[170px]">{p.name}</span>
-                            <span className="font-bold text-[#C59F59]">{qty} x</span>
-                          </div>
-                        );
-                      })}
+                  <div className="pt-4 border-t border-foreground/5 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/40">Resumen de Productos</p>
+                    {CUSTOM_PRODUCTS.map(p => {
+                      const qty = customQuantities[p.id] || 0;
+                      if (qty === 0) return null;
+                      return (
+                        <div key={p.id} className="flex justify-between items-center text-xs">
+                          <span className="text-foreground/70 truncate max-w-[170px]">{p.name}</span>
+                          <span className="font-bold text-[#C59F59]">{qty} x</span>
+                        </div>
+                      );
+                    })}
+                    <div className="flex justify-between items-center text-[11px] text-foreground/40 pt-2 border-t border-foreground/5">
+                      <span>Envío plano por entrega:</span>
+                      <span className="font-semibold text-foreground/70">$10.000 COP</span>
                     </div>
-                  )}
+                  </div>
 
                   <div className="space-y-4 pt-6 border-t border-foreground/5">
                     <div className="flex items-center justify-between text-sm">
