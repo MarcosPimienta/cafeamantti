@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { upsertSubscription, getSubscription, getSubscriptionStock } from "./actions";
 import { CheckoutModal } from "@/app/components/CheckoutModal";
+import { calculateMetropolitanShipping } from "@/utils/shipping";
 
 export function calculateCoffeePrice(planOrProdId: string, weight: string): number {
   const isPremium = planOrProdId === "essential" || planOrProdId === "firma" || planOrProdId === "traditional";
@@ -218,6 +219,8 @@ function BuilderForm() {
     }));
   };
 
+  const shippingZone = calculateMetropolitanShipping(selection.shipping_state, selection.shipping_city);
+
   const getPrice = () => {
     let netCoffeeTotal = 0;
     let totalItems = 0;
@@ -232,11 +235,16 @@ function BuilderForm() {
       }
     });
 
-    return totalItems > 0 ? netCoffeeTotal + 10000 : 35000;
+    const shippingRate = shippingZone.isAvailable ? shippingZone.rate : 10000;
+    return totalItems > 0 ? netCoffeeTotal + shippingRate : 35000;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!shippingZone.isAvailable) {
+      alert(shippingZone.message || "Entregas disponibles únicamente en el Área Metropolitana.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const formData = new FormData();
@@ -563,6 +571,16 @@ function BuilderForm() {
                     className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
                   />
                 </div>
+
+                {!shippingZone.isAvailable && selection.shipping_state && selection.shipping_city && (
+                  <div className="md:col-span-2 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-800 animate-in fade-in">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-xs">
+                      <p className="font-bold">{shippingZone.zoneName}</p>
+                      <p className="mt-0.5 opacity-90">{shippingZone.message}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -604,10 +622,16 @@ function BuilderForm() {
                     })}
                     <div className="flex flex-col pt-2 border-t border-foreground/5 space-y-0.5">
                       <div className="flex justify-between items-center text-[11px] text-foreground/40">
-                        <span>Envío plano por entrega:</span>
-                        <span className="font-semibold text-foreground/70">$10.000 COP</span>
+                        <span>Envío ({shippingZone.zoneName}):</span>
+                        <span className="font-semibold text-foreground/70">
+                          {shippingZone.isAvailable 
+                            ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(shippingZone.rate)
+                            : "No disponible"}
+                        </span>
                       </div>
-                      <span className="text-[9px] text-foreground/40 text-right italic">*Área metropolitana</span>
+                      <span className={`text-[9px] text-right italic ${shippingZone.isAvailable ? "text-[#C59F59] font-medium" : "text-red-500 font-bold"}`}>
+                        {shippingZone.isAvailable ? shippingZone.radiusLabel : "*Fuera de Cobertura"}
+                      </span>
                     </div>
                   </div>
 
@@ -636,7 +660,7 @@ function BuilderForm() {
 
                     <button
                       onClick={handleSubmit}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !shippingZone.isAvailable}
                       className="w-full py-5 bg-foreground text-background font-bold uppercase tracking-widest text-xs rounded-2xl hover:bg-[#C59F59] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                       {isSubmitting ? (

@@ -388,12 +388,20 @@ To replicate this project from scratch:
 
 Amantti uses a single flexible subscription model (**Crea Tu Suscripción**), allowing subscribers to pick exact quantities of any coffee line.
 
-### Transportation Fee Rule
-- Store product prices include **$10.000 COP** transportation.
+### Transportation & Distance Radius Shipping Fee Rule
+- Store product prices include **$10.000 COP** base transportation.
 - **Net Coffee Value** per bag = Store Price - $10.000 COP.
-- Subscription deliveries charge a single **$10.000 COP flat shipping fee** per shipment:
+- Subscription deliveries charge a dynamic shipping rate based on the **Metropolitan Area distance radius**:
 
-$$\text{Subscription Total} = \sum \left( \text{Net Coffee Value} \times \text{Quantity} \right) + \$10.000\text{ COP}$$
+$$\text{Subscription Total} = \sum \left( \text{Net Coffee Value} \times \text{Quantity} \right) + \text{Radius Shipping Fee}$$
+
+#### Metropolitan Area Distance Radius Tiers:
+| Zone Tier | Municipalities | Distance Radius | Shipping Rate |
+|---|---|---|---|
+| **Núcleo Urbano** | Medellín, Envigado, Itagüí, Sabaneta | **Radio 0–10 km** | **$10.000 COP** |
+| **Zona Metro Extendida** | Bello, La Estrella, Caldas, Copacabana | **Radio 10–20 km** | **$14.000 COP** |
+| **Zona Norte Metropolitana** | Girardota, Barbosa | **Radio 20–35 km** | **$18.000 COP** |
+| **Fuera de Cobertura** | Otros departamentos o municipios fuera de Valle de Aburrá | **N/A** | *Suscripciones restringidas temporalmente* |
 
 | Presentation | Variety / Product | Store Price | Net Coffee Value |
 |---|---|---|---|
@@ -404,5 +412,6 @@ $$\text{Subscription Total} = \sum \left( \text{Net Coffee Value} \times \text{Q
 | **500g** | **Honey** | $86.400 | **$76.400** |
 | **500g** | **Microl** | $117.000 | **$107.000** |
 | **2.5kg** | **Premium** | $165.000 | **$155.000** *(Solo Premium)* |
+
 
 
