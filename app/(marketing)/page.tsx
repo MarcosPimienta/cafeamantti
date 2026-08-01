@@ -647,7 +647,7 @@ export default function Home() {
               </h2>
               <div className="w-24 h-1 bg-[#C59F59] mx-auto mb-6"></div>
               <p suppressHydrationWarning className="text-foreground/60 text-lg max-w-2xl mx-auto font-light leading-relaxed">
-                Arma tu combinación libre de café. Selecciona las variedades que deseas recibir, la presentación, molienda y frecuencia. Solo pagas <strong className="text-[#C59F59] font-semibold">$10.000 COP de envío por paquete</strong>.
+                Arma tu combinación libre de café. Selecciona las variedades que deseas recibir, la presentación, molienda y frecuencia. Solo pagas <strong className="text-[#C59F59] font-semibold">$10.000 COP de envío por paquete</strong> <span className="text-xs text-foreground/40 italic block sm:inline mt-1 sm:mt-0">*Aplica para área metropolitana.</span>
               </p>
             </div>
 
@@ -700,7 +700,7 @@ export default function Home() {
                     </div>
                     <div>
                       <h4 className="font-serif font-semibold text-foreground text-lg">Tarifa Plana de Envío ($10.000 COP)</h4>
-                      <p className="text-xs text-foreground/60 leading-relaxed">Consolidamos tu entrega en un solo transporte, ahorrando $10.000 COP en cada bolsa adicional.</p>
+                      <p className="text-xs text-foreground/60 leading-relaxed">Consolidamos tu entrega en un solo transporte en el área metropolitana, ahorrando $10.000 COP en cada bolsa adicional.</p>
                     </div>
                   </div>
 

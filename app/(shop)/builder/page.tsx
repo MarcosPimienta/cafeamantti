@@ -312,7 +312,7 @@ function BuilderForm() {
                     <h3 className="text-lg font-serif text-foreground">Elige las Cantidades de tu Suscripción</h3>
                   </div>
                   <p className="text-xs text-foreground/50">
-                    Arma tu pedido agregando las bolsas que desees. Solo pagas <strong className="text-[#C59F59]">$10.000 COP</strong> de envío por todo el paquete.
+                    Arma tu pedido agregando las bolsas que desees. Solo pagas <strong className="text-[#C59F59]">$10.000 COP</strong> de envío por todo el paquete <span className="text-[10px] text-foreground/40 italic block sm:inline mt-0.5 sm:mt-0">*Aplica para entregas en el área metropolitana.</span>
                   </p>
                 </div>
 
@@ -602,9 +602,12 @@ function BuilderForm() {
                         </div>
                       );
                     })}
-                    <div className="flex justify-between items-center text-[11px] text-foreground/40 pt-2 border-t border-foreground/5">
-                      <span>Envío plano por entrega:</span>
-                      <span className="font-semibold text-foreground/70">$10.000 COP</span>
+                    <div className="flex flex-col pt-2 border-t border-foreground/5 space-y-0.5">
+                      <div className="flex justify-between items-center text-[11px] text-foreground/40">
+                        <span>Envío plano por entrega:</span>
+                        <span className="font-semibold text-foreground/70">$10.000 COP</span>
+                      </div>
+                      <span className="text-[9px] text-foreground/40 text-right italic">*Área metropolitana</span>
                     </div>
                   </div>
 
@@ -652,7 +655,7 @@ function BuilderForm() {
                     <div className="mt-6 flex gap-3 p-4 bg-[#fdfbf7] rounded-xl border border-foreground/5">
                       <Info className="w-4 h-4 text-[#C59F59] shrink-0" />
                       <p className="text-[9px] text-foreground/40 leading-relaxed italic">
-                        Al confirmar, actualizaremos tu programa de entregas. Podrás realizar cambios adicionales en cualquier momento.
+                        Al confirmar, actualizaremos tu programa de entregas. La tarifa de transporte de $10.000 COP aplica únicamente para entregas dentro del área metropolitana. Podrás realizar cambios adicionales en cualquier momento.
                       </p>
                     </div>
                   </div>
