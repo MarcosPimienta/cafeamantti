@@ -23,6 +23,28 @@ import { useSearchParams } from "next/navigation";
 import { upsertSubscription, getSubscription, getSubscriptionStock } from "./actions";
 import { CheckoutModal } from "@/app/components/CheckoutModal";
 
+export function calculateCoffeePrice(planOrProdId: string, weight: string): number {
+  const isPremium = planOrProdId === "essential" || planOrProdId === "firma" || planOrProdId === "traditional";
+  const isHoney = planOrProdId === "alchemy" || planOrProdId === "honey";
+  const isMicrol = planOrProdId === "curator" || planOrProdId === "microlot" || planOrProdId === "microl";
+
+  if (weight === "250g") {
+    if (isPremium) return 35000;
+    if (isHoney) return 48000;
+    if (isMicrol) return 65000;
+  }
+  if (weight === "500g") {
+    if (isPremium) return 63000;
+    if (isHoney) return 86400;
+    if (isMicrol) return 117000;
+  }
+  if (weight === "2.5kg") {
+    if (isPremium) return 165000;
+    return 0;
+  }
+  return 35000;
+}
+
 const PLANS = [
   {
     id: "essential",
@@ -201,14 +223,13 @@ function BuilderForm() {
       CUSTOM_PRODUCTS.forEach(p => {
         const qty = customQuantities[p.id] || 0;
         if (qty > 0) {
-          const mult = selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 8;
-          total += (p.basePrice * mult) * qty;
+          const itemPrice = calculateCoffeePrice(p.id, selection.weight);
+          total += itemPrice * qty;
         }
       });
       return total > 0 ? total : 35000;
     }
-    const multiplier = selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 8;
-    return currentPlan.price * multiplier;
+    return calculateCoffeePrice(selection.plan_id, selection.weight) || 35000;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -353,7 +374,9 @@ function BuilderForm() {
                       const qty = customQuantities[prod.id] || 0;
                       const availableStock = getAvailableStock(prod.id);
                       const isOutOfStock = availableStock <= 0;
-                      const isMaxStockReached = qty >= availableStock;
+                      const isNotAvailableIn2k5 = selection.weight === "2.5kg" && prod.id !== "essential";
+                      const isMaxStockReached = qty >= availableStock || isNotAvailableIn2k5;
+                      const unitPrice = calculateCoffeePrice(prod.id, selection.weight);
 
                       return (
                         <div key={prod.id} className="p-4 bg-[#fdfbf7] rounded-2xl border border-foreground/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -363,19 +386,25 @@ function BuilderForm() {
                             </div>
                             <div>
                               <p className="text-sm font-bold text-foreground">{prod.name}</p>
-                              <p className="text-xs text-[#C59F59] font-serif font-bold">
-                                {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(
-                                  prod.basePrice * (selection.weight === "250g" ? 1 : selection.weight === "500g" ? 1.8 : 8)
-                                )} / unidad
-                              </p>
-                              {isOutOfStock ? (
-                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full mt-1">
-                                  <AlertTriangle className="w-3 h-3" /> Agotado en Inventario
+                              {isNotAvailableIn2k5 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full mt-1">
+                                  Solo disponible en 250g y 500g
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-foreground/40 block mt-0.5">
-                                  Stock disponible: <strong className="text-foreground/70">{availableStock}</strong> unidades
-                                </span>
+                                <p className="text-xs text-[#C59F59] font-serif font-bold">
+                                  {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(unitPrice)} / unidad
+                                </p>
+                              )}
+                              {!isNotAvailableIn2k5 && (
+                                isOutOfStock ? (
+                                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full mt-1">
+                                    <AlertTriangle className="w-3 h-3" /> Agotado en Inventario
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-foreground/40 block mt-0.5">
+                                    Stock disponible: <strong className="text-foreground/70">{availableStock}</strong> unidades
+                                  </span>
+                                )
                               )}
                             </div>
                           </div>
@@ -411,20 +440,28 @@ function BuilderForm() {
                 <div className="space-y-6">
                   <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 block">Presentación</label>
                   <div className="grid grid-cols-3 gap-3">
-                    {WEIGHTS.map((w) => (
-                      <button
-                        key={w}
-                        type="button"
-                        onClick={() => setSelection({ ...selection, weight: w })}
-                        className={`py-4 rounded-2xl border text-sm font-medium transition-all ${
-                          selection.weight === w 
-                            ? "bg-foreground border-foreground text-background shadow-lg" 
-                            : "bg-white border-foreground/10 hover:border-[#C59F59]"
-                        }`}
-                      >
-                        {w}
-                      </button>
-                    ))}
+                    {WEIGHTS.map((w) => {
+                      const is2k5Restricted = w === "2.5kg" && (selection.plan_id === "alchemy" || selection.plan_id === "curator");
+                      return (
+                        <button
+                          key={w}
+                          type="button"
+                          disabled={is2k5Restricted}
+                          onClick={() => setSelection({ ...selection, weight: w })}
+                          className={`py-4 rounded-2xl border text-sm font-medium transition-all ${
+                            selection.weight === w 
+                              ? "bg-foreground border-foreground text-background shadow-lg" 
+                              : is2k5Restricted
+                              ? "opacity-40 cursor-not-allowed bg-foreground/5 border-foreground/5"
+                              : "bg-white border-foreground/10 hover:border-[#C59F59]"
+                          }`}
+                          title={is2k5Restricted ? "Presentación 2.5kg disponible exclusivamente para Café Premium" : undefined}
+                        >
+                          {w}
+                          {is2k5Restricted && <span className="block text-[9px] text-amber-700 font-semibold mt-0.5">Solo Premium</span>}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

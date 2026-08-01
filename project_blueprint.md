@@ -384,12 +384,11 @@ To replicate this project from scratch:
 
 ---
 
-## 15. Subscription Plans
+## 15. Subscription & Product Pricing Matrix
 
-| Plan ID | Name | Base Price (COP) |
-|---|---|---|
-| `essential` | Devoción Esencial | 35,000 |
-| `alchemy` | Alquimia & Contraste | 48,000 |
-| `curator` | Curaduría Privada | 65,000 |
+| Plan / Coffee Variety | 250g | 500g | 2.5kg |
+|---|---|---|---|
+| `essential` / Premium | 35,000 | 63,000 | 165,000 |
+| `alchemy` / Honey | 48,000 | 86,400 | *N/A (Solo Premium)* |
+| `curator` / Microl | 65,000 | 117,000 | *N/A (Solo Premium)* |
 
-Price multipliers by weight: `250g = 1×`, `500g = 1.8×`, `2.5kg = 8×`

@@ -30,7 +30,7 @@ import {
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useCart } from "@/app/context/CartContext";
 import { CartDrawer } from "@/app/components/CartDrawer";
-
+import { calculateCoffeePrice } from "@/app/(shop)/builder/page";
 
 interface ProductCardProps {
   id: string;
@@ -72,8 +72,7 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
   };
 
   const calculatePrice = () => {
-    const multiplier = weight === "250g" ? 1 : weight === "500g" ? 1.8 : 8;
-    return basePrice * multiplier;
+    return calculateCoffeePrice(id, weight);
   };
 
   const getPriceFormated = () => {
@@ -114,20 +113,30 @@ function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t
           <div className="space-y-3">
             <label suppressHydrationWarning className="text-[10px] font-bold uppercase tracking-tighter text-foreground/40">{t("products.weightLabel")}</label>
             <div className="grid grid-cols-3 gap-2">
-              {["250g", "500g", "2.5kg"].map((w) => (
-                <button
-                  key={w}
-                  suppressHydrationWarning
-                  onClick={() => setWeight(w)}
-                  className={`py-2 text-xs font-medium rounded-lg border transition-all ${
-                    weight === w 
-                      ? "bg-[#C59F59] border-[#C59F59] text-white shadow-md shadow-[#C59F59]/20" 
-                      : "bg-transparent border-foreground/10 text-foreground/60 hover:border-[#C59F59]/40 hover:text-[#C59F59]"
-                  }`}
-                >
-                  {w}
-                </button>
-              ))}
+              {["250g", "500g", "2.5kg"].map((w) => {
+                const is2k5Restricted = w === "2.5kg" && (id === "honey" || id === "microlot");
+                return (
+                  <button
+                    key={w}
+                    suppressHydrationWarning
+                    disabled={is2k5Restricted}
+                    onClick={() => {
+                      if (!is2k5Restricted) setWeight(w);
+                    }}
+                    className={`py-2 text-xs font-medium rounded-lg border transition-all ${
+                      weight === w 
+                        ? "bg-[#C59F59] border-[#C59F59] text-white shadow-md shadow-[#C59F59]/20" 
+                        : is2k5Restricted
+                        ? "opacity-40 cursor-not-allowed border-foreground/5 bg-foreground/5 text-foreground/40"
+                        : "bg-transparent border-foreground/10 text-foreground/60 hover:border-[#C59F59]/40 hover:text-[#C59F59]"
+                    }`}
+                    title={is2k5Restricted ? "Presentación 2.5kg disponible exclusivamente para Café Premium" : undefined}
+                  >
+                    {w}
+                    {is2k5Restricted && <span className="block text-[7px] text-amber-700 font-semibold leading-none mt-0.5">Solo Premium</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -685,14 +694,6 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-
-                <Link 
-                  href={getSubscribeHref('essential')}
-                  suppressHydrationWarning
-                  className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl text-center"
-                >
-                  {t("plans.subscribe")}
-                </Link>
               </div>
 
               {/* Plan II: Alquimia & Contraste */}
@@ -747,14 +748,6 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-
-                <Link 
-                  href={getSubscribeHref('alchemy')}
-                  suppressHydrationWarning
-                  className="w-full py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl scale-105 text-center"
-                >
-                  {t("plans.subscribe")}
-                </Link>
               </div>
 
               {/* Plan III: Curaduría Privada */}
@@ -815,14 +808,6 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-
-                <Link 
-                  href={getSubscribeHref('curator')}
-                  suppressHydrationWarning
-                  className="w-full py-4 bg-white text-black hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl text-center"
-                >
-                  {t("plans.subscribe")}
-                </Link>
               </div>
 
               {/* Plan IV: Crea Tu Suscripción */}
@@ -867,15 +852,19 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-
-                <Link 
-                  href={getSubscribeHref('custom')}
-                  suppressHydrationWarning
-                  className="w-full py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white font-medium rounded-xl transition-all duration-300 shadow-md group-hover:shadow-xl text-center"
-                >
-                  {t("plans.subscribe")}
-                </Link>
               </div>
+            </div>
+
+            {/* Single Prominent CTA Button for Subscriptions */}
+            <div className="mt-16 text-center">
+              <Link 
+                href={getSubscribeHref('custom')}
+                suppressHydrationWarning
+                className="inline-flex items-center justify-center gap-3 px-10 py-5 bg-[#C59F59] hover:bg-[#b08d4f] text-white text-base font-semibold rounded-2xl transition-all duration-300 shadow-xl hover:shadow-2xl hover:scale-105"
+              >
+                <SlidersHorizontal className="w-5 h-5" />
+                Personaliza tu Suscripción
+              </Link>
             </div>
           </div>
 
