@@ -233,7 +233,8 @@ export async function createManualAdminOrder(
       .single();
     
     if (error || !matInfo) throw new Error(`Producto en inventario no encontrado: ${item.product_name}`);
-    if (Number(matInfo.current_stock) < item.quantity) throw new Error(`Stock insuficiente: ${matInfo.product_name}.`);
+    // Stock validation temporarily bypassed for sales without inventory restrictions
+    // if (Number(matInfo.current_stock) < item.quantity) throw new Error(`Stock insuficiente: ${matInfo.product_name}.`);
   }
 
   let total_amount = 0;
@@ -397,6 +398,8 @@ export async function updateManualAdminOrder(
       .single();
     
     if (error || !matInfo) throw new Error(`Producto en inventario no encontrado: ${item.product_name}`);
+    // Stock validation temporarily bypassed for sales without inventory restrictions
+    /*
     if (Number(matInfo.current_stock) < item.quantity) {
       // Re-apply old movements to restore state since we are aborting!
       if (oldMovements) {
@@ -414,6 +417,7 @@ export async function updateManualAdminOrder(
       }
       throw new Error(`Stock insuficiente: ${matInfo.product_name}.`);
     }
+    */
   }
 
   // D. Insert new order items and update order details

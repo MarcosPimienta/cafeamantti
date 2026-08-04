@@ -198,10 +198,12 @@ function BuilderForm() {
   // Helper to check stock availability for a custom item
   const getAvailableStock = (productId: string) => {
     const prod = CUSTOM_PRODUCTS.find(p => p.id === productId);
-    if (!prod) return 50;
+    if (!prod) return 9999;
     const weightCode = selection.weight === "125g" ? "125G" : selection.weight === "250g" ? "250G" : selection.weight === "500g" ? "500G" : "2K5";
     const fullCode = `${prod.codePrefix}-${weightCode}`;
-    return stockMap[fullCode] ?? 50; // Fallback stock if inventory not seeded
+    const realStock = stockMap[fullCode];
+    // Return 9999 to allow sales without inventory restrictions for now
+    return (realStock && realStock > 0) ? realStock : 9999;
   };
 
   const handleCustomQuantityChange = (productId: string, delta: number) => {
