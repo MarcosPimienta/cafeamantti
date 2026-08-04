@@ -141,6 +141,9 @@ export function CheckoutModal({
           country: "co",
           lang: "es",
 
+          // Configuración de métodos de pago (Restringido solo a Tarjetas para Suscripciones)
+          methods: isSubscription ? "C" : undefined,
+
           // Configuración del popup
           external: "false", // Modal onpage
 
@@ -228,6 +231,15 @@ export function CheckoutModal({
                 <span className="font-serif text-2xl text-[#C59F59]">{formatPrice(finalTotalAmount)}</span>
               </div>
             </div>
+
+            {isSubscription && (
+              <div className="p-4 bg-[#C59F59]/10 border border-[#C59F59]/25 rounded-2xl text-xs text-[#8C6D33] flex items-start gap-3 animate-in fade-in duration-300">
+                <CreditCard className="w-4 h-4 shrink-0 mt-0.5 text-[#C59F59]" />
+                <p className="leading-relaxed">
+                  <strong>Cobro Recurrente Automático:</strong> Las suscripciones requieren Tarjeta de Crédito o Débito con CVV para tokenizar y automatizar tus renovaciones periódicas sin cortes de servicio.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2 group">
