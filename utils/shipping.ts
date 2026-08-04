@@ -70,6 +70,40 @@ export function calculateMetropolitanShipping(state?: string, city?: string): Me
     radiusLabel: "Fuera de Rango",
     rate: 0,
     isAvailable: false,
-    message: "Entregas de suscripción disponibles actualmente solo en el Área Metropolitana (Valle de Aburrá)."
+    message: "Entregas disponibles actualmente solo en el Área Metropolitana (Valle de Aburrá)."
   };
 }
+
+export function calculateOrderShippingAndTotal(
+  items: { price: number; quantity: number }[],
+  state?: string,
+  city?: string
+) {
+  const shippingZone = calculateMetropolitanShipping(state, city);
+
+  if (!items || items.length === 0) {
+    return {
+      netItemsTotal: 0,
+      shippingCost: 0,
+      totalAmount: 0,
+      shippingZone,
+    };
+  }
+
+  let netItemsTotal = 0;
+  for (const item of items) {
+    const netUnitPrice = Math.max(0, item.price - 10000);
+    netItemsTotal += netUnitPrice * item.quantity;
+  }
+
+  const shippingCost = shippingZone.isAvailable ? shippingZone.rate : 10000;
+  const totalAmount = netItemsTotal + shippingCost;
+
+  return {
+    netItemsTotal,
+    shippingCost,
+    totalAmount,
+    shippingZone,
+  };
+}
+

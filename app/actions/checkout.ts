@@ -2,22 +2,26 @@
 
 import { createClient } from "@/utils/supabase/server";
 
-export async function createPendingOrder(cartItems: any[], shippingCost: number = 0) {
+export async function createPendingOrder(
+  cartItems: any[], 
+  shippingCost: number = 0,
+  shippingInfoInput?: { address: string; city: string; state: string; details?: string }
+) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
-  // Calculate total securely (Ideally, fetch exact prices from the DB to prevent client tampering)
-  let subtotal = 0;
+  // Store prices include $10.000 COP base shipping per item.
+  // Net product total = sum( Math.max(0, item.price - 10000) * item.quantity )
+  let netItemsTotal = 0;
   for (const item of cartItems) {
-    subtotal += item.price * item.quantity;
+    const netPrice = Math.max(0, item.price - 10000);
+    netItemsTotal += netPrice * item.quantity;
   }
-  const totalAmount = subtotal + shippingCost;
+  const totalAmount = netItemsTotal + shippingCost;
 
-  // Placeholder for shipping info. 
-  // If the user is logged in, we try to pull it from their profile.
   let contact_email = "guest@example.com";
   let contact_phone = "0000000000";
-  let shipping_info = { address: "None provided" };
+  let shipping_info: any = shippingInfoInput || { address: "None provided" };
 
   if (user) {
     // Attempt to pull user's real email from auth
@@ -25,8 +29,15 @@ export async function createPendingOrder(cartItems: any[], shippingCost: number 
 
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     if (profile) {
-      if (profile.phone) contact_phone = profile.phone;
-      if (profile.address) shipping_info = { address: profile.address };
+      if (profile.phone_number || profile.phone) contact_phone = profile.phone_number || profile.phone;
+      if (!shippingInfoInput && profile.address) {
+        shipping_info = { 
+          address: profile.address,
+          city: profile.city || "",
+          state: profile.department || "",
+          details: ""
+        };
+      }
     }
   }
 

@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import Script from "next/script";
-import { X, CreditCard, ShieldCheck, Loader2, ArrowRight, AlertCircle } from "lucide-react";
+import { X, CreditCard, ShieldCheck, Loader2, ArrowRight, AlertCircle, Truck } from "lucide-react";
 import { updateUserProfile } from "@/app/(portal)/dashboard/actions";
 import { createPendingOrder } from "@/app/actions/checkout";
+import { calculateMetropolitanShipping, calculateOrderShippingAndTotal } from "@/utils/shipping";
 
 // Extend the window object for ePayco
 declare global {
@@ -56,8 +57,30 @@ export function CheckoutModal({
 
   if (!isOpen) return null;
 
+  // Compute dynamic shipping logic cost
+  const orderCalculation = calculateOrderShippingAndTotal(items, department, city);
+  const shippingZone = calculateMetropolitanShipping(department, city);
+
+  const finalShippingCost = isSubscription 
+    ? (shippingZone.isAvailable ? shippingZone.rate : 10000)
+    : orderCalculation.shippingCost;
+
+  const finalTotalAmount = isSubscription 
+    ? subtotal 
+    : orderCalculation.totalAmount;
+
+  const netCoffeeTotal = isSubscription 
+    ? Math.max(0, subtotal - finalShippingCost) 
+    : orderCalculation.netItemsTotal;
+
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!shippingZone.isAvailable) {
+      setError(shippingZone.message || "Entregas disponibles actualmente solo en el Área Metropolitana (Valle de Aburrá).");
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
 
@@ -79,8 +102,13 @@ export function CheckoutModal({
       if (isSubscription) {
         invoiceId = subscriptionId ? `SUB-${subscriptionId}` : `SUB-${Date.now()}`;
       } else {
-        // 2. Create Pending Order in Database for regular cart purchases
-        const orderResponse = await createPendingOrder(items, 0); // 0 shipping cost for now
+        // 2. Create Pending Order in Database for regular cart purchases with calculated shipping
+        const orderResponse = await createPendingOrder(items, finalShippingCost, {
+          address,
+          city,
+          state: department,
+          details: ""
+        });
         if (!orderResponse.success) {
           throw new Error(orderResponse.error || "No se pudo generar el pedido.");
         }
@@ -105,7 +133,7 @@ export function CheckoutModal({
           description: isSubscription ? `Suscripción Recurrente (${subscriptionFrequency})` : "Compra de productos en tienda",
           invoice: invoiceId,
           currency: "cop",
-          amount: subtotal.toString(),
+          amount: finalTotalAmount.toString(),
           tax_base: "0",
           tax: "0",
           country: "co",
@@ -180,9 +208,23 @@ export function CheckoutModal({
           </div>
 
           <form onSubmit={handlePayment} className="space-y-6">
-            <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-foreground/5 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-widest text-foreground/40">Total Suscripción:</span>
-              <span className="font-serif text-2xl text-[#C59F59]">{formatPrice(subtotal)}</span>
+            <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-foreground/5 space-y-3">
+              <div className="flex items-center justify-between text-xs text-foreground/60">
+                <span>Café Neto:</span>
+                <span className="font-medium text-foreground">{formatPrice(netCoffeeTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-foreground/60">
+                <span>Costo de Envío ({shippingZone.zoneName} — {shippingZone.radiusLabel}):</span>
+                <span className="font-medium text-foreground">
+                  {shippingZone.isAvailable ? formatPrice(finalShippingCost) : "No disponible"}
+                </span>
+              </div>
+              <div className="pt-3 border-t border-foreground/10 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-widest text-foreground/40">
+                  {isSubscription ? "Total Suscripción:" : "Total a Pagar:"}
+                </span>
+                <span className="font-serif text-2xl text-[#C59F59]">{formatPrice(finalTotalAmount)}</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -218,7 +260,7 @@ export function CheckoutModal({
                   required
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  placeholder="Cundinamarca"
+                  placeholder="Antioquia"
                   className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                 />
               </div>
@@ -228,11 +270,30 @@ export function CheckoutModal({
                   required
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  placeholder="Bogotá"
+                  placeholder="Medellín"
                   className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                 />
               </div>
             </div>
+
+            {department && city && (
+              <div className={`p-3.5 rounded-2xl text-xs flex items-start gap-3 transition-all ${
+                shippingZone.isAvailable 
+                  ? "bg-[#C59F59]/10 text-[#8C6D33] border border-[#C59F59]/20" 
+                  : "bg-red-50 text-red-700 border border-red-200"
+              }`}>
+                <Truck className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="leading-tight">
+                  {shippingZone.isAvailable ? (
+                    <p>
+                      <strong>{shippingZone.zoneName}</strong> ({shippingZone.radiusLabel}): Tarifa de transporte de {formatPrice(shippingZone.rate)} COP.
+                    </p>
+                  ) : (
+                    <p>{shippingZone.message || "Entregas disponibles únicamente en el Área Metropolitana (Valle de Aburrá)."}</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 animate-in shake-1">
@@ -243,7 +304,7 @@ export function CheckoutModal({
 
             <button
               type="submit"
-              disabled={isProcessing || !cedula || !scriptLoaded}
+              disabled={isProcessing || !cedula || !address || !city || !department || !scriptLoaded || !shippingZone.isAvailable}
               className="w-full py-5 bg-foreground text-background text-xs font-bold uppercase tracking-[0.2em] rounded-2xl hover:bg-[#C59F59] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50 group"
             >
               {isProcessing ? (
@@ -256,9 +317,13 @@ export function CheckoutModal({
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Cargando pasarela...
                 </>
+              ) : !shippingZone.isAvailable ? (
+                <>
+                  Zona Fuera de Cobertura
+                </>
               ) : (
                 <>
-                  Pagar con ePayco
+                  Pagar con ePayco ({formatPrice(finalTotalAmount)})
                   <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </>
               )}
@@ -275,3 +340,4 @@ export function CheckoutModal({
     </>
   );
 }
+
