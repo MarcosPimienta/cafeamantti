@@ -264,9 +264,23 @@ function BuilderForm() {
       if (res && res.subscriptionId) {
         setActiveSubId(res.subscriptionId);
         setIsCheckoutOpen(true);
+      } else if (res && res.error) {
+        if (res.error.toLowerCase().includes("authenticated") || res.error.toLowerCase().includes("auth")) {
+          const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/login?redirectTo=${returnUrl}`;
+        } else {
+          alert("Error guardando la suscripción: " + res.error);
+        }
       }
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error("Subscription submit error:", error);
+      const errMsg = error?.message || String(error);
+      if (errMsg.toLowerCase().includes("authenticated") || errMsg.toLowerCase().includes("auth")) {
+        const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/login?redirectTo=${returnUrl}`;
+      } else {
+        alert("Error al procesar la suscripción: " + errMsg);
+      }
     } finally {
       setIsSubmitting(false);
     }

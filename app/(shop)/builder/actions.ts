@@ -51,7 +51,7 @@ export async function upsertSubscription(formData: FormData, subscriptionId?: st
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    throw new Error('User not authenticated')
+    return { error: 'User not authenticated' }
   }
 
   const plan_id = formData.get('plan_id') as string

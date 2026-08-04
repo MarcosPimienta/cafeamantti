@@ -449,12 +449,13 @@ export default function Home() {
               <p className="text-2xl md:text-3xl text-white/90 mb-8 font-light tracking-wide">
                 {t("hero.tagline")}
               </p>
-              <button
+              <Link
+                href={getSubscribeHref('custom')}
                 suppressHydrationWarning
-                className="px-8 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white text-lg font-medium rounded-md transition-all shadow-lg"
+                className="inline-block px-8 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white text-lg font-medium rounded-md transition-all shadow-lg text-center cursor-pointer"
               >
                 {t("hero.cta")}
-              </button>
+              </Link>
             </div>
           </div>
         </section>
