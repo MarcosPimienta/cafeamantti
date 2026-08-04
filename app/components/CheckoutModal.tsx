@@ -122,9 +122,11 @@ export function CheckoutModal({
 
       // 3. Initialize ePayco Checkout
       if (typeof window !== "undefined" && window.ePayco) {
+        const isTestMode = process.env.NEXT_PUBLIC_EPAYCO_TEST_MODE !== "false";
+
         const handler = window.ePayco.checkout.configure({
           key: epaycoKey,
-          test: true // ⚠️ Cambiar a false cuando actives producción en ePayco
+          test: isTestMode
         });
 
         const data: any = {
