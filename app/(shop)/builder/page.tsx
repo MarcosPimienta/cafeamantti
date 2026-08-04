@@ -41,7 +41,8 @@ export function calculateCoffeePrice(planOrProdId: string, weight: string): numb
   }
   if (weight === "2.5kg") {
     if (isPremium) return 165000;
-    return 0;
+    if (isHoney) return 240000;
+    if (isMicrol) return 320000;
   }
   return 35000;
 }
@@ -49,28 +50,28 @@ export function calculateCoffeePrice(planOrProdId: string, weight: string): numb
 const PLANS = [
   {
     id: "essential",
-    name: "Devoción Esencial",
+    name: "Selección Amantti",
     price: 35000,
     image: "/images/Front_Paper_Traditional_Coffee_Bag.png",
-    description: "El café esencial para empezar cada día con intención.",
+    description: "El café esencial con perfil clásico colombiano, balanceado y constante.",
   },
   {
     id: "alchemy",
-    name: "Alquimia & Contraste",
+    name: "Honey Process",
     price: 48000,
     image: "/images/Front_White_Honey_Coffee_Bag.png",
-    description: "Para quienes disfrutan descubrir nuevos perfiles y contrastes.",
+    description: "Perfil dulce y exótico que conserva el mucílago natural de la cereza.",
   },
   {
     id: "curator",
-    name: "Curaduría Privada",
+    name: "Microlote del Mes",
     price: 65000,
     image: "/images/Amantti_Coffee_Bag.png",
-    description: "Una selección privada de los cafés más excepcionales de Amantti.",
+    description: "Pequeños lotes de variedades exóticas y procesos experimentales.",
   },
   {
     id: "custom",
-    name: "Crea Tu Suscripción",
+    name: "Suscripción Personalizada",
     price: 0,
     image: "/images/Amantti_Coffee_Bag.png",
     description: "Arma tu combinación personalizada eligiendo cantidades de cualquier café.",
@@ -80,21 +81,21 @@ const PLANS = [
 const CUSTOM_PRODUCTS = [
   {
     id: "essential",
-    name: "Devoción Esencial (Tradicional)",
+    name: "Selección Amantti",
     basePrice: 35000,
     image: "/images/Front_Paper_Traditional_Coffee_Bag.png",
     codePrefix: "CAFT"
   },
   {
     id: "alchemy",
-    name: "Alquimia & Contraste (Honey)",
+    name: "Honey Process",
     basePrice: 48000,
     image: "/images/Front_White_Honey_Coffee_Bag.png",
     codePrefix: "CAFT-HON"
   },
   {
     id: "curator",
-    name: "Curaduría Privada (Microlote)",
+    name: "Microlote del Mes",
     basePrice: 65000,
     image: "/images/Amantti_Coffee_Bag.png",
     codePrefix: "CAFT-MIC"
@@ -227,18 +228,29 @@ function BuilderForm() {
     let netCoffeeTotal = 0;
     let totalItems = 0;
 
-    CUSTOM_PRODUCTS.forEach(p => {
-      const qty = customQuantities[p.id] || 0;
-      if (qty > 0) {
-        totalItems += qty;
-        const storePrice = calculateCoffeePrice(p.id, selection.weight);
-        const netValue = Math.max(0, storePrice - 10000);
-        netCoffeeTotal += netValue * qty;
+    if (selection.plan_id === "custom") {
+      CUSTOM_PRODUCTS.forEach(p => {
+        const qty = customQuantities[p.id] || 0;
+        if (qty > 0) {
+          totalItems += qty;
+          const storePrice = calculateCoffeePrice(p.id, selection.weight);
+          const netValue = Math.max(0, storePrice - 10000);
+          netCoffeeTotal += netValue * qty;
+        }
+      });
+      if (totalItems === 0) {
+        const storePrice = calculateCoffeePrice("essential", selection.weight);
+        netCoffeeTotal = Math.max(0, storePrice - 10000);
+        totalItems = 1;
       }
-    });
+    } else {
+      const storePrice = calculateCoffeePrice(selection.plan_id, selection.weight);
+      netCoffeeTotal = Math.max(0, storePrice - 10000);
+      totalItems = 1;
+    }
 
     const shippingRate = shippingZone.isAvailable ? shippingZone.rate : 10000;
-    return totalItems > 0 ? netCoffeeTotal + shippingRate : 35000;
+    return netCoffeeTotal + shippingRate;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -52,6 +52,25 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
     );
   }
 
+  const getProductName = (planId: string) => {
+    switch (planId) {
+      case 'essential':
+      case 'traditional':
+      case 'firma':
+        return 'Selección Amantti';
+      case 'alchemy':
+      case 'honey':
+        return 'Honey Process';
+      case 'curator':
+      case 'microlot':
+        return 'Microlote del Mes';
+      case 'custom':
+        return 'Suscripción Personalizada';
+      default:
+        return planId;
+    }
+  };
+
   return (
     <>
       <div className="space-y-8">
@@ -114,7 +133,7 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
           </div>
           <div className="flex-1 space-y-6">
             <div>
-              <h3 className="text-3xl font-serif mb-2 capitalize">Plan {subscription.plan_id}</h3>
+              <h3 className="text-3xl font-serif mb-2">{getProductName(subscription.plan_id)}</h3>
               <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-2 text-sm text-foreground/60 px-3 py-1 bg-foreground/5 rounded-full">
                   <Package className="w-3.5 h-3.5" />

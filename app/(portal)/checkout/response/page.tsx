@@ -159,10 +159,20 @@ function CheckoutResponseContent() {
                 <div className="flex items-center justify-between pb-3 border-b border-foreground/5">
                   <div className="flex items-center gap-2 text-xs font-bold text-foreground">
                     <Coffee className="w-4 h-4 text-[#C59F59]" />
-                    <span>{txData?.plan_name || "Plan Amantti Selección"}</span>
+                    <span>
+                      {(() => {
+                        const raw = txData?.plan_name || "";
+                        const lower = raw.toLowerCase();
+                        if (lower.includes("essential") || lower.includes("devoción") || lower.includes("devocion") || lower.includes("firma")) return "Selección Amantti";
+                        if (lower.includes("alchemy") || lower.includes("alquimia") || lower.includes("honey")) return "Honey Process";
+                        if (lower.includes("curator") || lower.includes("curaduría") || lower.includes("curaduria") || lower.includes("microlot")) return "Microlote del Mes";
+                        if (lower.includes("custom") || lower.includes("crea tu") || lower.includes("personalizada")) return "Suscripción Personalizada";
+                        return raw.replace(/^Plan\s+/i, "") || "Selección Amantti";
+                      })()}
+                    </span>
                   </div>
                   <span className="text-xs font-serif text-[#C59F59] font-bold">
-                    {formatCurrency(txData?.x_amount || 48000)} / envío
+                    {formatCurrency(txData?.x_amount || 35000)} / envío
                   </span>
                 </div>
 
