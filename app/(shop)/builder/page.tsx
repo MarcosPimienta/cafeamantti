@@ -139,18 +139,10 @@ function BuilderForm() {
     curator: 0,
   });
 
-  const [stockMap, setStockMap] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(!!subscriptionId);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeSubId, setActiveSubId] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Fetch live inventory stock
-    getSubscriptionStock().then(data => {
-      if (data) setStockMap(data);
-    });
-  }, []);
 
   useEffect(() => {
     if (subscriptionId) {
@@ -176,7 +168,6 @@ function BuilderForm() {
             });
             setCustomQuantities(loadedQty);
           } else if (data.plan_id) {
-            // Map legacy plan_id to custom quantities
             if (data.plan_id === 'essential') setCustomQuantities({ essential: 1, alchemy: 0, curator: 0 });
             else if (data.plan_id === 'alchemy') setCustomQuantities({ essential: 1, alchemy: 1, curator: 0 });
             else if (data.plan_id === 'curator') setCustomQuantities({ essential: 1, alchemy: 1, curator: 1 });
@@ -184,7 +175,6 @@ function BuilderForm() {
 
           setIsLoading(false);
         } else {
-          // If ID is provided but no data (IDOR attempt or deleted), redirect
           window.location.href = "/dashboard";
         }
       };
@@ -196,25 +186,9 @@ function BuilderForm() {
 
   const currentPlan = PLANS.find((p) => p.id === "custom")!;
 
-  // Helper to check stock availability for a custom item
-  const getAvailableStock = (productId: string) => {
-    const prod = CUSTOM_PRODUCTS.find(p => p.id === productId);
-    if (!prod) return 9999;
-    const weightCode = selection.weight === "125g" ? "125G" : selection.weight === "250g" ? "250G" : selection.weight === "500g" ? "500G" : "2K5";
-    const fullCode = `${prod.codePrefix}-${weightCode}`;
-    const realStock = stockMap[fullCode];
-    // Return 9999 to allow sales without inventory restrictions for now
-    return (realStock && realStock > 0) ? realStock : 9999;
-  };
-
   const handleCustomQuantityChange = (productId: string, delta: number) => {
     const current = customQuantities[productId] || 0;
     const next = Math.max(0, current + delta);
-    const maxStock = getAvailableStock(productId);
-
-    if (delta > 0 && next > maxStock) {
-      return; // Restrict if stock is insufficient
-    }
 
     setCustomQuantities(prev => ({
       ...prev,
@@ -355,10 +329,7 @@ function BuilderForm() {
                 <div className="space-y-4">
                     {CUSTOM_PRODUCTS.map((prod) => {
                       const qty = customQuantities[prod.id] || 0;
-                      const availableStock = getAvailableStock(prod.id);
-                      const isOutOfStock = availableStock <= 0;
                       const isNotAvailableIn2k5 = selection.weight === "2.5kg" && prod.id !== "essential";
-                      const isMaxStockReached = qty >= availableStock || isNotAvailableIn2k5;
                       const unitPrice = calculateCoffeePrice(prod.id, selection.weight);
 
                       return (
@@ -378,17 +349,6 @@ function BuilderForm() {
                                   {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(unitPrice)} / unidad
                                 </p>
                               )}
-                              {!isNotAvailableIn2k5 && (
-                                isOutOfStock ? (
-                                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full mt-1">
-                                    <AlertTriangle className="w-3 h-3" /> Agotado en Inventario
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-foreground/40 block mt-0.5">
-                                    Stock disponible: <strong className="text-foreground/70">{availableStock}</strong> unidades
-                                  </span>
-                                )
-                              )}
                             </div>
                           </div>
 
@@ -406,7 +366,7 @@ function BuilderForm() {
                             <button
                               type="button"
                               onClick={() => handleCustomQuantityChange(prod.id, 1)}
-                              disabled={isOutOfStock || isMaxStockReached}
+                              disabled={isNotAvailableIn2k5}
                               className="w-9 h-9 rounded-xl border border-foreground/10 bg-white flex items-center justify-center text-foreground hover:bg-[#C59F59] hover:text-white disabled:opacity-30 transition-all"
                             >
                               <Plus className="w-4 h-4" />
