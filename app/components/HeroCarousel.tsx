@@ -22,24 +22,29 @@ export function HeroCarousel() {
   }, []);
 
   return (
-    <div className="absolute inset-0 z-0 overflow-hidden bg-zinc-900">
-      {CAROUSEL_IMAGES.map((img, index) => (
-        <div
-          key={img.src}
-          className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-            index === currentIndex ? "opacity-100 scale-105 transition-transform duration-[6000ms]" : "opacity-0 scale-100"
-          }`}
-        >
-          <Image
-            src={img.src}
-            alt={img.alt}
-            fill
-            priority={index === 0}
-            className="object-cover object-center"
-            sizes="100vw"
-          />
-        </div>
-      ))}
+    <div className="absolute inset-0 z-0 overflow-hidden bg-black">
+      {CAROUSEL_IMAGES.map((img, index) => {
+        const isActive = index === currentIndex;
+        return (
+          <div
+            key={img.src}
+            className={`absolute inset-0 transition-all duration-[1500ms] ease-in-out ${
+              isActive
+                ? "opacity-100 scale-105 z-10"
+                : "opacity-0 scale-100 z-0 pointer-events-none"
+            }`}
+          >
+            <Image
+              src={img.src}
+              alt={img.alt}
+              fill
+              priority={index === 0}
+              className="object-cover object-center"
+              sizes="100vw"
+            />
+          </div>
+        );
+      })}
 
       {/* Slide Indicators */}
       <div className="absolute bottom-6 left-8 z-20 flex items-center gap-2">
