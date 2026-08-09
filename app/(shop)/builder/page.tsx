@@ -52,28 +52,28 @@ const PLANS = [
     id: "essential",
     name: "Selección Amantti",
     price: 35000,
-    image: "/images/Front_Paper_Traditional_Coffee_Bag.png",
+    image: "/images/Premium_Bag.jpeg",
     description: "El café esencial con perfil clásico colombiano, balanceado y constante.",
   },
   {
     id: "alchemy",
     name: "Honey Process",
     price: 48000,
-    image: "/images/Front_White_Honey_Coffee_Bag.png",
+    image: "/images/Honey_Bag.jpeg",
     description: "Perfil dulce y exótico que conserva el mucílago natural de la cereza.",
   },
   {
     id: "curator",
     name: "Microlote del Mes",
     price: 65000,
-    image: "/images/Amantti_Coffee_Bag.png",
+    image: "/images/Especial_Bag.jpeg",
     description: "Pequeños lotes de variedades exóticas y procesos experimentales.",
   },
   {
     id: "custom",
     name: "Suscripción Personalizada",
     price: 0,
-    image: "/images/Amantti_Coffee_Bag.png",
+    image: "/images/Three_Bags.jpeg",
     description: "Arma tu combinación personalizada eligiendo cantidades de cualquier café.",
   },
 ];
@@ -83,21 +83,21 @@ const CUSTOM_PRODUCTS = [
     id: "essential",
     name: "Selección Amantti",
     basePrice: 35000,
-    image: "/images/Front_Paper_Traditional_Coffee_Bag.png",
+    image: "/images/Premium_Bag.jpeg",
     codePrefix: "CAFT"
   },
   {
     id: "alchemy",
     name: "Honey Process",
     basePrice: 48000,
-    image: "/images/Front_White_Honey_Coffee_Bag.png",
+    image: "/images/Honey_Bag.jpeg",
     codePrefix: "CAFT-HON"
   },
   {
     id: "curator",
     name: "Microlote del Mes",
     basePrice: 65000,
-    image: "/images/Amantti_Coffee_Bag.png",
+    image: "/images/Especial_Bag.jpeg",
     codePrefix: "CAFT-MIC"
   }
 ];

@@ -79,7 +79,7 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
             {subscription.plan_id === 'essential' && (
               <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-110">
                 <Image
-                  src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                  src="/images/Premium_Bag.jpeg"
                   alt="Amantti Traditional Bag"
                   fill
                   className="object-contain drop-shadow-xl"
@@ -89,13 +89,13 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
             {subscription.plan_id === 'alchemy' && (
               <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-110 scale-90">
                 <Image
-                  src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                  src="/images/Premium_Bag.jpeg"
                   alt="Amantti Traditional Bag"
                   fill
                   className="object-contain drop-shadow-lg -rotate-12 -translate-x-3 translate-y-1 opacity-90"
                 />
                 <Image
-                  src="/images/Front_White_Honey_Coffee_Bag.png"
+                  src="/images/Honey_Bag.jpeg"
                   alt="Amantti Honey Bag"
                   fill
                   className="object-contain drop-shadow-2xl rotate-6 translate-x-3 -translate-y-1"
@@ -105,19 +105,19 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
             {subscription.plan_id === 'curator' && (
               <div className="relative w-full h-full transition-transform duration-500 group-hover:scale-110 scale-[0.8]">
                 <Image
-                  src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                  src="/images/Premium_Bag.jpeg"
                   alt="Amantti Traditional Bag"
                   fill
                   className="object-contain drop-shadow-xl -rotate-[20deg] -translate-x-6 translate-y-2 opacity-80"
                 />
                 <Image
-                  src="/images/Front_White_Honey_Coffee_Bag.png"
+                  src="/images/Honey_Bag.jpeg"
                   alt="Amantti Honey Bag"
                   fill
                   className="object-contain drop-shadow-xl rotate-[20deg] translate-x-6 translate-y-2 opacity-80"
                 />
                 <Image
-                  src="/images/Amantti_Coffee_Bag.png"
+                  src="/images/Especial_Bag.jpeg"
                   alt="Amantti Microlot Bag"
                   fill
                   className="object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] scale-110 brightness-110 z-10"

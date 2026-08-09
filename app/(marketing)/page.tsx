@@ -33,7 +33,7 @@ const PRODUCTS: ProductDef[] = [
     nameKey: "home.tienda.tradName",
     notesKey: "home.tienda.tradNotes",
     descKey: "home.tienda.tradDesc",
-    image: "/images/Front_Paper_Traditional_Coffee_Bag.png",
+    image: "/images/Premium_Bag.jpeg",
     limited: false,
     weights: [
       { label: "250g", available: true },
@@ -47,7 +47,7 @@ const PRODUCTS: ProductDef[] = [
     nameKey: "home.tienda.honeyName",
     notesKey: "home.tienda.honeyNotes",
     descKey: "home.tienda.honeyDesc",
-    image: "/images/Front_White_Honey_Coffee_Bag.png",
+    image: "/images/Honey_Bag.jpeg",
     limited: false,
     weights: [
       { label: "250g", available: true },
@@ -61,7 +61,7 @@ const PRODUCTS: ProductDef[] = [
     nameKey: "home.tienda.microName",
     notesKey: "home.tienda.microNotes",
     descKey: "home.tienda.microDesc",
-    image: "/images/Amantti_Coffee_Bag.png",
+    image: "/images/Especial_Bag.jpeg",
     limited: true,
     weights: [
       { label: "250g", available: true },
@@ -786,8 +786,26 @@ export default function Home() {
       </section>
 
       {/* ── Suscripciones ────────────────────── */}
-      <section id="suscripciones" className="section-dark" style={{ overflow: "hidden" }}>
-        <div className="section-inner">
+      <section id="suscripciones" className="section-dark" style={{ position: "relative", overflow: "hidden" }}>
+        {/* Background Image & Filter */}
+        <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
+          <Image
+            src="/images/Three_Bags.jpeg"
+            alt="Suscripciones Café Amantti"
+            fill
+            className="object-cover"
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(to bottom, rgba(11,11,11,0.6) 0%, rgba(11,11,11,0.95) 100%)",
+              pointerEvents: "none",
+            }}
+          />
+        </div>
+
+        <div className="section-inner" style={{ position: "relative", zIndex: 10 }}>
           {/* Header */}
           <div data-reveal="" style={{ textAlign: "center", maxWidth: 680, margin: "0 auto 64px" }}>
             <p className="eyebrow-serif">{t("home.suscripciones.eyebrow")}</p>
@@ -797,53 +815,6 @@ export default function Home() {
             <p className="body-muted">
               {t("home.suscripciones.intro")}
             </p>
-          </div>
-
-          {/* Bag trio */}
-          <div
-            data-reveal=""
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "flex-end",
-              marginBottom: 70,
-            }}
-          >
-            <div style={{ position: "relative", width: 200, height: 280 }}>
-              <Image
-                src="/images/Front_Paper_Traditional_Coffee_Bag.png"
-                alt={t("home.tienda.tradName")}
-                fill
-                className="object-contain"
-                style={{
-                  transform: "rotate(-6deg) translateX(24px)",
-                  filter: "drop-shadow(0 30px 40px rgba(0,0,0,.5))",
-                }}
-              />
-            </div>
-            <div style={{ position: "relative", width: 250, height: 340, zIndex: 2 }}>
-              <Image
-                src="/images/Amantti_Coffee_Bag.png"
-                alt={t("home.tienda.microName")}
-                fill
-                className="object-contain"
-                style={{
-                  filter: "drop-shadow(0 30px 40px rgba(0,0,0,.6))",
-                }}
-              />
-            </div>
-            <div style={{ position: "relative", width: 200, height: 280 }}>
-              <Image
-                src="/images/Front_White_Honey_Coffee_Bag.png"
-                alt={t("home.tienda.honeyName")}
-                fill
-                className="object-contain"
-                style={{
-                  transform: "rotate(6deg) translateX(-24px)",
-                  filter: "drop-shadow(0 30px 40px rgba(0,0,0,.5))",
-                }}
-              />
-            </div>
           </div>
 
           {/* Feature cells */}
