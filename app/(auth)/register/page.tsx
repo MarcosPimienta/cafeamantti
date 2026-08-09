@@ -70,9 +70,9 @@ export default function RegisterPage() {
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0 scale-105 blur-[2px]"
         style={{ backgroundImage: "url('/images/AmanttiBG02.png')" }}
       />
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-10" />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-[2px] z-10" />
 
-      <div className="max-w-xl w-full p-10 bg-white/90 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/20 relative z-20 animate-in fade-in zoom-in duration-700">
+      <div className="max-w-xl w-full p-10 bg-[#0B0B0B]/90 backdrop-blur-2xl rounded-sm shadow-2xl border border-[#C2A878]/20 relative z-20 animate-in fade-in zoom-in duration-700">
         <Link 
           href="/" 
           className="absolute -top-12 left-0 flex items-center gap-2 text-white/60 hover:text-white transition-colors group"
@@ -83,14 +83,14 @@ export default function RegisterPage() {
         <div className="relative z-10">
           <div className="flex flex-col items-center mb-10">
             <Link href="/" className="mb-6">
-              <div className="w-16 h-16 bg-foreground rounded-full flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform ring-8 ring-foreground/5">
-                <Coffee className="w-8 h-8 text-background" strokeWidth={1.5} />
+              <div className="w-16 h-16 bg-[#C2A878] rounded-sm flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform ring-8 ring-[#C2A878]/10 border border-[#C2A878]/20">
+                <Coffee className="w-8 h-8 text-[#0B0B0B]" strokeWidth={1.5} />
               </div>
             </Link>
-            <h1 className="text-5xl md:text-6xl font-bodoni italic text-center mb-3 tracking-tight">
+            <h1 className="text-5xl md:text-6xl font-bodoni italic text-center mb-3 tracking-tight text-[#F4F1ED]">
               amantti.
             </h1>
-            <p className="text-[10px] text-foreground/40 text-center font-bold tracking-[0.3em] uppercase max-w-xs leading-relaxed">
+            <p className="text-[10px] text-white/40 text-center font-bold tracking-[0.3em] uppercase max-w-xs leading-relaxed">
               Crea tu perfil y comienza a disfrutar del café más selecto de Colombia.
             </p>
           </div>
@@ -117,13 +117,13 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="group space-y-2">
-                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Nombre</label>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1 transition-colors group-focus-within:text-[#C2A878]">Nombre</label>
                 <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C2A878] transition-colors" />
                   <input
                     {...register("firstName")}
                     suppressHydrationWarning
-                    className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
+                    className="w-full rounded-sm border border-white/20 bg-transparent px-12 py-4 text-sm text-[#F4F1ED] focus:border-[#C2A878] focus:outline-none transition-all placeholder:text-white/20"
                     placeholder="Juan"
                   />
                 </div>
@@ -131,13 +131,13 @@ export default function RegisterPage() {
               </div>
 
               <div className="group space-y-2">
-                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Apellido</label>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1 transition-colors group-focus-within:text-[#C2A878]">Apellido</label>
                 <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C2A878] transition-colors" />
                   <input
                     {...register("lastName")}
                     suppressHydrationWarning
-                    className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
+                    className="w-full rounded-sm border border-white/20 bg-transparent px-12 py-4 text-sm text-[#F4F1ED] focus:border-[#C2A878] focus:outline-none transition-all placeholder:text-white/20"
                     placeholder="Pérez"
                   />
                 </div>
@@ -146,14 +146,14 @@ export default function RegisterPage() {
             </div>
 
             <div className="group space-y-2">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Email</label>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1 transition-colors group-focus-within:text-[#C2A878]">Email</label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C2A878] transition-colors" />
                 <input
                   {...register("email")}
                   type="email"
                   suppressHydrationWarning
-                  className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
+                  className="w-full rounded-sm border border-white/20 bg-transparent px-12 py-4 text-sm text-[#F4F1ED] focus:border-[#C2A878] focus:outline-none transition-all placeholder:text-white/20"
                   placeholder="juan@ejemplo.com"
                 />
               </div>
@@ -161,13 +161,13 @@ export default function RegisterPage() {
             </div>
 
               <div className="group space-y-2">
-                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Teléfono</label>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1 transition-colors group-focus-within:text-[#C2A878]">Teléfono</label>
                 <div className="relative">
-                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C2A878] transition-colors" />
                   <input
                     {...register("phone")}
                     suppressHydrationWarning
-                    className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
+                    className="w-full rounded-sm border border-white/20 bg-transparent px-12 py-4 text-sm text-[#F4F1ED] focus:border-[#C2A878] focus:outline-none transition-all placeholder:text-white/20"
                     placeholder="3001234567"
                   />
                 </div>
@@ -175,13 +175,13 @@ export default function RegisterPage() {
               </div>
 
             <div className="group space-y-2">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Dirección de Envío</label>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1 transition-colors group-focus-within:text-[#C2A878]">Dirección de Envío</label>
               <div className="relative">
-                <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C2A878] transition-colors" />
                 <input
                   {...register("address")}
                   suppressHydrationWarning
-                  className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
+                  className="w-full rounded-sm border border-white/20 bg-transparent px-12 py-4 text-sm text-[#F4F1ED] focus:border-[#C2A878] focus:outline-none transition-all placeholder:text-white/20"
                   placeholder="Calle 123 # 45 - 67, Bogotá"
                 />
               </div>
@@ -189,14 +189,14 @@ export default function RegisterPage() {
             </div>
 
             <div className="group space-y-2">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 px-1 transition-colors group-focus-within:text-[#C59F59]">Contraseña</label>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1 transition-colors group-focus-within:text-[#C2A878]">Contraseña</label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C2A878] transition-colors" />
                 <input
                   {...register("password")}
                   type="password"
                   suppressHydrationWarning
-                  className="w-full rounded-2xl border border-foreground/10 bg-white/50 px-12 py-4 text-sm focus:border-[#C59F59] focus:outline-none focus:ring-4 focus:ring-[#C59F59]/5 transition-all placeholder:text-foreground/20"
+                  className="w-full rounded-sm border border-white/20 bg-transparent px-12 py-4 text-sm text-[#F4F1ED] focus:border-[#C2A878] focus:outline-none transition-all placeholder:text-white/20"
                   placeholder="••••••••"
                 />
               </div>
@@ -210,17 +210,17 @@ export default function RegisterPage() {
                   type="checkbox"
                   suppressHydrationWarning
                   {...register("terms")}
-                  className="w-4 h-4 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]"
+                  className="w-4 h-4 rounded-sm border-white/20 text-[#C2A878] focus:ring-[#C2A878] bg-transparent"
                 />
               </div>
               <div className="text-sm">
-                <label htmlFor="terms" className="text-foreground/60">
+                <label htmlFor="terms" className="text-white/70">
                   Acepto los{" "}
                   <button 
                     type="button" 
                     suppressHydrationWarning
                     onClick={() => setIsTermsOpen(true)} 
-                    className="font-bold text-[#C59F59] hover:underline"
+                    className="font-bold text-[#C2A878] hover:underline"
                   >
                     Términos y Condiciones
                   </button>
@@ -234,7 +234,7 @@ export default function RegisterPage() {
                 type="submit"
                 disabled={isSubmitting}
                 suppressHydrationWarning
-                className="group w-full rounded-2xl bg-foreground px-6 py-4 text-sm font-bold uppercase tracking-widest text-background shadow-xl hover:bg-[#C59F59] hover:text-white transition-all duration-500 flex items-center justify-center gap-3 disabled:opacity-50"
+                className="group w-full rounded-sm bg-[#C2A878] px-6 py-4 text-sm font-bold uppercase tracking-widest text-[#0B0B0B] hover:bg-[#F4F1ED] transition-all duration-500 flex items-center justify-center gap-3 disabled:opacity-50"
               >
                 <span>{isSubmitting ? "Registrando..." : "Crear Cuenta"}</span>
                 {!isSubmitting && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
@@ -242,10 +242,10 @@ export default function RegisterPage() {
             </div>
           </form>
 
-          <div className="mt-10 pt-10 border-t border-foreground/5 text-center">
-            <p className="text-sm text-foreground/40">
+          <div className="mt-10 pt-10 border-t border-white/10 text-center">
+            <p className="text-sm text-white/40">
               ¿Ya tienes cuenta?{" "}
-              <Link href="/login" className="font-bold text-foreground hover:text-[#C59F59] transition-colors">
+              <Link href="/login" className="font-bold text-[#F4F1ED] hover:text-[#C2A878] transition-colors">
                 Inicia Sesión
               </Link>
             </p>

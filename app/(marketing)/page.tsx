@@ -2,221 +2,349 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
-import {
-  ShoppingCart,
-  Calendar,
-  CalendarClock,
-  CalendarDays,
-  Facebook,
-  Twitter,
-  Youtube,
-  Instagram,
-  Globe,
-  Coffee,
-  Wrench,
-  Headset,
-  MessageCircle,
-  Send,
-  Menu,
-  X,
-  Plus,
-  Check,
-  Truck,
-  Leaf,
-  SlidersHorizontal,
-} from "lucide-react";
+import { ShoppingCart, Menu, X } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useCart } from "@/app/context/CartContext";
 import { CartDrawer } from "@/app/components/CartDrawer";
 import { HeroCarousel } from "@/app/components/HeroCarousel";
 import { calculateCoffeePrice } from "@/app/(shop)/builder/page";
+import "./homepage.css";
 
-interface ProductCardProps {
+/* ────────────────────────────────────────────────
+   Product data
+   ──────────────────────────────────────────────── */
+interface ProductDef {
+  key: string;
   id: string;
-  titleKey: string;
+  nameKey: string;
+  notesKey: string;
   descKey: string;
-  profileKey: string;
-  basePrice: number;
-  imageSrc: string;
+  image: string;
+  limited: boolean;
+  weights: { label: string; available: boolean }[];
+}
+
+const PRODUCTS: ProductDef[] = [
+  {
+    key: "trad",
+    id: "firma",
+    nameKey: "home.tienda.tradName",
+    notesKey: "home.tienda.tradNotes",
+    descKey: "home.tienda.tradDesc",
+    image: "/images/Front_Paper_Traditional_Coffee_Bag.png",
+    limited: false,
+    weights: [
+      { label: "250g", available: true },
+      { label: "500g", available: true },
+      { label: "2.5kg", available: true },
+    ],
+  },
+  {
+    key: "honey",
+    id: "honey",
+    nameKey: "home.tienda.honeyName",
+    notesKey: "home.tienda.honeyNotes",
+    descKey: "home.tienda.honeyDesc",
+    image: "/images/Front_White_Honey_Coffee_Bag.png",
+    limited: false,
+    weights: [
+      { label: "250g", available: true },
+      { label: "500g", available: true },
+      { label: "2.5kg", available: false },
+    ],
+  },
+  {
+    key: "micro",
+    id: "microlot",
+    nameKey: "home.tienda.microName",
+    notesKey: "home.tienda.microNotes",
+    descKey: "home.tienda.microDesc",
+    image: "/images/Amantti_Coffee_Bag.png",
+    limited: true,
+    weights: [
+      { label: "250g", available: true },
+      { label: "500g", available: true },
+      { label: "2.5kg", available: false },
+    ],
+  },
+];
+
+/* ────────────────────────────────────────────────
+   ProductCard component
+   ──────────────────────────────────────────────── */
+interface ProductCardProps {
+  product: ProductDef;
   t: (key: any) => string;
 }
 
-function ProductCard({ id, titleKey, descKey, profileKey, basePrice, imageSrc, t }: ProductCardProps) {
-  const [weight, setWeight] = useState("250g");
-  const [isGround, setIsGround] = useState(false);
-  const [grindLevel, setGrindLevel] = useState("drip");
+function ProductCard({ product, t }: ProductCardProps) {
+  const [selectedWeight, setSelectedWeight] = useState("250g");
+  const [selectedGrind, setSelectedGrind] = useState("whole");
   const [isAdding, setIsAdding] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
   const { addItem } = useCart();
 
-  const handleAddToCart = () => {
+  const price = calculateCoffeePrice(product.id, selectedWeight);
+  const formattedPrice =
+    "$ " + price.toLocaleString("es-CO");
+
+  const handleAdd = () => {
     setIsAdding(true);
-    
-    // Add to cart context
     addItem({
-      id,
-      nameKey: titleKey,
-      price: calculatePrice(),
-      weight,
-      grind: isGround ? "ground" : "whole",
-      grindLevel: isGround ? grindLevel : undefined,
-      image: imageSrc,
+      id: product.id,
+      nameKey: product.nameKey,
+      price,
+      weight: selectedWeight,
+      grind: selectedGrind === "whole" ? "whole" : "ground",
+      image: product.image,
     });
-
-    setTimeout(() => {
-      setIsAdding(false);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 2000);
-    }, 800);
-  };
-
-  const calculatePrice = () => {
-    return calculateCoffeePrice(id, weight);
-  };
-
-  const getPriceFormated = () => {
-    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(calculatePrice());
+    setTimeout(() => setIsAdding(false), 800);
   };
 
   return (
-    <div className="group relative bg-white border border-foreground/5 rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 flex flex-col">
-      {/* Product Image */}
-      <div className="relative h-64 bg-[#f9f7f2] flex items-center justify-center p-8 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-        <div className="relative w-48 h-full transition-transform duration-700 group-hover:scale-110 group-hover:rotate-2">
+    <div className="product-card" data-reveal="">
+      {/* Bag image */}
+      <div style={{ position: "relative", display: "flex", justifyContent: "center", padding: "10px 0 26px" }}>
+        {product.limited && (
+          <span
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              fontSize: 10,
+              letterSpacing: ".2em",
+              textTransform: "uppercase",
+              color: "#C2A878",
+              border: "1px solid rgba(194,168,120,.4)",
+              padding: "6px 10px",
+              borderRadius: 2,
+              fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+            }}
+          >
+            {t("home.tienda.edicionLimitada")}
+          </span>
+        )}
+        <div style={{ position: "relative", height: 230, width: 140 }}>
           <Image
-            src={imageSrc}
-            alt={t(titleKey)}
+            src={product.image}
+            alt={t(product.nameKey)}
             fill
-            className="object-contain drop-shadow-2xl"
+            className="object-contain"
+            style={{ filter: "drop-shadow(0 22px 26px rgba(0,0,0,.5))" }}
           />
         </div>
-        {id === "microlot" && (
-          <div className="absolute top-4 left-4">
-            <span className="bg-[#C59F59] text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-lg">Limited Edition</span>
-          </div>
-        )}
       </div>
-      <div className="p-8 flex flex-col flex-1">
-        <div className="mb-6">
-          <h3 suppressHydrationWarning className="text-2xl font-serif mb-2 group-hover:text-[#C59F59] transition-colors">{t(titleKey)}</h3>
-          <p suppressHydrationWarning className="text-foreground/60 text-sm leading-relaxed mb-4 line-clamp-2">{t(descKey)}</p>
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#C59F59]/80">
-            <Leaf className="w-3 h-3" />
-            <span suppressHydrationWarning>{t(profileKey)}</span>
-          </div>
-        </div>
 
-        <div className="space-y-6 mt-auto">
-          {/* Weight Selection */}
-          <div className="space-y-3">
-            <label suppressHydrationWarning className="text-[10px] font-bold uppercase tracking-tighter text-foreground/40">{t("products.weightLabel")}</label>
-            <div className="grid grid-cols-3 gap-2">
-              {["250g", "500g", "2.5kg"].map((w) => {
-                const is2k5Restricted = w === "2.5kg" && (id === "honey" || id === "microlot");
-                return (
-                  <button
-                    key={w}
-                    suppressHydrationWarning
-                    disabled={is2k5Restricted}
-                    onClick={() => {
-                      if (!is2k5Restricted) setWeight(w);
-                    }}
-                    className={`py-2 text-xs font-medium rounded-lg border transition-all ${
-                      weight === w 
-                        ? "bg-[#C59F59] border-[#C59F59] text-white shadow-md shadow-[#C59F59]/20" 
-                        : is2k5Restricted
-                        ? "opacity-40 cursor-not-allowed border-foreground/5 bg-foreground/5 text-foreground/40"
-                        : "bg-transparent border-foreground/10 text-foreground/60 hover:border-[#C59F59]/40 hover:text-[#C59F59]"
-                    }`}
-                    title={is2k5Restricted ? "Presentación 2.5kg disponible exclusivamente para Café Premium" : undefined}
-                  >
-                    {w}
-                    {is2k5Restricted && <span className="block text-[7px] text-amber-700 font-semibold leading-none mt-0.5">Solo Premium</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      {/* Name */}
+      <h3
+        style={{
+          margin: 0,
+          fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+          fontStyle: "italic",
+          fontWeight: 400,
+          fontSize: 24,
+          color: "#F4F1ED",
+        }}
+      >
+        {t(product.nameKey)}
+      </h3>
 
-          {/* Grind Toggle */}
-          <div className="space-y-3">
-            <label suppressHydrationWarning className="text-[10px] font-bold uppercase tracking-tighter text-foreground/40">{t("products.grindLabel")}</label>
-            <div className="flex p-1 bg-foreground/5 rounded-xl">
-              <button
-                suppressHydrationWarning
-                onClick={() => setIsGround(false)}
-                className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
-                  !isGround ? "bg-white text-foreground shadow-sm" : "text-foreground/40 hover:text-foreground/60"
-                }`}
-              >
-                {t("products.wholeBean")}
-              </button>
-              <button
-                suppressHydrationWarning
-                onClick={() => setIsGround(true)}
-                className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
-                  isGround ? "bg-white text-foreground shadow-sm" : "text-foreground/40 hover:text-foreground/60"
-                }`}
-              >
-                {t("products.ground")}
-              </button>
-            </div>
-          </div>
+      {/* Tasting notes */}
+      <p
+        style={{
+          margin: "8px 0 0",
+          fontSize: 12,
+          letterSpacing: ".16em",
+          textTransform: "uppercase",
+          color: "#C2A878",
+          fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+        }}
+      >
+        {t(product.notesKey)}
+      </p>
 
-          {/* Grind Level (Animated) */}
-          <div className={`space-y-3 transition-all duration-300 ${isGround ? "opacity-100 max-h-24" : "opacity-0 max-h-0 overflow-hidden"}`}>
-            <label suppressHydrationWarning className="text-[10px] font-bold uppercase tracking-tighter text-foreground/40">{t("products.grindLevelLabel")}</label>
-            <select
-              value={grindLevel}
-              suppressHydrationWarning
-              onChange={(e) => setGrindLevel(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-foreground/10 bg-transparent focus:outline-none focus:border-[#C59F59]"
-            >
-              <option suppressHydrationWarning value="espresso">{t("products.grind.espresso")}</option>
-              <option suppressHydrationWarning value="drip">{t("products.grind.drip")}</option>
-              <option suppressHydrationWarning value="french">{t("products.grind.frenchPress")}</option>
-            </select>
-          </div>
+      {/* Description */}
+      <p
+        style={{
+          margin: "14px 0 24px",
+          fontSize: 14,
+          lineHeight: 1.7,
+          color: "rgba(244,241,237,.6)",
+          flex: 1,
+          fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+        }}
+      >
+        {t(product.descKey)}
+      </p>
 
-          {/* Price and Add Button */}
-          <div className="pt-6 border-t border-foreground/5 flex items-center justify-between">
-            <div className="flex flex-col">
-              <span suppressHydrationWarning className="text-2xl font-serif text-[#C59F59]">{getPriceFormated()}</span>
-            </div>
-            <button
-              onClick={handleAddToCart}
-              suppressHydrationWarning
-              disabled={isAdding}
-              className={`relative px-6 py-3 rounded-xl font-medium text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden ${
-                showSuccess 
-                  ? "bg-green-500 text-white" 
-                  : "bg-foreground text-background hover:bg-[#C59F59] hover:text-white"
-              }`}
-            >
-              {isAdding ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : showSuccess ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span suppressHydrationWarning>{t("products.addedToCart")}</span>
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  <span suppressHydrationWarning>{t("products.addToCart")}</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+      {/* Weight selector */}
+      <p
+        style={{
+          margin: "0 0 10px",
+          fontSize: 10,
+          letterSpacing: ".2em",
+          textTransform: "uppercase",
+          color: "rgba(244,241,237,.4)",
+          fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+        }}
+      >
+        {t("home.tienda.pesoLabel")}
+      </p>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        {product.weights.map((w) => (
+          <button
+            key={w.label}
+            suppressHydrationWarning
+            disabled={!w.available}
+            onClick={() => w.available && setSelectedWeight(w.label)}
+            className={`chip ${selectedWeight === w.label ? "chip-active" : ""}`}
+          >
+            {w.label}
+            {!w.available && ` · ${t("home.tienda.premium")}`}
+          </button>
+        ))}
+      </div>
+
+      {/* Grind selector */}
+      <p
+        style={{
+          margin: "0 0 10px",
+          fontSize: 10,
+          letterSpacing: ".2em",
+          textTransform: "uppercase",
+          color: "rgba(244,241,237,.4)",
+          fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+        }}
+      >
+        {t("home.tienda.moliendaLabel")}
+      </p>
+      <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
+        <button
+          suppressHydrationWarning
+          onClick={() => setSelectedGrind("whole")}
+          className={`chip ${selectedGrind === "whole" ? "chip-active" : ""}`}
+        >
+          {t("home.tienda.granoEntero")}
+        </button>
+        <button
+          suppressHydrationWarning
+          onClick={() => setSelectedGrind("ground")}
+          className={`chip ${selectedGrind === "ground" ? "chip-active" : ""}`}
+        >
+          {t("home.tienda.molido")}
+        </button>
+      </div>
+
+      {/* Price + add */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          borderTop: "1px solid rgba(194,168,120,.25)",
+          paddingTop: 22,
+        }}
+      >
+        <p
+          style={{
+            margin: 0,
+            fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+            fontSize: 24,
+            color: "#F4F1ED",
+          }}
+        >
+          {formattedPrice}
+        </p>
+        <button
+          suppressHydrationWarning
+          onClick={handleAdd}
+          disabled={isAdding}
+          className="btn-primary"
+          style={{ padding: "13px 22px", fontSize: 11, letterSpacing: ".2em" }}
+        >
+          {isAdding ? "..." : t("home.tienda.anadirBtn")}
+        </button>
       </div>
     </div>
   );
 }
 
+/* ────────────────────────────────────────────────
+   Scroll reveal hook
+   ──────────────────────────────────────────────── */
+function useScrollReveal() {
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    // Respect reduced motion
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) return;
+
+    const els = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    const inView = (el: HTMLElement) => {
+      const r = el.getBoundingClientRect();
+      return r.top < innerHeight * 0.95 && r.bottom > 0;
+    };
+    const reveal = (el: HTMLElement) => {
+      el.classList.add("revealed");
+      (el as any)._revealed = true;
+    };
+
+    // Never hide what's already on screen
+    els.forEach((el) => {
+      if (inView(el)) {
+        el.classList.add("revealed");
+        (el as any)._revealed = true;
+      }
+    });
+
+    let ioAlive = false;
+    let io: IntersectionObserver | null = null;
+
+    if ("IntersectionObserver" in window) {
+      io = new IntersectionObserver(
+        (entries) => {
+          ioAlive = true;
+          entries.forEach((e) => {
+            if (e.isIntersecting && !(e.target as any)._revealed) {
+              reveal(e.target as HTMLElement);
+              io!.unobserve(e.target);
+            }
+          });
+        },
+        { threshold: 0.12 }
+      );
+      els.forEach((el) => {
+        if (!(el as any)._revealed) io!.observe(el);
+      });
+    }
+
+    // Fallback sweep on scroll
+    const sweep = () => els.forEach((el) => { if (!(el as any)._revealed && inView(el)) reveal(el); });
+    const onScroll = () => sweep();
+    addEventListener("scroll", onScroll, { passive: true });
+    const t1 = setTimeout(sweep, 600);
+    const t2 = setTimeout(() => {
+      if (!ioAlive) els.forEach((el) => { if (!(el as any)._revealed) reveal(el); });
+    }, 4000);
+
+    return () => {
+      io?.disconnect();
+      removeEventListener("scroll", onScroll);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+}
+
+/* ────────────────────────────────────────────────
+   Homepage
+   ──────────────────────────────────────────────── */
 export default function Home() {
   const { t, locale, setLocale } = useLanguage();
   const { itemCount } = useCart();
@@ -226,6 +354,8 @@ export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+
+  useScrollReveal();
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -252,715 +382,771 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const getSubscribeHref = (planId: string) => {
+  const getSubscribeHref = useCallback((planId: string) => {
     const baseUrl = `/builder?plan=${planId}`;
-    if (!user) {
-      return `/login?redirectTo=${encodeURIComponent(baseUrl)}`;
-    }
+    if (!user) return `/login?redirectTo=${encodeURIComponent(baseUrl)}`;
     return baseUrl;
-  };
+  }, [user]);
+
+  const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background font-sans text-foreground overflow-x-hidden">
-      {/* Navigation */}
-      <header className="fixed top-0 left-0 z-50 w-full border-b border-foreground/5 bg-background/95 backdrop-blur">
-        <div className="container mx-auto px-6 h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center">
-            <span className="font-bodoni italic text-3xl font-bold tracking-tight">
-              amantti
-            </span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-8">
-            <Link
-              href="#historia"
-              className="text-sm font-medium text-foreground/80 hover:text-foreground"
-            >
-              {t("nav.ourStory")}
-            </Link>
-
-            <Link
-              href="#servicios"
-              className="text-sm font-medium text-foreground/80 hover:text-foreground"
-            >
-              {t("nav.services")}
-            </Link>
-            <Link
-              href="#suscripciones"
-              className="text-sm font-medium text-foreground/80 hover:text-foreground"
-            >
-              {t("nav.subscriptions")}
-            </Link>
-            <Link
-              href="#tienda"
-              className="text-sm font-medium text-foreground/80 hover:text-foreground"
-            >
-              {t("nav.shop")}
-            </Link>
-            <Link
-              href={user ? "/dashboard" : "/login"}
-              className="text-sm font-medium text-foreground/80 hover:text-foreground flex items-center gap-2"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-foreground/20 border-t-foreground/60 rounded-full animate-spin" />
-              ) : (
-                user ? "Dashboard" : t("nav.myAccount")
-              )}
-            </Link>
-
-            {/* Language Switcher */}
-            <button
-              suppressHydrationWarning
-              onClick={() => setLocale(locale === "es" ? "en" : "es")}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border border-foreground/20 hover:border-[#C59F59] hover:bg-[#C59F59]/5 transition-all text-foreground/80 hover:text-foreground"
-              aria-label="Switch language"
-            >
-              <Globe className="w-4 h-4" strokeWidth={2} />
-              <span>{locale === "es" ? "EN" : "ES"}</span>
-            </button>
-
-            <button
-              suppressHydrationWarning
-              onClick={() => setIsCartOpen(true)}
-              className="relative p-2 hover:bg-foreground/5 rounded-full transition-colors"
-              aria-label={t("nav.cart")}
-            >
-              <ShoppingCart
-                className="w-5 h-5 text-foreground/80"
-                strokeWidth={2}
-              />
-              {itemCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C59F59] text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">
-                  {itemCount}
-                </span>
-              )}
-            </button>
-          </nav>
-
-          {/* Mobile Menu Toggle Button */}
-          <div className="flex items-center gap-4 md:hidden">
-            <button
-              suppressHydrationWarning
-              onClick={() => setIsCartOpen(true)}
-              className="relative p-2 hover:bg-foreground/5 rounded-full transition-colors"
-              aria-label={t("nav.cart")}
-            >
-              <ShoppingCart
-                className="w-5 h-5 text-foreground/80"
-                strokeWidth={2}
-              />
-              {itemCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C59F59] text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">
-                  {itemCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 -mr-2 text-foreground/80 hover:text-foreground transition-colors"
-              aria-label="Toggle mobile menu"
-            >
-              {isMobileMenuOpen ? (
-                <X className="w-6 h-6" strokeWidth={1.5} />
-              ) : (
-                <Menu className="w-6 h-6" strokeWidth={1.5} />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Navigation Menu */}
-        <div
-          className={`md:hidden absolute top-20 left-0 w-full bg-background border-b border-foreground/10 shadow-lg transition-all duration-300 ease-in-out overflow-hidden z-40 ${
-            isMobileMenuOpen ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"
-          }`}
+    <div style={{ background: "#0B0B0B", color: "#F4F1ED", fontFamily: "var(--font-archivo), 'Archivo', sans-serif", minHeight: "100vh" }}>
+      {/* ── Nav ──────────────────────────────── */}
+      <nav className="amantti-nav">
+        <Link
+          href="/"
+          style={{
+            fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+            fontStyle: "italic",
+            fontSize: 26,
+            color: "#F4F1ED",
+            letterSpacing: ".02em",
+            textDecoration: "none",
+          }}
         >
-          <nav className="flex flex-col px-6 py-6 space-y-6">
-            <Link
-              href="#historia"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-lg font-medium text-foreground/80 hover:text-foreground"
-            >
-              {t("nav.ourStory")}
-            </Link>
+          amantti
+        </Link>
 
-            <Link
-              href="#servicios"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-lg font-medium text-foreground/80 hover:text-foreground"
-            >
-              {t("nav.services")}
-            </Link>
-            <Link
-              href="#suscripciones"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-lg font-medium text-foreground/80 hover:text-foreground"
-            >
-              {t("nav.subscriptions")}
-            </Link>
-            <Link
-              href="#tienda"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-lg font-medium text-foreground/80 hover:text-foreground"
-            >
-              {t("nav.shop")}
-            </Link>
-            <Link
-              href={user ? "/dashboard" : "/login"}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-lg font-medium text-foreground/80 hover:text-foreground flex items-center gap-2"
-            >
-              {user ? "Dashboard" : t("nav.myAccount")}
-            </Link>
+        {/* Desktop links */}
+        <div
+          className="hidden md:flex"
+          style={{ alignItems: "center", gap: "clamp(14px, 2.6vw, 34px)" }}
+        >
+          <a href="#historia" className="amantti-nav-link">{t("nav.ourStory")}</a>
+          <a href="#servicios" className="amantti-nav-link">{t("nav.services")}</a>
+          <a href="#suscripciones" className="amantti-nav-link">{t("nav.subscriptions")}</a>
+          <a href="#tienda" className="amantti-nav-link">{t("nav.shop")}</a>
 
-            <div className="pt-4 border-t border-foreground/10 flex items-center justify-between">
-              <span className="text-sm font-medium text-foreground/60 uppercase tracking-wider">
-                Language
-              </span>
-              <button
-                suppressHydrationWarning
-                onClick={() => setLocale(locale === "es" ? "en" : "es")}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-foreground/5 hover:bg-foreground/10 transition-colors"
-                aria-label="Switch language"
-              >
-                <Globe className="w-4 h-4" strokeWidth={2} />
-                <span>{locale === "es" ? "English" : "Español"}</span>
-              </button>
-            </div>
-          </nav>
+          <Link href="#suscripciones" className="amantti-nav-pill">
+            {t("home.nav.subscribe")}
+          </Link>
+
+          {/* Cart icon */}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            style={{
+              position: "relative",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 4,
+            }}
+            aria-label={t("nav.cart")}
+          >
+            <ShoppingCart size={18} color="rgba(244,241,237,.75)" strokeWidth={1.5} />
+            {itemCount > 0 && <span className="cart-badge">{itemCount}</span>}
+          </button>
+
+          {/* Language Toggle */}
+          <button
+            suppressHydrationWarning
+            onClick={() => setLocale(locale === "en" ? "es" : "en")}
+            className="text-[#F4F1ED]/70 hover:text-[#C2A878] transition-colors text-[10px] font-bold uppercase tracking-widest px-2"
+            aria-label="Toggle language"
+          >
+            {locale === "en" ? "ES" : "EN"}
+          </button>
         </div>
-      </header>
+
+        {/* Mobile hamburger + cart */}
+        <div className="flex md:hidden" style={{ alignItems: "center", gap: 16 }}>
+          <button
+            onClick={() => setIsCartOpen(true)}
+            style={{ position: "relative", background: "none", border: "none", cursor: "pointer", padding: 4 }}
+            aria-label={t("nav.cart")}
+          >
+            <ShoppingCart size={18} color="rgba(244,241,237,.75)" strokeWidth={1.5} />
+            {itemCount > 0 && <span className="cart-badge">{itemCount}</span>}
+          </button>
+          {/* Language Toggle */}
+          <button
+            suppressHydrationWarning
+            onClick={() => setLocale(locale === "en" ? "es" : "en")}
+            className="text-[#F4F1ED]/70 hover:text-[#C2A878] transition-colors text-[10px] font-bold uppercase tracking-widest px-2"
+            aria-label="Toggle language"
+          >
+            {locale === "en" ? "ES" : "EN"}
+          </button>
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}
+            aria-label="Toggle menu"
+          >
+            {isMobileMenuOpen ? (
+              <X size={22} color="#F4F1ED" strokeWidth={1.5} />
+            ) : (
+              <Menu size={22} color="#F4F1ED" strokeWidth={1.5} />
+            )}
+          </button>
+        </div>
+      </nav>
+
+      {/* ── Mobile menu ──────────────────────── */}
+      <div className={`mobile-menu ${isMobileMenuOpen ? "open" : ""}`}>
+        <a href="#historia" className="mobile-menu-link" onClick={closeMobileMenu}>{t("nav.ourStory")}</a>
+        <a href="#servicios" className="mobile-menu-link" onClick={closeMobileMenu}>{t("nav.services")}</a>
+        <a href="#suscripciones" className="mobile-menu-link" onClick={closeMobileMenu}>{t("nav.subscriptions")}</a>
+        <a href="#tienda" className="mobile-menu-link" onClick={closeMobileMenu}>{t("nav.shop")}</a>
+        <a href="#contacto" className="mobile-menu-link" onClick={closeMobileMenu}>
+          {locale === "es" ? "Contacto" : "Contact"}
+        </a>
+        <Link
+          href={user ? "/dashboard" : "/login"}
+          className="mobile-menu-link"
+          onClick={closeMobileMenu}
+        >
+          {user ? "Dashboard" : t("nav.myAccount")}
+        </Link>
+      </div>
 
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} profile={profile} epaycoKey={process.env.NEXT_PUBLIC_EPAYCO_PUBLIC_KEY || ""} />
 
-      <main className="flex-1 pt-20">
-        {/* Hero Section */}
-        <section className="relative w-full h-[500px] flex items-center overflow-hidden">
-          {/* Background Image Carousel */}
-          <HeroCarousel />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/10 to-transparent z-10" />
+      {/* ── Hero ─────────────────────────────── */}
+      <header id="hero" style={{ position: "relative", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+        <HeroCarousel />
 
-          <div className="container mx-auto px-8 relative z-20">
-            <div className="max-w-2xl">
-              <h1 className="text-6xl md:text-8xl font-bodoni italic text-white mb-2 leading-none">
-                amantti.
-              </h1>
-              <p className="text-2xl md:text-3xl text-white/90 mb-8 font-light tracking-wide">
-                {t("hero.tagline")}
+        {/* Gradient overlay */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            background: "linear-gradient(180deg, rgba(11,11,11,.72) 0%, rgba(11,11,11,.55) 45%, rgba(11,11,11,.92) 100%)",
+          }}
+        />
+
+        {/* Film grain */}
+        <div className="film-grain" />
+
+        {/* Content */}
+        <div style={{ position: "relative", textAlign: "center", padding: "0 24px", maxWidth: 900 }}>
+          <p
+            className="hero-fade hero-fade-1"
+            style={{
+              margin: "0 0 26px",
+              fontSize: 11,
+              letterSpacing: ".34em",
+              textTransform: "uppercase",
+              color: "#C2A878",
+              fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+            }}
+          >
+            {t("home.hero.eyebrow")}
+          </p>
+
+          <h1
+            className="hero-fade hero-fade-2"
+            style={{
+              margin: 0,
+              fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+              fontStyle: "italic",
+              fontWeight: 400,
+              fontSize: "clamp(72px, 13vw, 168px)",
+              lineHeight: .95,
+              color: "#F4F1ED",
+            }}
+          >
+            amantti
+          </h1>
+
+          <p
+            className="hero-fade hero-fade-3"
+            style={{
+              margin: "30px 0 0",
+              fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+              fontSize: "clamp(20px, 2.6vw, 30px)",
+              fontWeight: 400,
+              color: "rgba(244,241,237,.9)",
+            }}
+          >
+            {t("home.hero.tagline")}
+          </p>
+
+          <div
+            className="hero-fade hero-fade-4"
+            style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 48, flexWrap: "wrap" }}
+          >
+            <Link href={getSubscribeHref("custom")} className="btn-primary">
+              {t("home.hero.ctaPrimary")}
+            </Link>
+            <a href="#contacto" className="btn-secondary">
+              {t("home.hero.ctaSecondary")}
+            </a>
+          </div>
+        </div>
+
+        {/* Scroll cue line */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 34,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 1,
+            height: 56,
+            background: "linear-gradient(rgba(194,168,120,0), #C2A878)",
+          }}
+        />
+      </header>
+
+      {/* ── Historia ─────────────────────────── */}
+      <section id="historia" className="section-dark">
+        <div className="section-inner">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(420px, 100%), 1fr))",
+              gap: 80,
+              alignItems: "center",
+            }}
+          >
+            {/* Text column */}
+            <div data-reveal="">
+              <p className="eyebrow-serif">{t("home.historia.eyebrow")}</p>
+              <h2 className="heading-section" style={{ marginBottom: 28, color: "#F4F1ED" }}>
+                {t("home.historia.title")}
+              </h2>
+              <p className="body-muted" style={{ marginBottom: 44, maxWidth: "52ch" }}>
+                {t("home.historia.body")}
               </p>
-              <Link
-                href={getSubscribeHref('custom')}
-                suppressHydrationWarning
-                className="inline-block px-8 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white text-lg font-medium rounded-md transition-all shadow-lg text-center cursor-pointer"
+
+              {/* Definition list */}
+              <div>
+                <div className="hairline-gold" style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 20, padding: "22px 0" }}>
+                  <h3 className="def-term">{t("home.historia.tradicionTerm")}</h3>
+                  <p className="def-desc">{t("home.historia.tradicionDesc")}</p>
+                </div>
+                <div className="hairline-gold" style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 20, padding: "22px 0" }}>
+                  <h3 className="def-term">{t("home.historia.pasionTerm")}</h3>
+                  <p className="def-desc">{t("home.historia.pasionDesc")}</p>
+                </div>
+                <div className="hairline-gold hairline-gold-bottom" style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 20, padding: "22px 0" }}>
+                  <h3 className="def-term">{t("home.historia.sostenibilidadTerm")}</h3>
+                  <p className="def-desc">{t("home.historia.sostenibilidadDesc")}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Image column */}
+            <div data-reveal="" style={{ position: "relative" }}>
+              <div className="offset-frame" />
+              <div
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  aspectRatio: "4/5",
+                  borderRadius: 2,
+                  overflow: "hidden",
+                }}
               >
-                {t("hero.cta")}
-              </Link>
-            </div>
-          </div>
-        </section>
-
-
-
-        {/* Our Story Section */}
-        <section className="py-24 bg-background overflow-hidden" id="historia">
-          <div className="container mx-auto px-6 max-w-7xl">
-            <div className="flex flex-col lg:flex-row items-center gap-16">
-              {/* Text Content */}
-              <div className="w-full lg:w-1/2">
-                <div className="max-w-xl">
-                  <span className="text-[#C59F59] font-bold text-sm tracking-widest uppercase mb-4 block">
-                    {locale === "es" ? "Nuestra Historia" : "Our Story"}
-                  </span>
-                  <h2 suppressHydrationWarning className="text-4xl md:text-5xl font-serif text-foreground mb-8 leading-tight">
-                    {t("story.title")}
-                  </h2>
-                  <div className="space-y-6">
-                    <p suppressHydrationWarning className="text-foreground/70 text-lg leading-relaxed">
-                      {t("story.content")}
-                    </p>
-                  </div>
-
-                  {/* Values Grid */}
-                  <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-8">
-                    <div className="space-y-3">
-                      <div className="w-10 h-10 rounded-full bg-[#C59F59]/10 flex items-center justify-center">
-                        <Globe className="w-5 h-5 text-[#C59F59]" strokeWidth={1.5} />
-                      </div>
-                      <h4 suppressHydrationWarning className="text-sm font-bold uppercase tracking-wider text-foreground">
-                        {t("story.traditionTitle")}
-                      </h4>
-                      <p suppressHydrationWarning className="text-foreground/60 text-xs leading-relaxed">
-                        {t("story.traditionDesc")}
-                      </p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="w-10 h-10 rounded-full bg-[#C59F59]/10 flex items-center justify-center">
-                        <Coffee className="w-5 h-5 text-[#C59F59]" strokeWidth={1.5} />
-                      </div>
-                      <h4 suppressHydrationWarning className="text-sm font-bold uppercase tracking-wider text-foreground">
-                        {t("story.passionTitle")}
-                      </h4>
-                      <p suppressHydrationWarning className="text-foreground/60 text-xs leading-relaxed">
-                        {t("story.passionDesc")}
-                      </p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="w-10 h-10 rounded-full bg-[#C59F59]/10 flex items-center justify-center">
-                        <Leaf className="w-5 h-5 text-[#C59F59]" strokeWidth={1.5} />
-                      </div>
-                      <h4 suppressHydrationWarning className="text-sm font-bold uppercase tracking-wider text-foreground">
-                        {t("story.sustainabilityTitle")}
-                      </h4>
-                      <p suppressHydrationWarning className="text-foreground/60 text-xs leading-relaxed">
-                        {t("story.sustainabilityDesc")}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Image Content */}
-              <div className="w-full lg:w-1/2">
-                <div className="relative aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl">
-                  <Image
-                    src={locale === "es" ? "/images/AmanttiRootsESP.png" : "/images/AmanttiRoots.png"}
-                    alt={t("nav.ourStory")}
-                    fill
-                    className="object-cover transition-transform duration-700 hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                </div>
+                <Image
+                  src="/images/AmanttiRootsESP.png"
+                  alt={t("home.historia.eyebrow")}
+                  fill
+                  className="object-cover photo-treatment"
+                  sizes="(max-width: 900px) 100vw, 50vw"
+                />
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Services Section */}
-        <section className="py-24 bg-[#1a1a1a] text-white relative overflow-hidden" id="servicios">
-          {/* Subtle background pattern */}
-          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)", backgroundSize: "40px 40px" }} />
+      {/* ── Servicios (Cream) ────────────────── */}
+      <section id="servicios" className="section-cream">
+        <div className="section-inner">
+          <div data-reveal="" style={{ maxWidth: 640, marginBottom: 70 }}>
+            <p className="eyebrow-serif-dark">{t("home.servicios.eyebrow")}</p>
+            <h2 className="heading-section" style={{ color: "#0B0B0B" }}>
+              {t("home.servicios.title")}
+            </h2>
+            <p className="body-muted-dark">
+              {t("home.servicios.intro")}
+            </p>
+          </div>
 
-          <div className="container mx-auto px-6 max-w-6xl relative z-10">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-serif mb-6">
-                {t("services.title")}
-              </h2>
-              <p className="text-white/70 text-lg max-w-2xl mx-auto leading-relaxed">
-                {t("services.subtitle")}
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-8">
-              {/* Barismo Training */}
-              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
-                <div className="relative w-full h-48 overflow-hidden">
-                  <Image
-                    src="/images/Guy_Barism.png"
-                    alt="Barismo Training"
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-transparent" />
-                  <div className="absolute bottom-3 right-3 w-10 h-10 rounded-lg bg-[#C59F59]/90 flex items-center justify-center">
-                    <Coffee className="w-5 h-5 text-white" strokeWidth={1.5} />
-                  </div>
-                </div>
-                <div className="p-8 pt-5">
-                  <h3 className="text-xl font-semibold mb-3">
-                    {t("services.barismoTitle")}
-                  </h3>
-                  <p className="text-white/60 leading-relaxed text-sm">
-                    {t("services.barismoDesc")}
-                  </p>
-                </div>
-              </div>
-
-              {/* Equipment Maintenance */}
-              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
-                <div className="relative w-full h-48 overflow-hidden">
-                  <Image
-                    src="/images/Guy_Repairing.png"
-                    alt="Equipment Maintenance"
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-transparent" />
-                  <div className="absolute bottom-3 right-3 w-10 h-10 rounded-lg bg-[#C59F59]/90 flex items-center justify-center">
-                    <Wrench className="w-5 h-5 text-white" strokeWidth={1.5} />
-                  </div>
-                </div>
-                <div className="p-8 pt-5">
-                  <h3 className="text-xl font-semibold mb-3">
-                    {t("services.maintenanceTitle")}
-                  </h3>
-                  <p className="text-white/60 leading-relaxed text-sm">
-                    {t("services.maintenanceDesc")}
-                  </p>
-                </div>
-              </div>
-
-              {/* Ongoing Support */}
-              <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:bg-white/10 hover:border-[#C59F59]/40 transition-all duration-300">
-                <div className="relative w-full h-48 overflow-hidden">
-                  <Image
-                    src="/images/Guy_Explains.png"
-                    alt="Ongoing Support"
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-transparent" />
-                  <div className="absolute bottom-3 right-3 w-10 h-10 rounded-lg bg-[#C59F59]/90 flex items-center justify-center">
-                    <Headset className="w-5 h-5 text-white" strokeWidth={1.5} />
-                  </div>
-                </div>
-                <div className="p-8 pt-5">
-                  <h3 className="text-xl font-semibold mb-3">
-                    {t("services.supportTitle")}
-                  </h3>
-                  <p className="text-white/60 leading-relaxed text-sm">
-                    {t("services.supportDesc")}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-center mt-12">
-              <a
-                href="#contacto"
-                className="inline-block px-8 py-3 bg-transparent border-2 border-[#C59F59] text-[#C59F59] hover:bg-[#C59F59] hover:text-white text-lg font-medium rounded-md transition-all"
+          {/* Service cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 36 }}>
+            {/* Barismo */}
+            <div data-reveal="" style={{ display: "flex", flexDirection: "column" }}>
+              <div
+                style={{
+                  width: "100%",
+                  aspectRatio: "4/3",
+                  borderRadius: 2,
+                  overflow: "hidden",
+                  position: "relative",
+                }}
               >
-                {t("services.cta")}
-              </a>
-            </div>
-          </div>
-        </section>
-
-        {/* Subscription Plans Section */}
-        <section className="py-24 bg-background relative overflow-hidden" id="suscripciones">
-          <div className="container mx-auto px-6 max-w-5xl relative z-10">
-            <div className="text-center mb-12">
-              <span className="text-[#C59F59] font-bold text-xs tracking-[0.25em] uppercase mb-3 block">El Ritual Del Café Recién Tostado</span>
-              <h2 suppressHydrationWarning className="text-4xl md:text-6xl font-serif text-foreground mb-6">
-                Crea Tu Suscripción
-              </h2>
-              <div className="w-24 h-1 bg-[#C59F59] mx-auto mb-6"></div>
-              <p suppressHydrationWarning className="text-foreground/60 text-lg max-w-2xl mx-auto font-light leading-relaxed">
-                Arma tu combinación libre de café. Selecciona las variedades que deseas recibir, la presentación, molienda y frecuencia. Envíos en el Área Metropolitana con <strong className="text-[#C59F59] font-semibold">tarifa según radio desde $10.000 COP</strong>.
+                <Image
+                  src="/images/Guy_Barism.png"
+                  alt={t("home.servicios.barismoTitle")}
+                  fill
+                  className="object-cover photo-treatment"
+                  sizes="(max-width: 900px) 100vw, 33vw"
+                />
+              </div>
+              <h3
+                style={{
+                  margin: "26px 0 0",
+                  fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                  fontSize: 23,
+                  color: "#0B0B0B",
+                }}
+              >
+                {t("home.servicios.barismoTitle")}
+              </h3>
+              <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.75, color: "rgba(11,11,11,.6)", fontFamily: "var(--font-archivo), 'Archivo', sans-serif" }}>
+                {t("home.servicios.barismoDesc")}
               </p>
             </div>
 
-            {/* Feature Card */}
-            <div className="bg-white border border-[#C59F59]/30 rounded-[2.5rem] p-8 md:p-14 shadow-2xl relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-12">
-              <div className="absolute top-0 right-0 p-8 opacity-5">
-                <SlidersHorizontal className="w-64 h-64 rotate-12 text-[#C59F59]" />
+            {/* Equipos */}
+            <div data-reveal="" style={{ display: "flex", flexDirection: "column" }}>
+              <div
+                style={{
+                  width: "100%",
+                  aspectRatio: "4/3",
+                  borderRadius: 2,
+                  overflow: "hidden",
+                  position: "relative",
+                }}
+              >
+                <Image
+                  src="/images/Guy_Repairing.png"
+                  alt={t("home.servicios.equiposTitle")}
+                  fill
+                  className="object-cover photo-treatment"
+                  sizes="(max-width: 900px) 100vw, 33vw"
+                />
               </div>
-
-              {/* Visual Showcase */}
-              <div className="relative w-full lg:w-1/2 h-64 sm:h-80 flex items-center justify-center">
-                <div className="relative w-72 h-full">
-                  <Image
-                    src="/images/Front_Paper_Traditional_Coffee_Bag.png"
-                    alt="Amantti Traditional"
-                    fill
-                    className="object-contain drop-shadow-xl -rotate-[15deg] -translate-x-14 translate-y-2 opacity-90"
-                  />
-                  <Image
-                    src="/images/Front_White_Honey_Coffee_Bag.png"
-                    alt="Amantti Honey"
-                    fill
-                    className="object-contain drop-shadow-xl rotate-[15deg] translate-x-14 translate-y-2 opacity-90"
-                  />
-                  <Image
-                    src="/images/Amantti_Coffee_Bag.png"
-                    alt="Amantti Microlot"
-                    fill
-                    className="object-contain drop-shadow-2xl scale-110 z-10"
-                  />
-                </div>
-              </div>
-
-              {/* Content & Benefits */}
-              <div className="w-full lg:w-1/2 space-y-6 text-left relative z-10">
-                <div className="space-y-4">
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 rounded-xl bg-[#C59F59]/10 text-[#C59F59] flex items-center justify-center shrink-0 mt-0.5">
-                      <Coffee className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="font-serif font-semibold text-foreground text-lg">Libertad Total de Selección</h4>
-                      <p className="text-xs text-foreground/60 leading-relaxed">Combina bolsas de Selección Premium, Honey Process o Microlote del Mes en las cantidades que desees.</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 rounded-xl bg-[#C59F59]/10 text-[#C59F59] flex items-center justify-center shrink-0 mt-0.5">
-                      <Truck className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="font-serif font-semibold text-foreground text-lg">Envío por Radio Metropolitano (Desde $10.000 COP)</h4>
-                      <p className="text-xs text-foreground/60 leading-relaxed">Calculamos la tarifa según tu municipio en el Área Metropolitana (Radio 0–10km $10k, 10–20km $14k, 20–35km $18k).</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 rounded-xl bg-[#C59F59]/10 text-[#C59F59] flex items-center justify-center shrink-0 mt-0.5">
-                      <Calendar className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="font-serif font-semibold text-foreground text-lg">Flexibilidad y Control</h4>
-                      <p className="text-xs text-foreground/60 leading-relaxed">Ajusta tu frecuencia (semanal, quincenal o mensual), pausa o cancela en cualquier momento desde tu panel.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-6 border-t border-foreground/5">
-                  <Link 
-                    href={getSubscribeHref('custom')}
-                    suppressHydrationWarning
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 bg-foreground text-background hover:bg-[#C59F59] hover:text-white text-sm font-bold uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-xl hover:shadow-2xl hover:scale-105 text-center"
-                  >
-                    <SlidersHorizontal className="w-4 h-4" />
-                    Personaliza tu Suscripción
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Decorative elements */}
-          <div className="absolute top-1/2 left-0 w-64 h-64 bg-[#C59F59]/5 rounded-full blur-3xl -translate-x-1/2"></div>
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-[#C59F59]/5 rounded-full blur-3xl translate-x-1/4 translate-y-1/4"></div>
-        </section>
-
-        {/* Individual Products Section */}
-        <section className="py-24 bg-[#fdfbf7] relative" id="tienda">
-          <div className="container mx-auto px-6 max-w-7xl relative z-10">
-            <div className="text-center mb-16">
-              <h2 suppressHydrationWarning className="text-4xl md:text-5xl font-serif text-foreground mb-6">
-                {t("products.title")}
-              </h2>
-              <p suppressHydrationWarning className="text-foreground/60 text-lg max-w-2xl mx-auto">
-                {t("products.subtitle")}
+              <h3
+                style={{
+                  margin: "26px 0 0",
+                  fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                  fontSize: 23,
+                  color: "#0B0B0B",
+                }}
+              >
+                {t("home.servicios.equiposTitle")}
+              </h3>
+              <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.75, color: "rgba(11,11,11,.6)", fontFamily: "var(--font-archivo), 'Archivo', sans-serif" }}>
+                {t("home.servicios.equiposDesc")}
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <ProductCard
-                id="firma"
-                titleKey="products.firmaTitle"
-                descKey="products.firmaDesc"
-                profileKey="products.firmaProfile"
-                basePrice={35000}
-                imageSrc="/images/Front_Paper_Traditional_Coffee_Bag.png"
-                t={t}
-              />
-              <ProductCard
-                id="honey"
-                titleKey="products.honeyTitle"
-                descKey="products.honeyDesc"
-                profileKey="products.honeyProfile"
-                basePrice={48000}
-                imageSrc="/images/Front_White_Honey_Coffee_Bag.png"
-                t={t}
-              />
-              <ProductCard
-                id="microlot"
-                titleKey="products.microlotTitle"
-                descKey="products.microlotDesc"
-                profileKey="products.microlotProfile"
-                basePrice={65000}
-                imageSrc="/images/Amantti_Coffee_Bag.png"
-                t={t}
-              />
-            </div>
-
-            {/* Quick Benefits */}
-            <div className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8 py-10 border-t border-foreground/5">
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
-                  <Truck className="w-6 h-6 text-[#C59F59]" />
-                </div>
-                <span className="text-xs font-bold uppercase tracking-wider text-foreground/40">Envío Nacional</span>
+            {/* Soporte */}
+            <div data-reveal="" style={{ display: "flex", flexDirection: "column" }}>
+              <div
+                style={{
+                  width: "100%",
+                  aspectRatio: "4/3",
+                  borderRadius: 2,
+                  overflow: "hidden",
+                  position: "relative",
+                }}
+              >
+                <Image
+                  src="/images/Guy_Explains.png"
+                  alt={t("home.servicios.soporteTitle")}
+                  fill
+                  className="object-cover photo-treatment"
+                  sizes="(max-width: 900px) 100vw, 33vw"
+                />
               </div>
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
-                  <Coffee className="w-6 h-6 text-[#C59F59]" />
-                </div>
-                <span className="text-xs font-bold uppercase tracking-wider text-foreground/40">Recién Tostado</span>
-              </div>
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
-                  <Check className="w-6 h-6 text-[#C59F59]" />
-                </div>
-                <span className="text-xs font-bold uppercase tracking-wider text-foreground/40">Calidad Premium</span>
-              </div>
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
-                  <Leaf className="w-6 h-6 text-[#C59F59]" />
-                </div>
-                <span className="text-xs font-bold uppercase tracking-wider text-foreground/40">Origen Único</span>
-              </div>
+              <h3
+                style={{
+                  margin: "26px 0 0",
+                  fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+                  fontStyle: "italic",
+                  fontWeight: 400,
+                  fontSize: 23,
+                  color: "#0B0B0B",
+                }}
+              >
+                {t("home.servicios.soporteTitle")}
+              </h3>
+              <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.75, color: "rgba(11,11,11,.6)", fontFamily: "var(--font-archivo), 'Archivo', sans-serif" }}>
+                {t("home.servicios.soporteDesc")}
+              </p>
             </div>
           </div>
-        </section>
 
-        {/* Contact Form Section - Split Layout */}
-        <section className="bg-[#f7f4ef] w-full" id="contacto">
-          <div className="flex flex-col lg:flex-row w-full min-h-[800px]">
-            {/* Left Side - Image */}
-            <div className="relative w-full lg:w-1/2 min-h-[400px] lg:min-h-full">
+          <div data-reveal="" style={{ marginTop: 60 }}>
+            <a href="#contacto" className="btn-outline-dark">
+              {t("home.servicios.cta")}
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Suscripciones ────────────────────── */}
+      <section id="suscripciones" className="section-dark" style={{ overflow: "hidden" }}>
+        <div className="section-inner">
+          {/* Header */}
+          <div data-reveal="" style={{ textAlign: "center", maxWidth: 680, margin: "0 auto 64px" }}>
+            <p className="eyebrow-serif">{t("home.suscripciones.eyebrow")}</p>
+            <h2 className="heading-section" style={{ color: "#F4F1ED" }}>
+              {t("home.suscripciones.title")}
+            </h2>
+            <p className="body-muted">
+              {t("home.suscripciones.intro")}
+            </p>
+          </div>
+
+          {/* Bag trio */}
+          <div
+            data-reveal=""
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "flex-end",
+              marginBottom: 70,
+            }}
+          >
+            <div style={{ position: "relative", width: 200, height: 280 }}>
               <Image
-                src="/images/Chemex&Cup.png"
-                alt="Amantti Coffee Experience"
+                src="/images/Front_Paper_Traditional_Coffee_Bag.png"
+                alt={t("home.tienda.tradName")}
                 fill
-                className="object-cover"
-                priority
+                className="object-contain"
+                style={{
+                  transform: "rotate(-6deg) translateX(24px)",
+                  filter: "drop-shadow(0 30px 40px rgba(0,0,0,.5))",
+                }}
               />
             </div>
-
-            {/* Right Side - Form */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-16 lg:p-24">
-              <div className="w-full max-w-xl">
-                <div className="mb-12">
-                  <h2 className="text-4xl md:text-5xl font-serif text-foreground mb-4">
-                    {t("contact.title")}
-                  </h2>
-                  <p className="text-foreground/60 text-lg leading-relaxed">
-                    {t("contact.subtitle")}
-                  </p>
-                </div>
-
-                <form
-                  onSubmit={(e) => e.preventDefault()}
-                  className="space-y-6"
-                >
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground/80 mb-2">
-                        {t("contact.name")}
-                      </label>
-                      <input
-                        type="text"
-                        suppressHydrationWarning
-                        className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
-                        placeholder={t("contact.name")}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground/80 mb-2">
-                        {t("contact.email")}
-                      </label>
-                      <input
-                        type="email"
-                        suppressHydrationWarning
-                        className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
-                        placeholder={t("contact.email")}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground/80 mb-2">
-                        {t("contact.business")}
-                      </label>
-                      <input
-                        type="text"
-                        suppressHydrationWarning
-                        className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm"
-                        placeholder={t("contact.business")}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground/80 mb-2">
-                        {t("contact.service")}
-                      </label>
-                      <select
-                        suppressHydrationWarning
-                        className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm text-foreground/80"
-                        defaultValue=""
-                      >
-                        <option value="" disabled>
-                          {t("contact.serviceDefault")}
-                        </option>
-                        <option value="barismo">{t("contact.serviceBarismo")}</option>
-                        <option value="maintenance">{t("contact.serviceMaintenance")}</option>
-                        <option value="support">{t("contact.serviceSupport")}</option>
-                        <option value="all">{t("contact.serviceAll")}</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-foreground/80 mb-2">
-                      {t("contact.message")}
-                    </label>
-                    <textarea
-                      rows={4}
-                      suppressHydrationWarning
-                      className="w-full px-4 py-3 rounded-xl border border-foreground/15 bg-white focus:outline-none focus:border-[#C59F59] focus:ring-1 focus:ring-[#C59F59] transition-colors text-sm resize-none"
-                      placeholder={t("contact.messagePlaceholder")}
-                    />
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
-                    <button
-                      type="submit"
-                      suppressHydrationWarning
-                      className="w-full sm:w-auto px-8 py-4 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-medium rounded-xl transition-all shadow-md hover:shadow-lg text-lg flex items-center justify-center gap-2"
-                    >
-                      <Send className="w-5 h-5" strokeWidth={2} />
-                      {t("contact.submit")}
-                    </button>
-
-                    <a
-                      href="https://wa.me/573332843078"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full sm:w-auto px-6 py-4 bg-[#25D366] hover:bg-[#1fb855] text-white font-medium rounded-xl transition-all shadow-md hover:shadow-lg text-lg flex items-center justify-center gap-2"
-                    >
-                      <MessageCircle className="w-5 h-5" strokeWidth={2} />
-                      {t("contact.whatsapp")}
-                    </a>
-                  </div>
-                </form>
-              </div>
+            <div style={{ position: "relative", width: 250, height: 340, zIndex: 2 }}>
+              <Image
+                src="/images/Amantti_Coffee_Bag.png"
+                alt={t("home.tienda.microName")}
+                fill
+                className="object-contain"
+                style={{
+                  filter: "drop-shadow(0 30px 40px rgba(0,0,0,.6))",
+                }}
+              />
+            </div>
+            <div style={{ position: "relative", width: 200, height: 280 }}>
+              <Image
+                src="/images/Front_White_Honey_Coffee_Bag.png"
+                alt={t("home.tienda.honeyName")}
+                fill
+                className="object-contain"
+                style={{
+                  transform: "rotate(6deg) translateX(-24px)",
+                  filter: "drop-shadow(0 30px 40px rgba(0,0,0,.5))",
+                }}
+              />
             </div>
           </div>
-        </section>
-      </main>
 
-      {/* Floating WhatsApp Button */}
-      <a
-        href="https://wa.me/573332843078"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] hover:bg-[#1fb855] rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all hover:scale-110"
-        aria-label="WhatsApp"
-      >
-        <MessageCircle className="w-7 h-7 text-white" strokeWidth={2} />
-      </a>
+          {/* Feature cells */}
+          <div className="feature-grid">
+            <div className="feature-cell" data-reveal="">
+              <p
+                style={{
+                  margin: "0 0 12px",
+                  fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+                  fontStyle: "italic",
+                  fontSize: 18,
+                  color: "#C2A878",
+                }}
+              >
+                {t("home.suscripciones.libertadTitle")}
+              </p>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  color: "rgba(244,241,237,.6)",
+                  fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+                }}
+              >
+                {t("home.suscripciones.libertadDesc")}
+              </p>
+            </div>
+            <div className="feature-cell" data-reveal="">
+              <p
+                style={{
+                  margin: "0 0 12px",
+                  fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+                  fontStyle: "italic",
+                  fontSize: 18,
+                  color: "#C2A878",
+                }}
+              >
+                {t("home.suscripciones.envioTitle")}
+              </p>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  color: "rgba(244,241,237,.6)",
+                  fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+                }}
+              >
+                {t("home.suscripciones.envioDesc")}
+              </p>
+            </div>
+            <div className="feature-cell" data-reveal="">
+              <p
+                style={{
+                  margin: "0 0 12px",
+                  fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+                  fontStyle: "italic",
+                  fontSize: 18,
+                  color: "#C2A878",
+                }}
+              >
+                {t("home.suscripciones.sinAtadurasTitle")}
+              </p>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  color: "rgba(244,241,237,.6)",
+                  fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+                }}
+              >
+                {t("home.suscripciones.sinAtadurasDesc")}
+              </p>
+            </div>
+          </div>
 
-      {/* Footer */}
-      <footer className="bg-background py-8 border-t border-foreground/10 relative z-20">
-        <div className="container mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex gap-4">
-            <Link
-              href="https://www.instagram.com/cafeamantti?igsh=aHdoaGZzd3NlMnF1"
+          {/* CTA */}
+          <div data-reveal="" style={{ textAlign: "center", marginTop: 56 }}>
+            <Link href={getSubscribeHref("custom")} className="btn-primary" style={{ padding: "16px 38px" }}>
+              {t("home.suscripciones.cta")}
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Tienda ───────────────────────────── */}
+      <section id="tienda" style={{ padding: "0 clamp(20px, 5vw, 48px) 140px", background: "#0B0B0B", color: "#F4F1ED" }}>
+        <div className="section-inner">
+          {/* Header row */}
+          <div
+            data-reveal=""
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 24,
+              flexWrap: "wrap",
+              borderTop: "1px solid rgba(194,168,120,.25)",
+              paddingTop: 56,
+              marginBottom: 64,
+            }}
+          >
+            <h2 className="heading-section" style={{ margin: 0, color: "#F4F1ED" }}>
+              {t("home.tienda.title")}
+            </h2>
+            <p
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+                fontStyle: "italic",
+                fontSize: 19,
+                color: "#C2A878",
+              }}
+            >
+              {t("home.tienda.subtitle")}
+            </p>
+          </div>
+
+          {/* Product cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 40 }}>
+            {PRODUCTS.map((p) => (
+              <ProductCard key={p.key} product={p} t={t} />
+            ))}
+          </div>
+
+          {/* Meta labels */}
+          <div
+            data-reveal=""
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 56,
+              flexWrap: "wrap",
+              marginTop: 80,
+            }}
+          >
+            {(["metaEnvio", "metaTostado", "metaOrigen", "metaCalidad"] as const).map((key) => (
+              <p
+                key={key}
+                style={{
+                  margin: 0,
+                  fontSize: 11,
+                  letterSpacing: ".24em",
+                  textTransform: "uppercase",
+                  color: "rgba(244,241,237,.45)",
+                  fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+                }}
+              >
+                {t(`home.tienda.${key}`)}
+              </p>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Contacto (Cream) ─────────────────── */}
+      <section id="contacto" className="section-cream">
+        <div
+          className="section-inner-narrow"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(380px, 100%), 1fr))",
+            gap: 80,
+            alignItems: "start",
+          }}
+        >
+          {/* Info column */}
+          <div data-reveal="">
+            <p className="eyebrow-serif-dark">{t("home.contacto.eyebrow")}</p>
+            <h2 className="heading-section" style={{ color: "#0B0B0B" }}>
+              {t("home.contacto.title")}
+            </h2>
+            <p className="body-muted-dark" style={{ marginBottom: 36, maxWidth: "44ch" }}>
+              {t("home.contacto.body")}
+            </p>
+            <a
+              href="https://wa.me/573332843078"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-8 h-8 rounded-full border border-foreground/30 flex items-center justify-center hover:bg-foreground/5 transition-colors text-foreground/70 hover:text-foreground"
+              style={{
+                fontSize: 11,
+                letterSpacing: ".22em",
+                textTransform: "uppercase",
+                color: "#0B0B0B",
+                borderBottom: "1px solid #A98C5D",
+                paddingBottom: 6,
+                textDecoration: "none",
+                fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+                transition: "color .3s ease",
+              }}
             >
-              <Instagram className="w-4 h-4" />
-            </Link>
+              {t("home.contacto.whatsappLink")}
+            </a>
+            <p style={{ margin: "40px 0 0", fontSize: 13, color: "rgba(11,11,11,.45)" }}>
+              <a
+                href="https://www.instagram.com/cafeamantti"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "rgba(11,11,11,.6)", textDecoration: "none" }}
+              >
+                @cafeamantti
+              </a>
+            </p>
           </div>
 
-          <div className="text-sm font-medium text-foreground/60 hover:text-foreground transition-colors">
-            <Link href="https://www.instagram.com/cafeamantti?igsh=aHdoaGZzd3NlMnF1" target="_blank" rel="noopener noreferrer">
-              @cafeamantti
-            </Link>
+          {/* Form column */}
+          <form data-reveal="" style={{ display: "grid", gap: 14 }} onSubmit={(e) => e.preventDefault()}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <input
+                suppressHydrationWarning
+                type="text"
+                placeholder={t("home.contacto.nombrePlaceholder")}
+                className="contact-input"
+              />
+              <input
+                suppressHydrationWarning
+                type="email"
+                placeholder={t("home.contacto.correoPlaceholder")}
+                className="contact-input"
+              />
+            </div>
+            <input
+              suppressHydrationWarning
+              type="text"
+              placeholder={t("home.contacto.negocioPlaceholder")}
+              className="contact-input"
+            />
+            <select suppressHydrationWarning className="contact-select" defaultValue="">
+              <option value="" disabled>{t("home.contacto.servicioDefault")}</option>
+              <option value="barismo">{t("home.contacto.servicioBarismo")}</option>
+              <option value="equipos">{t("home.contacto.servicioEquipos")}</option>
+              <option value="soporte">{t("home.contacto.servicioSoporte")}</option>
+              <option value="todos">{t("home.contacto.servicioTodos")}</option>
+            </select>
+            <textarea
+              suppressHydrationWarning
+              placeholder={t("home.contacto.mensajePlaceholder")}
+              rows={5}
+              className="contact-input"
+              style={{ resize: "vertical" }}
+            />
+            <button suppressHydrationWarning type="submit" className="contact-submit">
+              {t("home.contacto.submitBtn")}
+            </button>
+          </form>
+        </div>
+      </section>
+
+      {/* ── Footer ───────────────────────────── */}
+      <footer
+        style={{
+          padding: "72px clamp(20px, 5vw, 48px) 48px",
+          borderTop: "1px solid rgba(194,168,120,.2)",
+          background: "#0B0B0B",
+        }}
+      >
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 18, textAlign: "center" }}>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+              fontStyle: "italic",
+              fontSize: 30,
+              color: "#F4F1ED",
+            }}
+          >
+            amantti
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+              fontSize: 15,
+              color: "#C2A878",
+            }}
+          >
+            {t("home.footer.tagline")}
+          </p>
+          <div style={{ display: "flex", gap: 28, marginTop: 12 }}>
+            <a
+              href="https://www.instagram.com/cafeamantti"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="amantti-nav-link"
+              style={{ color: "rgba(244,241,237,.5)" }}
+            >
+              instagram
+            </a>
+            <a
+              href="https://wa.me/573332843078"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="amantti-nav-link"
+              style={{ color: "rgba(244,241,237,.5)" }}
+            >
+              whatsapp
+            </a>
           </div>
+          <p style={{ margin: "20px 0 0", fontSize: 11, color: "rgba(244,241,237,.3)", fontFamily: "var(--font-archivo), 'Archivo', sans-serif" }}>
+            {t("home.footer.legal")}
+          </p>
         </div>
       </footer>
     </div>

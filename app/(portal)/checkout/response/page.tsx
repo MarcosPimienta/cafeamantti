@@ -116,8 +116,8 @@ function CheckoutResponseContent() {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-16 px-4 bg-[#fdfbf7]">
-      <div className="max-w-lg w-full bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-foreground/5 text-center transition-all duration-300">
+    <div className="min-h-[85vh] flex items-center justify-center py-16 px-4 bg-[#0B0B0B]">
+      <div className="max-w-lg w-full bg-[#0B0B0B] p-8 md:p-10 rounded-sm shadow-2xl border border-[#C2A878]/20 text-center transition-all duration-300">
         
         {/* Banner indicator when using Mock Mode */}
         {searchParams.get("mock_status") && (
@@ -129,9 +129,9 @@ function CheckoutResponseContent() {
 
         {status === "loading" && (
           <div className="flex flex-col items-center gap-4 py-8">
-            <Loader2 className="w-12 h-12 text-[#C59F59] animate-spin" />
-            <h1 className="text-2xl font-serif text-foreground">Verificando tu transacción...</h1>
-            <p className="text-sm text-foreground/40">Por favor espera un momento mientras conectamos con la pasarela.</p>
+            <Loader2 className="w-12 h-12 text-[#C2A878] animate-spin" />
+            <h1 className="text-2xl font-serif text-[#F4F1ED]">Verificando tu transacción...</h1>
+            <p className="text-sm text-white/40">Por favor espera un momento mientras conectamos con la pasarela.</p>
           </div>
         )}
 
@@ -142,23 +142,23 @@ function CheckoutResponseContent() {
             </div>
 
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#C2A878] bg-[#C2A878]/10 px-3 py-1 rounded-sm border border-[#C2A878]/20">
                 {isSubscription ? "¡Suscripción Activada!" : "¡Pago Exitoso!"}
               </span>
-              <h1 className="text-3xl font-serif text-foreground mt-3 mb-2">
+              <h1 className="text-3xl font-serif text-[#F4F1ED] mt-3 mb-2">
                 {isSubscription ? "¡Bienvenido al Club Café Amantti!" : "¡Gracias por tu compra!"}
               </h1>
-              <p className="text-xs text-foreground/60 leading-relaxed max-w-sm mx-auto">
+              <p className="text-xs text-white/60 leading-relaxed max-w-sm mx-auto">
                 Tu transacción <strong>#{txData?.x_id_invoice || "INV-001"}</strong> ha sido confirmada satisfactoriamente.
               </p>
             </div>
 
             {/* Subscription Detail Card */}
             {isSubscription && (
-              <div className="w-full bg-[#fdfbf7] p-6 rounded-2xl border border-foreground/5 text-left space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-foreground/5">
-                  <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                    <Coffee className="w-4 h-4 text-[#C59F59]" />
+              <div className="w-full bg-[#0B0B0B] p-6 rounded-sm border border-[#C2A878]/20 text-left space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-[#C2A878]/20">
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#F4F1ED]">
+                    <Coffee className="w-4 h-4 text-[#C2A878]" />
                     <span>
                       {(() => {
                         const raw = txData?.plan_name || "";
@@ -171,24 +171,24 @@ function CheckoutResponseContent() {
                       })()}
                     </span>
                   </div>
-                  <span className="text-xs font-serif text-[#C59F59] font-bold">
+                  <span className="text-xs font-serif text-[#C2A878] font-bold">
                     {formatCurrency(txData?.x_amount || 35000)} / envío
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-foreground/40 block">Frecuencia</span>
-                    <span className="font-medium text-foreground">{txData?.frequency_label || "Quincenal"}</span>
+                    <span className="text-[10px] uppercase font-bold text-white/40 block">Frecuencia</span>
+                    <span className="font-medium text-[#F4F1ED]">{txData?.frequency_label || "Quincenal"}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-foreground/40 block">Presentación</span>
-                    <span className="font-medium text-foreground">{txData?.weight || "500g"} • {txData?.grind || "Grano"}</span>
+                    <span className="text-[10px] uppercase font-bold text-white/40 block">Presentación</span>
+                    <span className="font-medium text-[#F4F1ED]">{txData?.weight || "500g"} • {txData?.grind || "Grano"}</span>
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-foreground/5 flex items-center gap-2 text-xs text-foreground/70">
-                  <Calendar className="w-4 h-4 text-[#C59F59] shrink-0" />
+                <div className="pt-3 border-t border-[#C2A878]/20 flex items-center gap-2 text-xs text-white/70">
+                  <Calendar className="w-4 h-4 text-[#C2A878] shrink-0" />
                   <span>Primer envío estimado: <strong>{txData?.next_delivery || "Próximos 3 días hábiles"}</strong></span>
                 </div>
               </div>
@@ -197,7 +197,7 @@ function CheckoutResponseContent() {
             <div className="w-full space-y-3 pt-2">
               <Link 
                 href="/dashboard?tab=overview"
-                className="w-full py-4 bg-foreground text-background text-xs font-bold uppercase tracking-[0.2em] rounded-2xl hover:bg-[#C59F59] hover:text-white transition-all shadow-lg flex items-center justify-center gap-3 group"
+                className="w-full py-4 bg-[#C2A878] text-[#0B0B0B] text-xs font-bold uppercase tracking-[0.2em] rounded-sm hover:bg-[#F4F1ED] transition-all flex items-center justify-center gap-3 group"
               >
                 Ir a Mi Panel de Suscripciones
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
@@ -205,9 +205,9 @@ function CheckoutResponseContent() {
               
               <Link
                 href="/dashboard?tab=orders"
-                className="w-full py-3 bg-transparent text-foreground/60 text-xs font-medium hover:text-foreground transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3 bg-transparent text-white/60 text-xs font-medium hover:text-[#F4F1ED] transition-colors flex items-center justify-center gap-2"
               >
-                <Package className="w-4 h-4 text-foreground/40" />
+                <Package className="w-4 h-4 text-white/40" />
                 Ver historial de pedidos
               </Link>
             </div>
@@ -220,16 +220,16 @@ function CheckoutResponseContent() {
               <Loader2 className="w-10 h-10 text-yellow-500 animate-spin" />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-700 bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded-sm border border-yellow-500/20">
                 En Validación Bancaria
               </span>
-              <h1 className="text-2xl font-serif text-foreground mt-3 mb-2">Pago Pendiente de Aprobación</h1>
-              <p className="text-xs text-foreground/60 leading-relaxed max-w-sm mx-auto">
+              <h1 className="text-2xl font-serif text-[#F4F1ED] mt-3 mb-2">Pago Pendiente de Aprobación</h1>
+              <p className="text-xs text-white/60 leading-relaxed max-w-sm mx-auto">
                 Tu entidad bancaria está procesando la solicitud. Te notificaremos por correo electrónico una vez recibamos la confirmación oficial.
               </p>
             </div>
 
-            <div className="w-full bg-[#fdfbf7] p-5 rounded-2xl border border-foreground/5 text-xs text-foreground/60 text-left space-y-2">
+            <div className="w-full bg-[#0B0B0B] p-5 rounded-sm border border-[#C2A878]/20 text-xs text-white/60 text-left space-y-2">
               <div className="flex justify-between">
                 <span>Referencia ePayco:</span>
                 <strong className="font-mono">{txData?.x_ref_payco || "Pendiente"}</strong>
@@ -242,7 +242,7 @@ function CheckoutResponseContent() {
 
             <Link 
               href="/dashboard"
-              className="w-full py-4 bg-foreground text-background text-xs font-bold uppercase tracking-[0.2em] rounded-2xl hover:bg-[#C59F59] hover:text-white transition-all shadow-lg flex items-center justify-center gap-3 group"
+              className="w-full py-4 bg-[#C2A878] text-[#0B0B0B] text-xs font-bold uppercase tracking-[0.2em] rounded-sm hover:bg-[#F4F1ED] transition-all flex items-center justify-center gap-3 group"
             >
               Ir a Mi Panel
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
@@ -257,21 +257,21 @@ function CheckoutResponseContent() {
             </div>
 
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-200">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-red-400 bg-red-500/10 px-3 py-1 rounded-sm border border-red-500/20">
                 Transacción No Completada
               </span>
-              <h1 className="text-2xl font-serif text-foreground mt-3 mb-2">Pago Rechazado o Cancelado</h1>
-              <p className="text-xs text-foreground/60 leading-relaxed max-w-sm mx-auto">
+              <h1 className="text-2xl font-serif text-[#F4F1ED] mt-3 mb-2">Pago Rechazado o Cancelado</h1>
+              <p className="text-xs text-white/60 leading-relaxed max-w-sm mx-auto">
                 No pudimos procesar el cobro de tu {isSubscription ? "suscripción de café" : "pedido"}. Tu tarjeta no ha sido cargada.
               </p>
             </div>
 
             {/* Error detail box */}
-            <div className="w-full p-4 bg-red-50/70 border border-red-200/60 rounded-2xl text-left flex items-start gap-3">
+            <div className="w-full p-4 bg-red-500/10 border border-red-500/20 rounded-sm text-left flex items-start gap-3">
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
               <div>
-                <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Motivo informado por el banco</p>
-                <p className="text-xs text-red-600 font-medium mt-0.5">
+                <p className="text-[11px] font-bold text-red-400 uppercase tracking-wider">Motivo informado por el banco</p>
+                <p className="text-xs text-red-300 font-medium mt-0.5">
                   {txData?.x_response_reason_text || "Transacción declinada o cancelada por la entidad financiera. Verifica tus datos de facturación e intenta de nuevo."}
                 </p>
               </div>
@@ -280,7 +280,7 @@ function CheckoutResponseContent() {
             <div className="w-full space-y-3">
               <button 
                 onClick={() => router.push("/builder")}
-                className="w-full py-4 bg-foreground text-background text-xs font-bold uppercase tracking-[0.2em] rounded-2xl hover:bg-[#C59F59] hover:text-white transition-all shadow-lg flex items-center justify-center gap-3 group"
+                className="w-full py-4 bg-[#C2A878] text-[#0B0B0B] text-xs font-bold uppercase tracking-[0.2em] rounded-sm hover:bg-[#F4F1ED] transition-all flex items-center justify-center gap-3 group"
               >
                 <RefreshCw className="w-4 h-4" />
                 Reintentar Pago / Configurar Suscripción
@@ -290,15 +290,15 @@ function CheckoutResponseContent() {
                 href="https://wa.me/573000000000?text=Hola,%20tuve%20un%20inconveniente%20con%20el%20pago%20de%20mi%20suscripción"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3 bg-transparent border border-foreground/10 text-foreground text-xs font-bold uppercase tracking-widest rounded-2xl hover:bg-foreground/5 transition-all flex items-center justify-center gap-2"
+                className="w-full py-3 bg-transparent border border-white/20 text-[#F4F1ED] text-xs font-bold uppercase tracking-widest rounded-sm hover:bg-white/5 transition-all flex items-center justify-center gap-2"
               >
-                <HelpCircle className="w-4 h-4 text-[#C59F59]" />
+                <HelpCircle className="w-4 h-4 text-[#C2A878]" />
                 Contactar a Soporte Café Amantti
               </a>
 
               <button 
                 onClick={() => router.push("/dashboard")}
-                className="w-full py-2 text-xs text-foreground/40 hover:text-foreground transition-colors"
+                className="w-full py-2 text-xs text-white/40 hover:text-white transition-colors"
               >
                 Volver al Panel Principal
               </button>
@@ -314,8 +314,8 @@ function CheckoutResponseContent() {
 export default function CheckoutResponsePage() {
   return (
     <Suspense fallback={
-      <div className="min-h-[80vh] flex items-center justify-center bg-[#fdfbf7]">
-        <Loader2 className="w-8 h-8 text-[#C59F59] animate-spin" />
+      <div className="min-h-[80vh] flex items-center justify-center bg-[#0B0B0B]">
+        <Loader2 className="w-8 h-8 text-[#C2A878] animate-spin" />
       </div>
     }>
       <CheckoutResponseContent />

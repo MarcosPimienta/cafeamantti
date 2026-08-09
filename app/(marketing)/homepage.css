@@ -1,0 +1,434 @@
+/* ──────────────────────────────────────────────
+   Café Amantti — Homepage Redesign Styles
+   Dark editorial aesthetic, Bodoni Moda + Archivo
+   ────────────────────────────────────────────── */
+
+/* ── Keyframes ─────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes drift {
+  from { transform: scale(1.04); }
+  to   { transform: scale(1); }
+}
+
+/* ── Photo treatment (site-wide) ───────────── */
+.photo-treatment {
+  filter: sepia(.2) saturate(.8) contrast(.95);
+}
+
+.photo-treatment-hero {
+  filter: sepia(.22) saturate(.78) contrast(.94) brightness(.96);
+}
+
+/* ── Film grain overlay ────────────────────── */
+.film-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='0.55'/></svg>");
+}
+
+/* ── Scroll reveal ─────────────────────────── */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity .9s ease, transform .9s ease;
+}
+[data-reveal].revealed {
+  opacity: 1;
+  transform: none;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .hero-bg-drift {
+    animation: none !important;
+  }
+  .hero-fade {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ── Hero entrance stagger ─────────────────── */
+.hero-bg-drift {
+  animation: drift 6s ease-out forwards;
+}
+
+.hero-fade {
+  animation: fadeUp 1.2s ease both;
+}
+.hero-fade-1 { animation-delay: .2s; animation-duration: 1s; }
+.hero-fade-2 { animation-delay: .4s; }
+.hero-fade-3 { animation-delay: .7s; }
+.hero-fade-4 { animation-delay: 1s; }
+
+/* ── Nav ───────────────────────────────────── */
+.amantti-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px clamp(16px, 4vw, 48px);
+  background: linear-gradient(rgba(11,11,11,.85), rgba(11,11,11,0));
+  backdrop-filter: blur(2px);
+}
+
+.amantti-nav-link {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 11px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: rgba(244,241,237,.75);
+  text-decoration: none;
+  transition: color .3s ease;
+}
+.amantti-nav-link:hover {
+  color: #C2A878;
+}
+
+.amantti-nav-pill {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 11px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: #0B0B0B;
+  background: #C2A878;
+  padding: 11px 22px;
+  border-radius: 2px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: background .3s ease;
+}
+.amantti-nav-pill:hover {
+  background: #F4F1ED;
+  color: #0B0B0B;
+}
+
+/* ── Section base ──────────────────────────── */
+.section-dark {
+  background: #0B0B0B;
+  color: #F4F1ED;
+  padding: 140px clamp(20px, 5vw, 48px);
+}
+
+.section-cream {
+  background: #F4F1ED;
+  color: #0B0B0B;
+  padding: 130px clamp(20px, 5vw, 48px);
+}
+
+.section-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section-inner-narrow {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ── Typography ────────────────────────────── */
+.eyebrow-serif {
+  margin: 0 0 18px;
+  font-family: var(--font-bodoni), 'Bodoni Moda', serif;
+  font-style: italic;
+  font-size: 20px;
+  color: #C2A878;
+}
+
+.eyebrow-serif-dark {
+  margin: 0 0 18px;
+  font-family: var(--font-bodoni), 'Bodoni Moda', serif;
+  font-style: italic;
+  font-size: 20px;
+  color: #A98C5D;
+}
+
+.heading-section {
+  margin: 0 0 22px;
+  font-family: var(--font-bodoni), 'Bodoni Moda', serif;
+  font-weight: 400;
+  font-size: clamp(34px, 4.4vw, 54px);
+  line-height: 1.12;
+}
+
+.body-muted {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 16px;
+  line-height: 1.8;
+  color: rgba(244,241,237,.65);
+}
+
+.body-muted-dark {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 16px;
+  line-height: 1.8;
+  color: rgba(11,11,11,.6);
+}
+
+/* ── Buttons ───────────────────────────────── */
+.btn-primary {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 11px;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: #0B0B0B;
+  background: #C2A878;
+  padding: 16px 34px;
+  border-radius: 2px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: background .3s ease;
+}
+.btn-primary:hover {
+  background: #F4F1ED;
+  color: #0B0B0B;
+}
+
+.btn-secondary {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 11px;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: #F4F1ED;
+  background: transparent;
+  padding: 15px 34px;
+  border-radius: 2px;
+  border: 1px solid rgba(244,241,237,.35);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: border-color .3s ease, color .3s ease;
+}
+.btn-secondary:hover {
+  border-color: #C2A878;
+  color: #C2A878;
+}
+
+.btn-outline-dark {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 11px;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: #0B0B0B;
+  background: transparent;
+  padding: 15px 34px;
+  border-radius: 2px;
+  border: 1px solid rgba(11,11,11,.3);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: background .3s ease, color .3s ease;
+}
+.btn-outline-dark:hover {
+  background: #0B0B0B;
+  color: #F4F1ED;
+}
+
+/* ── Product chips ─────────────────────────── */
+.chip {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 12px;
+  padding: 9px 14px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: transparent;
+  color: rgba(244,241,237,.75);
+  border: 1px solid rgba(244,241,237,.25);
+  transition: border-color .2s ease, background .2s ease, color .2s ease;
+}
+.chip:hover:not(:disabled) {
+  border-color: #C2A878;
+}
+.chip.chip-active {
+  background: #C2A878;
+  color: #0B0B0B;
+  border-color: #C2A878;
+}
+.chip:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* ── Product card ──────────────────────────── */
+.product-card {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(rgba(244,241,237,.03), rgba(244,241,237,.01));
+  border: 1px solid rgba(194,168,120,.2);
+  border-radius: 2px;
+  padding: 34px 30px;
+}
+
+/* ── Contact form inputs ───────────────────── */
+.contact-input {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  background: transparent;
+  border: 1px solid rgba(11,11,11,.25);
+  border-radius: 2px;
+  padding: 15px 16px;
+  font-size: 14px;
+  color: #0B0B0B;
+  outline: none;
+  width: 100%;
+  transition: border-color .3s ease;
+}
+.contact-input::placeholder {
+  color: rgba(11,11,11,.35);
+}
+.contact-input:focus {
+  border-color: #A98C5D;
+}
+
+.contact-select {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  background: transparent;
+  border: 1px solid rgba(11,11,11,.25);
+  border-radius: 2px;
+  padding: 15px 12px;
+  font-size: 14px;
+  color: rgba(11,11,11,.7);
+  outline: none;
+  width: 100%;
+  transition: border-color .3s ease;
+  appearance: auto;
+}
+.contact-select:focus {
+  border-color: #A98C5D;
+}
+
+.contact-submit {
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 11px;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: #F4F1ED;
+  background: #0B0B0B;
+  border: none;
+  padding: 17px;
+  border-radius: 2px;
+  cursor: pointer;
+  width: 100%;
+  transition: background .3s ease, color .3s ease;
+}
+.contact-submit:hover {
+  background: #A98C5D;
+  color: #0B0B0B;
+}
+
+/* ── Hairline borders ──────────────────────── */
+.hairline-gold {
+  border-top: 1px solid rgba(194,168,120,.25);
+}
+.hairline-gold-bottom {
+  border-bottom: 1px solid rgba(194,168,120,.25);
+}
+
+/* ── Definition list items ─────────────────── */
+.def-term {
+  margin: 0;
+  font-family: var(--font-bodoni), 'Bodoni Moda', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 19px;
+  color: #F4F1ED;
+}
+.def-desc {
+  margin: 0;
+  font-family: var(--font-archivo), 'Archivo', sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(244,241,237,.55);
+}
+
+/* ── Feature cells grid ────────────────────── */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1px;
+  background: rgba(194,168,120,.25);
+  border: 1px solid rgba(194,168,120,.25);
+}
+.feature-cell {
+  background: #0B0B0B;
+  padding: 36px 30px;
+}
+
+/* ── Mobile menu ───────────────────────────── */
+.mobile-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 49;
+  background: rgba(11,11,11,.97);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s ease;
+}
+.mobile-menu.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mobile-menu-link {
+  font-family: var(--font-bodoni), 'Bodoni Moda', serif;
+  font-style: italic;
+  font-size: 28px;
+  color: #F4F1ED;
+  text-decoration: none;
+  transition: color .3s ease;
+}
+.mobile-menu-link:hover {
+  color: #C2A878;
+}
+
+/* ── Offset frame (Historia image) ─────────── */
+.offset-frame {
+  position: absolute;
+  inset: -16px 16px 16px -16px;
+  border: 1px solid rgba(194,168,120,.3);
+  border-radius: 2px;
+}
+
+/* ── Cart badge on nav ─────────────────────── */
+.cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  background: #C2A878;
+  color: #0B0B0B;
+  font-size: 9px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  line-height: 1;
+}

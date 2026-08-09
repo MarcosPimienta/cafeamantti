@@ -276,20 +276,20 @@ function BuilderForm() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#fdfbf7] flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-[#C59F59] animate-spin" />
+      <div className="min-h-screen bg-[#0B0B0B] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-[#C2A878] animate-spin" />
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#fdfbf7] pt-32 pb-20 font-sans text-foreground">
+    <main className="min-h-screen bg-[#0B0B0B] pt-32 pb-20 font-sans text-[#F4F1ED]">
       <div className="container mx-auto px-6 max-w-6xl">
         {/* Navigation & Header */}
         <div className="mb-12">
           <Link 
             href="/dashboard" 
-            className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-foreground/40 hover:text-foreground transition-all mb-8 group"
+            className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-[#F4F1ED] transition-all mb-8 group"
           >
             <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
             Volver al Dashboard
@@ -297,7 +297,7 @@ function BuilderForm() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
               <h1 className="text-4xl md:text-6xl font-serif mb-4">Personaliza tu Suscripción</h1>
-              <p className="text-foreground/40 text-lg font-light tracking-wide max-w-xl">
+              <p className="text-white/40 text-lg font-light tracking-wide max-w-xl">
                 Ajusta cada detalle de tu experiencia Amantti. Elije un plan predefinido o arma tu combinación a la medida.
               </p>
             </div>
@@ -311,18 +311,18 @@ function BuilderForm() {
             {/* Section 1: Coffee Quantity Selection */}
             <section className="space-y-8">
               <div className="flex items-center gap-4">
-                <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">1</span>
+                <span className="w-8 h-8 rounded-sm bg-[#C2A878] text-[#0B0B0B] flex items-center justify-center font-serif text-sm">1</span>
                 <h2 className="text-2xl font-serif">Selecciona tus Cafés y Cantidades</h2>
               </div>
               
-              <div className="space-y-6 bg-white p-6 sm:p-8 rounded-3xl border border-[#C59F59]/30 shadow-xl">
+              <div className="space-y-6 bg-[#0B0B0B] p-6 sm:p-8 rounded-sm border border-[#C2A878]/20 shadow-2xl">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <Sparkles className="w-4 h-4 text-[#C59F59]" />
-                    <h3 className="text-lg font-serif text-foreground">Elige las Cantidades de tu Suscripción</h3>
+                    <Sparkles className="w-4 h-4 text-[#C2A878]" />
+                    <h3 className="text-lg font-serif text-[#F4F1ED]">Elige las Cantidades de tu Suscripción</h3>
                   </div>
-                  <p className="text-xs text-foreground/50">
-                    Arma tu pedido agregando las bolsas que desees. Solo pagas <strong className="text-[#C59F59]">$10.000 COP</strong> de envío por todo el paquete <span className="text-[10px] text-foreground/40 italic block sm:inline mt-0.5 sm:mt-0">*Aplica para entregas en el área metropolitana.</span>
+                  <p className="text-xs text-white/50">
+                    Arma tu pedido agregando las bolsas que desees. Solo pagas <strong className="text-[#C2A878]">$10.000 COP</strong> de envío por todo el paquete <span className="text-[10px] text-white/40 italic block sm:inline mt-0.5 sm:mt-0">*Aplica para entregas en el área metropolitana.</span>
                   </p>
                 </div>
 
@@ -333,19 +333,19 @@ function BuilderForm() {
                       const unitPrice = calculateCoffeePrice(prod.id, selection.weight);
 
                       return (
-                        <div key={prod.id} className="p-4 bg-[#fdfbf7] rounded-2xl border border-foreground/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div key={prod.id} className="p-4 bg-[#0B0B0B] rounded-sm border border-[#C2A878]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <div className="relative w-12 h-16 shrink-0 bg-white p-1 rounded-xl ring-1 ring-black/5">
+                            <div className="relative w-12 h-16 shrink-0 bg-[#0B0B0B] p-1 rounded-sm border border-[#C2A878]/20">
                               <Image src={prod.image} alt={prod.name} fill className="object-contain" />
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-foreground">{prod.name}</p>
+                              <p className="text-sm font-bold text-[#F4F1ED]">{prod.name}</p>
                               {isNotAvailableIn2k5 ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full mt-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2.5 py-0.5 rounded-sm mt-1 border border-amber-500/20">
                                   Solo disponible en 250g y 500g
                                 </span>
                               ) : (
-                                <p className="text-xs text-[#C59F59] font-serif font-bold">
+                                <p className="text-xs text-[#C2A878] font-serif font-bold">
                                   {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(unitPrice)} / unidad
                                 </p>
                               )}
@@ -358,7 +358,7 @@ function BuilderForm() {
                               type="button"
                               onClick={() => handleCustomQuantityChange(prod.id, -1)}
                               disabled={qty === 0}
-                              className="w-9 h-9 rounded-xl border border-foreground/10 bg-white flex items-center justify-center text-foreground hover:bg-foreground/5 disabled:opacity-30 transition-all"
+                              className="w-9 h-9 rounded-sm border border-white/20 bg-transparent flex items-center justify-center text-[#F4F1ED] hover:bg-white/5 disabled:opacity-30 transition-all"
                             >
                               <Minus className="w-4 h-4" />
                             </button>
@@ -367,7 +367,7 @@ function BuilderForm() {
                               type="button"
                               onClick={() => handleCustomQuantityChange(prod.id, 1)}
                               disabled={isNotAvailableIn2k5}
-                              className="w-9 h-9 rounded-xl border border-foreground/10 bg-white flex items-center justify-center text-foreground hover:bg-[#C59F59] hover:text-white disabled:opacity-30 transition-all"
+                              className="w-9 h-9 rounded-sm border border-white/20 bg-transparent flex items-center justify-center text-[#F4F1ED] hover:bg-[#C2A878] hover:text-[#0B0B0B] disabled:opacity-30 transition-all"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
@@ -382,13 +382,13 @@ function BuilderForm() {
             {/* Section 2: Presentation & Grind */}
             <section className="space-y-12">
               <div className="flex items-center gap-4">
-                <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">2</span>
+                <span className="w-8 h-8 rounded-sm bg-[#C2A878] text-[#0B0B0B] flex items-center justify-center font-serif text-sm">2</span>
                 <h2 className="text-2xl font-serif">Personaliza tu Café</h2>
               </div>
 
               <div className="grid md:grid-cols-2 gap-12">
                 <div className="space-y-6">
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 block">Presentación</label>
+                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 block">Presentación</label>
                   <div className="grid grid-cols-3 gap-3">
                     {WEIGHTS.map((w) => {
                       const is2k5Restricted = w === "2.5kg" && (selection.plan_id === "alchemy" || selection.plan_id === "curator");
@@ -398,17 +398,17 @@ function BuilderForm() {
                           type="button"
                           disabled={is2k5Restricted}
                           onClick={() => setSelection({ ...selection, weight: w })}
-                          className={`py-4 rounded-2xl border text-sm font-medium transition-all ${
+                          className={`py-4 rounded-sm border text-sm font-medium transition-all ${
                             selection.weight === w 
-                              ? "bg-foreground border-foreground text-background shadow-lg" 
+                              ? "bg-[#C2A878] border-[#C2A878] text-[#0B0B0B] shadow-2xl" 
                               : is2k5Restricted
-                              ? "opacity-40 cursor-not-allowed bg-foreground/5 border-foreground/5"
-                              : "bg-white border-foreground/10 hover:border-[#C59F59]"
+                              ? "opacity-40 cursor-not-allowed bg-white/5 border-white/5"
+                              : "bg-transparent border-white/20 hover:border-[#C2A878]"
                           }`}
                           title={is2k5Restricted ? "Presentación 2.5kg disponible exclusivamente para Café Premium" : undefined}
                         >
                           {w}
-                          {is2k5Restricted && <span className="block text-[9px] text-amber-700 font-semibold mt-0.5">Solo Premium</span>}
+                          {is2k5Restricted && <span className="block text-[9px] text-amber-500 font-semibold mt-0.5">Solo Premium</span>}
                         </button>
                       );
                     })}
@@ -416,13 +416,13 @@ function BuilderForm() {
                 </div>
 
                 <div className="space-y-6">
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 block">Molienda</label>
-                  <div className="flex p-1.5 bg-foreground/5 rounded-2xl">
+                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 block">Molienda</label>
+                  <div className="flex p-1.5 bg-white/5 rounded-sm">
                     <button
                       type="button"
                       onClick={() => setSelection({ ...selection, grind: "whole" })}
-                      className={`flex-1 py-4 text-sm font-medium rounded-xl transition-all ${
-                        selection.grind === "whole" ? "bg-white text-foreground shadow-sm" : "text-foreground/40"
+                      className={`flex-1 py-4 text-sm font-medium rounded-sm transition-all ${
+                        selection.grind === "whole" ? "bg-[#0B0B0B] text-[#F4F1ED] shadow-sm border border-[#C2A878]/20" : "text-white/40"
                       }`}
                     >
                       Grano Entero
@@ -430,8 +430,8 @@ function BuilderForm() {
                     <button
                       type="button"
                       onClick={() => setSelection({ ...selection, grind: "ground" })}
-                      className={`flex-1 py-4 text-sm font-medium rounded-xl transition-all ${
-                        selection.grind === "ground" ? "bg-white text-foreground shadow-sm" : "text-foreground/40"
+                      className={`flex-1 py-4 text-sm font-medium rounded-sm transition-all ${
+                        selection.grind === "ground" ? "bg-[#0B0B0B] text-[#F4F1ED] shadow-sm border border-[#C2A878]/20" : "text-white/40"
                       }`}
                     >
                       Molido
@@ -442,7 +442,7 @@ function BuilderForm() {
 
               {selection.grind === "ground" && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-top-2">
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 block">Nivel de Molienda</label>
+                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 block">Nivel de Molienda</label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {[
                       { id: "espresso", label: "Fina (Espresso)" },
@@ -453,10 +453,10 @@ function BuilderForm() {
                         key={level.id}
                         type="button"
                         onClick={() => setSelection({ ...selection, grind_level: level.id })}
-                        className={`px-4 py-4 rounded-2xl border text-xs font-medium transition-all flex items-center justify-between group ${
+                        className={`px-4 py-4 rounded-sm border text-xs font-medium transition-all flex items-center justify-between group ${
                           selection.grind_level === level.id
-                            ? "border-[#C59F59] bg-[#C59F59]/5 text-[#C59F59]"
-                            : "bg-white border-foreground/10 hover:border-[#C59F59]/40"
+                            ? "border-[#C2A878] bg-[#C2A878]/10 text-[#C2A878]"
+                            : "bg-transparent border-white/20 hover:border-[#C2A878]/40 text-[#F4F1ED]"
                         }`}
                       >
                         <span>{level.label}</span>
@@ -471,7 +471,7 @@ function BuilderForm() {
             {/* Section 3: Frequency */}
             <section className="space-y-8">
               <div className="flex items-center gap-4">
-                <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">3</span>
+                <span className="w-8 h-8 rounded-sm bg-[#C2A878] text-[#0B0B0B] flex items-center justify-center font-serif text-sm">3</span>
                 <h2 className="text-2xl font-serif">Frecuencia de Entrega</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -480,19 +480,19 @@ function BuilderForm() {
                     key={freq.id}
                     type="button"
                     onClick={() => setSelection({ ...selection, frequency: freq.id })}
-                    className={`p-6 rounded-3xl border transition-all text-left group ${
+                    className={`p-6 rounded-sm border transition-all text-left group ${
                       selection.frequency === freq.id 
-                        ? "bg-white border-[#C59F59] shadow-xl" 
-                        : "bg-white/50 border-foreground/5 hover:border-[#C59F59]/40"
+                        ? "bg-[#0B0B0B] border-[#C2A878] shadow-2xl" 
+                        : "bg-transparent border-[#C2A878]/20 hover:border-[#C2A878]"
                     }`}
                   >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${
-                      selection.frequency === freq.id ? "bg-[#C59F59] text-white" : "bg-foreground/5 text-foreground/40"
+                    <div className={`w-10 h-10 rounded-sm flex items-center justify-center mb-4 transition-colors ${
+                      selection.frequency === freq.id ? "bg-[#C2A878] text-[#0B0B0B]" : "bg-white/5 text-white/40"
                     }`}>
                       <Calendar className="w-5 h-5" />
                     </div>
-                    <h3 className="font-semibold mb-1">{freq.label}</h3>
-                    <p className="text-[10px] text-foreground/40 leading-tight">
+                    <h3 className="font-semibold mb-1 text-[#F4F1ED]">{freq.label}</h3>
+                    <p className="text-[10px] text-white/40 leading-tight">
                       {freq.id === "weekly" && "Envíos semanales"}
                       {freq.id === "bi-weekly" && "Cada dos semanas"}
                       {freq.id === "monthly" && "Una vez al mes"}
@@ -505,58 +505,58 @@ function BuilderForm() {
             {/* Section 4: Shipping Info */}
             <section className="space-y-8">
               <div className="flex items-center gap-4">
-                <span className="w-8 h-8 rounded-full bg-[#C59F59] text-white flex items-center justify-center font-serif text-sm">4</span>
+                <span className="w-8 h-8 rounded-sm bg-[#C2A878] text-[#0B0B0B] flex items-center justify-center font-serif text-sm">4</span>
                 <h2 className="text-2xl font-serif">Información de Envío</h2>
               </div>
               
-              <div className="grid md:grid-cols-2 gap-6 bg-white p-8 rounded-3xl border border-foreground/5 shadow-sm">
+              <div className="grid md:grid-cols-2 gap-6 bg-[#0B0B0B] p-8 rounded-sm border border-[#C2A878]/20 shadow-2xl">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 px-1">Departamento</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 px-1">Departamento</label>
                   <select
                     value={selection.shipping_state}
                     onChange={(e) => setSelection({ ...selection, shipping_state: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
+                    className="w-full px-4 py-3 rounded-sm border border-white/20 bg-transparent focus:ring-2 focus:ring-[#C2A878]/20 outline-none transition-all text-sm text-[#F4F1ED]"
                     required
                   >
-                    <option value="">Selecciona Departamento</option>
+                    <option value="" className="bg-[#0B0B0B]">Selecciona Departamento</option>
                     {DEPARTAMENTOS.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
+                      <option key={dept} value={dept} className="bg-[#0B0B0B]">{dept}</option>
                     ))}
                   </select>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 px-1">Ciudad / Municipio</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 px-1">Ciudad / Municipio</label>
                   <input
                     type="text"
                     value={selection.shipping_city}
                     onChange={(e) => setSelection({ ...selection, shipping_city: e.target.value })}
                     placeholder="Ej. Bogotá, Medellín..."
-                    className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
+                    className="w-full px-4 py-3 rounded-sm border border-white/20 bg-transparent focus:ring-2 focus:ring-[#C2A878]/20 outline-none transition-all text-sm text-[#F4F1ED]"
                     required
                   />
                 </div>
 
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 px-1">Dirección Exacta</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 px-1">Dirección Exacta</label>
                   <input
                     type="text"
                     value={selection.shipping_address}
                     onChange={(e) => setSelection({ ...selection, shipping_address: e.target.value })}
                     placeholder="Calle, Carrera, Avenida..."
-                    className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
+                    className="w-full px-4 py-3 rounded-sm border border-white/20 bg-transparent focus:ring-2 focus:ring-[#C2A878]/20 outline-none transition-all text-sm text-[#F4F1ED]"
                     required
                   />
                 </div>
 
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 px-1">Apto / Torre / Otros Detalles</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 px-1">Apto / Torre / Otros Detalles</label>
                   <input
                     type="text"
                     value={selection.shipping_details}
                     onChange={(e) => setSelection({ ...selection, shipping_details: e.target.value })}
                     placeholder="Ej. Apto 502, Torre A, Portería..."
-                    className="w-full px-4 py-3 rounded-xl border border-foreground/10 bg-[#fdfbf7] focus:ring-2 focus:ring-[#C59F59]/20 outline-none transition-all text-sm"
+                    className="w-full px-4 py-3 rounded-sm border border-white/20 bg-transparent focus:ring-2 focus:ring-[#C2A878]/20 outline-none transition-all text-sm text-[#F4F1ED]"
                   />
                 </div>
 
@@ -576,71 +576,70 @@ function BuilderForm() {
           {/* Sticky Summary Card (Right Sidebar) */}
           <div className="lg:col-span-4">
             <div className="sticky top-32 space-y-6">
-              <div className="bg-white rounded-[2.5rem] p-8 border border-foreground/5 shadow-2xl relative overflow-hidden">
+              <div className="bg-[#0B0B0B] rounded-sm p-8 border border-[#C2A878]/20 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-[0.03]">
                   <Coffee className="w-32 h-32 rotate-12" />
                 </div>
                 
-                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-[#C59F59] mb-8">Tu Selección</h3>
+                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-[#C2A878] mb-8">Tu Selección</h3>
                 
                 <div className="space-y-8 relative z-10">
                   <div className="flex items-center gap-6">
-                    <div className="relative w-20 h-24 shrink-0 bg-[#fdfbf7] rounded-2xl p-2 ring-1 ring-black/5 flex items-center justify-center">
-                      <div className="flex flex-col items-center justify-center text-[#C59F59]">
+                    <div className="relative w-20 h-24 shrink-0 bg-[#0B0B0B] rounded-sm p-2 border border-[#C2A878]/20 flex items-center justify-center">
+                      <div className="flex flex-col items-center justify-center text-[#C2A878]">
                         <SlidersHorizontal className="w-8 h-8" />
                       </div>
                     </div>
                     <div>
-                      <p className="text-xl font-serif leading-tight mb-1">Crea Tu Suscripción</p>
-                      <p className="text-xs text-foreground/40 font-medium">{selection.weight} • {selection.grind === "whole" ? "Grano" : "Molido"}</p>
+                      <p className="text-xl font-serif leading-tight mb-1 text-[#F4F1ED]">Crea Tu Suscripción</p>
+                      <p className="text-xs text-white/40 font-medium">{selection.weight} • {selection.grind === "whole" ? "Grano" : "Molido"}</p>
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-foreground/5 space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/40">Resumen de Productos</p>
+                  <div className="pt-4 border-t border-[#C2A878]/20 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Resumen de Productos</p>
                     {CUSTOM_PRODUCTS.map(p => {
                       const qty = customQuantities[p.id] || 0;
                       if (qty === 0) return null;
                       return (
                         <div key={p.id} className="flex justify-between items-center text-xs">
-                          <span className="text-foreground/70 truncate max-w-[170px]">{p.name}</span>
-                          <span className="font-bold text-[#C59F59]">{qty} x</span>
+                          <span className="text-white/70 truncate max-w-[170px]">{p.name}</span>
+                          <span className="font-bold text-[#C2A878]">{qty} x</span>
                         </div>
                       );
                     })}
-                    <div className="flex flex-col pt-2 border-t border-foreground/5 space-y-0.5">
-                      <div className="flex justify-between items-center text-[11px] text-foreground/40">
+                    <div className="flex flex-col pt-2 border-t border-[#C2A878]/20 space-y-0.5">
+                      <div className="flex justify-between items-center text-[11px] text-white/40">
                         <span>Envío ({shippingZone.zoneName}):</span>
-                        <span className="font-semibold text-foreground/70">
+                        <span className="font-semibold text-white/70">
                           {shippingZone.isAvailable 
                             ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(shippingZone.rate)
                             : "No disponible"}
                         </span>
                       </div>
-                      <span className={`text-[9px] text-right italic ${shippingZone.isAvailable ? "text-[#C59F59] font-medium" : "text-red-500 font-bold"}`}>
-                        {shippingZone.isAvailable ? shippingZone.radiusLabel : "*Fuera de Cobertura"}
+                      <span className={`text-[9px] text-right italic ${shippingZone.isAvailable ? "text-[#C2A878] font-medium" : "text-red-400 font-bold"}`}>
                       </span>
                     </div>
                   </div>
 
-                  <div className="space-y-4 pt-6 border-t border-foreground/5">
+                  <div className="space-y-4 pt-6 border-t border-[#C2A878]/20">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-foreground/40">Frecuencia</span>
-                      <span className="font-medium">{FREQUENCIES.find(f => f.id === selection.frequency)?.label}</span>
+                      <span className="text-white/40">Frecuencia</span>
+                      <span className="font-medium text-[#F4F1ED]">{FREQUENCIES.find(f => f.id === selection.frequency)?.label}</span>
                     </div>
                     {selection.grind === "ground" && (
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-foreground/40">Molienda</span>
-                        <span className="font-medium capitalize">{selection.grind_level}</span>
+                        <span className="text-white/40">Molienda</span>
+                        <span className="font-medium capitalize text-[#F4F1ED]">{selection.grind_level}</span>
                       </div>
                     )}
                   </div>
 
-                  <div className="pt-8 border-t border-foreground/5">
+                  <div className="pt-8 border-t border-[#C2A878]/20">
                     <div className="flex items-end justify-between mb-8">
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/30 mb-1">Total por Envío</p>
-                        <p className="text-3xl font-serif text-[#C59F59]">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30 mb-1">Total por Envío</p>
+                        <p className="text-3xl font-serif text-[#C2A878]">
                           {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(getPrice())}
                         </p>
                       </div>
@@ -649,7 +648,7 @@ function BuilderForm() {
                     <button
                       onClick={handleSubmit}
                       disabled={isSubmitting || !shippingZone.isAvailable}
-                      className="w-full py-5 bg-foreground text-background font-bold uppercase tracking-widest text-xs rounded-2xl hover:bg-[#C59F59] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
+                      className="w-full py-5 bg-[#C2A878] text-[#0B0B0B] font-bold uppercase tracking-widest text-xs rounded-sm hover:bg-[#F4F1ED] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                       {isSubmitting ? (
                         <>
@@ -664,9 +663,9 @@ function BuilderForm() {
                       )}
                     </button>
 
-                    <div className="mt-6 flex gap-3 p-4 bg-[#fdfbf7] rounded-xl border border-foreground/5">
-                      <Info className="w-4 h-4 text-[#C59F59] shrink-0" />
-                      <p className="text-[9px] text-foreground/40 leading-relaxed italic">
+                    <div className="mt-6 flex gap-3 p-4 bg-[#0B0B0B] rounded-sm border border-[#C2A878]/20">
+                      <Info className="w-4 h-4 text-[#C2A878] shrink-0" />
+                      <p className="text-[9px] text-white/40 leading-relaxed italic">
                         Al confirmar, actualizaremos tu programa de entregas. La tarifa de transporte de $10.000 COP aplica únicamente para entregas dentro del área metropolitana. Podrás realizar cambios adicionales en cualquier momento.
                       </p>
                     </div>
@@ -697,8 +696,8 @@ function BuilderForm() {
 export default function BuilderPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[#fdfbf7] flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-[#C59F59] animate-spin" />
+      <div className="min-h-screen bg-[#0B0B0B] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-[#C2A878] animate-spin" />
       </div>
     }>
       <BuilderForm />

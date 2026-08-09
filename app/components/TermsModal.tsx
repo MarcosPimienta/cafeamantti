@@ -20,30 +20,30 @@ export function TermsModal({ isOpen, onClose }: TermsModalProps) {
         onClick={onClose}
       />
       
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-3xl max-h-[85vh] bg-white rounded-3xl shadow-2xl z-[110] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
-        <div className="p-6 border-b border-foreground/5 flex items-center justify-between shrink-0 bg-white shadow-sm z-10">
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-3xl max-h-[85vh] bg-[#0B0B0B] text-[#F4F1ED] rounded-sm shadow-2xl border border-[#C2A878]/20 z-[110] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
+        <div className="p-6 border-b border-[#C2A878]/20 flex items-center justify-between shrink-0 bg-[#0B0B0B] shadow-sm z-10">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-[#f9f7f0] rounded-full flex items-center justify-center border border-foreground/5">
-              <Scale className="w-6 h-6 text-[#C59F59]" />
+            <div className="w-12 h-12 bg-[#C2A878]/10 rounded-sm flex items-center justify-center border border-[#C2A878]/20">
+              <Scale className="w-6 h-6 text-[#C2A878]" />
             </div>
             <div>
-              <h2 className="text-xl font-serif text-foreground leading-tight">
+              <h2 className="text-xl font-serif text-[#F4F1ED] leading-tight">
                 {locale === "en" ? "Terms and Conditions" : "Términos y Condiciones"}
               </h2>
-              <p className="text-[#C59F59] text-[10px] font-bold uppercase tracking-widest mt-1">
+              <p className="text-[#C2A878] text-[10px] font-bold uppercase tracking-widest mt-1">
                 {locale === "en" ? "Updated: March 25, 2026" : "Actualizado: 25 Mar 2026"}
               </p>
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="p-3 bg-foreground/5 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors text-foreground/40"
+            className="p-3 bg-white/5 hover:bg-red-500/10 hover:text-red-400 rounded-sm transition-colors text-white/40"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-8 md:px-12 overflow-y-auto flex-1 prose prose-sm md:prose-base prose-headings:font-serif prose-headings:font-normal prose-h2:text-xl prose-h2:text-foreground prose-h2:mt-8 prose-h2:mb-4 prose-p:text-foreground/70 prose-li:text-foreground/70 max-w-none bg-[#fdfbf7]">
+        <div className="p-8 md:px-12 overflow-y-auto flex-1 prose prose-sm md:prose-base prose-headings:font-serif prose-headings:font-normal prose-h2:text-xl prose-h2:text-[#C2A878] prose-h2:mt-8 prose-h2:mb-4 prose-p:text-white/70 prose-li:text-white/70 max-w-none bg-[#0B0B0B] prose-strong:text-[#F4F1ED]">
           {locale === "en" ? (
             <>
               <p>This document establishes the general Terms and Conditions (hereinafter, the "Terms") governing the use of the Café Amantti website and the purchase of our products and subscriptions. By accessing, browsing, and using our website, you agree to be bound by these Terms.</p>
@@ -141,11 +141,11 @@ export function TermsModal({ isOpen, onClose }: TermsModalProps) {
           )}
         </div>
         
-        <div className="p-6 border-t border-foreground/5 bg-white flex justify-end shrink-0">
+        <div className="p-6 border-t border-[#C2A878]/20 bg-[#0B0B0B] flex justify-end shrink-0">
           <button 
             type="button"
             onClick={onClose}
-            className="px-8 py-3 bg-foreground text-background text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-[#C59F59] hover:text-white transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-[#C59F59]/20"
+            className="px-8 py-3 bg-[#C2A878] text-[#0B0B0B] text-[10px] font-bold uppercase tracking-widest rounded-sm hover:bg-[#F4F1ED] hover:text-[#0B0B0B] transition-all shadow-md focus:outline-none focus:ring-4 focus:ring-[#C2A878]/20"
           >
             {locale === "en" ? "Close & Accept" : "Cerrar y Aceptar"}
           </button>

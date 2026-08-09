@@ -4,24 +4,37 @@
   --background: #fdfbf7;
   --foreground: #2c2a29;
   --gold: #C59F59;
+
+  /* Design system – homepage redesign */
+  --ink: #0B0B0B;
+  --cream: #F4F1ED;
+  --gold-accent: #C2A878;
+  --gold-dark: #A98C5D;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-gold: var(--gold);
+  --color-ink: var(--ink);
+  --color-cream: var(--cream);
+  --color-gold-accent: var(--gold-accent);
+  --color-gold-dark: var(--gold-dark);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-serif: var(--font-playfair);
   --font-bodoni: var(--font-bodoni);
+  --font-archivo: var(--font-archivo);
 }
 
-/* @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-} */
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: #C2A878;
+  color: #0B0B0B;
+}
 
 body {
   background: var(--background);

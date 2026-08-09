@@ -4,6 +4,7 @@ import {
   Geist_Mono,
   Playfair_Display,
   Bodoni_Moda,
+  Archivo,
 } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -27,6 +28,13 @@ const bodoni = Bodoni_Moda({
   variable: "--font-bodoni",
   subsets: ["latin"],
   style: ["normal", "italic"],
+  weight: ["400", "500"],
+});
+
+const archivo = Archivo({
+  variable: "--font-archivo",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -42,7 +50,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${bodoni.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${bodoni.variable} ${archivo.variable} antialiased`}
       >
         <Providers>{children}</Providers>
       </body>

@@ -195,46 +195,46 @@ export function CheckoutModal({
         onReady={() => setScriptLoaded(true)}
       />
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="relative w-full max-w-lg bg-white rounded-[2.5rem] p-10 shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div className="relative w-full max-w-lg bg-[#0B0B0B] text-[#F4F1ED] rounded-sm p-10 shadow-2xl border border-[#C2A878]/20 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
         <button 
           onClick={onClose}
-          className="absolute top-8 right-8 p-2 rounded-full hover:bg-foreground/5 text-foreground/20 hover:text-foreground transition-colors"
+          className="absolute top-8 right-8 p-2 rounded-sm hover:bg-white/5 text-white/20 hover:text-[#F4F1ED] transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
 
         <div className="space-y-8">
           <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-[#C59F59]/10 rounded-full flex items-center justify-center mb-6">
-              <CreditCard className="w-8 h-8 text-[#C59F59]" strokeWidth={1.5} />
+            <div className="w-16 h-16 bg-[#C2A878]/10 rounded-sm flex items-center justify-center mb-6">
+              <CreditCard className="w-8 h-8 text-[#C2A878]" strokeWidth={1.5} />
             </div>
             <h2 className="text-2xl font-serif">Confirmar Datos de Pago</h2>
-            <p className="text-sm text-foreground/40 mt-2">Verifica tu información para el envío y facturación</p>
+            <p className="text-sm text-white/40 mt-2">Verifica tu información para el envío y facturación</p>
           </div>
 
           <form onSubmit={handlePayment} className="space-y-6">
-            <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-foreground/5 space-y-3">
-              <div className="flex items-center justify-between text-xs text-foreground/60">
+            <div className="bg-[#0B0B0B] p-6 rounded-sm border border-[#C2A878]/20 space-y-3">
+              <div className="flex items-center justify-between text-xs text-white/60">
                 <span>Café Neto:</span>
-                <span className="font-medium text-foreground">{formatPrice(netCoffeeTotal)}</span>
+                <span className="font-medium text-[#F4F1ED]">{formatPrice(netCoffeeTotal)}</span>
               </div>
-              <div className="flex items-center justify-between text-xs text-foreground/60">
+              <div className="flex items-center justify-between text-xs text-white/60">
                 <span>Costo de Envío ({shippingZone.zoneName} — {shippingZone.radiusLabel}):</span>
-                <span className="font-medium text-foreground">
+                <span className="font-medium text-[#F4F1ED]">
                   {shippingZone.isAvailable ? formatPrice(finalShippingCost) : "No disponible"}
                 </span>
               </div>
-              <div className="pt-3 border-t border-foreground/10 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-widest text-foreground/40">
+              <div className="pt-3 border-t border-white/10 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-widest text-white/40">
                   {isSubscription ? "Total Suscripción:" : "Total a Pagar:"}
                 </span>
-                <span className="font-serif text-2xl text-[#C59F59]">{formatPrice(finalTotalAmount)}</span>
+                <span className="font-serif text-2xl text-[#C2A878]">{formatPrice(finalTotalAmount)}</span>
               </div>
             </div>
 
             {isSubscription && (
-              <div className="p-4 bg-[#C59F59]/10 border border-[#C59F59]/25 rounded-2xl text-xs text-[#8C6D33] flex items-start gap-3 animate-in fade-in duration-300">
-                <CreditCard className="w-4 h-4 shrink-0 mt-0.5 text-[#C59F59]" />
+              <div className="p-4 bg-[#C2A878]/10 border border-[#C2A878]/25 rounded-sm text-[#C2A878] flex items-start gap-3 animate-in fade-in duration-300">
+                <CreditCard className="w-4 h-4 shrink-0 mt-0.5 text-[#C2A878]" />
                 <p className="leading-relaxed">
                   <strong>Cobro Recurrente Automático:</strong> Las suscripciones requieren Tarjeta de Crédito o Débito con CVV para tokenizar y automatizar tus renovaciones periódicas sin cortes de servicio.
                 </p>
@@ -243,58 +243,58 @@ export function CheckoutModal({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2 group">
-                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1">Cédula</label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1">Cédula</label>
                 <div className="relative">
-                  <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/20 group-focus-within:text-[#C59F59] transition-colors" />
+                  <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C2A878] transition-colors" />
                   <input
                     required
                     value={cedula}
                     onChange={(e) => setCedula(e.target.value)}
                     placeholder="1029384756"
-                    className="w-full pl-12 pr-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:ring-2 focus:ring-[#C2A878]/20 transition-all text-[#F4F1ED]"
                   />
                 </div>
               </div>
               <div className="space-y-2 group">
-                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1">Dirección</label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1">Dirección</label>
                 <input
                   required
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Calle 123 #45-67"
-                  className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                  className="w-full px-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:ring-2 focus:ring-[#C2A878]/20 transition-all text-[#F4F1ED]"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2 group">
-                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1">Departamento</label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1">Departamento</label>
                 <input
                   required
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
                   placeholder="Antioquia"
-                  className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                  className="w-full px-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:ring-2 focus:ring-[#C2A878]/20 transition-all text-[#F4F1ED]"
                 />
               </div>
               <div className="space-y-2 group">
-                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 px-1">Ciudad</label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 px-1">Ciudad</label>
                 <input
                   required
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   placeholder="Medellín"
-                  className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                  className="w-full px-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:ring-2 focus:ring-[#C2A878]/20 transition-all text-[#F4F1ED]"
                 />
               </div>
             </div>
 
             {department && city && (
-              <div className={`p-3.5 rounded-2xl text-xs flex items-start gap-3 transition-all ${
+              <div className={`p-3.5 rounded-sm text-xs flex items-start gap-3 transition-all ${
                 shippingZone.isAvailable 
-                  ? "bg-[#C59F59]/10 text-[#8C6D33] border border-[#C59F59]/20" 
-                  : "bg-red-50 text-red-700 border border-red-200"
+                  ? "bg-[#C2A878]/10 text-[#C2A878] border border-[#C2A878]/20" 
+                  : "bg-red-500/10 text-red-400 border border-red-500/20"
               }`}>
                 <Truck className="w-4 h-4 shrink-0 mt-0.5" />
                 <div className="leading-tight">
@@ -310,7 +310,7 @@ export function CheckoutModal({
             )}
 
             {error && (
-              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 animate-in shake-1">
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-sm flex items-start gap-3 text-red-400 animate-in shake-1">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <p className="text-xs font-medium">{error}</p>
               </div>
@@ -319,7 +319,7 @@ export function CheckoutModal({
             <button
               type="submit"
               disabled={isProcessing || !cedula || !address || !city || !department || !scriptLoaded || !shippingZone.isAvailable}
-              className="w-full py-5 bg-foreground text-background text-xs font-bold uppercase tracking-[0.2em] rounded-2xl hover:bg-[#C59F59] hover:text-white transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50 group"
+              className="w-full py-5 bg-[#C2A878] text-[#0B0B0B] text-xs font-bold uppercase tracking-[0.2em] rounded-sm hover:bg-[#F4F1ED] transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50 group"
             >
               {isProcessing ? (
                 <>
@@ -344,7 +344,7 @@ export function CheckoutModal({
             </button>
           </form>
 
-          <div className="flex items-center justify-center gap-2 text-[9px] text-foreground/20 uppercase tracking-widest font-bold">
+          <div className="flex items-center justify-center gap-2 text-[9px] text-white/20 uppercase tracking-widest font-bold">
             <ShieldCheck className="w-3 h-3" />
             Transacción Segura y Encriptada
           </div>

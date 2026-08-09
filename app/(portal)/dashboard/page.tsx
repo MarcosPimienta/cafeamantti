@@ -81,7 +81,7 @@ export default async function DashboardPage(props: {
   };
 
   return (
-    <main className="min-h-screen bg-[#fdfbf7] p-8 font-sans text-foreground">
+    <main className="min-h-screen bg-[#0B0B0B] p-8 font-sans text-[#F4F1ED]">
       <div className="max-w-6xl mx-auto">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
           <div className="flex items-center gap-8">
@@ -90,15 +90,15 @@ export default async function DashboardPage(props: {
                 amantti
               </span>
             </Link>
-            <div className="h-10 w-px bg-foreground/10 hidden md:block" />
+            <div className="h-10 w-px bg-white/10 hidden md:block" />
             <div>
-              <h1 className="text-3xl font-serif">{t("dashboard.title")}</h1>
-              <p className="text-foreground/40 text-xs italic">{t("dashboard.welcome")} {greetingName}.</p>
+              <h1 className="text-3xl font-serif text-[#F4F1ED]">{t("dashboard.title")}</h1>
+              <p className="text-white/40 text-xs italic">{t("dashboard.welcome")} {greetingName}.</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/dashboard?tab=profile" className="p-3 rounded-full hover:bg-foreground/5 transition-colors">
-              <Settings className="w-5 h-5 text-foreground/40" />
+            <Link href="/dashboard?tab=profile" className="p-3 rounded-sm hover:bg-white/5 transition-colors">
+              <Settings className="w-5 h-5 text-white/40" />
             </Link>
             <form action={signOut}>
               <button suppressHydrationWarning type="submit" className="p-3 rounded-full hover:bg-red-50 text-red-400 transition-colors" title="Cerrar sesión">
@@ -108,11 +108,11 @@ export default async function DashboardPage(props: {
           </div>
         </header>
 
-        <div className="mb-8 border-b border-foreground/5 overflow-x-auto">
+        <div className="mb-8 border-b border-[#C2A878]/20 overflow-x-auto">
           <div className="flex gap-8 whitespace-nowrap min-w-max">
-            <Link href="/dashboard?tab=overview" suppressHydrationWarning className={`pb-4 text-sm font-bold uppercase tracking-widest border-b-2 transition-all ${tab === 'overview' ? 'border-[#C59F59] text-[#C59F59]' : 'border-transparent text-foreground/40 hover:text-foreground'}`}>{t("dashboard.tab.overview")}</Link>
-            <Link href="/dashboard?tab=orders" suppressHydrationWarning className={`pb-4 text-sm font-bold uppercase tracking-widest border-b-2 transition-all ${tab === 'orders' ? 'border-[#C59F59] text-[#C59F59]' : 'border-transparent text-foreground/40 hover:text-foreground'}`}>{t("dashboard.tab.orders")}</Link>
-            <Link href="/dashboard?tab=profile" suppressHydrationWarning className={`pb-4 text-sm font-bold uppercase tracking-widest border-b-2 transition-all ${tab === 'profile' ? 'border-[#C59F59] text-[#C59F59]' : 'border-transparent text-foreground/40 hover:text-foreground'}`}>{t("dashboard.tab.profile")}</Link>
+            <Link href="/dashboard?tab=overview" suppressHydrationWarning className={`pb-4 text-sm font-bold uppercase tracking-widest border-b-2 transition-all ${tab === 'overview' ? 'border-[#C2A878] text-[#C2A878]' : 'border-transparent text-white/40 hover:text-white'}`}>{t("dashboard.tab.overview")}</Link>
+            <Link href="/dashboard?tab=orders" suppressHydrationWarning className={`pb-4 text-sm font-bold uppercase tracking-widest border-b-2 transition-all ${tab === 'orders' ? 'border-[#C2A878] text-[#C2A878]' : 'border-transparent text-white/40 hover:text-white'}`}>{t("dashboard.tab.orders")}</Link>
+            <Link href="/dashboard?tab=profile" suppressHydrationWarning className={`pb-4 text-sm font-bold uppercase tracking-widest border-b-2 transition-all ${tab === 'profile' ? 'border-[#C2A878] text-[#C2A878]' : 'border-transparent text-white/40 hover:text-white'}`}>{t("dashboard.tab.profile")}</Link>
           </div>
         </div>
 
@@ -122,11 +122,11 @@ export default async function DashboardPage(props: {
             <DashboardCart profile={profile} epaycoKey={epaycoKey} />
             
             {tab === 'overview' && (
-              <div className="bg-white rounded-3xl p-10 border border-foreground/5 shadow-xl">
+              <div className="bg-[#0B0B0B] rounded-sm p-10 border border-[#C2A878]/20">
                 <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-xl font-serif">{t("dashboard.activeSub.title")}</h2>
+                  <h2 className="text-xl font-serif text-[#F4F1ED]">{t("dashboard.activeSub.title")}</h2>
                   {subscriptions.length > 0 && (
-                    <span className="bg-green-50 text-green-700 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest border border-green-100">
+                    <span className="bg-[#C2A878]/10 text-[#C2A878] text-[10px] font-bold px-3 py-1 rounded-sm uppercase tracking-widest border border-[#C2A878]/20">
                       {t("dashboard.activeSub.badge")}
                     </span>
                   )}
@@ -138,14 +138,14 @@ export default async function DashboardPage(props: {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-[#C59F59]/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <Coffee className="w-8 h-8 text-[#C59F59]" strokeWidth={1.5} />
+                    <div className="w-16 h-16 bg-[#C2A878]/10 rounded-sm flex items-center justify-center mx-auto mb-6">
+                      <Coffee className="w-8 h-8 text-[#C2A878]" strokeWidth={1.5} />
                     </div>
-                    <h3 className="text-lg font-serif mb-2">{t("dashboard.noSub.title")}</h3>
-                    <p className="text-sm text-foreground/40 mb-8 max-w-xs mx-auto">{t("dashboard.noSub.desc")}</p>
+                    <h3 className="text-lg font-serif mb-2 text-[#F4F1ED]">{t("dashboard.noSub.title")}</h3>
+                    <p className="text-sm text-white/40 mb-8 max-w-xs mx-auto">{t("dashboard.noSub.desc")}</p>
                     <Link 
                       href="/builder" 
-                      className="inline-flex items-center gap-2 px-8 py-4 bg-[#C59F59] text-white text-xs font-bold uppercase tracking-widest rounded-2xl hover:bg-foreground transition-all shadow-lg"
+                      className="inline-flex items-center gap-2 px-8 py-4 bg-[#C2A878] text-[#0B0B0B] text-xs font-bold uppercase tracking-widest rounded-sm hover:bg-[#F4F1ED] hover:text-[#0B0B0B] transition-all"
                     >
                       {t("dashboard.noSub.cta")}
                       <ChevronRight className="w-4 h-4" />
@@ -156,33 +156,33 @@ export default async function DashboardPage(props: {
             )}
 
             {tab === 'orders' && (
-              <div className="bg-white rounded-3xl p-10 border border-foreground/5 shadow-xl">
+              <div className="bg-[#0B0B0B] rounded-sm p-10 border border-[#C2A878]/20">
                 <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-xl font-serif">{t("dashboard.orders.title")}</h2>
+                  <h2 className="text-xl font-serif text-[#F4F1ED]">{t("dashboard.orders.title")}</h2>
                 </div>
 
                 {orders.length > 0 ? (
                   <div className="space-y-4">
                     {orders.map(order => (
-                      <div key={order.id} className="p-6 border border-foreground/5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 hover:shadow-md transition-shadow bg-[#fdfbf7]/50">
+                      <div key={order.id} className="p-6 border border-[#C2A878]/20 rounded-sm flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-white/5 transition-colors">
                         <div className="flex items-start gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-[#C59F59]/10 flex items-center justify-center shrink-0">
-                            <Package className="w-6 h-6 text-[#C59F59]" />
+                          <div className="w-12 h-12 rounded-sm bg-[#C2A878]/10 flex items-center justify-center shrink-0">
+                            <Package className="w-6 h-6 text-[#C2A878]" />
                           </div>
                           <div>
-                            <p className="text-sm font-bold uppercase tracking-widest text-[#C59F59] mb-1">
+                            <p className="text-sm font-bold uppercase tracking-widest text-[#C2A878] mb-1">
                               {t("dashboard.orders.orderLabel")}{order.id.split('-')[0]}
                             </p>
-                            <p className="text-xs text-foreground/50">
+                            <p className="text-xs text-white/50">
                               {new Date(order.created_at).toLocaleDateString(locale === "en" ? "en-US" : "es-CO")}
                             </p>
-                            <span className={`inline-block mt-3 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(order.status)}`}>
+                            <span className={`inline-block mt-3 px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider ${getStatusColor(order.status)}`}>
                               {STATUS_LABELS[order.status] || order.status}
                             </span>
                           </div>
                         </div>
                         <div className="md:text-right flex flex-row md:flex-col items-center md:items-end justify-between w-full md:w-auto">
-                          <p className="font-serif text-2xl text-foreground">
+                          <p className="font-serif text-2xl text-[#F4F1ED]">
                             {formatPrice(order.total_amount)}
                           </p>
                         </div>
@@ -191,21 +191,21 @@ export default async function DashboardPage(props: {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-[#f9f7f0] rounded-full flex items-center justify-center mx-auto mb-6">
-                      <Package className="w-8 h-8 text-foreground/20" />
+                    <div className="w-16 h-16 bg-white/5 rounded-sm flex items-center justify-center mx-auto mb-6">
+                      <Package className="w-8 h-8 text-white/20" />
                     </div>
-                    <h3 className="text-lg font-serif mb-2">{t("dashboard.noOrders.title")}</h3>
-                    <p className="text-sm text-foreground/40 mb-8 max-w-xs mx-auto">{t("dashboard.noOrders.desc")}</p>
+                    <h3 className="text-lg font-serif mb-2 text-[#F4F1ED]">{t("dashboard.noOrders.title")}</h3>
+                    <p className="text-sm text-white/40 mb-8 max-w-xs mx-auto">{t("dashboard.noOrders.desc")}</p>
                   </div>
                 )}
               </div>
             )}
 
             {tab === 'profile' && (
-              <div className="bg-white rounded-3xl p-10 border border-foreground/5 shadow-xl">
+              <div className="bg-[#0B0B0B] rounded-sm p-10 border border-[#C2A878]/20">
                 <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-xl font-serif">{t("dashboard.profile.title")}</h2>
-                  <div className="w-12 h-12 rounded-full bg-[#f9f7f0] flex items-center justify-center text-[#C59F59] font-serif text-xl border border-[#C59F59]/20">
+                  <h2 className="text-xl font-serif text-[#F4F1ED]">{t("dashboard.profile.title")}</h2>
+                  <div className="w-12 h-12 rounded-sm bg-[#C2A878]/10 flex items-center justify-center text-[#C2A878] font-serif text-xl border border-[#C2A878]/30">
                     {(profile?.first_name?.[0] || user.email?.[0] || "?").toUpperCase()}
                   </div>
                 </div>
@@ -216,97 +216,97 @@ export default async function DashboardPage(props: {
                 }} className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label htmlFor="first_name" className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{t("dashboard.profile.firstName")}</label>
+                      <label htmlFor="first_name" className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t("dashboard.profile.firstName")}</label>
                       <div className="relative">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                         <input suppressHydrationWarning
                           type="text" 
                           name="first_name" 
                           id="first_name"
                           defaultValue={profile?.first_name || ""} 
-                          className="w-full pl-12 pr-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:border-[#C2A878] transition-all text-[#F4F1ED]"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label htmlFor="last_name" className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{t("dashboard.profile.lastName")}</label>
+                      <label htmlFor="last_name" className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t("dashboard.profile.lastName")}</label>
                       <input suppressHydrationWarning
                         type="text" 
                         name="last_name" 
                         id="last_name"
                         defaultValue={profile?.last_name || ""} 
-                        className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                        className="w-full px-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:border-[#C2A878] transition-all text-[#F4F1ED]"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label htmlFor="cedula_number" className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{t("dashboard.profile.cedula")}</label>
+                      <label htmlFor="cedula_number" className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t("dashboard.profile.cedula")}</label>
                       <div className="relative">
-                        <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
+                        <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                         <input suppressHydrationWarning
                           type="text" 
                           name="cedula_number" 
                           id="cedula_number"
                           defaultValue={profile?.cedula_number || ""} 
-                          className="w-full pl-12 pr-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:border-[#C2A878] transition-all text-[#F4F1ED]"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label htmlFor="phone_number" className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{t("dashboard.profile.phone")}</label>
+                      <label htmlFor="phone_number" className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t("dashboard.profile.phone")}</label>
                       <div className="relative">
-                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                         <input suppressHydrationWarning
                           type="tel" 
                           name="phone_number" 
                           id="phone_number"
                           defaultValue={profile?.phone_number || ""} 
-                          className="w-full pl-12 pr-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:border-[#C2A878] transition-all text-[#F4F1ED]"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-6 border-t border-foreground/5 space-y-6">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-[#C59F59]">{t("dashboard.profile.addressTitle")}</h3>
+                  <div className="pt-6 border-t border-white/10 space-y-6">
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-[#C2A878]">{t("dashboard.profile.addressTitle")}</h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label htmlFor="department" className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{t("dashboard.profile.department")}</label>
+                        <label htmlFor="department" className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t("dashboard.profile.department")}</label>
                         <div className="relative">
-                          <Map className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
+                          <Map className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                           <input suppressHydrationWarning
                             type="text" 
                             name="department" 
                             id="department"
                             defaultValue={profile?.department || ""} 
-                            className="w-full pl-12 pr-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                            className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:border-[#C2A878] transition-all text-[#F4F1ED]"
                           />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <label htmlFor="city" className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{t("dashboard.profile.city")}</label>
+                        <label htmlFor="city" className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t("dashboard.profile.city")}</label>
                         <input suppressHydrationWarning
                           type="text" 
                           name="city" 
                           id="city"
                           defaultValue={profile?.city || ""} 
-                          className="w-full px-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                          className="w-full px-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:border-[#C2A878] transition-all text-[#F4F1ED]"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label htmlFor="address" className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{t("dashboard.profile.address")}</label>
+                      <label htmlFor="address" className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t("dashboard.profile.address")}</label>
                       <div className="relative">
-                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
+                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                         <input suppressHydrationWarning
                           type="text" 
                           name="address" 
                           id="address"
                           defaultValue={profile?.address || ""} 
-                          className="w-full pl-12 pr-4 py-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
+                          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-sm text-sm focus:outline-none focus:border-[#C2A878] transition-all text-[#F4F1ED]"
                           placeholder={t("dashboard.profile.addressPlaceholder")}
                         />
                       </div>
@@ -314,7 +314,7 @@ export default async function DashboardPage(props: {
                   </div>
 
                   <div className="flex justify-end pt-4">
-                     <button suppressHydrationWarning type="submit" className="px-8 py-4 bg-foreground text-background text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#C59F59] hover:text-white transition-all shadow-md">
+                     <button suppressHydrationWarning type="submit" className="px-8 py-4 bg-[#C2A878] text-[#0B0B0B] text-xs font-bold uppercase tracking-widest rounded-sm hover:bg-[#F4F1ED] transition-all">
                         {t("dashboard.profile.saveBtn")}
                       </button>
                   </div>
@@ -325,13 +325,13 @@ export default async function DashboardPage(props: {
 
           {/* Sidebar Area */}
           <div className="space-y-8">
-            <div className="bg-foreground text-background rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-              <div className="absolute -right-8 -bottom-8 opacity-10">
+            <div className="bg-[#C2A878] text-[#0B0B0B] rounded-sm p-8 relative overflow-hidden">
+              <div className="absolute -right-8 -bottom-8 opacity-20">
                 <Coffee className="w-32 h-32" />
               </div>
               <h3 className="text-lg font-serif mb-4">{t("dashboard.sidebar.title")}</h3>
-              <p className="text-sm text-background/60 leading-relaxed mb-6 italic">{t("dashboard.sidebar.quote")}</p>
-              <button suppressHydrationWarning className="text-xs font-bold uppercase tracking-widest text-[#C59F59] hover:text-white transition-colors relative z-10">{t("dashboard.sidebar.link")}</button>
+              <p className="text-sm text-[#0B0B0B]/70 leading-relaxed mb-6 italic">{t("dashboard.sidebar.quote")}</p>
+              <button suppressHydrationWarning className="text-xs font-bold uppercase tracking-widest text-[#0B0B0B] hover:text-white transition-colors relative z-10">{t("dashboard.sidebar.link")}</button>
             </div>
           </div>
         </div>

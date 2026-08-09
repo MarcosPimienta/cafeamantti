@@ -8,12 +8,12 @@ export default async function TermsPage() {
   const locale = localeOption === "en" ? "en" : "es";
 
   return (
-    <main className="min-h-screen bg-[#fdfbf7] p-8 md:p-12 font-sans text-foreground">
-      <div className="max-w-4xl mx-auto bg-white rounded-[2.5rem] shadow-xl p-10 md:p-16 border border-foreground/5 relative">
+    <main className="min-h-screen bg-[#0B0B0B] p-8 md:p-12 font-sans text-[#F4F1ED]">
+      <div className="max-w-4xl mx-auto bg-[#0B0B0B] rounded-sm shadow-2xl p-10 md:p-16 border border-[#C2A878]/20 relative">
         
         <Link 
           href="/" 
-          className="absolute top-10 left-10 flex items-center gap-2 text-foreground/40 hover:text-foreground transition-colors group"
+          className="absolute top-10 left-10 flex items-center gap-2 text-white/40 hover:text-[#F4F1ED] transition-colors group"
         >
           <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
           <span className="text-sm font-medium tracking-tight">
@@ -22,18 +22,18 @@ export default async function TermsPage() {
         </Link>
         
         <div className="flex flex-col items-center mb-12 mt-12">
-          <div className="w-16 h-16 bg-[#f9f7f2] rounded-full flex items-center justify-center mb-6 ring-4 ring-foreground/5">
-            <Scale className="w-8 h-8 text-[#C59F59]" strokeWidth={1.5} />
+          <div className="w-16 h-16 bg-[#C2A878]/10 rounded-sm flex items-center justify-center mb-6 border border-[#C2A878]/20">
+            <Scale className="w-8 h-8 text-[#C2A878]" strokeWidth={1.5} />
           </div>
-          <h1 className="text-4xl md:text-5xl font-serif text-center mb-4 text-foreground tracking-tight">
+          <h1 className="text-4xl md:text-5xl font-serif text-center mb-4 text-[#F4F1ED] tracking-tight">
             {locale === "en" ? "Terms and Conditions" : "Términos y Condiciones"}
           </h1>
-          <p className="text-[#C59F59] text-xs font-bold uppercase tracking-[0.2em]">
+          <p className="text-[#C2A878] text-xs font-bold uppercase tracking-[0.2em]">
             {locale === "en" ? "Last updated: March 25, 2026" : "Última actualización: 25 de marzo de 2026"}
           </p>
         </div>
 
-        <article className="prose prose-sm md:prose-base prose-headings:font-serif prose-headings:font-normal prose-h2:text-2xl prose-h2:mt-12 prose-h2:mb-4 prose-p:text-foreground/70 prose-li:text-foreground/70 prose-a:text-[#C59F59] max-w-none">
+        <article className="prose prose-sm md:prose-base prose-headings:font-serif prose-headings:font-normal prose-h2:text-2xl prose-h2:mt-12 prose-h2:mb-4 prose-p:text-white/70 prose-li:text-white/70 prose-a:text-[#C2A878] prose-h2:text-[#C2A878] prose-strong:text-[#F4F1ED] max-w-none">
           {locale === "en" ? (
             <>
               <p>This document establishes the general Terms and Conditions (hereinafter, the "Terms") governing the use of the Café Amantti website and the purchase of our products and subscriptions. By accessing, browsing, and using our website, you agree to be bound by these Terms.</p>
