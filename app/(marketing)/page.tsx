@@ -525,7 +525,7 @@ export default function Home() {
                 }}
               >
                 <Image
-                  src="/images/Guy_Repairing.png"
+                  src="/images/Mantenimiento.jpg"
                   alt={t("home.servicios.equiposTitle")}
                   fill
                   className="object-cover photo-treatment"
