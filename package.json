@@ -14,8 +14,11 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource/bodoni-moda": "^5.2.7",
     "@hookform/resolvers": "^5.2.2",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.98.0",
+    "@types/three": "^0.185.4",
     "html2pdf.js": "^0.14.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
@@ -26,6 +29,7 @@
     "react-hook-form": "^7.71.2",
     "recharts": "^3.8.1",
     "resend": "^6.18.1",
+    "three": "^0.185.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {

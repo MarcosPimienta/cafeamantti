@@ -9,23 +9,13 @@ import { useLanguage } from "@/app/context/LanguageContext";
 import { useCart } from "@/app/context/CartContext";
 import { CartDrawer } from "@/app/components/CartDrawer";
 import { HeroCarousel } from "@/app/components/HeroCarousel";
-import { calculateCoffeePrice } from "@/app/(shop)/builder/page";
 import { sendContactEmail } from "@/app/actions/contact";
 import "./homepage.css";
+import { ProductCarousel, ProductDef } from "@/app/components/ProductCarousel";
 
 /* ────────────────────────────────────────────────
    Product data
    ──────────────────────────────────────────────── */
-interface ProductDef {
-  key: string;
-  id: string;
-  nameKey: string;
-  notesKey: string;
-  descKey: string;
-  image: string;
-  limited: boolean;
-  weights: { label: string; available: boolean }[];
-}
 
 const PRODUCTS: ProductDef[] = [
   {
@@ -35,6 +25,7 @@ const PRODUCTS: ProductDef[] = [
     notesKey: "home.tienda.tradNotes",
     descKey: "home.tienda.tradDesc",
     image: "/images/Premium_Bag.jpeg",
+    model: "/3d/Coffee_Bag_Premium.glb",
     limited: false,
     weights: [
       { label: "250g", available: true },
@@ -49,6 +40,7 @@ const PRODUCTS: ProductDef[] = [
     notesKey: "home.tienda.honeyNotes",
     descKey: "home.tienda.honeyDesc",
     image: "/images/Honey_Bag.jpeg",
+    model: "/3d/Coffee_Bag_Honey.glb",
     limited: false,
     weights: [
       { label: "250g", available: true },
@@ -63,6 +55,7 @@ const PRODUCTS: ProductDef[] = [
     notesKey: "home.tienda.microNotes",
     descKey: "home.tienda.microDesc",
     image: "/images/Especial_Bag.jpeg",
+    model: "/3d/Coffee_Bag_Especial.glb",
     limited: true,
     weights: [
       { label: "250g", available: true },
@@ -71,206 +64,6 @@ const PRODUCTS: ProductDef[] = [
     ],
   },
 ];
-
-/* ────────────────────────────────────────────────
-   ProductCard component
-   ──────────────────────────────────────────────── */
-interface ProductCardProps {
-  product: ProductDef;
-  t: (key: any) => string;
-}
-
-function ProductCard({ product, t }: ProductCardProps) {
-  const [selectedWeight, setSelectedWeight] = useState("250g");
-  const [selectedGrind, setSelectedGrind] = useState("whole");
-  const [isAdding, setIsAdding] = useState(false);
-  const { addItem } = useCart();
-
-  const price = calculateCoffeePrice(product.id, selectedWeight);
-  const formattedPrice =
-    "$ " + price.toLocaleString("es-CO");
-
-  const handleAdd = () => {
-    setIsAdding(true);
-    addItem({
-      id: product.id,
-      nameKey: product.nameKey,
-      price,
-      weight: selectedWeight,
-      grind: selectedGrind === "whole" ? "whole" : "ground",
-      image: product.image,
-    });
-    setTimeout(() => setIsAdding(false), 800);
-  };
-
-  return (
-    <div className="product-card" data-reveal="">
-      {/* Bag image */}
-      <div style={{ position: "relative", display: "flex", justifyContent: "center", padding: "10px 0 26px" }}>
-        {product.limited && (
-          <span
-            style={{
-              position: "absolute",
-              top: 0,
-              right: 0,
-              fontSize: 10,
-              letterSpacing: ".2em",
-              textTransform: "uppercase",
-              color: "#C2A878",
-              border: "1px solid rgba(194,168,120,.4)",
-              padding: "6px 10px",
-              borderRadius: 2,
-              fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
-            }}
-          >
-            {t("home.tienda.edicionLimitada")}
-          </span>
-        )}
-        <div style={{ position: "relative", height: 230, width: 140 }}>
-          <Image
-            src={product.image}
-            alt={t(product.nameKey)}
-            fill
-            className="object-contain"
-            style={{ filter: "drop-shadow(0 22px 26px rgba(0,0,0,.5))" }}
-          />
-        </div>
-      </div>
-
-      {/* Name */}
-      <h3
-        style={{
-          margin: 0,
-          fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
-          fontStyle: "italic",
-          fontWeight: 400,
-          fontSize: 24,
-          color: "#F4F1ED",
-        }}
-      >
-        {t(product.nameKey)}
-      </h3>
-
-      {/* Tasting notes */}
-      <p
-        style={{
-          margin: "8px 0 0",
-          fontSize: 12,
-          letterSpacing: ".16em",
-          textTransform: "uppercase",
-          color: "#C2A878",
-          fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
-        }}
-      >
-        {t(product.notesKey)}
-      </p>
-
-      {/* Description */}
-      <p
-        style={{
-          margin: "14px 0 24px",
-          fontSize: 14,
-          lineHeight: 1.7,
-          color: "rgba(244,241,237,.6)",
-          flex: 1,
-          fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
-        }}
-      >
-        {t(product.descKey)}
-      </p>
-
-      {/* Weight selector */}
-      <p
-        style={{
-          margin: "0 0 10px",
-          fontSize: 10,
-          letterSpacing: ".2em",
-          textTransform: "uppercase",
-          color: "rgba(244,241,237,.4)",
-          fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
-        }}
-      >
-        {t("home.tienda.pesoLabel")}
-      </p>
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-        {product.weights.map((w) => (
-          <button
-            key={w.label}
-            suppressHydrationWarning
-            disabled={!w.available}
-            onClick={() => w.available && setSelectedWeight(w.label)}
-            className={`chip ${selectedWeight === w.label ? "chip-active" : ""}`}
-          >
-            {w.label}
-            {!w.available && ` · ${t("home.tienda.premium")}`}
-          </button>
-        ))}
-      </div>
-
-      {/* Grind selector */}
-      <p
-        style={{
-          margin: "0 0 10px",
-          fontSize: 10,
-          letterSpacing: ".2em",
-          textTransform: "uppercase",
-          color: "rgba(244,241,237,.4)",
-          fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
-        }}
-      >
-        {t("home.tienda.moliendaLabel")}
-      </p>
-      <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
-        <button
-          suppressHydrationWarning
-          onClick={() => setSelectedGrind("whole")}
-          className={`chip ${selectedGrind === "whole" ? "chip-active" : ""}`}
-        >
-          {t("home.tienda.granoEntero")}
-        </button>
-        <button
-          suppressHydrationWarning
-          onClick={() => setSelectedGrind("ground")}
-          className={`chip ${selectedGrind === "ground" ? "chip-active" : ""}`}
-        >
-          {t("home.tienda.molido")}
-        </button>
-      </div>
-
-      {/* Price + add */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-          borderTop: "1px solid rgba(194,168,120,.25)",
-          paddingTop: 22,
-        }}
-      >
-        <p
-          style={{
-            margin: 0,
-            fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
-            fontSize: 24,
-            color: "#F4F1ED",
-          }}
-        >
-          {formattedPrice}
-        </p>
-        <button
-          suppressHydrationWarning
-          onClick={handleAdd}
-          disabled={isAdding}
-          className="btn-primary"
-          style={{ padding: "13px 22px", fontSize: 11, letterSpacing: ".2em" }}
-        >
-          {isAdding ? "..." : t("home.tienda.anadirBtn")}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 /* ────────────────────────────────────────────────
    Scroll reveal hook
@@ -951,12 +744,8 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Product cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 40 }}>
-            {PRODUCTS.map((p) => (
-              <ProductCard key={p.key} product={p} t={t} />
-            ))}
-          </div>
+          {/* Product Carousel */}
+          <ProductCarousel products={PRODUCTS} t={t} />
 
           {/* Meta labels */}
           <div
