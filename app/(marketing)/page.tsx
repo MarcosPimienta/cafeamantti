@@ -10,6 +10,7 @@ import { useCart } from "@/app/context/CartContext";
 import { CartDrawer } from "@/app/components/CartDrawer";
 import { HeroCarousel } from "@/app/components/HeroCarousel";
 import { calculateCoffeePrice } from "@/app/(shop)/builder/page";
+import { sendContactEmail } from "@/app/actions/contact";
 import "./homepage.css";
 
 /* ────────────────────────────────────────────────
@@ -350,6 +351,21 @@ export default function Home() {
   const { itemCount } = useCart();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [contactStatus, setContactStatus] = useState<{ type: "idle" | "loading" | "success" | "error"; message?: string }>({ type: "idle" });
+
+  const handleContactSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setContactStatus({ type: "loading" });
+    const formData = new FormData(e.currentTarget);
+    const result = await sendContactEmail(formData);
+    
+    if (result.error) {
+      setContactStatus({ type: "error", message: result.error });
+    } else {
+      setContactStatus({ type: "success", message: "¡Mensaje enviado con éxito! Nos pondremos en contacto pronto." });
+      (e.target as HTMLFormElement).reset();
+    }
+  };
   const [profile, setProfile] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -1023,17 +1039,22 @@ export default function Home() {
           </div>
 
           {/* Form column */}
-          <form data-reveal="" style={{ display: "grid", gap: 14 }} onSubmit={(e) => e.preventDefault()}>
+          {/* Form column */}
+          <form data-reveal="" style={{ display: "grid", gap: 14 }} onSubmit={handleContactSubmit}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <input
                 suppressHydrationWarning
                 type="text"
+                name="nombre"
+                required
                 placeholder={t("home.contacto.nombrePlaceholder")}
                 className="contact-input"
               />
               <input
                 suppressHydrationWarning
                 type="email"
+                name="email"
+                required
                 placeholder={t("home.contacto.correoPlaceholder")}
                 className="contact-input"
               />
@@ -1041,10 +1062,11 @@ export default function Home() {
             <input
               suppressHydrationWarning
               type="text"
+              name="negocio"
               placeholder={t("home.contacto.negocioPlaceholder")}
               className="contact-input"
             />
-            <select suppressHydrationWarning className="contact-select" defaultValue="">
+            <select suppressHydrationWarning name="servicio" className="contact-select" defaultValue="">
               <option value="" disabled>{t("home.contacto.servicioDefault")}</option>
               <option value="barismo">{t("home.contacto.servicioBarismo")}</option>
               <option value="equipos">{t("home.contacto.servicioEquipos")}</option>
@@ -1053,13 +1075,35 @@ export default function Home() {
             </select>
             <textarea
               suppressHydrationWarning
+              name="mensaje"
+              required
               placeholder={t("home.contacto.mensajePlaceholder")}
               rows={5}
               className="contact-input"
               style={{ resize: "vertical" }}
             />
-            <button suppressHydrationWarning type="submit" className="contact-submit">
-              {t("home.contacto.submitBtn")}
+            
+            {contactStatus.message && (
+              <div style={{ 
+                padding: "10px", 
+                borderRadius: "4px", 
+                backgroundColor: contactStatus.type === "error" ? "rgba(220, 38, 38, 0.1)" : "rgba(34, 197, 94, 0.1)",
+                color: contactStatus.type === "error" ? "#ef4444" : "#22c55e",
+                fontSize: "14px",
+                border: contactStatus.type === "error" ? "1px solid rgba(220, 38, 38, 0.2)" : "1px solid rgba(34, 197, 94, 0.2)"
+              }}>
+                {contactStatus.message}
+              </div>
+            )}
+
+            <button 
+              suppressHydrationWarning 
+              type="submit" 
+              className="contact-submit"
+              disabled={contactStatus.type === "loading"}
+              style={{ opacity: contactStatus.type === "loading" ? 0.7 : 1 }}
+            >
+              {contactStatus.type === "loading" ? "Enviando..." : t("home.contacto.submitBtn")}
             </button>
           </form>
         </div>
