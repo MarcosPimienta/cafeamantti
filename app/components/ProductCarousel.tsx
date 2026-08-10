@@ -174,7 +174,7 @@ export function ProductCarousel({ products, t }: { products: ProductDef[], t: (k
             <ContactShadows position={[0, -1.4, 0]} opacity={0.75} scale={10} blur={2.5} far={4} />
 
             {/* Post Processing Effects */}
-            <EffectComposer disableNormalPass>
+            <EffectComposer>
               <Bloom luminanceThreshold={0.9} mipmapBlur intensity={0.8} />
               <Vignette eskil={false} offset={0.1} darkness={1.1} />
             </EffectComposer>
