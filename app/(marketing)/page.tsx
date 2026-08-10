@@ -489,10 +489,10 @@ export default function Home() {
                 }}
               >
                 <Image
-                  src="/images/Guy_Barism.png"
-                  alt={t("home.servicios.barismoTitle")}
+                  src="/images/LatteArt.jpg"
+                  alt="Barista"
                   fill
-                  className="object-cover photo-treatment"
+                  className="object-cover transition-transform duration-700 hover:scale-105"
                   sizes="(max-width: 900px) 100vw, 33vw"
                 />
               </div>
@@ -561,7 +561,7 @@ export default function Home() {
                 }}
               >
                 <Image
-                  src="/images/Guy_Explains.png"
+                  src="/images/SoporteContinuo.jpg"
                   alt={t("home.servicios.soporteTitle")}
                   fill
                   className="object-cover photo-treatment"
