@@ -2,8 +2,9 @@
 
 import { useState, Suspense, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
-import { Gltf, OrbitControls, ContactShadows } from "@react-three/drei";
+import { OrbitControls, ContactShadows, useGLTF } from "@react-three/drei";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { useCart } from "@/app/context/CartContext";
 import { calculateCoffeePrice } from "@/app/(shop)/builder/page";
 
@@ -20,9 +21,25 @@ export interface ProductDef {
   weights: { label: string; available: boolean }[];
 }
 
+import * as THREE from "three";
+
 function Model({ url }: { url: string }) {
-  // Use the <Gltf> component from drei instead of useGLTF to avoid React 18 Strict Mode Blob URL revocation bugs
-  return <Gltf src={url} scale={2.8} position={[0, -1.2, 0]} rotation={[0, Math.PI, 0]} />;
+  const { scene } = useGLTF(url);
+  
+  useEffect(() => {
+    scene.traverse((node: any) => {
+      if (node.isMesh && node.material) {
+        // Make the texture emit light so it's always perfectly readable
+        if (node.material.map) {
+          node.material.emissive = new THREE.Color(0xffffff);
+          node.material.emissiveMap = node.material.map;
+          node.material.emissiveIntensity = 0.15; // Lowered to prevent light bags from blowing out
+        }
+      }
+    });
+  }, [scene]);
+
+  return <primitive object={scene} scale={2.8} position={[0, -1.2, 0]} rotation={[0, Math.PI, 0]} />;
 }
 
 // Preload models disabled to fix Next.js blob texture error in dev
@@ -131,8 +148,13 @@ export function ProductCarousel({ products, t }: { products: ProductDef[], t: (k
 
         <div style={{ width: "100%", height: "100%", cursor: "grab", maxWidth: "800px" }}>
           <Canvas shadows camera={{ position: [0, 0, 5], fov: 45 }}>
-            <ambientLight intensity={0.5} />
-            <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
+            {/* Cinematic Lighting Setup */}
+            <ambientLight intensity={0.4} color="#ffe8cc" />
+            <spotLight position={[5, 10, 5]} angle={0.25} penumbra={1} intensity={2} castShadow color="#ffffff" />
+            <spotLight position={[-10, 5, -10]} angle={0.3} penumbra={1} intensity={1.5} color="#d4b483" />
+            <directionalLight position={[0, -5, 5]} intensity={0.8} color="#4a3b2c" />
+            <directionalLight position={[5, 0, 5]} intensity={1.2} color="#f4f1ed" />
+            
             <Suspense fallback={null}>
               {products.map((p, index) => (
                 <group key={p.key} visible={index === currentIndex}>
@@ -140,6 +162,7 @@ export function ProductCarousel({ products, t }: { products: ProductDef[], t: (k
                 </group>
               ))}
             </Suspense>
+            
             <OrbitControls 
               enableZoom={true} 
               enablePan={false} 
@@ -149,11 +172,12 @@ export function ProductCarousel({ products, t }: { products: ProductDef[], t: (k
               maxPolarAngle={Math.PI / 1.5} 
             />
             <ContactShadows position={[0, -1.4, 0]} opacity={0.75} scale={10} blur={2.5} far={4} />
-            
-            {/* Added extra lights to compensate for removed Environment map */}
-            <directionalLight position={[5, 10, 5]} intensity={1.5} />
-            <directionalLight position={[-5, 0, -5]} intensity={0.8} />
-            <directionalLight position={[0, 0, 5]} intensity={0.5} />
+
+            {/* Post Processing Effects */}
+            <EffectComposer disableNormalPass>
+              <Bloom luminanceThreshold={0.9} mipmapBlur intensity={0.8} />
+              <Vignette eskil={false} offset={0.1} darkness={1.1} />
+            </EffectComposer>
           </Canvas>
         </div>
 

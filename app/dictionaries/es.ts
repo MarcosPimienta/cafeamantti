@@ -243,7 +243,7 @@ export const es: Record<TranslationKey, string> = {
   "home.tienda.tradNotes": "chocolate · caramelo · naranja",
   "home.tienda.tradDesc": "La mezcla de la casa. Balanceada, constante, un tributo al perfil clásico colombiano.",
   "home.tienda.honeyName": "Honey Process",
-  "home.tienda.honeyNotes": "frutos rojos · miel · floral",
+  "home.tienda.honeyNotes": "panela · durazno · miel",
   "home.tienda.honeyDesc": "Exótico y dulce. El mucílago de la cereza se conserva para un dulzor frutal distintivo.",
   "home.tienda.microName": "Microlote del Mes",
   "home.tienda.microNotes": "complejo · brillante · irrepetible",

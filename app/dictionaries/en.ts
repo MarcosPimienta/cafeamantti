@@ -241,7 +241,7 @@ export const en = {
   "home.tienda.tradNotes": "chocolate · caramel · orange",
   "home.tienda.tradDesc": "The house blend. Balanced, consistent — a tribute to the classic Colombian profile.",
   "home.tienda.honeyName": "Honey Process",
-  "home.tienda.honeyNotes": "red fruits · honey · floral",
+  "home.tienda.honeyNotes": "panela · peach · honey",
   "home.tienda.honeyDesc": "Exotic and sweet. The cherry mucilage is preserved for a distinctive fruity sweetness.",
   "home.tienda.microName": "Microlot of the Month",
   "home.tienda.microNotes": "complex · bright · unrepeatable",
