@@ -33,11 +33,16 @@ function Model({ url }: { url: string }) {
         if (node.material.map) {
           node.material.emissive = new THREE.Color(0xffffff);
           node.material.emissiveMap = node.material.map;
-          node.material.emissiveIntensity = 0.15; // Lowered to prevent light bags from blowing out
+          // Amantti Seleccion (Premium bag) is darker, so it needs more light to be visible
+          if (url.includes('Premium')) {
+            node.material.emissiveIntensity = 0.9;
+          } else {
+            node.material.emissiveIntensity = 0.15; // Lowered to prevent light bags from blowing out
+          }
         }
       }
     });
-  }, [scene]);
+  }, [scene, url]);
 
   return <primitive object={scene} scale={2.8} position={[0, -1.2, 0]} rotation={[0, Math.PI, 0]} />;
 }
