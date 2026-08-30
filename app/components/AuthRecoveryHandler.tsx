@@ -8,14 +8,24 @@ export function AuthRecoveryHandler() {
   const router = useRouter();
 
   useEffect(() => {
-    // 1. Check if the URL hash contains recovery token directly (Supabase default redirect behavior)
-    if (typeof window !== "undefined" && window.location.hash) {
-      const hash = window.location.hash;
-      if (hash.includes("type=recovery")) {
-        // Forward to the reset password page with the hash
-        if (!window.location.pathname.startsWith("/recovery/reset-password")) {
-          router.push(`/recovery/reset-password${hash}`);
-          return;
+    if (typeof window !== "undefined") {
+      // 1. Check if the URL has ?code= parameter
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      if (code && !window.location.pathname.startsWith("/auth/callback")) {
+        window.location.href = `/auth/callback?code=${encodeURIComponent(code)}&next=/recovery/reset-password`;
+        return;
+      }
+
+      // 2. Check if the URL hash contains recovery token directly
+      if (window.location.hash) {
+        const hash = window.location.hash;
+        if (hash.includes("type=recovery")) {
+          // Forward to the reset password page with the hash
+          if (!window.location.pathname.startsWith("/recovery/reset-password")) {
+            router.push(`/recovery/reset-password${hash}`);
+            return;
+          }
         }
       }
     }

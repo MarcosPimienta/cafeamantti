@@ -2,7 +2,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname, searchParams } = request.nextUrl
+
+  // If a Supabase auth code lands on root or any other page, redirect to the callback handler
+  const authCode = searchParams.get('code')
+  if (authCode && pathname !== '/auth/callback') {
+    const callbackUrl = new URL('/auth/callback', request.url)
+    callbackUrl.searchParams.set('code', authCode)
+    callbackUrl.searchParams.set('next', '/recovery/reset-password')
+    return NextResponse.redirect(callbackUrl)
+  }
 
   // Define paths that strictly REQUIRE authentication checks
   const isProtectedPath = pathname.startsWith('/portal') || pathname.startsWith('/dashboard')
