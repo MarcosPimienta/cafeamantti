@@ -165,9 +165,19 @@ function LoginForm() {
             </div>
 
             <div className="group">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 mb-2 px-1 transition-colors group-focus-within:text-[#C2A878]">
-                Contraseña
-              </label>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 transition-colors group-focus-within:text-[#C2A878]">
+                  Contraseña
+                </label>
+                {isLogin && (
+                  <Link
+                    href="/recovery"
+                    className="text-[11px] text-[#C2A878] hover:text-[#F4F1ED] transition-colors"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </Link>
+                )}
+              </div>
               <input
                 {...register("password")}
                 type="password"
