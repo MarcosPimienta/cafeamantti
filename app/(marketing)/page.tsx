@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { ShoppingCart, Menu, X } from "lucide-react";
+import { ShoppingCart, Menu, X, User } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useCart } from "@/app/context/CartContext";
 import { CartDrawer } from "@/app/components/CartDrawer";
@@ -231,6 +231,25 @@ export default function Home() {
             {t("home.nav.subscribe")}
           </Link>
 
+          {/* Profile / Account icon */}
+          <Link
+            href="/dashboard"
+            style={{
+              position: "relative",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            className="text-[#F4F1ED]/75 hover:text-[#C2A878] transition-colors"
+            aria-label={t("nav.myAccount")}
+          >
+            <User size={18} strokeWidth={1.5} />
+          </Link>
+
           {/* Cart icon */}
           <button
             onClick={() => setIsCartOpen(true)}
@@ -258,8 +277,27 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Mobile hamburger + cart */}
+        {/* Mobile hamburger + profile + cart */}
         <div className="flex md:hidden" style={{ alignItems: "center", gap: 16 }}>
+          {/* Profile / Account icon */}
+          <Link
+            href="/dashboard"
+            style={{
+              position: "relative",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            className="text-[#F4F1ED]/75 hover:text-[#C2A878] transition-colors"
+            aria-label={t("nav.myAccount")}
+          >
+            <User size={18} strokeWidth={1.5} />
+          </Link>
+
           <button
             onClick={() => setIsCartOpen(true)}
             style={{ position: "relative", background: "none", border: "none", cursor: "pointer", padding: 4 }}
