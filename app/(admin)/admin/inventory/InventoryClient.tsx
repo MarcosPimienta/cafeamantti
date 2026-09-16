@@ -68,6 +68,7 @@ interface InventoryItem {
   category: string;
   unit: string;
   current_stock: number;
+  legacy_stock?: number;
   min_stock: number;
   notes: string | null;
   created_at: string;
@@ -3686,6 +3687,16 @@ export default function InventoryClient({
 
   const isLegacy = era === 'v1';
 
+  const displayedInventory = useMemo(() => {
+    if (isLegacy) {
+      return inventory.map((item) => ({
+        ...item,
+        current_stock: Number(item.legacy_stock ?? item.current_stock),
+      }));
+    }
+    return inventory;
+  }, [inventory, isLegacy]);
+
   function updateStock(id: string, newStock: number) {
     setInventory((prev) =>
       prev.map((item) =>
@@ -3765,25 +3776,25 @@ export default function InventoryClient({
 
       {/* Tab content */}
       {activeTab === "inventario" && (
-        <InventarioTab inventory={inventory} onStockUpdate={updateStock} era={era} />
+        <InventarioTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
       )}
       {activeTab === "entradas" && (
-        <EntradasTab inventory={inventory} onStockUpdate={updateStock} era={era} />
+        <EntradasTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
       )}
       {activeTab === "trilla" && (
-        <TrillaTab inventory={inventory} onStocksUpdate={updateStocks} era={era} />
+        <TrillaTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
       )}
       {activeTab === "tostion" && (
-        <TostionTab inventory={inventory} onStocksUpdate={updateStocks} era={era} />
+        <TostionTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
       )}
       {activeTab === "prod_altas" && (
-        <ProdAltasTab inventory={inventory} onStocksUpdate={updateStocks} era={era} />
+        <ProdAltasTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
       )}
       {activeTab === "salidas" && (
-        <SalidasTab inventory={inventory} onStockUpdate={updateStock} era={era} />
+        <SalidasTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
       )}
-      {activeTab === "reportes" && <ReportesTab inventory={inventory} era={era} />}
-      {activeTab === "auditoria" && <AuditoriaTab inventory={inventory} />}
+      {activeTab === "reportes" && <ReportesTab inventory={displayedInventory} era={era} />}
+      {activeTab === "auditoria" && <AuditoriaTab inventory={displayedInventory} />}
     </div>
   );
 }

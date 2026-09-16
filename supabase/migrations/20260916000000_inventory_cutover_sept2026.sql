@@ -74,30 +74,24 @@ UPDATE public.cashflow_incomes
   );
 
 -- ────────────────────────────────────────────────────────────
--- SECTION 5 — Create opening-balance snapshot movements
--- One 'ajuste' per product with current_stock as of migration date.
--- These serve as the clean starting point for v2 data.
+-- SECTION 5 — Reset current stock to 0 & preserve legacy stock
 -- ────────────────────────────────────────────────────────────
 
-INSERT INTO public.inventory_movements (
-  inventory_id,
-  type,
-  quantity,
-  reason,
-  movement_date,
-  tab_source,
-  era
-)
-SELECT
-  id,
-  'ajuste',
-  current_stock,
-  'Apertura inventario limpio — Sept 2026',
-  '2026-09-01',
-  'entrada',
-  'v2'
-FROM public.inventory
-WHERE current_stock IS NOT NULL;
+-- 1. Preserve legacy stock in a dedicated column before resetting
+ALTER TABLE public.inventory
+  ADD COLUMN IF NOT EXISTS legacy_stock NUMERIC DEFAULT 0;
+
+UPDATE public.inventory
+  SET legacy_stock = COALESCE(current_stock, 0);
+
+-- 2. Reset all inventory items to 0 for the clean start from September 2026
+UPDATE public.inventory
+  SET current_stock = 0;
+
+-- 3. Clean up any previous v2 opening movements that carried over old stock
+DELETE FROM public.inventory_movements
+  WHERE era = 'v2' AND reason = 'Apertura inventario limpio — Sept 2026';
+
 
 -- ────────────────────────────────────────────────────────────
 -- SECTION 6 — Performance indexes for era filtering
