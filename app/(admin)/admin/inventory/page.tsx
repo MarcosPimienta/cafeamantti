@@ -4,6 +4,8 @@ import { getInventory } from "../../actions";
 import { redirect } from "next/navigation";
 import InventoryClient from "./InventoryClient";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Inventario — Amantti Admin",
 };

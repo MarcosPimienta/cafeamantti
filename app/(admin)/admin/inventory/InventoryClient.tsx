@@ -57,6 +57,7 @@ import {
   updateMovement,
   deleteProductionBatch,
   getAuditLogs,
+  getInventory,
 } from "../../actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -3696,6 +3697,16 @@ export default function InventoryClient({
     }
     return inventory;
   }, [inventory, isLegacy]);
+
+  useEffect(() => {
+    getInventory()
+      .then((data) => {
+        if (data && data.length > 0) {
+          setInventory(data as InventoryItem[]);
+        }
+      })
+      .catch(console.error);
+  }, [era]);
 
   function updateStock(id: string, newStock: number) {
     setInventory((prev) =>

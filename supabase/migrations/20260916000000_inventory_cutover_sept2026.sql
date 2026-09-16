@@ -77,18 +77,40 @@ UPDATE public.cashflow_incomes
 -- SECTION 5 — Reset current stock to 0 & preserve legacy stock
 -- ────────────────────────────────────────────────────────────
 
--- 1. Preserve legacy stock in a dedicated column before resetting
+-- 1. Ensure legacy_stock column exists
 ALTER TABLE public.inventory
   ADD COLUMN IF NOT EXISTS legacy_stock NUMERIC DEFAULT 0;
 
+-- 2. If current_stock has values, save them to legacy_stock
 UPDATE public.inventory
-  SET legacy_stock = COALESCE(current_stock, 0);
+  SET legacy_stock = COALESCE(current_stock, 0)
+  WHERE (legacy_stock IS NULL OR legacy_stock = 0) AND current_stock != 0;
 
--- 2. Reset all inventory items to 0 for the clean start from September 2026
+-- 3. If current_stock was already set to 0, recover legacy stock from snapshot movements
+UPDATE public.inventory i
+  SET legacy_stock = m.quantity
+  FROM public.inventory_movements m
+  WHERE m.inventory_id = i.id
+    AND m.reason = 'Apertura inventario limpio — Sept 2026'
+    AND (i.legacy_stock IS NULL OR i.legacy_stock = 0);
+
+-- 4. If any items still have 0/NULL, calculate from sum of historical v1 movements
+UPDATE public.inventory i
+  SET legacy_stock = COALESCE(sub.total_qty, 0)
+  FROM (
+    SELECT inventory_id, SUM(quantity) as total_qty
+    FROM public.inventory_movements
+    WHERE era = 'v1'
+    GROUP BY inventory_id
+  ) sub
+  WHERE i.id = sub.inventory_id
+    AND (i.legacy_stock IS NULL OR i.legacy_stock = 0);
+
+-- 5. Reset operational current_stock to 0 for all products in the clean era (v2)
 UPDATE public.inventory
   SET current_stock = 0;
 
--- 3. Clean up any previous v2 opening movements that carried over old stock
+-- 6. Clean up temporary v2 snapshot movements so they don't pollute v2
 DELETE FROM public.inventory_movements
   WHERE era = 'v2' AND reason = 'Apertura inventario limpio — Sept 2026';
 
