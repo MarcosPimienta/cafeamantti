@@ -5,7 +5,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, BarChart2, History, Plus, Upload,
   Image as ImageIcon, Trash2, X, Loader2, Check, Calendar, AlertTriangle,
   ChevronDown, ChevronUp, TrendingUp, TrendingDown, DollarSign,
-  Activity, Layers, Zap, Package, Pencil,
+  Activity, Layers, Zap, Package, Pencil, Archive,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -1389,6 +1389,7 @@ function PaginationControls({
 export default function CashflowClient() {
   const [activeTab,      setActiveTab]      = useState<TabId>("gastos");
   const [reportMode,     setReportMode]     = useState<"cash" | "pl">("cash");
+  const [era,            setEra]            = useState<'v1' | 'v2'>('v2');
   const [expenses,       setExpenses]       = useState<any[]>([]);
   const [incomes,        setIncomes]        = useState<any[]>([]);
   const [historyLogs,    setHistoryLogs]    = useState<any[]>([]);
@@ -1401,6 +1402,8 @@ export default function CashflowClient() {
   const [selectedDate,   setSelectedDate]   = useState<string | undefined>(undefined);
   const [showDayActionsModal, setShowDayActionsModal] = useState(false);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
+
+  const isLegacy = era === 'v1';
 
   // Filters for Gastos
   const [expSearch, setExpSearch] = useState("");
@@ -1431,7 +1434,7 @@ export default function CashflowClient() {
   const loadData = useCallback(async () => {
     setLoading(true);
     const [exp, inc, hist, missing, inv] = await Promise.all([
-      getAllExpenses(), getAllIncomes(), getCashflowHistory(), getMissingCashflowDays(), getInventory(),
+      getAllExpenses(era), getAllIncomes(era), getCashflowHistory(), getMissingCashflowDays(), getInventory(),
     ]);
     setExpenses(exp   || []);
     setIncomes(inc    || []);
@@ -1439,7 +1442,7 @@ export default function CashflowClient() {
     setMissingDays(missing || []);
     setInventory(inv || []);
     setLoading(false);
-  }, []);
+  }, [era]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -1455,14 +1458,44 @@ export default function CashflowClient() {
 
   return (
     <div className="space-y-6 pb-24">
-      {/* Title */}
-      <div>
-        <h1 className="text-3xl font-serif text-foreground mb-2">Flujo de Caja</h1>
-        <p className="text-foreground/60">Gestiona y audita los ingresos, gastos y reportes financieros.</p>
+      {/* Title & Legacy Toggle */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-serif text-foreground mb-1">Flujo de Caja</h1>
+          <p className="text-foreground/60">Gestiona y audita los ingresos, gastos y reportes financieros.</p>
+        </div>
+        <button
+          id="toggle-legacy-cashflow-era"
+          onClick={() => setEra(prev => prev === 'v2' ? 'v1' : 'v2')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all border ${
+            isLegacy
+              ? 'bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
+              : 'bg-white text-foreground/50 border-foreground/10 hover:bg-foreground/5'
+          }`}
+        >
+          <Archive className="w-3.5 h-3.5" />
+          {isLegacy ? 'Viendo: Archivo (pre-Sept 2026)' : 'Ver datos anteriores'}
+        </button>
       </div>
 
-      {/* ⚠️ Missing days alert */}
-      {!loading && missingDays.length > 0 && (
+      {/* Legacy mode banner */}
+      {isLegacy && (
+        <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <Archive className="w-5 h-5 flex-shrink-0" />
+          <div>
+            <span className="font-bold">Modo archivo</span> — Estás viendo datos financieros anteriores a septiembre 2026. Estos datos son de solo lectura.
+          </div>
+          <button
+            onClick={() => setEra('v2')}
+            className="ml-auto px-3 py-1.5 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-xs font-bold uppercase tracking-widest transition-colors"
+          >
+            Volver a datos actuales
+          </button>
+        </div>
+      )}
+
+      {/* ⚠️ Missing days alert — only in current era */}
+      {!isLegacy && !loading && missingDays.length > 0 && (
         <div className="rounded-2xl border-2 border-amber-400 bg-gradient-to-br from-amber-50 to-orange-50 shadow-lg overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 bg-amber-400/20 border-b border-amber-300">
             <div className="flex items-center gap-3">
@@ -1525,7 +1558,7 @@ export default function CashflowClient() {
       )}
 
       {/* ✅ All up to date */}
-      {!loading && missingDays.length === 0 && (
+      {!isLegacy && !loading && missingDays.length === 0 && (
         <div className="flex items-center gap-3 px-6 py-4 bg-green-50 border border-green-200 rounded-2xl">
           <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center shrink-0">
             <Check className="w-4 h-4 text-white" />
@@ -1602,10 +1635,12 @@ export default function CashflowClient() {
               <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
                 <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
                   <h2 className="text-xl font-serif">Todos los Gastos</h2>
-                  <button onClick={() => { setSelectedDate(undefined); setExpenseToEdit(null); setShowExpModal(true); }}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
-                    <Plus className="w-4 h-4" /> Nuevo Gasto
-                  </button>
+                  {era === 'v2' && (
+                    <button onClick={() => { setSelectedDate(undefined); setExpenseToEdit(null); setShowExpModal(true); }}
+                      className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
+                      <Plus className="w-4 h-4" /> Nuevo Gasto
+                    </button>
+                  )}
                 </div>
 
                 {/* Filter controls */}
@@ -1789,26 +1824,30 @@ export default function CashflowClient() {
                                 : <span className="text-foreground/30">—</span>}
                             </td>
                             <td className="px-5 py-4 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => {
-                                    setExpenseToEdit(exp);
-                                    setShowExpModal(true);
-                                  }}
-                                  className="text-[#C59F59] hover:bg-amber-50 p-2 rounded-lg transition-colors cursor-pointer"
-                                  title="Editar gasto"
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </button>
-                                <button onClick={async () => {
-                                  if (confirm("¿Eliminar este gasto?")) {
-                                    await deleteExpenseDirect(exp.id);
-                                    loadData();
-                                  }
-                                }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors cursor-pointer">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
+                              {era === 'v2' ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => {
+                                      setExpenseToEdit(exp);
+                                      setShowExpModal(true);
+                                    }}
+                                    className="text-[#C59F59] hover:bg-amber-50 p-2 rounded-lg transition-colors cursor-pointer"
+                                    title="Editar gasto"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={async () => {
+                                    if (confirm("¿Eliminar este gasto?")) {
+                                      await deleteExpenseDirect(exp.id);
+                                      loadData();
+                                    }
+                                  }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors cursor-pointer">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-foreground/30 italic">Solo lectura</span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1869,10 +1908,12 @@ export default function CashflowClient() {
               <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
                 <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
                   <h2 className="text-xl font-serif">Todos los Ingresos</h2>
-                  <button onClick={() => { setSelectedDate(undefined); setIncomeToEdit(null); setShowIncModal(true); }}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
-                    <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
-                  </button>
+                  {era === 'v2' && (
+                    <button onClick={() => { setSelectedDate(undefined); setIncomeToEdit(null); setShowIncModal(true); }}
+                      className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
+                      <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
+                    </button>
+                  )}
                 </div>
 
                 {/* Filter controls */}
@@ -2045,31 +2086,35 @@ export default function CashflowClient() {
                                 <span className="text-foreground/30 px-2">—</span>
                               )}
                               
-                              {inc.type === "manual" && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setIncomeToEdit(inc);
-                                      setShowIncModal(true);
-                                    }}
-                                    className="text-[#C59F59] hover:bg-amber-50 p-2 rounded-lg transition-colors cursor-pointer"
-                                    title="Editar ingreso"
-                                  >
-                                    <Pencil className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      if (confirm("¿Eliminar este ingreso manual?")) {
-                                        await deleteIncomeDirect(inc.id);
-                                        loadData();
-                                      }
-                                    }}
-                                    className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors cursor-pointer"
-                                    title="Eliminar ingreso"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </>
+                              {era === 'v2' ? (
+                                inc.type === "manual" && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setIncomeToEdit(inc);
+                                        setShowIncModal(true);
+                                      }}
+                                      className="text-[#C59F59] hover:bg-amber-50 p-2 rounded-lg transition-colors cursor-pointer"
+                                      title="Editar ingreso"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        if (confirm("¿Eliminar este ingreso manual?")) {
+                                          await deleteIncomeDirect(inc.id);
+                                          loadData();
+                                        }
+                                      }}
+                                      className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors cursor-pointer"
+                                      title="Eliminar ingreso"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )
+                              ) : (
+                                <span className="text-xs text-foreground/30 italic">Solo lectura</span>
                               )}
                             </div>
                           </td>

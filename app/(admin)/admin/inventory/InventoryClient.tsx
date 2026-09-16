@@ -23,6 +23,7 @@ import {
   BarChart2,
   Pencil,
   Trash2,
+  Archive,
 } from "lucide-react";
 import {
   BarChart,
@@ -424,19 +425,21 @@ function AdjustModal({
 function HistoryDrawer({
   item,
   onClose,
+  era = 'v2',
 }: {
   item: InventoryItem;
   onClose: () => void;
+  era?: 'v1' | 'v2';
 }) {
   const [movements, setMovements] = useState<MovementRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getInventoryMovements(item.id)
+    getInventoryMovements(item.id, era)
       .then((data) => setMovements(data as MovementRecord[]))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [item.id]);
+  }, [item.id, era]);
 
   return (
     <div
@@ -611,9 +614,11 @@ function sortRecordsList<T>(data: T[], sortField: string, sortAsc: boolean): T[]
 function InventarioTab({
   inventory,
   onStockUpdate,
+  era,
 }: {
   inventory: InventoryItem[];
   onStockUpdate: (id: string, newStock: number) => void;
+  era: 'v1' | 'v2';
 }) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -866,14 +871,16 @@ function InventarioTab({
                     </td>
                     <td className={`${tdCls} text-center`}>
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          id={`adjust-${item.product_code}`}
-                          onClick={() => setAdjustItem(item)}
-                          title="Ajuste manual"
-                          className="p-2 rounded-xl bg-[#C59F59]/10 text-[#C59F59] hover:bg-[#C59F59] hover:text-white transition-all"
-                        >
-                          <ArrowLeftRight className="w-3.5 h-3.5" />
-                        </button>
+                        {era === 'v2' && (
+                          <button
+                            id={`adjust-${item.product_code}`}
+                            onClick={() => setAdjustItem(item)}
+                            title="Ajuste manual"
+                            className="p-2 rounded-xl bg-[#C59F59]/10 text-[#C59F59] hover:bg-[#C59F59] hover:text-white transition-all"
+                          >
+                            <ArrowLeftRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           id={`history-${item.product_code}`}
                           onClick={() => setHistoryItem(item)}
@@ -909,6 +916,7 @@ function InventarioTab({
         <HistoryDrawer
           item={historyItem}
           onClose={() => setHistoryItem(null)}
+          era={era}
         />
       )}
     </>
@@ -1056,9 +1064,11 @@ function AccionesCell({
 function EntradasTab({
   inventory,
   onStockUpdate,
+  era,
 }: {
   inventory: InventoryItem[];
   onStockUpdate: (id: string, newStock: number) => void;
+  era: 'v1' | 'v2';
 }) {
   const initForm = {
     inventoryId: "",
@@ -1096,7 +1106,7 @@ function EntradasTab({
 
   function loadHistory() {
     setLoading(true);
-    getMovementsByTab("entrada")
+    getMovementsByTab("entrada", era)
       .then((d) => setRecords(d as MovementRecord[]))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -1104,7 +1114,7 @@ function EntradasTab({
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [era]);
   useEffect(() => {
     if (feedback?.type === "success") {
       const t = setTimeout(() => setFeedback(null), 4000);
@@ -1162,7 +1172,8 @@ function EntradasTab({
 
   return (
     <div className="space-y-6">
-      {/* Form */}
+      {/* Form — only in v2 (current era) */}
+      {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
           <h2 className="text-xl font-serif">Registrar Entrada</h2>
@@ -1273,6 +1284,7 @@ function EntradasTab({
           </button>
         </form>
       </div>
+      )}
 
       {/* History */}
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
@@ -1381,9 +1393,11 @@ function EntradasTab({
 function TrillaTab({
   inventory,
   onStocksUpdate,
+  era,
 }: {
   inventory: InventoryItem[];
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
+  era: 'v1' | 'v2';
 }) {
   const pergaminoOptions = useMemo(() => {
     return inventory.filter((i) => i.category === "cafe" && i.product_code.startsWith("CAPG"));
@@ -1454,7 +1468,7 @@ function TrillaTab({
 
   function loadHistory() {
     setLoading(true);
-    getTrillaBatches()
+    getTrillaBatches(era)
       .then((d) => setBatches(d as TrillaBatch[]))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -1462,7 +1476,7 @@ function TrillaTab({
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [era]);
   useEffect(() => {
     if (feedback?.type === "success") {
       const t = setTimeout(() => setFeedback(null), 5000);
@@ -1561,7 +1575,8 @@ function TrillaTab({
 
   return (
     <div className="space-y-6">
-      {/* Form */}
+      {/* Form — only in v2 */}
+      {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
           <h2 className="text-xl font-serif">Registrar Trilla</h2>
@@ -1730,6 +1745,7 @@ function TrillaTab({
           </button>
         </form>
       </div>
+      )}
 
       {/* History */}
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
@@ -1830,9 +1846,11 @@ function TrillaTab({
 function TostionTab({
   inventory,
   onStocksUpdate,
+  era,
 }: {
   inventory: InventoryItem[];
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
+  era: 'v1' | 'v2';
 }) {
   const initForm = {
     inputInventoryId: "",
@@ -1892,8 +1910,8 @@ function TostionTab({
   function loadHistory() {
     setLoading(true);
     Promise.all([
-      getTostionBatches(),
-      getMovementsByTab("prod_consumo")
+      getTostionBatches(era),
+      getMovementsByTab("prod_consumo", era)
     ])
       .then(([b, m]) => {
         setBatches(b as TrillaBatch[]);
@@ -1905,7 +1923,7 @@ function TostionTab({
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [era]);
 
   // Auto-calculate output whenever input or rendimiento changes
   useEffect(() => {
@@ -1980,6 +1998,7 @@ function TostionTab({
 
   return (
     <div className="space-y-6">
+      {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
           <h2 className="text-xl font-serif">Proceso de Tostión</h2>
@@ -2095,6 +2114,7 @@ function TostionTab({
           </button>
         </form>
       </div>
+      )}
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
@@ -2180,9 +2200,11 @@ const FINISHED_CODES = [
 function ProdAltasTab({
   inventory,
   onStocksUpdate,
+  era,
 }: {
   inventory: InventoryItem[];
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
+  era: 'v1' | 'v2';
 }) {
   const initForm = {
     inventoryId: "",
@@ -2220,7 +2242,7 @@ function ProdAltasTab({
 
   function loadHistory() {
     setLoading(true);
-    getMovementsByTab("prod_alta")
+    getMovementsByTab("prod_alta", era)
       .then((d) => setRecords(d as MovementRecord[]))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -2228,7 +2250,7 @@ function ProdAltasTab({
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [era]);
   useEffect(() => {
     if (feedback?.type === "success") {
       const t = setTimeout(() => setFeedback(null), 4000);
@@ -2366,6 +2388,7 @@ function ProdAltasTab({
 
   return (
     <div className="space-y-6">
+      {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
           <h2 className="text-xl font-serif">Producción — Altas</h2>
@@ -2529,6 +2552,7 @@ function ProdAltasTab({
           </button>
         </form>
       </div>
+      )}
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
@@ -2612,9 +2636,11 @@ function ProdAltasTab({
 function SalidasTab({
   inventory,
   onStockUpdate,
+  era,
 }: {
   inventory: InventoryItem[];
   onStockUpdate: (id: string, newStock: number) => void;
+  era: 'v1' | 'v2';
 }) {
   const initForm = {
     inventoryId: "",
@@ -2651,7 +2677,7 @@ function SalidasTab({
 
   function loadHistory() {
     setLoading(true);
-    getMovementsByTab("salida")
+    getMovementsByTab("salida", era)
       .then((d) => setRecords(d as MovementRecord[]))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -2659,7 +2685,7 @@ function SalidasTab({
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [era]);
   useEffect(() => {
     if (feedback?.type === "success") {
       const t = setTimeout(() => setFeedback(null), 4000);
@@ -2716,6 +2742,7 @@ function SalidasTab({
 
   return (
     <div className="space-y-6">
+      {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
           <h2 className="text-xl font-serif">Registrar Salida</h2>
@@ -2810,6 +2837,7 @@ function SalidasTab({
           </button>
         </form>
       </div>
+      )}
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
@@ -2948,7 +2976,7 @@ function ChartCard({
   );
 }
 
-function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
+function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1' | 'v2' }) {
   const [reportData, setReportData] = useState<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     movements: any[];
@@ -2962,11 +2990,11 @@ function ReportesTab({ inventory }: { inventory: InventoryItem[] }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getInventoryReportData()
+    getInventoryReportData(era)
       .then(setReportData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [era]);
 
   // ── derived data ──────────────────────────────────────────────────────────
 
@@ -3654,6 +3682,9 @@ export default function InventoryClient({
 }) {
   const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
   const [activeTab, setActiveTab] = useState<TabId>("inventario");
+  const [era, setEra] = useState<'v1' | 'v2'>('v2');
+
+  const isLegacy = era === 'v1';
 
   function updateStock(id: string, newStock: number) {
     setInventory((prev) =>
@@ -3675,12 +3706,42 @@ export default function InventoryClient({
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div>
-        <h1 className="text-3xl font-serif text-foreground mb-1">Inventario</h1>
-        <p className="text-foreground/60">
-          Control de stock y flujo de producción de Café Amantti.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-serif text-foreground mb-1">Inventario</h1>
+          <p className="text-foreground/60">
+            Control de stock y flujo de producción de Café Amantti.
+          </p>
+        </div>
+        <button
+          id="toggle-legacy-era"
+          onClick={() => setEra(prev => prev === 'v2' ? 'v1' : 'v2')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all border ${
+            isLegacy
+              ? 'bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
+              : 'bg-white text-foreground/50 border-foreground/10 hover:bg-foreground/5'
+          }`}
+        >
+          <Archive className="w-3.5 h-3.5" />
+          {isLegacy ? 'Viendo: Archivo (pre-Sept 2026)' : 'Ver datos anteriores'}
+        </button>
       </div>
+
+      {/* Legacy mode banner */}
+      {isLegacy && (
+        <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <Archive className="w-5 h-5 flex-shrink-0" />
+          <div>
+            <span className="font-bold">Modo archivo</span> — Estás viendo datos anteriores a septiembre 2026. Estos datos son de solo lectura.
+          </div>
+          <button
+            onClick={() => setEra('v2')}
+            className="ml-auto px-3 py-1.5 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-xs font-bold uppercase tracking-widest transition-colors"
+          >
+            Volver a datos actuales
+          </button>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex overflow-x-auto gap-1 bg-white rounded-2xl p-1.5 border border-foreground/5 shadow-sm">
@@ -3704,24 +3765,24 @@ export default function InventoryClient({
 
       {/* Tab content */}
       {activeTab === "inventario" && (
-        <InventarioTab inventory={inventory} onStockUpdate={updateStock} />
+        <InventarioTab inventory={inventory} onStockUpdate={updateStock} era={era} />
       )}
       {activeTab === "entradas" && (
-        <EntradasTab inventory={inventory} onStockUpdate={updateStock} />
+        <EntradasTab inventory={inventory} onStockUpdate={updateStock} era={era} />
       )}
       {activeTab === "trilla" && (
-        <TrillaTab inventory={inventory} onStocksUpdate={updateStocks} />
+        <TrillaTab inventory={inventory} onStocksUpdate={updateStocks} era={era} />
       )}
       {activeTab === "tostion" && (
-        <TostionTab inventory={inventory} onStocksUpdate={updateStocks} />
+        <TostionTab inventory={inventory} onStocksUpdate={updateStocks} era={era} />
       )}
       {activeTab === "prod_altas" && (
-        <ProdAltasTab inventory={inventory} onStocksUpdate={updateStocks} />
+        <ProdAltasTab inventory={inventory} onStocksUpdate={updateStocks} era={era} />
       )}
       {activeTab === "salidas" && (
-        <SalidasTab inventory={inventory} onStockUpdate={updateStock} />
+        <SalidasTab inventory={inventory} onStockUpdate={updateStock} era={era} />
       )}
-      {activeTab === "reportes" && <ReportesTab inventory={inventory} />}
+      {activeTab === "reportes" && <ReportesTab inventory={inventory} era={era} />}
       {activeTab === "auditoria" && <AuditoriaTab inventory={inventory} />}
     </div>
   );

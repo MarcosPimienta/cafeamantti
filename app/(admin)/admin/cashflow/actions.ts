@@ -181,11 +181,12 @@ export async function ensureCashflowDate(date: string) {
   return data.id;
 }
 
-export async function getAllExpenses() {
+export async function getAllExpenses(era: 'v1' | 'v2' = 'v2') {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('cashflow_expenses')
     .select('*, cashflow:cashflow_id(date)')
+    .eq('era', era)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -203,51 +204,90 @@ export async function getAllExpenses() {
  * usando los mismos parámetros que las escrituras manuales.
  * De este modo el listado siempre expone bruto vs neto de forma coherente.
  */
-export async function getAllIncomes() {
+export async function getAllIncomes(era: 'v1' | 'v2' = 'v2') {
   const supabase = await createClient();
 
   // ── 1. Ingresos manuales (todos los campos P&L ya persisten en DB) ──
   const { data: manual, error: manErr } = await supabase
     .from('cashflow_incomes')
     .select('*, cashflow:cashflow_id(date), inventory:inventory_id(product_code, product_name, unit)')
+    .eq('era', era)
     .order('created_at', { ascending: false });
 
   if (manErr) console.error('getAllIncomes: manual incomes error', manErr);
 
   // ── 2. Órdenes web (ingresos automáticos sin registro en cashflow_incomes) ──
-  const { data: orders, error: ordErr } = await supabase
-    .from('orders')
-    .select('id, total_amount, created_at, status')
-    .in('status', ['paid', 'processing', 'shipped', 'delivered'])
-    .order('created_at', { ascending: false });
+  // Only include web orders for v2 era (orders don't have an era column)
+  let autoIncomes: any[] = [];
+  if (era === 'v2') {
+    const { data: orders, error: ordErr } = await supabase
+      .from('orders')
+      .select('id, total_amount, created_at, status')
+      .in('status', ['paid', 'processing', 'shipped', 'delivered'])
+      .gte('created_at', '2026-09-01T00:00:00Z')
+      .order('created_at', { ascending: false });
 
-  if (ordErr) console.error('getAllIncomes: orders error', ordErr);
+    if (ordErr) console.error('getAllIncomes: orders error', ordErr);
 
-  // ── 3. Proyectar órdenes con desglose P&L derivado ──────────────────
-  const autoIncomes = (orders || []).map((o) => {
-    const rawIncome = {
-      gross_amount: o.total_amount,
-      amount:       o.total_amount,
-      category:     'Ventas Web',
-    };
-    const { fields } = resolveIncomeFields(rawIncome);
-    return {
-      id:            o.id,
-      concept:       `Venta Orden #${o.id.split('-')[0]}`,
-      category:      'Ventas Web',
-      type:          'auto' as const,
-      // Desglose P&L derivado
-      amount:        fields.amount,
-      gross_amount:  fields.gross_amount,
-      fee_amount:    fields.fee_amount,
-      shipping_cost: fields.shipping_cost,
-      tax_amount:    fields.tax_amount,
-      net_revenue:   fields.net_revenue,
-      // Fecha
-      date:          new Date(o.created_at).toISOString().split('T')[0],
-      created_at:    o.created_at,
-    };
-  });
+    // ── 3. Proyectar órdenes con desglose P&L derivado ──────────────────
+    autoIncomes = (orders || []).map((o) => {
+      const rawIncome = {
+        gross_amount: o.total_amount,
+        amount:       o.total_amount,
+        category:     'Ventas Web',
+      };
+      const { fields } = resolveIncomeFields(rawIncome);
+      return {
+        id:            o.id,
+        concept:       `Venta Orden #${o.id.split('-')[0]}`,
+        category:      'Ventas Web',
+        type:          'auto' as const,
+        // Desglose P&L derivado
+        amount:        fields.amount,
+        gross_amount:  fields.gross_amount,
+        fee_amount:    fields.fee_amount,
+        shipping_cost: fields.shipping_cost,
+        tax_amount:    fields.tax_amount,
+        net_revenue:   fields.net_revenue,
+        // Fecha
+        date:          new Date(o.created_at).toISOString().split('T')[0],
+        created_at:    o.created_at,
+      };
+    });
+  } else {
+    // For v1 era, include orders before Sept 2026
+    const { data: orders, error: ordErr } = await supabase
+      .from('orders')
+      .select('id, total_amount, created_at, status')
+      .in('status', ['paid', 'processing', 'shipped', 'delivered'])
+      .lt('created_at', '2026-09-01T00:00:00Z')
+      .order('created_at', { ascending: false });
+
+    if (ordErr) console.error('getAllIncomes: orders error', ordErr);
+
+    autoIncomes = (orders || []).map((o) => {
+      const rawIncome = {
+        gross_amount: o.total_amount,
+        amount:       o.total_amount,
+        category:     'Ventas Web',
+      };
+      const { fields } = resolveIncomeFields(rawIncome);
+      return {
+        id:            o.id,
+        concept:       `Venta Orden #${o.id.split('-')[0]}`,
+        category:      'Ventas Web',
+        type:          'auto' as const,
+        amount:        fields.amount,
+        gross_amount:  fields.gross_amount,
+        fee_amount:    fields.fee_amount,
+        shipping_cost: fields.shipping_cost,
+        tax_amount:    fields.tax_amount,
+        net_revenue:   fields.net_revenue,
+        date:          new Date(o.created_at).toISOString().split('T')[0],
+        created_at:    o.created_at,
+      };
+    });
+  }
 
   // ── 4. Fusionar y ordenar por fecha descendente ─────────────────────
   const merged = [
@@ -260,11 +300,12 @@ export async function getAllIncomes() {
   return merged;
 }
 
-export async function getCashflows() {
+export async function getCashflows(era: 'v1' | 'v2' = 'v2') {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('daily_cashflows')
     .select('*')
+    .eq('era', era)
     .order('date', { ascending: false });
 
   if (error) return [];
@@ -692,7 +733,7 @@ export async function getCashflowReportData() {
  * up to (but not including) today that have NO recorded expenses AND NO recorded incomes.
  */
 export async function getMissingCashflowDays(): Promise<string[]> {
-  const START_DATE = '2026-05-01';
+  const START_DATE = '2026-09-01';
   const supabase = await createClient();
 
   // Build the range: from START_DATE to yesterday (inclusive)

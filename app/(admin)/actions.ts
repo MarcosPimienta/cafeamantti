@@ -634,7 +634,7 @@ export async function getInventory() {
   return data;
 }
 
-export async function getInventoryMovements(inventoryId?: string) {
+export async function getInventoryMovements(inventoryId?: string, era: 'v1' | 'v2' = 'v2') {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
 
@@ -657,6 +657,7 @@ export async function getInventoryMovements(inventoryId?: string) {
       created_at,
       inventory ( product_code, product_name )
     `)
+    .eq('era', era)
     .order('movement_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(100);
@@ -849,7 +850,7 @@ export async function runProductionBatch(
   return { success: true, newInputStock, newOutputStock };
 }
 
-export async function getProductionBatches() {
+export async function getProductionBatches(era: 'v1' | 'v2' = 'v2') {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
@@ -868,6 +869,7 @@ export async function getProductionBatches() {
       input_inventory:input_inventory_id ( product_code, product_name ),
       output_inventory:output_inventory_id ( product_code, product_name )
     `)
+    .eq('era', era)
     .order('created_at', { ascending: false })
     .limit(50);
 
@@ -937,7 +939,7 @@ async function _updateStockBy(supabase: any, inventoryId: string, delta: number)
 // TAB-BASED DATA FETCHING
 // ============================================================
 
-export async function getMovementsByTab(tabSource: string) {
+export async function getMovementsByTab(tabSource: string, era: 'v1' | 'v2' = 'v2') {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
@@ -952,6 +954,7 @@ export async function getMovementsByTab(tabSource: string) {
       inventory ( product_code, product_name, unit )
     `)
     .eq('tab_source', tabSource)
+    .eq('era', era)
     .order('movement_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(200);
@@ -963,7 +966,7 @@ export async function getMovementsByTab(tabSource: string) {
   return data;
 }
 
-export async function getTrillaBatches() {
+export async function getTrillaBatches(era: 'v1' | 'v2' = 'v2') {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
@@ -978,6 +981,7 @@ export async function getTrillaBatches() {
       output_inventory:output_inventory_id ( product_code, product_name )
     `)
     .eq('process_type', 'trilla')
+    .eq('era', era)
     .order('movement_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(100);
@@ -989,7 +993,7 @@ export async function getTrillaBatches() {
   return data;
 }
 
-export async function getTostionBatches() {
+export async function getTostionBatches(era: 'v1' | 'v2' = 'v2') {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
@@ -1004,6 +1008,7 @@ export async function getTostionBatches() {
       output_inventory:output_inventory_id ( product_code, product_name )
     `)
     .eq('process_type', 'tostion')
+    .eq('era', era)
     .order('movement_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(100);
@@ -1345,7 +1350,7 @@ export async function getAuditLogs() {
   return data;
 }
 
-export async function getInventoryReportData() {
+export async function getInventoryReportData(era: 'v1' | 'v2' = 'v2') {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
@@ -1359,6 +1364,7 @@ export async function getInventoryReportData() {
   const { data: movements } = await supabase
     .from('inventory_movements')
     .select('id, type, quantity, movement_date, tab_source, created_at, inventory_id')
+    .eq('era', era)
     .gte('movement_date', cutoffStr)
     .order('movement_date', { ascending: true });
 
@@ -1368,6 +1374,7 @@ export async function getInventoryReportData() {
       'id, input_quantity_kg, output_quantity_kg, weight_loss_pct, rendimiento_pct, movement_date, created_at'
     )
     .eq('process_type', 'trilla')
+    .eq('era', era)
     .order('movement_date', { ascending: true });
 
   const { data: tostionBatches } = await supabase
@@ -1376,12 +1383,14 @@ export async function getInventoryReportData() {
       'id, input_quantity_kg, output_quantity_kg, weight_loss_pct, rendimiento_pct, movement_date, created_at'
     )
     .eq('process_type', 'tostion')
+    .eq('era', era)
     .order('movement_date', { ascending: true });
 
   // All movements (no cutoff) grouped by tab_source for pie chart
   const { data: allMovements } = await supabase
     .from('inventory_movements')
-    .select('tab_source, quantity');
+    .select('tab_source, quantity')
+    .eq('era', era);
 
   return {
     movements: movements ?? [],
