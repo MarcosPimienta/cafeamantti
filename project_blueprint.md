@@ -381,6 +381,7 @@ To replicate this project from scratch:
 | STK-AMT | Stickers Amantti | empaque | unidad |
 | POC-001 | Pocillo | accesorio | unidad |
 | SACF-001 | Sacos de fique | empaque | unidad |
+| CAFC-340ML | Cold Brew 340ml (Maquila Café 11:11) | cafe | unidad |
 
 ---
 

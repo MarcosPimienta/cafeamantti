@@ -35,7 +35,7 @@ export async function getCurrentUserProfile() {
 
 export async function logAuditAction(
   actionType: "CREATE" | "UPDATE" | "DELETE",
-  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH",
+  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH" | "COLD_BREW_BATCH",
   entityId: string,
   inventoryId?: string,
   details?: Record<string, any>
@@ -1329,6 +1329,176 @@ export async function createTostionBatch(
   }
 }
 
+export async function createColdBrewBatch(
+  roastedCoffeeInventoryId: string,
+  coldBrewInventoryId: string,
+  inputQtyKg: number,
+  outputBottles: number,
+  date: string,
+  lote?: string,
+  notes?: string,
+  thirdParty: string = "Café 11:11"
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  try {
+    // Validate Roasted Coffee stock
+    const { data: coffee, error: cErr } = await supabase
+      .from('inventory')
+      .select('current_stock, product_name')
+      .eq('id', roastedCoffeeInventoryId)
+      .single();
+    if (cErr || !coffee) throw new Error('Café Tostado no encontrado');
+    if (Number(coffee.current_stock) < inputQtyKg) {
+      throw new Error(
+        `Stock insuficiente de ${coffee.product_name}. Disponible: ${coffee.current_stock} kg`
+      );
+    }
+
+    const reasonBase = [
+      `Maquila ${thirdParty}`,
+      lote ? `Lote: ${lote}` : null,
+      notes ? notes : null,
+    ].filter(Boolean).join(' — ');
+
+    // 1. Salida: Café Tostado
+    let salidaId: string;
+    try {
+      salidaId = await _insertMovement(supabase, user?.id ?? null, roastedCoffeeInventoryId, 'salida', -inputQtyKg, {
+        movement_date: date,
+        reason: `Cold Brew (${thirdParty}) → Salida café tostado${reasonBase ? ` — ${reasonBase}` : ''}`,
+        tab_source: 'cold_brew',
+        lote: lote || undefined,
+        entry_type: 'MP',
+      });
+    } catch {
+      // Fallback if DB tab_source constraint hasn't been migrated yet
+      salidaId = await _insertMovement(supabase, user?.id ?? null, roastedCoffeeInventoryId, 'salida', -inputQtyKg, {
+        movement_date: date,
+        reason: `[Cold Brew 11:11] Salida café tostado${reasonBase ? ` — ${reasonBase}` : ''}`,
+        tab_source: 'prod_consumo',
+        lote: lote || undefined,
+        entry_type: 'MP',
+      });
+    }
+    const newCoffeeStock = await _updateStockBy(supabase, roastedCoffeeInventoryId, -inputQtyKg);
+
+    // 2. Entrada: Cold Brew 340ml
+    let entradaId: string;
+    try {
+      entradaId = await _insertMovement(supabase, user?.id ?? null, coldBrewInventoryId, 'entrada', outputBottles, {
+        movement_date: date,
+        reason: `Cold Brew (${thirdParty}) → Entrada producto terminado${reasonBase ? ` — ${reasonBase}` : ''}`,
+        tab_source: 'cold_brew',
+        lote: lote || undefined,
+      });
+    } catch {
+      // Fallback if DB tab_source constraint hasn't been migrated yet
+      entradaId = await _insertMovement(supabase, user?.id ?? null, coldBrewInventoryId, 'entrada', outputBottles, {
+        movement_date: date,
+        reason: `[Cold Brew 11:11] Entrada producto terminado${reasonBase ? ` — ${reasonBase}` : ''}`,
+        tab_source: 'prod_alta',
+        lote: lote || undefined,
+      });
+    }
+    const newColdBrewStock = await _updateStockBy(supabase, coldBrewInventoryId, outputBottles);
+
+    // 3. Ratio: bottles per kg
+    const bottlesPerKg = inputQtyKg > 0 ? outputBottles / inputQtyKg : 0;
+    const batchNote = `[Maquila: ${thirdParty}] ${outputBottles} botellas (340ml) elaboradas con ${inputQtyKg} kg (${bottlesPerKg.toFixed(1)} bot/kg). ${notes || ''}`.trim();
+
+    let batchId: string | null = null;
+    try {
+      const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
+        process_type: 'cold_brew',
+        input_inventory_id: roastedCoffeeInventoryId,
+        input_quantity_kg: inputQtyKg,
+        output_inventory_id: coldBrewInventoryId,
+        output_quantity_kg: outputBottles,
+        weight_loss_pct: 0,
+        rendimiento_pct: bottlesPerKg,
+        notes: batchNote,
+        created_by: user?.id ?? null,
+        movement_date: date,
+      }).select('id').single();
+
+      if (!batchErr && batchData) {
+        batchId = batchData.id;
+      }
+    } catch {
+      // Handled by fallback below
+    }
+
+    if (!batchId) {
+      // Fallback if DB process_type constraint hasn't been migrated yet
+      const { data: fbData } = await supabase.from('production_batches').insert({
+        process_type: 'tostion',
+        input_inventory_id: roastedCoffeeInventoryId,
+        input_quantity_kg: inputQtyKg,
+        output_inventory_id: coldBrewInventoryId,
+        output_quantity_kg: outputBottles,
+        weight_loss_pct: 0,
+        rendimiento_pct: bottlesPerKg,
+        notes: `[COLD_BREW_11_11] ${batchNote}`,
+        created_by: user?.id ?? null,
+        movement_date: date,
+      }).select('id').single();
+      batchId = fbData?.id ?? null;
+    }
+
+    if (batchId) {
+      await supabase.from('inventory_movements')
+        .update({ production_batch_id: batchId })
+        .in('id', [salidaId, entradaId]);
+    }
+
+    await logAuditAction("CREATE", "COLD_BREW_BATCH", batchId || entradaId, coldBrewInventoryId, {
+      thirdParty,
+      inputQtyKg,
+      outputBottles,
+      bottlesPerKg,
+      date,
+      lote
+    });
+
+    revalidatePath('/admin/inventory');
+    return { success: true, newCoffeeStock, newColdBrewStock };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getColdBrewBatches(era: 'v1' | 'v2' = 'v2') {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('production_batches')
+    .select(`
+      id, process_type, input_quantity_kg, output_quantity_kg,
+      weight_loss_pct, rendimiento_pct, movement_date, notes, created_at,
+      input_inventory:input_inventory_id ( product_code, product_name ),
+      output_inventory:output_inventory_id ( product_code, product_name )
+    `)
+    .or('process_type.eq.cold_brew,notes.ilike.%COLD_BREW_11_11%,notes.ilike.%11:11%')
+    .eq('era', era)
+    .order('movement_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.error('getColdBrewBatches error:', error);
+    return [];
+  }
+  return data || [];
+}
+
 // ============================================================
 // REPORT AND AUDIT ACTIONS
 // ============================================================
@@ -1525,7 +1695,12 @@ export async function deleteProductionBatch(batchId: string) {
     supabase, batch.output_inventory_id, -Number(batch.output_quantity_kg)
   );
 
-  const logEntityType = batch.process_type === 'trilla' ? 'TRILLA_BATCH' : 'TOSTION_BATCH';
+  const logEntityType =
+    batch.process_type === 'trilla'
+      ? 'TRILLA_BATCH'
+      : batch.process_type === 'cold_brew'
+      ? 'COLD_BREW_BATCH'
+      : 'TOSTION_BATCH';
   await logAuditAction("DELETE", logEntityType, batchId, undefined, { 
     batch_details: batch 
   });

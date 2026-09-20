@@ -24,6 +24,7 @@ import {
   Pencil,
   Trash2,
   Archive,
+  Sparkles,
 } from "lucide-react";
 import {
   BarChart,
@@ -52,6 +53,8 @@ import {
   createProdAlta,
   createTostionBatch,
   createTrillaBatch,
+  createColdBrewBatch,
+  getColdBrewBatches,
   getInventoryReportData,
   deleteMovement,
   updateMovement,
@@ -123,6 +126,7 @@ const TABS = [
   { id: "trilla", label: "Trilla", Icon: FlaskConical },
   { id: "tostion", label: "Proceso Tostión", Icon: Factory },
   { id: "prod_altas", label: "Empaque/Altas", Icon: TrendingUp },
+  { id: "cold_brew", label: "Cold Brew (11:11)", Icon: Sparkles },
   { id: "salidas", label: "Salidas", Icon: PackageMinus },
   { id: "reportes", label: "Reportes", Icon: BarChart2 },
   { id: "auditoria", label: "Auditoría", Icon: History },
@@ -2197,6 +2201,8 @@ const FINISHED_CODES = [
   "CAFT-MIC-125G",
   "CAFT-MIC-250G",
   "CAFT-MIC-500G",
+  // Cold Brew
+  "CAFC-340ML",
 ];
 
 function ProdAltasTab({
@@ -2629,6 +2635,451 @@ function ProdAltasTab({
       {editingRecord && (
         <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStocksUpdate([{ id: invId, newStock: s }]); loadHistory(); setEditingRecord(null); }} />
       )}
+    </div>
+  );
+}
+
+// ─── Cold Brew (Café 11:11) Tab ───────────────────────────────────────────────
+
+function ColdBrewTab({
+  inventory,
+  onStocksUpdate,
+  era,
+}: {
+  inventory: InventoryItem[];
+  onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
+  era: 'v1' | 'v2';
+}) {
+  const defaultCoffee = inventory.find(i => i.product_code === "CAFT-001") || inventory.find(i => i.product_code.startsWith("CAFT-"));
+  const defaultColdBrew = inventory.find(i => i.product_code === "CAFC-340ML") || inventory.find(i => i.product_name.toLowerCase().includes("cold brew"));
+
+  const initForm = {
+    coffeeId: defaultCoffee?.id || "",
+    coldBrewId: defaultColdBrew?.id || "",
+    inputQtyKg: "",
+    outputBottles: "",
+    date: today(),
+    lote: "",
+    notes: "",
+    thirdParty: "Café 11:11",
+  };
+
+  const [form, setForm] = useState(initForm);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [batches, setBatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortField, setSortField] = useState("date");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  // Auto-fill default IDs when inventory updates
+  useEffect(() => {
+    if (!form.coffeeId && inventory.length > 0) {
+      const c = inventory.find(i => i.product_code === "CAFT-001") || inventory.find(i => i.product_code.startsWith("CAFT-"));
+      if (c) setForm(prev => ({ ...prev, coffeeId: c.id }));
+    }
+    if (!form.coldBrewId && inventory.length > 0) {
+      const cb = inventory.find(i => i.product_code === "CAFC-340ML") || inventory.find(i => i.product_name.toLowerCase().includes("cold brew"));
+      if (cb) setForm(prev => ({ ...prev, coldBrewId: cb.id }));
+    }
+  }, [inventory, form.coffeeId, form.coldBrewId]);
+
+  function loadHistory() {
+    setLoading(true);
+    getColdBrewBatches(era)
+      .then((d) => setBatches(d || []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadHistory();
+  }, [era]);
+
+  const selectedCoffee = inventory.find(i => i.id === form.coffeeId);
+  const selectedColdBrew = inventory.find(i => i.id === form.coldBrewId);
+
+  const inputNum = parseFloat(form.inputQtyKg) || 0;
+  const bottlesNum = parseFloat(form.outputBottles) || 0;
+  const ratio = inputNum > 0 ? (bottlesNum / inputNum).toFixed(1) : "0.0";
+  const totalLiters = (bottlesNum * 0.34).toFixed(1);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.coffeeId || !form.coldBrewId || !form.inputQtyKg || !form.outputBottles) {
+      setFeedback({ type: "error", msg: "Completa los campos obligatorios (*)" });
+      return;
+    }
+
+    if (selectedCoffee && Number(selectedCoffee.current_stock) < inputNum) {
+      setFeedback({
+        type: "error",
+        msg: `Stock insuficiente de café tostado (${selectedCoffee.product_name}). Disponible: ${selectedCoffee.current_stock} kg`,
+      });
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const res = await createColdBrewBatch(
+          form.coffeeId,
+          form.coldBrewId,
+          inputNum,
+          bottlesNum,
+          form.date,
+          form.lote || undefined,
+          form.notes || undefined,
+          form.thirdParty || "Café 11:11"
+        );
+
+        if (!res.success) {
+          setFeedback({ type: "error", msg: res.error || "Error al registrar el lote de Cold Brew" });
+          return;
+        }
+
+        onStocksUpdate([
+          { id: form.coffeeId, newStock: res.newCoffeeStock ?? 0 },
+          { id: form.coldBrewId, newStock: res.newColdBrewStock ?? 0 },
+        ]);
+
+        setFeedback({
+          type: "success",
+          msg: `✓ Lote de Cold Brew 340ml registrado con éxito (+${bottlesNum} botellas, -${inputNum} kg café)`,
+        });
+
+        setForm(prev => ({
+          ...initForm,
+          coffeeId: prev.coffeeId,
+          coldBrewId: prev.coldBrewId,
+        }));
+        loadHistory();
+      } catch (err: unknown) {
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al registrar" });
+      }
+    });
+  }
+
+  function handleDeleteBatch(batchId: string) {
+    startTransition(async () => {
+      try {
+        const res = await deleteProductionBatch(batchId);
+        onStocksUpdate([
+          { id: res.inputInventoryId, newStock: res.newInputStock },
+          { id: res.outputInventoryId, newStock: res.newOutputStock },
+        ]);
+        setDeletingId(null);
+        setFeedback({ type: "success", msg: "✓ Lote eliminado e inventario revertido correctamente" });
+        loadHistory();
+      } catch (err: unknown) {
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar lote" });
+      }
+    });
+  }
+
+  const sortedBatches = useMemo(() => sortRecordsList(batches, sortField, sortAsc), [batches, sortField, sortAsc]);
+  const paginatedBatches = sortedBatches.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  function handleSort(field: string) {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {era === 'v2' && (
+        <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
+          <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-xl font-serif">Pipeline Cold Brew — Tercero Café 11:11</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#C59F59]/15 text-[#C59F59] uppercase tracking-wider">
+                  Maquila Café 11:11
+                </span>
+              </div>
+              <p className="text-sm text-foreground/60 max-w-2xl">
+                Registra la salida de café tostado a granel entregado al maquilador y la entrada de unidades de Cold Brew 340ml terminadas.
+                Las botellas y tapas son suministradas directamente por el tercero.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
+              <div>
+                <label htmlFor="cb-date" className={labelCls}>
+                  Fecha <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="cb-date"
+                  type="date"
+                  value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  suppressHydrationWarning={true}
+                  className={inputCls}
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="cb-coffee" className={labelCls}>
+                  Café Tostado a Enviar <span className="text-red-400">*</span>
+                </label>
+                <ProductSelect
+                  id="cb-coffee"
+                  value={form.coffeeId}
+                  onChange={(v) => setForm({ ...form, coffeeId: v })}
+                  inventory={inventory}
+                  filter={(i) =>
+                    i.category === "cafe" &&
+                    (i.product_code.startsWith("CAFT") || i.product_name.toLowerCase().includes("tostado"))
+                  }
+                  placeholder="Seleccionar café tostado..."
+                />
+                {selectedCoffee && (
+                  <p className="text-xs text-foreground/50 mt-1">
+                    Disponible: <span className="font-semibold text-foreground">{Number(selectedCoffee.current_stock).toFixed(2)} kg</span>
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="cb-qty-coffee" className={labelCls}>
+                  Cantidad Café Tostado (kg) <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="cb-qty-coffee"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.inputQtyKg}
+                  onChange={(e) => setForm({ ...form, inputQtyKg: e.target.value })}
+                  placeholder="ej. 5.0"
+                  className={inputCls}
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="cb-product" className={labelCls}>
+                  Producto Terminado <span className="text-red-400">*</span>
+                </label>
+                <ProductSelect
+                  id="cb-product"
+                  value={form.coldBrewId}
+                  onChange={(v) => setForm({ ...form, coldBrewId: v })}
+                  inventory={inventory}
+                  filter={(i) =>
+                    i.product_code === "CAFC-340ML" ||
+                    i.product_name.toLowerCase().includes("cold brew")
+                  }
+                  placeholder="Seleccionar producto Cold Brew..."
+                />
+                {selectedColdBrew && (
+                  <p className="text-xs text-foreground/50 mt-1">
+                    Stock actual: <span className="font-semibold text-foreground">{selectedColdBrew.current_stock} uds</span>
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="cb-qty-bottles" className={labelCls}>
+                  Botellas Recibidas (340ml) <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="cb-qty-bottles"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={form.outputBottles}
+                  onChange={(e) => setForm({ ...form, outputBottles: e.target.value })}
+                  placeholder="ej. 50"
+                  className={inputCls}
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="cb-lote" className={labelCls}>
+                  Lote / Referencia (opcional)
+                </label>
+                <input
+                  id="cb-lote"
+                  type="text"
+                  value={form.lote}
+                  onChange={(e) => setForm({ ...form, lote: e.target.value })}
+                  placeholder="ej. CB-2026-Lote1"
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            {/* Live Metrics Card */}
+            <div className="mb-6 p-4 rounded-2xl border border-[#C59F59]/20 bg-[#fdfbf7] flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-6">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">Tercero Responsable</span>
+                  <span className="text-sm font-semibold text-[#8a6b32]">Café 11:11 (Maquila)</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">Volumen Total</span>
+                  <span className="text-sm font-semibold text-foreground">{totalLiters} Litros</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">Rendimiento Extracción</span>
+                  <span className="text-sm font-semibold text-foreground">{ratio} botellas / kg</span>
+                </div>
+              </div>
+              <div className="text-xs text-foreground/50">
+                ✓ Botellas y tapas suministradas directamente por Café 11:11
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label htmlFor="cb-notes" className={labelCls}>
+                Notas / Observaciones (opcional)
+              </label>
+              <input
+                id="cb-notes"
+                type="text"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Detalles del lote, entrega o características de la extracción..."
+                className={inputCls}
+              />
+            </div>
+
+            {feedback && (
+              <div
+                className={`p-4 rounded-xl text-sm mb-4 ${
+                  feedback.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                }`}
+              >
+                {feedback.msg}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isPending}
+              className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#C59F59] text-white font-medium hover:bg-[#b08d4b] transition-all shadow-sm disabled:opacity-50"
+            >
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Registrar Lote Cold Brew
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* History Table */}
+      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-serif">Historial de Lotes — Cold Brew (Café 11:11)</h3>
+            <p className="text-xs text-foreground/50 mt-0.5">
+              Registro de producciones y lotes elaborados por el tercero Café 11:11.
+            </p>
+          </div>
+          <button
+            onClick={loadHistory}
+            className="p-2 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-xl transition-all"
+            title="Refrescar historial"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-foreground/40 gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Cargando lotes de Cold Brew...</span>
+          </div>
+        ) : batches.length === 0 ? (
+          <div className="text-center py-12 text-foreground/40">
+            <p className="text-sm">No hay lotes de Cold Brew registrados en este periodo.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-foreground/5">
+                  <th className={`${thCls} cursor-pointer select-none`} onClick={() => handleSort("date")}>
+                    <div className="flex items-center gap-1">Fecha {sortField === "date" && (sortAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
+                  </th>
+                  <th className={thCls}>Café Tostado Salida</th>
+                  <th className={thCls}>Cold Brew 340ml Entrada</th>
+                  <th className={thCls}>Rendimiento</th>
+                  <th className={thCls}>Maquila</th>
+                  <th className={thCls}>Notas / Lote</th>
+                  <th className={`${thCls} text-right`}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-foreground/5">
+                {paginatedBatches.map((b) => {
+                  const inputInv = getRelation(b.input_inventory);
+                  const outputInv = getRelation(b.output_inventory);
+                  const inputKg = Number(b.input_quantity_kg);
+                  const outputUds = Number(b.output_quantity_kg);
+                  const rend = inputKg > 0 ? (outputUds / inputKg).toFixed(1) : "-";
+
+                  return (
+                    <tr key={b.id} className="hover:bg-foreground/[0.01] transition-colors">
+                      <td className={tdCls}>{fmtDate(b.movement_date || b.created_at)}</td>
+                      <td className={tdCls}>
+                        <span className="font-semibold text-rose-600">-{inputKg} kg</span>
+                        <span className="text-xs text-foreground/50 block">{inputInv?.product_name || "Café Tostado"}</span>
+                      </td>
+                      <td className={tdCls}>
+                        <span className="font-semibold text-emerald-600">+{outputUds} uds</span>
+                        <span className="text-xs text-foreground/50 block">{outputInv?.product_name || "Cold Brew 340ml"} ({(outputUds * 0.34).toFixed(1)} L)</span>
+                      </td>
+                      <td className={tdCls}>
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#C59F59]/10 text-[#8a6b32]">
+                          {rend} bot/kg
+                        </span>
+                      </td>
+                      <td className={tdCls}>
+                        <span className="text-xs font-semibold text-foreground/70">Café 11:11</span>
+                      </td>
+                      <td className={`${tdCls} max-w-xs truncate text-xs text-foreground/60`}>
+                        {b.notes || "—"}
+                      </td>
+                      <td className={tdCls}>
+                        {deletingId === b.id ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-[10px] font-bold text-red-600">¿Revertir lote?</span>
+                            <button onClick={() => handleDeleteBatch(b.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg hover:bg-red-600">Sí</button>
+                            <button onClick={() => setDeletingId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg hover:bg-foreground/20">No</button>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end">
+                            <button onClick={() => setDeletingId(b.id)} title="Eliminar y revertir lote" className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <PaginationControls
+          currentPage={currentPage}
+          totalItems={batches.length}
+          onPageChange={setCurrentPage}
+        />
+      </div>
     </div>
   );
 }
@@ -3800,6 +4251,9 @@ export default function InventoryClient({
       )}
       {activeTab === "prod_altas" && (
         <ProdAltasTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
+      )}
+      {activeTab === "cold_brew" && (
+        <ColdBrewTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
       )}
       {activeTab === "salidas" && (
         <SalidasTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
