@@ -1,6 +1,13 @@
 -- ============================================================
 -- Add sample white-label packaging bag item
 -- Date: 2026-09-22
+--
+-- Important:
+-- This item is tracked through the standard inventory movement flow.
+-- When a purchase is registered via the Entrada tab, or when it is
+-- produced via the Alta/packaging pipeline, the app increases
+-- inventory.current_stock by the movement quantity through the shared
+-- _updateStockBy helper. No separate trigger is required here.
 -- ============================================================
 
 INSERT INTO public.inventory (

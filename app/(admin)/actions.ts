@@ -2,6 +2,13 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
+import {
+  COFFEE_PROFILES,
+  type Molienda,
+  isGrindTracked,
+  isMolienda,
+  profileForCode,
+} from "./coffeeProfiles";
 
 export async function checkIsAdmin() {
   const supabase = await createClient();
@@ -653,6 +660,7 @@ export async function getInventoryMovements(inventoryId?: string, era: 'v1' | 'v
       responsable,
       entry_type,
       tab_source,
+      molienda,
       production_batch_id,
       created_at,
       inventory ( product_code, product_name )
@@ -899,6 +907,7 @@ async function _insertMovement(
     entry_type?: string;
     tab_source?: string;
     lote?: string;
+    molienda?: Molienda | null;
   } = {}
 ) {
   const { data, error } = await supabase.from('inventory_movements').insert({
@@ -912,6 +921,7 @@ async function _insertMovement(
     entry_type: opts.entry_type ?? null,
     tab_source: opts.tab_source ?? null,
     lote: opts.lote ?? null,
+    molienda: opts.molienda ?? null,
   }).select('id').single();
   if (error) throw new Error(error.message);
   return data.id;
@@ -935,6 +945,32 @@ async function _updateStockBy(supabase: any, inventoryId: string, delta: number)
   return newStock;
 }
 
+/**
+ * Roasted coffee must say whether it is Grano or Molido; everything else must
+ * not carry a grind at all. Returns the value to store on the movement.
+ */
+async function _resolveMolienda(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  inventoryId: string,
+  molienda?: string | null
+): Promise<Molienda | null> {
+  const { data, error } = await supabase
+    .from('inventory')
+    .select('product_code, product_name')
+    .eq('id', inventoryId)
+    .single();
+  if (error || !data) throw new Error('Producto no encontrado');
+
+  if (!isGrindTracked(data.product_code)) return null;
+  if (!isMolienda(molienda)) {
+    throw new Error(
+      `Selecciona la molienda (Grano o Molido) para ${data.product_name}.`
+    );
+  }
+  return molienda;
+}
+
 // ============================================================
 // TAB-BASED DATA FETCHING
 // ============================================================
@@ -949,7 +985,7 @@ export async function getMovementsByTab(tabSource: string, era: 'v1' | 'v2' = 'v
     .from('inventory_movements')
     .select(`
       id, inventory_id, type, quantity, reason, lote,
-      movement_date, responsable, entry_type, tab_source, created_at,
+      movement_date, responsable, entry_type, tab_source, molienda, created_at,
       production_batch_id,
       inventory ( product_code, product_name, unit )
     `)
@@ -1030,7 +1066,8 @@ export async function createEntrada(
   date: string,
   entryType: 'MP' | 'MAT',
   responsable?: string,
-  lote?: string
+  lote?: string,
+  molienda?: string | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1039,16 +1076,19 @@ export async function createEntrada(
   const { data: { user } } = await supabase.auth.getUser();
 
   try {
+    const grind = await _resolveMolienda(supabase, inventoryId, molienda);
+
     const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
       movement_date: date,
       entry_type: entryType,
       responsable,
       tab_source: 'entrada',
       lote,
+      molienda: grind,
     });
 
     const newStock = await _updateStockBy(supabase, inventoryId, qty);
-    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote });
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote, molienda: grind });
     revalidatePath('/admin/inventory');
     return { success: true, newStock };
   } catch (err: any) {
@@ -1061,7 +1101,8 @@ export async function createSalida(
   qty: number,
   date: string,
   reason?: string,
-  responsable?: string
+  responsable?: string,
+  molienda?: string | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1070,15 +1111,18 @@ export async function createSalida(
   const { data: { user } } = await supabase.auth.getUser();
 
   try {
+    const grind = await _resolveMolienda(supabase, inventoryId, molienda);
+
     const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
       movement_date: date,
       reason,
       responsable,
       tab_source: 'salida',
+      molienda: grind,
     });
 
     const newStock = await _updateStockBy(supabase, inventoryId, -qty);
-    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, reason, responsable });
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, reason, responsable, molienda: grind });
     revalidatePath('/admin/inventory');
     return { success: true, newStock };
   } catch (err: any) {
@@ -1122,7 +1166,8 @@ export async function createProdAlta(
   date: string,
   consumos: { id: string; qty: number }[] = [],
   lote?: string,
-  notes?: string
+  notes?: string,
+  molienda?: string | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1131,6 +1176,10 @@ export async function createProdAlta(
   const { data: { user } } = await supabase.auth.getUser();
 
   try {
+    // Reject a missing grind before any stock is touched. Consumed materials
+    // (bags, stickers, bulk coffee) stay grind-free on purpose.
+    const grind = await _resolveMolienda(supabase, inventoryId, molienda);
+
     // Validate stock for all consumos first to avoid partial commits
     for (const c of consumos) {
       if (c.qty <= 0) continue;
@@ -1167,10 +1216,11 @@ export async function createProdAlta(
       movement_date: date,
       reason: reason ?? undefined,
       tab_source: 'prod_alta',
+      molienda: grind,
     });
 
     const newStock = await _updateStockBy(supabase, inventoryId, qty);
-    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, reason, consumosCount: consumos.length });
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, reason, molienda: grind, consumosCount: consumos.length });
     
     revalidatePath('/admin/inventory');
     return { success: true, newStock, consumedResults };
@@ -1570,6 +1620,83 @@ export async function getInventoryReportData(era: 'v1' | 'v2' = 'v2') {
   };
 }
 
+/**
+ * Stock of packaged roasted coffee broken down by profile (Premium / Honey /
+ * Chiroso) and grind (Grano / Molido).
+ *
+ * There is no per-grind current_stock column — the grind lives on the movement
+ * that determined it (Entrada, Empaque/Alta, Salida), so the balance is the
+ * signed sum of those movements. Salidas are stored negative, so a plain sum
+ * already nets out.
+ */
+export async function getMoliendaBalances(era: 'v1' | 'v2' = 'v2') {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data: items, error: itemsErr } = await supabase
+    .from('inventory')
+    .select('id, product_code')
+    .eq('category', 'cafe');
+  if (itemsErr) {
+    console.error('getMoliendaBalances items error:', itemsErr);
+    return { rows: [], totals: { grano: 0, molido: 0, sin_definir: 0, total: 0 } };
+  }
+
+  const tracked = new Map<string, string>();
+  for (const it of items ?? []) {
+    if (isGrindTracked(it.product_code)) tracked.set(it.id, it.product_code);
+  }
+  if (tracked.size === 0) {
+    return { rows: [], totals: { grano: 0, molido: 0, sin_definir: 0, total: 0 } };
+  }
+
+  // Page through the movements — a busy era can exceed the default row cap.
+  const ids = [...tracked.keys()];
+  const PAGE = 1000;
+  const movements: { inventory_id: string; quantity: number; molienda: string | null }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('inventory_movements')
+      .select('inventory_id, quantity, molienda')
+      .eq('era', era)
+      .in('inventory_id', ids)
+      .range(from, from + PAGE - 1);
+    if (error) {
+      console.error('getMoliendaBalances movements error:', error);
+      break;
+    }
+    movements.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+
+  const blank = () => ({ grano: 0, molido: 0, sin_definir: 0, total: 0 });
+  const byProfile = new Map<string, ReturnType<typeof blank>>();
+  const totals = blank();
+
+  for (const m of movements) {
+    const profile = profileForCode(tracked.get(m.inventory_id));
+    if (!profile) continue;
+    if (!byProfile.has(profile)) byProfile.set(profile, blank());
+    const bucket = byProfile.get(profile)!;
+    const qty = Number(m.quantity) || 0;
+    const key = isMolienda(m.molienda) ? m.molienda : 'sin_definir';
+    bucket[key] += qty;
+    bucket.total += qty;
+    totals[key] += qty;
+    totals.total += qty;
+  }
+
+  const rows = COFFEE_PROFILES.map((p) => ({
+    id: p.id,
+    label: p.label,
+    ...(byProfile.get(p.id) ?? blank()),
+  }));
+
+  return { rows, totals };
+}
+
 // ============================================================
 // EDIT / DELETE ACTIONS
 // ============================================================
@@ -1606,7 +1733,8 @@ export async function updateMovement(
   date: string,
   reason?: string,
   responsable?: string,
-  entry_type?: string
+  entry_type?: string,
+  molienda?: string | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1620,6 +1748,8 @@ export async function updateMovement(
     .single();
   if (selErr || !mov) throw new Error('Movimiento no encontrado');
 
+  const grind = await _resolveMolienda(supabase, mov.inventory_id, molienda);
+
   const { error } = await supabase
     .from('inventory_movements')
     .update({
@@ -1628,6 +1758,7 @@ export async function updateMovement(
       reason: reason ?? null,
       responsable: responsable ?? null,
       entry_type: entry_type || null,
+      molienda: grind,
     })
     .eq('id', id);
   if (error) throw new Error(error.message);
@@ -1639,7 +1770,7 @@ export async function updateMovement(
   await logAuditAction("UPDATE", "MOVEMENT", id, mov.inventory_id, { 
     old_quantity: mov.quantity, 
     new_quantity: newQty,
-    reason, responsable
+    reason, responsable, molienda: grind
   });
   
   revalidatePath('/admin/inventory');

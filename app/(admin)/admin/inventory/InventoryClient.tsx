@@ -61,7 +61,15 @@ import {
   deleteProductionBatch,
   getAuditLogs,
   getInventory,
+  getMoliendaBalances,
 } from "../../actions";
+import {
+  MOLIENDAS,
+  MOLIENDA_LABELS,
+  type Molienda,
+  isGrindTracked,
+  isMolienda,
+} from "../../coffeeProfiles";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,6 +98,7 @@ interface MovementRecord {
   responsable: string | null;
   entry_type: string | null;
   tab_source: string | null;
+  molienda: string | null;
   production_batch_id?: string | null;
   created_at: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -250,6 +259,75 @@ function ProductSelect({
         ))}
       </select>
     </div>
+  );
+}
+
+/**
+ * Grano / Molido picker. The grind is decided when the movement is registered,
+ * not baked into the SKU, so every form that moves packaged roasted coffee
+ * asks for it. Items with no grind (bulk coffee, bags, stickers) say so
+ * instead of showing a choice.
+ */
+function MoliendaField({
+  idPrefix,
+  value,
+  onChange,
+  productCode,
+}: {
+  idPrefix: string;
+  value: Molienda | "";
+  onChange: (v: Molienda | "") => void;
+  productCode: string | null | undefined;
+}) {
+  const applies = isGrindTracked(productCode);
+  return (
+    <div>
+      <label className={labelCls}>
+        Molienda {applies && <span className="text-red-400">*</span>}
+      </label>
+      {applies ? (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {MOLIENDAS.map((opt) => {
+            const isActive = value === opt;
+            return (
+              <button
+                key={opt}
+                id={`${idPrefix}-molienda-${opt}`}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onChange(isActive ? "" : opt)}
+                className={`px-4 py-2.5 rounded-xl border text-xs font-bold uppercase tracking-wider transition-all ${
+                  isActive
+                    ? "bg-[#C59F59] text-white border-[#C59F59] shadow-sm"
+                    : "bg-white text-foreground/60 border-foreground/10 hover:border-[#C59F59]/40 hover:text-foreground"
+                }`}
+              >
+                {MOLIENDA_LABELS[opt]}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-foreground/30 pt-3">
+          {productCode ? "No aplica a este producto" : "Selecciona un producto"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MoliendaBadge({ value }: { value: string | null | undefined }) {
+  if (!isMolienda(value)) return <span className="text-foreground/30">—</span>;
+  return (
+    <span
+      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+        value === "grano"
+          ? "bg-[#C59F59]/10 text-[#C59F59]"
+          : "bg-purple-50 text-purple-600"
+      }`}
+    >
+      {MOLIENDA_LABELS[value]}
+    </span>
   );
 }
 
@@ -640,6 +718,106 @@ function sortRecordsList<T>(data: T[], sortField: string, sortAsc: boolean): T[]
   });
 }
 
+/**
+ * Packaged roasted coffee split by profile and grind.
+ *
+ * There is no per-grind stock column: the grind is stamped on the movement
+ * that determined it (Entrada, Empaque/Alta, Salida), so this is the signed
+ * sum of those movements. "Sin definir" only appears where older rows predate
+ * the grind field.
+ */
+function MoliendaBreakdown({ era }: { era: "v1" | "v2" }) {
+  type Balances = {
+    rows: { id: string; label: string; grano: number; molido: number; sin_definir: number; total: number }[];
+    totals: { grano: number; molido: number; sin_definir: number; total: number };
+  };
+  // Tag the result with the era it belongs to, so switching eras reads as
+  // loading without a synchronous setState in the effect body.
+  const [loaded, setLoaded] = useState<{ era: string; data: Balances | null } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMoliendaBalances(era)
+      .then((d) => {
+        if (!cancelled) setLoaded({ era, data: d as Balances });
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setLoaded({ era, data: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [era]);
+
+  const loading = loaded?.era !== era;
+  const data = loaded?.era === era ? loaded.data : null;
+
+  const showUndefined = !!data && data.totals.sin_definir !== 0;
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+
+  return (
+    <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
+      <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7]">
+        <h3 className="font-serif text-lg">Café empacado por perfil y molienda</h3>
+        <p className="text-sm text-foreground/50 mt-1">
+          La molienda se define al registrar la entrada o el alta de producción.
+          El café a granel (KG) no lleva molienda hasta que se empaca.
+        </p>
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 text-[#C59F59] animate-spin" />
+        </div>
+      ) : !data || data.rows.length === 0 ? (
+        <p className="text-sm text-foreground/40 text-center py-12">
+          Aún no hay movimientos de café empacado en esta era.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-[#fdfbf7] border-b border-foreground/5">
+                <th className={thCls}>Perfil</th>
+                <th className={`${thCls} text-right`}>Grano</th>
+                <th className={`${thCls} text-right`}>Molido</th>
+                {showUndefined && <th className={`${thCls} text-right`}>Sin definir</th>}
+                <th className={`${thCls} text-right`}>Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-foreground/5">
+              {data.rows.map((r) => (
+                <tr key={r.id} className="hover:bg-[#fdfbf7]">
+                  <td className={`${tdCls} font-bold`}>{r.label}</td>
+                  <td className={`${tdCls} text-right`}>{fmt(r.grano)}</td>
+                  <td className={`${tdCls} text-right`}>{fmt(r.molido)}</td>
+                  {showUndefined && (
+                    <td className={`${tdCls} text-right text-foreground/40`}>
+                      {fmt(r.sin_definir)}
+                    </td>
+                  )}
+                  <td className={`${tdCls} text-right font-bold`}>{fmt(r.total)}</td>
+                </tr>
+              ))}
+              <tr className="bg-[#fdfbf7]">
+                <td className={`${tdCls} font-bold`}>Total</td>
+                <td className={`${tdCls} text-right font-bold`}>{fmt(data.totals.grano)}</td>
+                <td className={`${tdCls} text-right font-bold`}>{fmt(data.totals.molido)}</td>
+                {showUndefined && (
+                  <td className={`${tdCls} text-right font-bold text-foreground/40`}>
+                    {fmt(data.totals.sin_definir)}
+                  </td>
+                )}
+                <td className={`${tdCls} text-right font-bold`}>{fmt(data.totals.total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Inventario Tab ───────────────────────────────────────────────────────────
 
 function InventarioTab({
@@ -759,6 +937,9 @@ function InventarioTab({
           </div>
         </div>
       </div>
+
+      {/* Packaged coffee split by profile x grind */}
+      <MoliendaBreakdown era={era} />
 
       {/* Table card */}
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
@@ -970,17 +1151,24 @@ function EditMovementModal({
   const [qty, setQty] = useState(String(Math.abs(record.quantity)));
   const [reason, setReason] = useState(record.reason ?? "");
   const [responsable, setResponsable] = useState(record.responsable ?? "");
+  const [molienda, setMolienda] = useState<Molienda | "">(
+    isMolienda(record.molienda) ? record.molienda : ""
+  );
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
+
+  const productCode = getRelation(record.inventory)?.product_code;
+  const needsMolienda = isGrindTracked(productCode);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsedQty = parseFloat(qty);
     if (isNaN(parsedQty) || parsedQty <= 0) { setError("Cantidad inválida"); return; }
+    if (needsMolienda && !molienda) { setError("Selecciona la molienda (Grano o Molido)"); return; }
     const signedQty = origSign * parsedQty;
     startTransition(async () => {
       try {
-        const res = await updateMovement(record.id, signedQty, date, reason || undefined, responsable || undefined, record.entry_type || undefined);
+        const res = await updateMovement(record.id, signedQty, date, reason || undefined, responsable || undefined, record.entry_type || undefined, molienda || undefined);
         onSuccess(res.inventoryId, res.newStock);
         onClose();
       } catch (err: unknown) {
@@ -1004,6 +1192,14 @@ function EditMovementModal({
           <div><label className={labelCls}>Cantidad (valor absoluto)</label><input type="number" min="0.001" step="0.001" value={qty} onChange={(e) => setQty(e.target.value)} className={inputCls} required /></div>
           <div><label className={labelCls}>Motivo / Notas</label><input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo..." className={inputCls} /></div>
           <div><label className={labelCls}>Responsable</label><input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder="Nombre..." className={inputCls} /></div>
+          {needsMolienda && (
+            <MoliendaField
+              idPrefix={`edit-${record.id}`}
+              value={molienda}
+              onChange={setMolienda}
+              productCode={productCode}
+            />
+          )}
           {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-3 border border-foreground/10 rounded-2xl text-sm font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5">Cancelar</button>
@@ -1108,9 +1304,9 @@ function EntradasTab({
     entryType: "MP" as "MP" | "MAT",
     responsable: "",
     lote: "",
+    molienda: "" as Molienda | "",
   };
   const [form, setForm] = useState(initForm);
-  const [coffeeFormat, setCoffeeFormat] = useState<"all" | "grano" | "molido">("all");
   const [records, setRecords] = useState<MovementRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -1122,30 +1318,52 @@ function EntradasTab({
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
+  const [search, setSearch] = useState("");
 
-  const coffeeInventoryFilter = useMemo(() => {
-    return (item: InventoryItem) => {
-      const name = item.product_name.toLowerCase();
-      const isCoffee = item.category === "cafe" && (
-        name.includes("café") ||
-        name.includes("cafe") ||
-        name.includes("tostado") ||
-        name.includes("grano") ||
-        name.includes("molido") ||
-        name.includes("molida")
-      );
+  const selectedItem = useMemo(
+    () => inventory.find((i) => i.id === form.inventoryId) ?? null,
+    [inventory, form.inventoryId]
+  );
 
-      if (!isCoffee) return true;
-      if (coffeeFormat === "all") return true;
-      if (coffeeFormat === "grano") {
-        return name.includes("grano") || (!name.includes("molido") && !name.includes("molida"));
-      }
-      return name.includes("molido") || name.includes("molida");
-    };
-  }, [coffeeFormat]);
+  // Free-text filter over the history — every whitespace-separated term must
+  // match somewhere in the row, so "honey 250" narrows down as you type.
+  const filteredRecords = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return records;
+    const terms = q.split(/\s+/);
+    return records.filter((r) => {
+      const inv = getRelation(r.inventory);
+      const haystack = [
+        inv?.product_code,
+        inv?.product_name,
+        r.lote,
+        r.responsable,
+        r.entry_type,
+        r.reason,
+        r.molienda,
+        isMolienda(r.molienda) ? MOLIENDA_LABELS[r.molienda] : null,
+        r.movement_date,
+        fmtDate(r.movement_date ?? r.created_at),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return terms.every((t) => haystack.includes(t));
+    });
+  }, [records, search]);
 
-  const sortedRecords = useMemo(() => sortRecordsList(records, sortField, sortAsc), [records, sortField, sortAsc]);
-  const paginatedRecords = sortedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const sortedRecords = useMemo(() => sortRecordsList(filteredRecords, sortField, sortAsc), [filteredRecords, sortField, sortAsc]);
+
+  // Clamp rather than store: deleting the last row of the last page must not
+  // leave the table blank while the page number catches up.
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / ITEMS_PER_PAGE));
+  const page = Math.min(currentPage, totalPages);
+  const paginatedRecords = sortedRecords.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
+  function handleSearch(value: string) {
+    setSearch(value);
+    setCurrentPage(1);
+  }
 
   function handleSort(field: string) {
     if (sortField === field) setSortAsc(!sortAsc);
@@ -1181,6 +1399,10 @@ function EntradasTab({
       setFeedback({ type: "error", msg: "Completa los campos obligatorios" });
       return;
     }
+    if (isGrindTracked(selectedItem?.product_code) && !form.molienda) {
+      setFeedback({ type: "error", msg: "Selecciona la molienda (Grano o Molido)" });
+      return;
+    }
     startTransition(async () => {
       try {
         const res = await createEntrada(
@@ -1189,7 +1411,8 @@ function EntradasTab({
           form.date,
           form.entryType,
           form.responsable || undefined,
-          form.lote || undefined
+          form.lote || undefined,
+          form.molienda || undefined
         );
         
         if (!res.success) {
@@ -1250,29 +1473,6 @@ function EntradasTab({
                 required
               />
             </div>
-            <div className="md:col-span-2 lg:col-span-3">
-              <label className={labelCls}>Tipo de café tostado</label>
-              <div className="flex flex-wrap gap-2 pt-2">
-                {(["all", "grano", "molido"] as const).map((opt) => {
-                  const isActive = coffeeFormat === opt;
-                  const label = opt === "all" ? "Todos" : opt === "grano" ? "Grano" : "Molido";
-                  return (
-                    <button
-                      key={opt}
-                      type="button"
-                      onClick={() => setCoffeeFormat(opt)}
-                      className={`px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-wider transition-all ${
-                        isActive
-                          ? "bg-[#C59F59] text-white border-[#C59F59] shadow-sm"
-                          : "bg-white text-foreground/60 border-foreground/10 hover:border-[#C59F59]/40 hover:text-foreground"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
             <div>
               <label htmlFor="ent-product" className={labelCls}>
                 Producto <span className="text-red-400">*</span>
@@ -1280,12 +1480,25 @@ function EntradasTab({
               <ProductSelect
                 id="ent-product"
                 value={form.inventoryId}
-                onChange={(v) => setForm({ ...form, inventoryId: v })}
+                onChange={(v) => {
+                  const next = inventory.find((i) => i.id === v);
+                  setForm({
+                    ...form,
+                    inventoryId: v,
+                    // A grind on a bag of stickers makes no sense — drop it.
+                    molienda: isGrindTracked(next?.product_code) ? form.molienda : "",
+                  });
+                }}
                 inventory={inventory}
-                filter={coffeeInventoryFilter}
                 searchable
               />
             </div>
+            <MoliendaField
+              idPrefix="ent"
+              value={form.molienda}
+              onChange={(v) => setForm({ ...form, molienda: v })}
+              productCode={selectedItem?.product_code}
+            />
             <div>
               <label htmlFor="ent-qty" className={labelCls}>
                 Cantidad <span className="text-red-400">*</span>
@@ -1366,22 +1579,64 @@ function EntradasTab({
 
       {/* History */}
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
-        <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
+        <div className="px-6 py-5 border-b border-foreground/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-[#fdfbf7]">
           <h3 className="font-serif text-lg">
             Historial{" "}
             <span className="text-foreground/40 text-base font-sans">
-              · {records.length}
+              · {filteredRecords.length}
+              {filteredRecords.length !== records.length && (
+                <span className="text-foreground/30"> de {records.length}</span>
+              )}
             </span>
           </h3>
-          <button
-            onClick={loadHistory}
-            className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-72 sm:flex-none">
+              <Search className="w-4 h-4 text-foreground/30 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Buscar código, producto, lote..."
+                aria-label="Buscar en el historial de entradas"
+                className={`${inputCls} pl-10 ${search ? "pr-10" : ""}`}
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => handleSearch("")}
+                  aria-label="Limpiar búsqueda"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-lg text-foreground/30 hover:text-foreground/60 hover:bg-foreground/5"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={loadHistory}
+              title="Recargar"
+              className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40 shrink-0"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         {loading || records.length === 0 ? (
           <HistoryLoadingOrEmpty loading={loading} empty={records.length === 0} />
+        ) : filteredRecords.length === 0 ? (
+          <div className="text-center py-16">
+            <Search className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
+            <p className="font-serif text-foreground/60">Sin coincidencias</p>
+            <p className="text-sm text-foreground/40 mt-1">
+              Ningún registro coincide con “{search.trim()}”.
+            </p>
+            <button
+              type="button"
+              onClick={() => handleSearch("")}
+              className="mt-4 px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl hover:bg-foreground/5"
+            >
+              Limpiar búsqueda
+            </button>
+          </div>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -1392,6 +1647,7 @@ function EntradasTab({
                   <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Molienda" field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Lote" field="lote" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Tipo" field="entry_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Responsable" field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
@@ -1416,6 +1672,9 @@ function EntradasTab({
                       <td className={tdCls}>{inv?.product_name ?? "—"}</td>
                       <td className={`${tdCls} text-right font-bold text-emerald-700`}>
                         +{r.quantity}
+                      </td>
+                      <td className={tdCls}>
+                        <MoliendaBadge value={r.molienda} />
                       </td>
                       <td className={tdCls}>
                         {r.lote ? (
@@ -1452,8 +1711,8 @@ function EntradasTab({
             </table>
           </div>
           <PaginationControls
-            currentPage={currentPage}
-            totalItems={records.length}
+            currentPage={page}
+            totalItems={filteredRecords.length}
             onPageChange={setCurrentPage}
           />
         </>
@@ -2292,6 +2551,7 @@ function ProdAltasTab({
     date: today(),
     lote: "",
     notes: "",
+    molienda: "" as Molienda | "",
   };
   const [form, setForm] = useState(initForm);
   const [consumos, setConsumos] = useState<{ id: string; qty: string }[]>([]);
@@ -2320,6 +2580,11 @@ function ProdAltasTab({
 
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
+  const selectedProduct = useMemo(
+    () => inventory.find((i) => i.id === form.inventoryId) ?? null,
+    [inventory, form.inventoryId]
+  );
+
   function loadHistory() {
     setLoading(true);
     getMovementsByTab("prod_alta", era)
@@ -2344,6 +2609,10 @@ function ProdAltasTab({
       setFeedback({ type: "error", msg: "Completa los campos obligatorios" });
       return;
     }
+    if (isGrindTracked(selectedProduct?.product_code) && !form.molienda) {
+      setFeedback({ type: "error", msg: "Selecciona la molienda (Grano o Molido)" });
+      return;
+    }
     startTransition(async () => {
       try {
         const consumosParsed = consumos
@@ -2356,7 +2625,8 @@ function ProdAltasTab({
           form.date,
           consumosParsed,
           form.lote || undefined,
-          form.notes || undefined
+          form.notes || undefined,
+          form.molienda || undefined
         );
 
         if (!res.success) {
@@ -2499,12 +2769,25 @@ function ProdAltasTab({
               <ProductSelect
                 id="pa-product"
                 value={form.inventoryId}
-                onChange={(v) => setForm({ ...form, inventoryId: v })}
+                onChange={(v) => {
+                  const next = inventory.find((i) => i.id === v);
+                  setForm({
+                    ...form,
+                    inventoryId: v,
+                    molienda: isGrindTracked(next?.product_code) ? form.molienda : "",
+                  });
+                }}
                 inventory={inventory}
                 filter={(i) => FINISHED_CODES.includes(i.product_code)}
                 placeholder="Seleccionar café tostado..."
               />
             </div>
+            <MoliendaField
+              idPrefix="pa"
+              value={form.molienda}
+              onChange={(v) => setForm({ ...form, molienda: v })}
+              productCode={selectedProduct?.product_code}
+            />
             <div>
               <label htmlFor="pa-qty" className={labelCls}>
                 Cantidad (kg / ud) <span className="text-red-400">*</span>
@@ -2661,6 +2944,7 @@ function ProdAltasTab({
                   <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Molienda" field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Lote / Notas" field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Acciones</th>
                 </tr>
@@ -2683,6 +2967,9 @@ function ProdAltasTab({
                       <td className={tdCls}>{inv?.product_name ?? "—"}</td>
                       <td className={`${tdCls} text-right font-bold ${r.quantity > 0 ? "text-emerald-700" : "text-red-600"}`}>
                         {r.quantity > 0 ? "+" : ""}{r.quantity}
+                      </td>
+                      <td className={tdCls}>
+                        <MoliendaBadge value={r.molienda} />
                       </td>
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.reason || "—"}
@@ -3173,6 +3460,7 @@ function SalidasTab({
     date: today(),
     motivo: "",
     responsable: "",
+    molienda: "" as Molienda | "",
   };
   const [form, setForm] = useState(initForm);
   const [records, setRecords] = useState<MovementRecord[]>([]);
@@ -3200,6 +3488,11 @@ function SalidasTab({
 
   const [editingRecord, setEditingRecord] = useState<MovementRecord | null>(null);
 
+  const selectedItem = useMemo(
+    () => inventory.find((i) => i.id === form.inventoryId) ?? null,
+    [inventory, form.inventoryId]
+  );
+
   function loadHistory() {
     setLoading(true);
     getMovementsByTab("salida", era)
@@ -3224,6 +3517,10 @@ function SalidasTab({
       setFeedback({ type: "error", msg: "Completa los campos obligatorios" });
       return;
     }
+    if (isGrindTracked(selectedItem?.product_code) && !form.molienda) {
+      setFeedback({ type: "error", msg: "Selecciona la molienda (Grano o Molido)" });
+      return;
+    }
     startTransition(async () => {
       try {
         const res = await createSalida(
@@ -3231,7 +3528,8 @@ function SalidasTab({
           parseFloat(form.qty),
           form.date,
           form.motivo || undefined,
-          form.responsable || undefined
+          form.responsable || undefined,
+          form.molienda || undefined
         );
 
         if (!res.success) {
@@ -3298,10 +3596,24 @@ function SalidasTab({
               <ProductSelect
                 id="sal-product"
                 value={form.inventoryId}
-                onChange={(v) => setForm({ ...form, inventoryId: v })}
+                onChange={(v) => {
+                  const next = inventory.find((i) => i.id === v);
+                  setForm({
+                    ...form,
+                    inventoryId: v,
+                    molienda: isGrindTracked(next?.product_code) ? form.molienda : "",
+                  });
+                }}
                 inventory={inventory}
+                searchable
               />
             </div>
+            <MoliendaField
+              idPrefix="sal"
+              value={form.molienda}
+              onChange={(v) => setForm({ ...form, molienda: v })}
+              productCode={selectedItem?.product_code}
+            />
             <div>
               <label htmlFor="sal-qty" className={labelCls}>
                 Cantidad <span className="text-red-400">*</span>
@@ -3391,6 +3703,7 @@ function SalidasTab({
                   <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label="Molienda" field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Motivo" field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label="Responsable" field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>Acciones</th>
@@ -3414,6 +3727,9 @@ function SalidasTab({
                       <td className={tdCls}>{inv?.product_name ?? "—"}</td>
                       <td className={`${tdCls} text-right font-bold text-red-600`}>
                         {r.quantity}
+                      </td>
+                      <td className={tdCls}>
+                        <MoliendaBadge value={r.molienda} />
                       </td>
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.reason || "—"}
