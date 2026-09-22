@@ -202,6 +202,7 @@ function ProductSelect({
   inventory,
   filter,
   placeholder = "Seleccionar producto...",
+  searchable = false,
 }: {
   id?: string;
   value: string;
@@ -209,22 +210,46 @@ function ProductSelect({
   inventory: InventoryItem[];
   filter?: (i: InventoryItem) => boolean;
   placeholder?: string;
+  searchable?: boolean;
 }) {
   const items = filter ? inventory.filter(filter) : inventory;
+  const [search, setSearch] = useState("");
+
+  const filteredItems = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return items;
+    return items.filter((item) => {
+      const haystack = `${item.product_code} ${item.product_name}`.toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [items, search]);
+
   return (
-    <select
-      id={id}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${inputCls} appearance-none cursor-pointer`}
-    >
-      <option value="">{placeholder}</option>
-      {items.map((item) => (
-        <option key={item.id} value={item.id}>
-          {item.product_code} — {item.product_name}
-        </option>
-      ))}
-    </select>
+    <div className="space-y-2">
+      {searchable && (
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar producto..."
+          className={`${inputCls} w-full`}
+        />
+      )}
+
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${inputCls} appearance-none cursor-pointer`}
+      >
+        <option value="">{placeholder}</option>
+        {filteredItems.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.product_code} — {item.product_name}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -1085,6 +1110,7 @@ function EntradasTab({
     lote: "",
   };
   const [form, setForm] = useState(initForm);
+  const [coffeeFormat, setCoffeeFormat] = useState<"all" | "grano" | "molido">("all");
   const [records, setRecords] = useState<MovementRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -1096,6 +1122,27 @@ function EntradasTab({
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
+
+  const coffeeInventoryFilter = useMemo(() => {
+    return (item: InventoryItem) => {
+      const name = item.product_name.toLowerCase();
+      const isCoffee = item.category === "cafe" && (
+        name.includes("café") ||
+        name.includes("cafe") ||
+        name.includes("tostado") ||
+        name.includes("grano") ||
+        name.includes("molido") ||
+        name.includes("molida")
+      );
+
+      if (!isCoffee) return true;
+      if (coffeeFormat === "all") return true;
+      if (coffeeFormat === "grano") {
+        return name.includes("grano") || (!name.includes("molido") && !name.includes("molida"));
+      }
+      return name.includes("molido") || name.includes("molida");
+    };
+  }, [coffeeFormat]);
 
   const sortedRecords = useMemo(() => sortRecordsList(records, sortField, sortAsc), [records, sortField, sortAsc]);
   const paginatedRecords = sortedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -1203,6 +1250,29 @@ function EntradasTab({
                 required
               />
             </div>
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className={labelCls}>Tipo de café tostado</label>
+              <div className="flex flex-wrap gap-2 pt-2">
+                {(["all", "grano", "molido"] as const).map((opt) => {
+                  const isActive = coffeeFormat === opt;
+                  const label = opt === "all" ? "Todos" : opt === "grano" ? "Grano" : "Molido";
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setCoffeeFormat(opt)}
+                      className={`px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-wider transition-all ${
+                        isActive
+                          ? "bg-[#C59F59] text-white border-[#C59F59] shadow-sm"
+                          : "bg-white text-foreground/60 border-foreground/10 hover:border-[#C59F59]/40 hover:text-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div>
               <label htmlFor="ent-product" className={labelCls}>
                 Producto <span className="text-red-400">*</span>
@@ -1212,6 +1282,8 @@ function EntradasTab({
                 value={form.inventoryId}
                 onChange={(v) => setForm({ ...form, inventoryId: v })}
                 inventory={inventory}
+                filter={coffeeInventoryFilter}
+                searchable
               />
             </div>
             <div>
