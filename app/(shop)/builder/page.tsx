@@ -50,7 +50,7 @@ export function calculateCoffeePrice(planOrProdId: string, weight: string): numb
 const PLANS = [
   {
     id: "essential",
-    name: "Selección Amantti",
+    name: "Premium",
     price: 35000,
     image: "/images/Premium_Bag.jpeg",
     description: "El café esencial con perfil clásico colombiano, balanceado y constante.",
@@ -64,7 +64,7 @@ const PLANS = [
   },
   {
     id: "curator",
-    name: "Microlote del Mes",
+    name: "Chiroso",
     price: 65000,
     image: "/images/Especial_Bag.jpeg",
     description: "Pequeños lotes de variedades exóticas y procesos experimentales.",
@@ -81,7 +81,7 @@ const PLANS = [
 const CUSTOM_PRODUCTS = [
   {
     id: "essential",
-    name: "Selección Amantti",
+    name: "Premium",
     basePrice: 35000,
     image: "/images/Premium_Bag.jpeg",
     codePrefix: "CAFT"
@@ -95,7 +95,7 @@ const CUSTOM_PRODUCTS = [
   },
   {
     id: "curator",
-    name: "Microlote del Mes",
+    name: "Chiroso",
     basePrice: 65000,
     image: "/images/Especial_Bag.jpeg",
     codePrefix: "CAFT-MIC"

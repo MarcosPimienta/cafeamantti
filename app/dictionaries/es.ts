@@ -83,10 +83,10 @@ export const es: Record<TranslationKey, string> = {
 
   // Subscription Plans
   "plans.title": "Nuestros Planes de Suscripción",
-  "plans.essentialTitle": "Selección Amantti",
+  "plans.essentialTitle": "Premium",
   "plans.essentialSubtitle": "",
   "plans.essentialQuote": "El café esencial para empezar cada día con intención.",
-  "plans.essentialContent": "250g o 500g de nuestra Selección Amantti (Perfil balanceado y constante).",
+  "plans.essentialContent": "250g o 500g de nuestro café Premium (Perfil balanceado y constante).",
   "plans.essentialDifference": "Acceso a la \"Bitácora de Tueste\" (notas digitales sobre el lote específico de la semana).",
   "plans.essentialFrequency": "Quincenal o Mensual (Tú eliges el ritmo de tu ritual).",
   "plans.essentialIdeal": "El purista que busca la perfección en la consistencia.",
@@ -99,7 +99,7 @@ export const es: Record<TranslationKey, string> = {
   "plans.alchemyFrequency": "Mensual o Quincenal.",
   "plans.alchemyIdeal": "Parejas o entusiastas que ven el café como un tema de conversación, no solo una bebida.",
 
-  "plans.curatorTitle": "Microlote del Mes",
+  "plans.curatorTitle": "Chiroso",
   "plans.curatorSubtitle": "",
   "plans.curatorQuote": "Una selección privada de los cafés más excepcionales de Amantti.",
   "plans.curatorContent": "Varietales exóticos como Geisha, Borbón Rosado o procesos experimentales.",
@@ -110,7 +110,7 @@ export const es: Record<TranslationKey, string> = {
   "plans.customTitle": "Suscripción Personalizada",
   "plans.customSubtitle": "",
   "plans.customQuote": "Diseña tu propia suscripción eligiendo las cantidades exactas de tus cafés favoritos.",
-  "plans.customContent": "Combinación libre de Selección Amantti, Honey Process y Microlote del Mes.",
+  "plans.customContent": "Combinación libre de Premium, Honey Process y Chiroso.",
   "plans.customDifference": "Control total sobre las cantidades de cada producto y verificación de inventario en tiempo real.",
   "plans.customFrequency": "Semanal, Quincenal o Mensual.",
   "plans.customIdeal": "Quienes desean personalizar totalmente su volumen y variedad de café.",
@@ -136,7 +136,7 @@ export const es: Record<TranslationKey, string> = {
   "products.grind.drip": "Filtro / Drip (Media)",
   "products.grind.frenchPress": "Prensa Francesa (Gruesa)",
 
-  "products.firmaTitle": "Selección Amantti",
+  "products.firmaTitle": "Premium",
   "products.firmaDesc": "Nuestra mezcla de la casa, balanceada y constante. Un tributo al perfil clásico colombiano.",
   "products.firmaProfile": "Chocolate, Caramelo y Naranja",
 
@@ -144,7 +144,7 @@ export const es: Record<TranslationKey, string> = {
   "products.honeyDesc": "Exótico y dulce. Este proceso conserva el mucílago de la cereza para un sabor frutal distintivo.",
   "products.honeyProfile": "Frutos Rojos, Miel y Floral",
 
-  "products.microlotTitle": "Microlote del Mes",
+  "products.microlotTitle": "Chiroso",
   "products.microlotDesc": "La joya de la corona. Pequeños lotes de variedades experimentales y fermentaciones únicas.",
   "products.microlotProfile": "Complejo, Brillante e Irrepetible",
 
@@ -218,7 +218,7 @@ export const es: Record<TranslationKey, string> = {
   "home.suscripciones.title": "Tu café, a tu ritmo.",
   "home.suscripciones.intro": "Arma tu combinación: variedades, presentación, molienda y frecuencia. Nosotros lo tostamos y te lo llevamos.",
   "home.suscripciones.libertadTitle": "libertad total",
-  "home.suscripciones.libertadDesc": "Combina Selección Premium, Honey Process o Microlote del Mes en las cantidades que quieras.",
+  "home.suscripciones.libertadDesc": "Combina Premium, Honey Process o Chiroso en las cantidades que quieras.",
   "home.suscripciones.envioTitle": "envío metropolitano",
   "home.suscripciones.envioDesc": "Tarifa según tu municipio, desde $10.000 COP. Siempre recién tostado.",
   "home.suscripciones.sinAtadurasTitle": "sin ataduras",
@@ -239,13 +239,13 @@ export const es: Record<TranslationKey, string> = {
   "home.tienda.metaOrigen": "origen único",
   "home.tienda.metaCalidad": "calidad premium",
 
-  "home.tienda.tradName": "Selección Amantti",
+  "home.tienda.tradName": "Premium",
   "home.tienda.tradNotes": "chocolate · caramelo · naranja",
   "home.tienda.tradDesc": "La mezcla de la casa. Balanceada, constante, un tributo al perfil clásico colombiano.",
   "home.tienda.honeyName": "Honey Process",
   "home.tienda.honeyNotes": "panela · durazno · miel",
   "home.tienda.honeyDesc": "Exótico y dulce. El mucílago de la cereza se conserva para un dulzor frutal distintivo.",
-  "home.tienda.microName": "Microlote del Mes",
+  "home.tienda.microName": "Chiroso",
   "home.tienda.microNotes": "complejo · brillante · irrepetible",
   "home.tienda.microDesc": "La joya de la corona. Lotes pequeños de variedades experimentales y fermentaciones únicas.",
 

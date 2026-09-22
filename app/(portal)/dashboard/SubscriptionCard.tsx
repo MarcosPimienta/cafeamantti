@@ -57,13 +57,13 @@ export function SubscriptionCard({ subscription }: { subscription: Subscription 
       case 'essential':
       case 'traditional':
       case 'firma':
-        return 'Selección Amantti';
+        return 'Premium';
       case 'alchemy':
       case 'honey':
         return 'Honey Process';
       case 'curator':
       case 'microlot':
-        return 'Microlote del Mes';
+        return 'Chiroso';
       case 'custom':
         return 'Suscripción Personalizada';
       default:

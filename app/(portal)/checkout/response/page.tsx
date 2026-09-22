@@ -163,11 +163,11 @@ function CheckoutResponseContent() {
                       {(() => {
                         const raw = txData?.plan_name || "";
                         const lower = raw.toLowerCase();
-                        if (lower.includes("essential") || lower.includes("devoción") || lower.includes("devocion") || lower.includes("firma")) return "Selección Amantti";
+                        if (lower.includes("essential") || lower.includes("devoción") || lower.includes("devocion") || lower.includes("firma")) return "Premium";
                         if (lower.includes("alchemy") || lower.includes("alquimia") || lower.includes("honey")) return "Honey Process";
-                        if (lower.includes("curator") || lower.includes("curaduría") || lower.includes("curaduria") || lower.includes("microlot")) return "Microlote del Mes";
+                        if (lower.includes("curator") || lower.includes("curaduría") || lower.includes("curaduria") || lower.includes("microlot")) return "Chiroso";
                         if (lower.includes("custom") || lower.includes("crea tu") || lower.includes("personalizada")) return "Suscripción Personalizada";
-                        return raw.replace(/^Plan\s+/i, "") || "Selección Amantti";
+                        return raw.replace(/^Plan\s+/i, "") || "Premium";
                       })()}
                     </span>
                   </div>
