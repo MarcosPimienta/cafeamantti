@@ -40,19 +40,22 @@ export const PROFILE_LABELS: Record<CoffeeProfileId, string> = {
 };
 
 /**
- * Only *packaged* roasted coffee exists in Grano or Molido. Bulk roasted
- * coffee (CAFT-001 / CAFT-HON-001 / CAFT-MIC-001) comes out of the roaster
- * grind-agnostic and is ground at packing time, so it carries no grind — that
- * is exactly why consuming bulk to produce a Molido bag nets out correctly.
- * Pergamino (CAPG-*), verde (CAFV-*), cold brew (CAFC-*), bags and stickers
- * have no grind either.
+ * All roasted coffee exists in Grano or Molido — bulk by the kilo
+ * (CAFT-001 / CAFT-HON-001 / CAFT-MIC-001) just as much as the packaged
+ * sizes, since bulk can be bought or sold already ground. Pergamino
+ * (CAPG-*), verde (CAFV-*), cold brew (CAFC-*), bags and stickers have no
+ * grind.
  */
 export function isGrindTracked(productCode: string | null | undefined): boolean {
-  return (
-    !!productCode &&
-    productCode.startsWith("CAFT-") &&
-    !productCode.endsWith("-001")
-  );
+  return !!productCode && productCode.startsWith("CAFT-");
+}
+
+/**
+ * Bulk roasted coffee is measured in kg, the packaged sizes in units, so the
+ * two can never be added into one total.
+ */
+export function isBulkCoffee(productCode: string | null | undefined): boolean {
+  return isGrindTracked(productCode) && (productCode as string).endsWith("-001");
 }
 
 /**

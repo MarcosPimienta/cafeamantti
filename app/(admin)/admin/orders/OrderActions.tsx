@@ -49,7 +49,9 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
     grind: string;
   }[]>(
     (order.order_items || []).map((oi: any) => {
-      const inv = inventory.find(i => i.product_name === oi.product_id);
+      const inv =
+        inventory.find(i => i.id === oi.inventory_id) ??
+        inventory.find(i => i.product_name === oi.product_id);
       return {
         inventory_id: inv ? inv.id : "",
         product_code: inv ? inv.product_code : "",

@@ -151,6 +151,23 @@ function resolveIncomeFields(
   };
 }
 
+/**
+ * El flujo de caja ya no mueve inventario. Un ingreso que nació de una Salida
+ * de inventario (venta pagada) le pertenece a esa salida: se edita o elimina
+ * desde Inventario → Salidas para que stock y caja cambien juntos.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function _saleLockError(supabase: any, incomeId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('inventory_movements')
+    .select('id')
+    .eq('income_id', incomeId)
+    .limit(1);
+  return data && data.length > 0
+    ? 'Este ingreso proviene de una salida de inventario. Edítalo o elimínalo desde Inventario → Salidas.'
+    : null;
+}
+
 export async function ensureCashflowDate(date: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -210,7 +227,7 @@ export async function getAllIncomes(era: 'v1' | 'v2' = 'v2') {
   // ── 1. Ingresos manuales (todos los campos P&L ya persisten en DB) ──
   const { data: manual, error: manErr } = await supabase
     .from('cashflow_incomes')
-    .select('*, cashflow:cashflow_id(date), inventory:inventory_id(product_code, product_name, unit)')
+    .select('*, cashflow:cashflow_id(date), inventory:inventory_id(product_code, product_name, unit), salidas:inventory_movements(id)')
     .eq('era', era)
     .order('created_at', { ascending: false });
 
@@ -291,7 +308,12 @@ export async function getAllIncomes(era: 'v1' | 'v2' = 'v2') {
 
   // ── 4. Fusionar y ordenar por fecha descendente ─────────────────────
   const merged = [
-    ...(manual || []).map(m => ({ ...m, type: 'manual' as const })),
+    ...(manual || []).map(({ salidas, ...m }) => ({
+      ...m,
+      type: 'manual' as const,
+      // Ingreso generado por una Salida de inventario: se gestiona desde allá.
+      from_salida: (salidas?.length ?? 0) > 0,
+    })),
     ...autoIncomes,
   ].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -468,9 +490,6 @@ export async function createIncomeDirect(
     // Metadatos
     cashflow_id,
     created_by:    user?.id,
-    // Inventario
-    inventory_id:  income.inventory_id || null,
-    quantity_sold: income.quantity_sold ? Number(income.quantity_sold) : 0,
   };
 
   // ── 3. Persistir ─────────────────────────────────────────
@@ -482,43 +501,6 @@ export async function createIncomeDirect(
 
   if (error) return { error: error.message };
 
-  // ── 3.1. Deducir inventario operacional si se especificó producto y cantidad ──
-  if (payload.inventory_id && payload.quantity_sold > 0) {
-    const { data: invItem, error: invErr } = await supabase
-      .from('inventory')
-      .select('current_stock')
-      .eq('id', payload.inventory_id)
-      .single();
-    if (!invErr && invItem) {
-      const newStock = Number(invItem.current_stock) - payload.quantity_sold;
-      await supabase.from('inventory').update({ current_stock: newStock }).eq('id', payload.inventory_id);
-
-      let adminName = 'Flujo de Caja';
-      if (user?.id) {
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('first_name, last_name')
-          .eq('id', user.id)
-          .single();
-        if (prof) {
-          adminName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || 'Flujo de Caja';
-        }
-      }
-
-      await supabase.from('inventory_movements').insert({
-        inventory_id: payload.inventory_id,
-        type: 'salida',
-        quantity: -payload.quantity_sold,
-        movement_date: date,
-        reason: `Salida por venta física (Ingreso: ${payload.concept})`,
-        created_by: user?.id,
-        responsable: adminName,
-        tab_source: 'salida',
-        income_id: data.id
-      });
-    }
-  }
-
   // ── 4. Audit log con snapshot completo ───────────────────
   await supabase.from('cashflow_audit_logs').insert({
     admin_id:    user?.id,
@@ -529,8 +511,6 @@ export async function createIncomeDirect(
   });
 
   revalidatePath('/admin/cashflow');
-  revalidatePath('/admin/inventory');
-  revalidatePath('/admin/inventory', 'page');
   return { success: true, data };
 }
 
@@ -549,6 +529,9 @@ export async function updateIncomeDirect(
     .single();
   if (getErr) return { error: getErr.message };
 
+  const lockErr = await _saleLockError(supabase, id);
+  if (lockErr) return { error: lockErr };
+
   // ── 2. Fusionar y recalcular campos P&L ─────────────────
   const merged = { ...oldData, ...income };
   const { fields } = resolveIncomeFields(merged);
@@ -564,24 +547,7 @@ export async function updateIncomeDirect(
     shipping_cost: fields.shipping_cost,
     tax_amount:    fields.tax_amount,
     net_revenue:   fields.net_revenue,
-    inventory_id:  income.inventory_id !== undefined ? (income.inventory_id || null) : oldData.inventory_id,
-    quantity_sold: income.quantity_sold !== undefined ? Number(income.quantity_sold || 0) : Number(oldData.quantity_sold || 0),
   };
-
-  const oldInvId = oldData.inventory_id;
-  const oldQty = Number(oldData.quantity_sold || 0);
-  const newInvId = payload.inventory_id;
-  const newQty = Number(payload.quantity_sold || 0);
-  const isInvChanged = oldInvId !== newInvId || oldQty !== newQty;
-
-  // ── 3.1. Revertir inventario previo si cambió ─────────────
-  if (isInvChanged && oldInvId && oldQty > 0) {
-    const { data: oldInvItem } = await supabase.from('inventory').select('current_stock').eq('id', oldInvId).single();
-    if (oldInvItem) {
-      await supabase.from('inventory').update({ current_stock: Number(oldInvItem.current_stock) + oldQty }).eq('id', oldInvId);
-    }
-    await supabase.from('inventory_movements').delete().eq('income_id', id);
-  }
 
   // ── 4. Persistir ─────────────────────────────────────────
   const { data: newData, error } = await supabase
@@ -593,60 +559,6 @@ export async function updateIncomeDirect(
 
   if (error) return { error: error.message };
 
-  // ── 4.1. Aplicar nuevo inventario si cambió y hay producto/cantidad ──
-  if (isInvChanged && newInvId && newQty > 0) {
-    const { data: newInvItem } = await supabase.from('inventory').select('current_stock').eq('id', newInvId).single();
-    if (newInvItem) {
-      const newStock = Number(newInvItem.current_stock) - newQty;
-      await supabase.from('inventory').update({ current_stock: newStock }).eq('id', newInvId);
-
-      let adminName = 'Flujo de Caja';
-      if (user?.id) {
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('first_name, last_name')
-          .eq('id', user.id)
-          .single();
-        if (prof) {
-          adminName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || 'Flujo de Caja';
-        }
-      }
-
-      await supabase.from('inventory_movements').insert({
-        inventory_id: newInvId,
-        type: 'salida',
-        quantity: -newQty,
-        movement_date: oldData.cashflow?.date || new Date().toISOString().split('T')[0],
-        reason: `Salida por venta física (Ingreso modificado: ${payload.concept})`,
-        created_by: user?.id,
-        responsable: adminName,
-        tab_source: 'salida',
-        income_id: id
-      });
-    }
-  } else if (!isInvChanged && newInvId && newQty > 0) {
-    let adminName = 'Flujo de Caja';
-    if (user?.id) {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('first_name, last_name')
-        .eq('id', user.id)
-        .single();
-      if (prof) {
-        adminName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || 'Flujo de Caja';
-      }
-    }
-
-    // Si no cambió la asociación de inventario pero sí el concepto o fecha, actualizar el movimiento
-    await supabase.from('inventory_movements')
-      .update({
-        reason: `Salida por venta física (Ingreso modificado: ${payload.concept})`,
-        movement_date: oldData.cashflow?.date || new Date().toISOString().split('T')[0],
-        responsable: adminName
-      })
-      .eq('income_id', id);
-  }
-
   // ── 5. Audit log con diff completo old→new ───────────────
   await supabase.from('cashflow_audit_logs').insert({
     admin_id:    user?.id,
@@ -657,8 +569,6 @@ export async function updateIncomeDirect(
   });
 
   revalidatePath('/admin/cashflow');
-  revalidatePath('/admin/inventory');
-  revalidatePath('/admin/inventory', 'page');
   return { success: true, data: newData };
 }
 
@@ -669,16 +579,8 @@ export async function deleteIncomeDirect(id: string) {
   const { data: old, error: getErr } = await supabase.from('cashflow_incomes').select('*').eq('id', id).single();
   if (getErr) return { error: getErr.message };
 
-  // Revertir inventario previo si existía
-  const oldInvId = old.inventory_id;
-  const oldQty = Number(old.quantity_sold || 0);
-  if (oldInvId && oldQty > 0) {
-    const { data: invItem } = await supabase.from('inventory').select('current_stock').eq('id', oldInvId).single();
-    if (invItem) {
-      await supabase.from('inventory').update({ current_stock: Number(invItem.current_stock) + oldQty }).eq('id', oldInvId);
-    }
-    await supabase.from('inventory_movements').delete().eq('income_id', id);
-  }
+  const lockErr = await _saleLockError(supabase, id);
+  if (lockErr) return { error: lockErr };
 
   const { error } = await supabase.from('cashflow_incomes').delete().eq('id', id);
   if (error) return { error: error.message };
@@ -692,8 +594,6 @@ export async function deleteIncomeDirect(id: string) {
   });
 
   revalidatePath('/admin/cashflow');
-  revalidatePath('/admin/inventory');
-  revalidatePath('/admin/inventory', 'page');
   return { success: true };
 }
 

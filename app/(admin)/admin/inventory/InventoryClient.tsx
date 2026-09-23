@@ -100,6 +100,9 @@ interface MovementRecord {
   tab_source: string | null;
   molienda: string | null;
   production_batch_id?: string | null;
+  income_id?: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  income?: any;
   created_at: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inventory?: any;
@@ -170,6 +173,21 @@ function fmtDate(iso: string | null | undefined) {
     month: "short",
     day: "numeric",
   });
+}
+
+function fmtCOP(n: number) {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+/** Value collected for a paid-sale salida (its linked cashflow income). */
+function saleAmountOf(record: MovementRecord): number | null {
+  if (!record.income_id) return null;
+  const inc = Array.isArray(record.income) ? record.income[0] : record.income;
+  return inc ? Number(inc.gross_amount ?? 0) : null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -719,18 +737,83 @@ function sortRecordsList<T>(data: T[], sortField: string, sortAsc: boolean): T[]
 }
 
 /**
- * Packaged roasted coffee split by profile and grind.
+ * Roasted coffee split by profile and grind.
  *
  * There is no per-grind stock column: the grind is stamped on the movement
- * that determined it (Entrada, Empaque/Alta, Salida), so this is the signed
- * sum of those movements. "Sin definir" only appears where older rows predate
- * the grind field.
+ * that determined it (Entrada, Empaque/Alta, Salida, Tostión), so this is the
+ * signed sum of those movements. Bulk and packaged are shown as two tables
+ * because kg and unidades cannot be added together. "Sin definir" only
+ * appears where rows predate the grind field.
  */
+type MoliendaTotals = { grano: number; molido: number; sin_definir: number; total: number };
+type MoliendaGroup = {
+  rows: ({ id: string; label: string } & MoliendaTotals)[];
+  totals: MoliendaTotals;
+};
+
+function MoliendaGroupTable({
+  group,
+  unit,
+}: {
+  group: MoliendaGroup;
+  unit: string;
+}) {
+  const showUndefined = group.totals.sin_definir !== 0;
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+
+  if (group.totals.total === 0 && group.rows.every((r) => r.total === 0)) {
+    return (
+      <p className="text-sm text-foreground/40 px-6 py-8">
+        Sin movimientos registrados.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="bg-[#fdfbf7] border-b border-foreground/5">
+            <th className={thCls}>Perfil</th>
+            <th className={`${thCls} text-right`}>Grano ({unit})</th>
+            <th className={`${thCls} text-right`}>Molido ({unit})</th>
+            {showUndefined && <th className={`${thCls} text-right`}>Sin definir</th>}
+            <th className={`${thCls} text-right`}>Total ({unit})</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-foreground/5">
+          {group.rows.map((r) => (
+            <tr key={r.id} className="hover:bg-[#fdfbf7]">
+              <td className={`${tdCls} font-bold`}>{r.label}</td>
+              <td className={`${tdCls} text-right`}>{fmt(r.grano)}</td>
+              <td className={`${tdCls} text-right`}>{fmt(r.molido)}</td>
+              {showUndefined && (
+                <td className={`${tdCls} text-right text-foreground/40`}>
+                  {fmt(r.sin_definir)}
+                </td>
+              )}
+              <td className={`${tdCls} text-right font-bold`}>{fmt(r.total)}</td>
+            </tr>
+          ))}
+          <tr className="bg-[#fdfbf7]">
+            <td className={`${tdCls} font-bold`}>Total</td>
+            <td className={`${tdCls} text-right font-bold`}>{fmt(group.totals.grano)}</td>
+            <td className={`${tdCls} text-right font-bold`}>{fmt(group.totals.molido)}</td>
+            {showUndefined && (
+              <td className={`${tdCls} text-right font-bold text-foreground/40`}>
+                {fmt(group.totals.sin_definir)}
+              </td>
+            )}
+            <td className={`${tdCls} text-right font-bold`}>{fmt(group.totals.total)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function MoliendaBreakdown({ era }: { era: "v1" | "v2" }) {
-  type Balances = {
-    rows: { id: string; label: string; grano: number; molido: number; sin_definir: number; total: number }[];
-    totals: { grano: number; molido: number; sin_definir: number; total: number };
-  };
+  type Balances = { packaged: MoliendaGroup; bulk: MoliendaGroup };
   // Tag the result with the era it belongs to, so switching eras reads as
   // loading without a synchronous setState in the effect body.
   const [loaded, setLoaded] = useState<{ era: string; data: Balances | null } | null>(null);
@@ -753,66 +836,34 @@ function MoliendaBreakdown({ era }: { era: "v1" | "v2" }) {
   const loading = loaded?.era !== era;
   const data = loaded?.era === era ? loaded.data : null;
 
-  const showUndefined = !!data && data.totals.sin_definir !== 0;
-  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
-
   return (
     <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
       <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7]">
-        <h3 className="font-serif text-lg">Café empacado por perfil y molienda</h3>
+        <h3 className="font-serif text-lg">Café tostado por perfil y molienda</h3>
         <p className="text-sm text-foreground/50 mt-1">
-          La molienda se define al registrar la entrada o el alta de producción.
-          El café a granel (KG) no lleva molienda hasta que se empaca.
+          La molienda se define al registrar la entrada, el alta de producción
+          o la salida. El café a granel sale del tostador en grano.
         </p>
       </div>
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 text-[#C59F59] animate-spin" />
         </div>
-      ) : !data || data.rows.length === 0 ? (
+      ) : !data ? (
         <p className="text-sm text-foreground/40 text-center py-12">
-          Aún no hay movimientos de café empacado en esta era.
+          No se pudo cargar el desglose por molienda.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                <th className={thCls}>Perfil</th>
-                <th className={`${thCls} text-right`}>Grano</th>
-                <th className={`${thCls} text-right`}>Molido</th>
-                {showUndefined && <th className={`${thCls} text-right`}>Sin definir</th>}
-                <th className={`${thCls} text-right`}>Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-foreground/5">
-              {data.rows.map((r) => (
-                <tr key={r.id} className="hover:bg-[#fdfbf7]">
-                  <td className={`${tdCls} font-bold`}>{r.label}</td>
-                  <td className={`${tdCls} text-right`}>{fmt(r.grano)}</td>
-                  <td className={`${tdCls} text-right`}>{fmt(r.molido)}</td>
-                  {showUndefined && (
-                    <td className={`${tdCls} text-right text-foreground/40`}>
-                      {fmt(r.sin_definir)}
-                    </td>
-                  )}
-                  <td className={`${tdCls} text-right font-bold`}>{fmt(r.total)}</td>
-                </tr>
-              ))}
-              <tr className="bg-[#fdfbf7]">
-                <td className={`${tdCls} font-bold`}>Total</td>
-                <td className={`${tdCls} text-right font-bold`}>{fmt(data.totals.grano)}</td>
-                <td className={`${tdCls} text-right font-bold`}>{fmt(data.totals.molido)}</td>
-                {showUndefined && (
-                  <td className={`${tdCls} text-right font-bold text-foreground/40`}>
-                    {fmt(data.totals.sin_definir)}
-                  </td>
-                )}
-                <td className={`${tdCls} text-right font-bold`}>{fmt(data.totals.total)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="px-6 pt-5 pb-1">
+            <p className={labelCls}>Empacado — unidades</p>
+          </div>
+          <MoliendaGroupTable group={data.packaged} unit="ud" />
+          <div className="px-6 pt-6 pb-1 border-t border-foreground/5">
+            <p className={labelCls}>A granel — kilogramos</p>
+          </div>
+          <MoliendaGroupTable group={data.bulk} unit="kg" />
+        </>
       )}
     </div>
   );
@@ -1154,6 +1205,8 @@ function EditMovementModal({
   const [molienda, setMolienda] = useState<Molienda | "">(
     isMolienda(record.molienda) ? record.molienda : ""
   );
+  const initialSale = saleAmountOf(record);
+  const [saleAmount, setSaleAmount] = useState(initialSale !== null ? String(initialSale) : "");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
@@ -1165,10 +1218,12 @@ function EditMovementModal({
     const parsedQty = parseFloat(qty);
     if (isNaN(parsedQty) || parsedQty <= 0) { setError("Cantidad inválida"); return; }
     if (needsMolienda && !molienda) { setError("Selecciona la molienda (Grano o Molido)"); return; }
+    const parsedSale = parseFloat(saleAmount);
+    if (initialSale !== null && !(parsedSale > 0)) { setError("Valor cobrado inválido"); return; }
     const signedQty = origSign * parsedQty;
     startTransition(async () => {
       try {
-        const res = await updateMovement(record.id, signedQty, date, reason || undefined, responsable || undefined, record.entry_type || undefined, molienda || undefined);
+        const res = await updateMovement(record.id, signedQty, date, reason || undefined, responsable || undefined, record.entry_type || undefined, molienda || undefined, initialSale !== null ? parsedSale : undefined);
         onSuccess(res.inventoryId, res.newStock);
         onClose();
       } catch (err: unknown) {
@@ -1199,6 +1254,13 @@ function EditMovementModal({
               onChange={setMolienda}
               productCode={productCode}
             />
+          )}
+          {initialSale !== null && (
+            <div>
+              <label className={labelCls}>Valor cobrado (COP)</label>
+              <input type="number" min="1" step="any" value={saleAmount} onChange={(e) => setSaleAmount(e.target.value)} className={inputCls} required />
+              <p className="text-[11px] text-foreground/40 mt-1">Venta pagada: fecha, cantidad y valor se actualizan también en el Flujo de Caja.</p>
+            </div>
           )}
           {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
           <div className="flex gap-3 pt-2">
@@ -3461,6 +3523,8 @@ function SalidasTab({
     motivo: "",
     responsable: "",
     molienda: "" as Molienda | "",
+    esVenta: false,
+    valor: "",
   };
   const [form, setForm] = useState(initForm);
   const [records, setRecords] = useState<MovementRecord[]>([]);
@@ -3521,6 +3585,11 @@ function SalidasTab({
       setFeedback({ type: "error", msg: "Selecciona la molienda (Grano o Molido)" });
       return;
     }
+    const valor = parseFloat(form.valor);
+    if (form.esVenta && !(valor > 0)) {
+      setFeedback({ type: "error", msg: "Ingresa el valor cobrado de la venta" });
+      return;
+    }
     startTransition(async () => {
       try {
         const res = await createSalida(
@@ -3529,7 +3598,8 @@ function SalidasTab({
           form.date,
           form.motivo || undefined,
           form.responsable || undefined,
-          form.molienda || undefined
+          form.molienda || undefined,
+          form.esVenta ? { amount: valor } : null
         );
 
         if (!res.success) {
@@ -3538,7 +3608,12 @@ function SalidasTab({
         }
 
         onStockUpdate(form.inventoryId, res.newStock ?? 0);
-        setFeedback({ type: "success", msg: "✓ Salida registrada exitosamente" });
+        setFeedback({
+          type: "success",
+          msg: form.esVenta
+            ? "✓ Venta registrada: stock descontado e ingreso creado en Flujo de Caja"
+            : "✓ Salida registrada exitosamente",
+        });
         setForm(initForm);
         loadHistory();
       } catch (err: unknown) {
@@ -3571,6 +3646,8 @@ function SalidasTab({
           <h2 className="text-xl font-serif">Registrar Salida</h2>
           <p className="text-sm text-foreground/50 mt-1">
             Registra una salida de stock: ventas directas, muestras, merma, etc.
+            Si es una venta pagada, márcala para que el ingreso quede en el Flujo
+            de Caja con la misma fecha de pago.
           </p>
         </div>
         <form onSubmit={handleSubmit}>
@@ -3659,6 +3736,41 @@ function SalidasTab({
               />
             </div>
           </div>
+          <div className="mb-5 p-4 rounded-2xl bg-[#fdfbf7] border border-foreground/5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+            <label htmlFor="sal-venta" className="flex items-center gap-3 cursor-pointer md:col-span-1">
+              <input
+                id="sal-venta"
+                type="checkbox"
+                checked={form.esVenta}
+                onChange={(e) => setForm({ ...form, esVenta: e.target.checked, valor: e.target.checked ? form.valor : "" })}
+                className="w-4 h-4 accent-[#C59F59]"
+              />
+              <span className="text-sm">
+                <span className="font-bold">Venta pagada</span>
+                <span className="block text-xs text-foreground/50">
+                  Registra el ingreso en Flujo de Caja (Ventas Físicas)
+                </span>
+              </span>
+            </label>
+            {form.esVenta && (
+              <div>
+                <label htmlFor="sal-valor" className={labelCls}>
+                  Valor cobrado (COP) <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="sal-valor"
+                  type="number"
+                  min="1"
+                  step="any"
+                  value={form.valor}
+                  onChange={(e) => setForm({ ...form, valor: e.target.value })}
+                  placeholder="ej. 45000"
+                  className={inputCls}
+                  required
+                />
+              </div>
+            )}
+          </div>
           <FeedbackBanner feedback={feedback} />
           <button
             type="submit"
@@ -3733,6 +3845,14 @@ function SalidasTab({
                       </td>
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.reason || "—"}
+                        {r.income_id && (
+                          <span
+                            className="ml-2 inline-block px-2 py-0.5 text-[10px] font-black rounded-full bg-green-100 text-green-700"
+                            title="Venta pagada — vinculada al Flujo de Caja"
+                          >
+                            {fmtCOP(saleAmountOf(r) ?? 0)}
+                          </span>
+                        )}
                       </td>
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.responsable || "—"}

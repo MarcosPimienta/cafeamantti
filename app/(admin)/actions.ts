@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import {
   COFFEE_PROFILES,
   type Molienda,
+  isBulkCoffee,
   isGrindTracked,
   isMolienda,
   profileForCode,
 } from "./coffeeProfiles";
+import { ensureCashflowDate } from "./admin/cashflow/actions";
 
 export async function checkIsAdmin() {
   const supabase = await createClient();
@@ -117,6 +119,7 @@ export async function updateOrderStatus(orderId: string, newStatus: string) {
   if (!isAdmin) throw new Error("Unauthorized");
 
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
   
   const { error } = await supabase
     .from('orders')
@@ -125,8 +128,11 @@ export async function updateOrderStatus(orderId: string, newStatus: string) {
 
   if (error) throw new Error(error.message);
 
+  await _syncManualOrderStock(supabase, user?.id ?? null, orderId, newStatus);
+
   revalidatePath('/admin');
   revalidatePath('/admin/orders');
+  revalidatePath('/admin/inventory');
   
   return { success: true };
 }
@@ -206,6 +212,72 @@ export async function updateShippingSettings(formData: FormData) {
 // MANUAL ORDERS (ADMIN)
 // ============================================================
 
+/** Statuses in which an order counts as cobrada (same set Flujo de Caja uses). */
+const PAID_ORDER_STATUSES = ['paid', 'processing', 'shipped', 'delivered'];
+
+/**
+ * Makes a manual order's stock match its payment state: salidas exist while
+ * the order is paid and are reverted when it goes back to pending/cancelled.
+ * Web-checkout orders have no inventory link and are left untouched.
+ */
+async function _syncManualOrderStock(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  userId: string | null,
+  orderId: string,
+  status: string
+) {
+  const reason = `Orden Manual #${orderId.split('-')[0]}`;
+
+  const { data: existing, error: movErr } = await supabase
+    .from('inventory_movements')
+    .select('id, inventory_id, quantity')
+    .eq('reason', reason);
+  if (movErr) throw new Error(movErr.message);
+
+  const deducted = (existing ?? []).length > 0;
+  const shouldDeduct = PAID_ORDER_STATUSES.includes(status);
+  if (deducted === shouldDeduct) return;
+
+  if (!shouldDeduct) {
+    // Only revert when the order can be re-applied later; older manual
+    // orders without inventory_id on their items are left as they were.
+    const { count } = await supabase
+      .from('order_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('order_id', orderId)
+      .not('inventory_id', 'is', null);
+    if (!count) return;
+
+    for (const mov of existing) {
+      await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
+      await logAuditAction("DELETE", "MOVEMENT", mov.id, mov.inventory_id, { old_quantity: mov.quantity, note: `Orden no pagada (${status})` });
+    }
+    await supabase.from('inventory_movements').delete().eq('reason', reason);
+    return;
+  }
+
+  const { data: items, error: itemsErr } = await supabase
+    .from('order_items')
+    .select('inventory_id, quantity')
+    .eq('order_id', orderId)
+    .not('inventory_id', 'is', null);
+  if (itemsErr) throw new Error(itemsErr.message);
+
+  const movementDate = new Date().toISOString();
+  for (const item of items ?? []) {
+    const qty = Number(item.quantity);
+    if (!(qty > 0)) continue;
+    const mId = await _insertMovement(supabase, userId, item.inventory_id, 'salida', -qty, {
+      movement_date: movementDate,
+      reason,
+      tab_source: 'salida',
+    });
+    await _updateStockBy(supabase, item.inventory_id, -qty);
+    await logAuditAction("CREATE", "MOVEMENT", mId, item.inventory_id, { qty: -qty, reason });
+  }
+}
+
 export async function createManualAdminOrder(
   data: {
     client_id?: string;
@@ -266,6 +338,7 @@ export async function createManualAdminOrder(
   const orderItemsData = data.items.map(item => ({
     order_id: order.id,
     product_id: item.product_name, // Save name to represent what was sold
+    inventory_id: item.inventory_id || null,
     weight: item.weight || null,
     grind: item.grind || null,
     quantity: item.quantity,
@@ -282,22 +355,8 @@ export async function createManualAdminOrder(
     throw new Error(itemsErr.message);
   }
 
-  // Deduct Inventory
-  const movementDate = new Date().toISOString();
-  for (const item of data.items) {
-    if (item.quantity <= 0) continue;
-    
-    const reason = `Orden Manual #${order.id.split('-')[0]}`;
-    
-    const mId = await _insertMovement(supabase, user?.id ?? null, item.inventory_id, 'salida', -item.quantity, {
-      movement_date: movementDate,
-      reason: reason,
-      tab_source: 'salida',
-    });
-    
-    await _updateStockBy(supabase, item.inventory_id, -item.quantity);
-    await logAuditAction("CREATE", "MOVEMENT", mId, item.inventory_id, { qty: -item.quantity, reason });
-  }
+  // Inventory moves only once the order is paid — same moment it enters Flujo de Caja.
+  await _syncManualOrderStock(supabase, user?.id ?? null, order.id, data.status);
 
   revalidatePath('/admin');
   revalidatePath('/admin/orders');
@@ -447,6 +506,7 @@ export async function updateManualAdminOrder(
   const orderItemsData = data.items.map(item => ({
     order_id: orderId,
     product_id: item.product_name,
+    inventory_id: item.inventory_id || null,
     weight: item.weight || null,
     grind: item.grind || null,
     quantity: item.quantity,
@@ -456,20 +516,8 @@ export async function updateManualAdminOrder(
   const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsData);
   if (itemsErr) throw new Error(itemsErr.message);
 
-  // E. Deduct new inventory
-  const movementDate = new Date().toISOString();
-  for (const item of data.items) {
-    if (item.quantity <= 0) continue;
-    
-    const mId = await _insertMovement(supabase, user?.id ?? null, item.inventory_id, 'salida', -item.quantity, {
-      movement_date: movementDate,
-      reason: reasonStr,
-      tab_source: 'salida',
-    });
-    
-    await _updateStockBy(supabase, item.inventory_id, -item.quantity);
-    await logAuditAction("UPDATE", "MOVEMENT", mId, item.inventory_id, { qty: -item.quantity, reason: reasonStr });
-  }
+  // E. Re-apply inventory only if the order is paid
+  await _syncManualOrderStock(supabase, user?.id ?? null, orderId, data.status);
 
   revalidatePath('/admin');
   revalidatePath('/admin/orders');
@@ -908,6 +956,7 @@ async function _insertMovement(
     tab_source?: string;
     lote?: string;
     molienda?: Molienda | null;
+    income_id?: string | null;
   } = {}
 ) {
   const { data, error } = await supabase.from('inventory_movements').insert({
@@ -922,6 +971,7 @@ async function _insertMovement(
     tab_source: opts.tab_source ?? null,
     lote: opts.lote ?? null,
     molienda: opts.molienda ?? null,
+    income_id: opts.income_id ?? null,
   }).select('id').single();
   if (error) throw new Error(error.message);
   return data.id;
@@ -972,6 +1022,114 @@ async function _resolveMolienda(
 }
 
 // ============================================================
+// SALE INCOMES (Salida pagada → Flujo de Caja)
+// ============================================================
+//
+// A paid sale is registered once, from Inventario → Salidas, and moves stock
+// and cash together: the salida movement carries income_id pointing at the
+// cashflow_incomes row it created. The cashflow screen no longer touches
+// inventory and treats these incomes as read-only.
+
+const SALE_INCOME_CATEGORY = 'Ventas Físicas';
+
+async function _createSaleIncome(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  userId: string | null,
+  sale: { date: string; amount: number; concept: string; inventoryId: string; qty: number }
+): Promise<string> {
+  const cashflow_id = await ensureCashflowDate(sale.date);
+  const { data, error } = await supabase
+    .from('cashflow_incomes')
+    .insert({
+      concept: sale.concept,
+      category: SALE_INCOME_CATEGORY,
+      amount: sale.amount,
+      gross_amount: sale.amount,
+      fee_amount: 0,
+      shipping_cost: 0,
+      tax_amount: 0,
+      net_revenue: sale.amount,
+      cashflow_id,
+      created_by: userId,
+      inventory_id: sale.inventoryId,
+      quantity_sold: sale.qty,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: userId,
+    action_type: 'CREATE_INCOME',
+    income_id: data.id,
+    cashflow_id,
+    details: { new: data, source: 'inventory_salida' },
+  });
+  return data.id;
+}
+
+async function _updateSaleIncome(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  userId: string | null,
+  incomeId: string,
+  changes: { date: string; qty: number; amount?: number }
+) {
+  const { data: old, error: getErr } = await supabase
+    .from('cashflow_incomes')
+    .select('*')
+    .eq('id', incomeId)
+    .single();
+  if (getErr || !old) throw new Error('Ingreso vinculado no encontrado');
+
+  const cashflow_id = await ensureCashflowDate(changes.date);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payload: Record<string, any> = { cashflow_id, quantity_sold: changes.qty };
+  if (changes.amount !== undefined) {
+    payload.amount = changes.amount;
+    payload.gross_amount = changes.amount;
+    payload.net_revenue = changes.amount - Number(old.fee_amount || 0)
+      - Number(old.shipping_cost || 0) - Number(old.tax_amount || 0);
+  }
+
+  const { data: updated, error } = await supabase
+    .from('cashflow_incomes')
+    .update(payload)
+    .eq('id', incomeId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: userId,
+    action_type: 'UPDATE_INCOME',
+    income_id: incomeId,
+    cashflow_id,
+    details: { old, new: updated, source: 'inventory_salida' },
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function _deleteSaleIncome(supabase: any, userId: string | null, incomeId: string) {
+  const { data: old } = await supabase
+    .from('cashflow_incomes')
+    .select('*')
+    .eq('id', incomeId)
+    .single();
+  if (!old) return;
+  const { error } = await supabase.from('cashflow_incomes').delete().eq('id', incomeId);
+  if (error) throw new Error(error.message);
+  await supabase.from('cashflow_audit_logs').insert({
+    admin_id: userId,
+    action_type: 'DELETE_INCOME',
+    income_id: incomeId,
+    cashflow_id: old.cashflow_id,
+    details: { old, source: 'inventory_salida' },
+  });
+}
+
+// ============================================================
 // TAB-BASED DATA FETCHING
 // ============================================================
 
@@ -986,8 +1144,9 @@ export async function getMovementsByTab(tabSource: string, era: 'v1' | 'v2' = 'v
     .select(`
       id, inventory_id, type, quantity, reason, lote,
       movement_date, responsable, entry_type, tab_source, molienda, created_at,
-      production_batch_id,
-      inventory ( product_code, product_name, unit )
+      production_batch_id, income_id,
+      inventory ( product_code, product_name, unit ),
+      income:income_id ( gross_amount )
     `)
     .eq('tab_source', tabSource)
     .eq('era', era)
@@ -1096,13 +1255,19 @@ export async function createEntrada(
   }
 }
 
+/**
+ * Registers a salida. When `sale` is given the salida is a paid sale: stock
+ * and Flujo de Caja are affected together, at the moment of payment (the
+ * salida date), through a cashflow income linked to the movement.
+ */
 export async function createSalida(
   inventoryId: string,
   qty: number,
   date: string,
   reason?: string,
   responsable?: string,
-  molienda?: string | null
+  molienda?: string | null,
+  sale?: { amount: number } | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1110,22 +1275,46 @@ export async function createSalida(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  let incomeId: string | null = null;
+  let mId: string | null = null;
   try {
     const grind = await _resolveMolienda(supabase, inventoryId, molienda);
 
-    const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
+    if (sale) {
+      if (!(sale.amount > 0)) throw new Error('Ingresa el valor cobrado de la venta.');
+      const { data: item } = await supabase
+        .from('inventory')
+        .select('product_name, unit')
+        .eq('id', inventoryId)
+        .single();
+      incomeId = await _createSaleIncome(supabase, user?.id ?? null, {
+        date,
+        amount: sale.amount,
+        concept: reason?.trim() || `Venta ${item?.product_name ?? 'producto'} × ${qty}${item?.unit ? ` ${item.unit}` : ''}`,
+        inventoryId,
+        qty,
+      });
+    }
+
+    const movementId: string = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'salida', -qty, {
       movement_date: date,
       reason,
       responsable,
       tab_source: 'salida',
       molienda: grind,
+      income_id: incomeId,
     });
+    mId = movementId;
 
     const newStock = await _updateStockBy(supabase, inventoryId, -qty);
-    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, reason, responsable, molienda: grind });
+    await logAuditAction("CREATE", "MOVEMENT", movementId, inventoryId, { qty: -qty, reason, responsable, molienda: grind, income_id: incomeId, sale_amount: sale?.amount });
     revalidatePath('/admin/inventory');
+    if (incomeId) revalidatePath('/admin/cashflow');
     return { success: true, newStock };
   } catch (err: any) {
+    // Never leave half a sale behind: stock and cash move together or not at all.
+    if (mId) await supabase.from('inventory_movements').delete().eq('id', mId);
+    if (incomeId) await supabase.from('cashflow_incomes').delete().eq('id', incomeId);
     return { success: false, error: err.message };
   }
 }
@@ -1331,6 +1520,12 @@ export async function createTostionBatch(
       throw new Error(`Stock insuficiente de Café Verde. Disponible: ${verde.current_stock} kg`);
     }
 
+    const { data: tostado } = await supabase
+      .from('inventory')
+      .select('product_code')
+      .eq('id', tostadoInventoryId)
+      .single();
+
     const outputQtyKg = inputQtyKg * rendimientoPct;
     const weightLossPct = (1 - rendimientoPct) * 100;
 
@@ -1342,11 +1537,13 @@ export async function createTostionBatch(
     });
     const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, -inputQtyKg);
 
-    // Entrada: Tostado
+    // Entrada: Tostado. Coffee leaves the roaster whole-bean — grinding is a
+    // separate step — so the batch output is always Grano.
     const mId2 = await _insertMovement(supabase, user?.id ?? null, tostadoInventoryId, 'entrada', outputQtyKg, {
       movement_date: date,
       reason: `Tostión (rend. ${(rendimientoPct * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
       tab_source: 'prod_consumo',
+      molienda: isGrindTracked(tostado?.product_code) ? 'grano' : null,
     });
     const newTostadoStock = await _updateStockBy(supabase, tostadoInventoryId, outputQtyKg);
 
@@ -1621,13 +1818,16 @@ export async function getInventoryReportData(era: 'v1' | 'v2' = 'v2') {
 }
 
 /**
- * Stock of packaged roasted coffee broken down by profile (Premium / Honey /
- * Chiroso) and grind (Grano / Molido).
+ * Roasted-coffee stock broken down by profile (Premium / Honey / Chiroso) and
+ * grind (Grano / Molido).
  *
  * There is no per-grind current_stock column — the grind lives on the movement
- * that determined it (Entrada, Empaque/Alta, Salida), so the balance is the
- * signed sum of those movements. Salidas are stored negative, so a plain sum
- * already nets out.
+ * that determined it (Entrada, Empaque/Alta, Salida, Tostion), so the balance
+ * is the signed sum of those movements. Salidas are stored negative, so a
+ * plain sum already nets out.
+ *
+ * Bulk (kg) and packaged (unidades) are returned as two separate groups: they
+ * are different units of measure and must never be added together.
  */
 export async function getMoliendaBalances(era: 'v1' | 'v2' = 'v2') {
   const isAdmin = await checkIsAdmin();
@@ -1639,18 +1839,22 @@ export async function getMoliendaBalances(era: 'v1' | 'v2' = 'v2') {
     .from('inventory')
     .select('id, product_code')
     .eq('category', 'cafe');
+
+  const empty = () => ({
+    rows: [] as { id: string; label: string; grano: number; molido: number; sin_definir: number; total: number }[],
+    totals: { grano: 0, molido: 0, sin_definir: 0, total: 0 },
+  });
+
   if (itemsErr) {
     console.error('getMoliendaBalances items error:', itemsErr);
-    return { rows: [], totals: { grano: 0, molido: 0, sin_definir: 0, total: 0 } };
+    return { packaged: empty(), bulk: empty() };
   }
 
   const tracked = new Map<string, string>();
   for (const it of items ?? []) {
     if (isGrindTracked(it.product_code)) tracked.set(it.id, it.product_code);
   }
-  if (tracked.size === 0) {
-    return { rows: [], totals: { grano: 0, molido: 0, sin_definir: 0, total: 0 } };
-  }
+  if (tracked.size === 0) return { packaged: empty(), bulk: empty() };
 
   // Page through the movements — a busy era can exceed the default row cap.
   const ids = [...tracked.keys()];
@@ -1672,29 +1876,36 @@ export async function getMoliendaBalances(era: 'v1' | 'v2' = 'v2') {
   }
 
   const blank = () => ({ grano: 0, molido: 0, sin_definir: 0, total: 0 });
-  const byProfile = new Map<string, ReturnType<typeof blank>>();
-  const totals = blank();
+  const groups = {
+    packaged: { byProfile: new Map<string, ReturnType<typeof blank>>(), totals: blank() },
+    bulk: { byProfile: new Map<string, ReturnType<typeof blank>>(), totals: blank() },
+  };
 
   for (const m of movements) {
-    const profile = profileForCode(tracked.get(m.inventory_id));
+    const code = tracked.get(m.inventory_id);
+    const profile = profileForCode(code);
     if (!profile) continue;
-    if (!byProfile.has(profile)) byProfile.set(profile, blank());
-    const bucket = byProfile.get(profile)!;
+    const g = isBulkCoffee(code) ? groups.bulk : groups.packaged;
+    if (!g.byProfile.has(profile)) g.byProfile.set(profile, blank());
+    const bucket = g.byProfile.get(profile)!;
     const qty = Number(m.quantity) || 0;
     const key = isMolienda(m.molienda) ? m.molienda : 'sin_definir';
     bucket[key] += qty;
     bucket.total += qty;
-    totals[key] += qty;
-    totals.total += qty;
+    g.totals[key] += qty;
+    g.totals.total += qty;
   }
 
-  const rows = COFFEE_PROFILES.map((p) => ({
-    id: p.id,
-    label: p.label,
-    ...(byProfile.get(p.id) ?? blank()),
-  }));
+  const shape = (g: (typeof groups)['bulk']) => ({
+    rows: COFFEE_PROFILES.map((p) => ({
+      id: p.id,
+      label: p.label,
+      ...(g.byProfile.get(p.id) ?? blank()),
+    })),
+    totals: g.totals,
+  });
 
-  return { rows, totals };
+  return { packaged: shape(groups.packaged), bulk: shape(groups.bulk) };
 }
 
 // ============================================================
@@ -1707,9 +1918,11 @@ export async function deleteMovement(id: string) {
 
   const supabase = await createClient();
 
+  const { data: { user } } = await supabase.auth.getUser();
+
   const { data: mov, error: selErr } = await supabase
     .from('inventory_movements')
-    .select('inventory_id, quantity')
+    .select('inventory_id, quantity, income_id')
     .eq('id', id)
     .single();
   if (selErr || !mov) throw new Error('Movimiento no encontrado');
@@ -1722,7 +1935,12 @@ export async function deleteMovement(id: string) {
 
   // Reverse the stock effect (negate the stored quantity)
   const newStock = await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
-  await logAuditAction("DELETE", "MOVEMENT", id, mov.inventory_id, { old_quantity: mov.quantity });
+  // A paid-sale salida takes its cashflow income with it.
+  if (mov.income_id) {
+    await _deleteSaleIncome(supabase, user?.id ?? null, mov.income_id);
+    revalidatePath('/admin/cashflow');
+  }
+  await logAuditAction("DELETE", "MOVEMENT", id, mov.inventory_id, { old_quantity: mov.quantity, income_id: mov.income_id });
   revalidatePath('/admin/inventory');
   return { success: true, inventoryId: mov.inventory_id, newStock };
 }
@@ -1734,19 +1952,24 @@ export async function updateMovement(
   reason?: string,
   responsable?: string,
   entry_type?: string,
-  molienda?: string | null
+  molienda?: string | null,
+  saleAmount?: number
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
   const { data: mov, error: selErr } = await supabase
     .from('inventory_movements')
-    .select('inventory_id, quantity')
+    .select('inventory_id, quantity, income_id')
     .eq('id', id)
     .single();
   if (selErr || !mov) throw new Error('Movimiento no encontrado');
+  if (mov.income_id && saleAmount !== undefined && !(saleAmount > 0)) {
+    throw new Error('El valor cobrado debe ser mayor a cero.');
+  }
 
   const grind = await _resolveMolienda(supabase, mov.inventory_id, molienda);
 
@@ -1766,11 +1989,21 @@ export async function updateMovement(
   // Apply only the difference to stock
   const delta = newQty - Number(mov.quantity);
   const newStock = await _updateStockBy(supabase, mov.inventory_id, delta);
-  
+
+  // Keep the linked sale income on the same payment date, quantity and value.
+  if (mov.income_id) {
+    await _updateSaleIncome(supabase, user?.id ?? null, mov.income_id, {
+      date,
+      qty: Math.abs(newQty),
+      amount: saleAmount,
+    });
+    revalidatePath('/admin/cashflow');
+  }
+
   await logAuditAction("UPDATE", "MOVEMENT", id, mov.inventory_id, { 
     old_quantity: mov.quantity, 
     new_quantity: newQty,
-    reason, responsable, molienda: grind
+    reason, responsable, molienda: grind, sale_amount: saleAmount
   });
   
   revalidatePath('/admin/inventory');

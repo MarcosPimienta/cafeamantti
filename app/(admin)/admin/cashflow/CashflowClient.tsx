@@ -19,7 +19,6 @@ import {
   getMissingCashflowDays, getMonthlyPLReport,
   markDateAsNoMovements,
   updateExpenseDirect, updateIncomeDirect,
-  getInventory,
   type PLReportResult,
 } from "./actions";
 import { EXPENSE_CATEGORY_TYPE_MAP, type ExpenseType } from "./types";
@@ -432,13 +431,11 @@ function IncomeModal({
   onSuccess,
   initialDate,
   incomeToEdit,
-  inventoryList = [],
 }: {
   onClose: () => void;
   onSuccess: () => void;
   initialDate?: string;
   incomeToEdit?: any;
-  inventoryList?: any[];
 }) {
   const today = new Date().toISOString().split("T")[0];
   const [date,     setDate]     = useState(incomeToEdit?.date || incomeToEdit?.cashflow?.date || initialDate || today);
@@ -449,14 +446,10 @@ function IncomeModal({
   const [shipping, setShipping] = useState(incomeToEdit?.shipping_cost ? String(incomeToEdit.shipping_cost) : "");
   const [tax,      setTax]      = useState(incomeToEdit?.tax_amount ? String(incomeToEdit.tax_amount) : "");
   const [imageUrl, setImageUrl] = useState<string | null>(incomeToEdit?.image_url || null);
-  const [inventoryId, setInventoryId]   = useState(incomeToEdit?.inventory_id || "");
-  const [quantitySold, setQuantitySold] = useState(incomeToEdit?.quantity_sold ? String(incomeToEdit.quantity_sold) : "");
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
   const [successMessage, setSuccessMessage] = useState("");
   const [shouldClose, setShouldClose] = useState(true);
-
-  const selectedProduct = inventoryList.find((p) => p.id === inventoryId);
 
   const isWebSale = category === "Ventas Web";
 
@@ -476,10 +469,6 @@ function IncomeModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!concept || !category || !gross || !date) return;
-    if (inventoryId && (!quantitySold || Number(quantitySold) <= 0)) {
-      alert("Por favor ingresa una cantidad vendida válida (mayor a cero).");
-      return;
-    }
     startTransition(async () => {
       const payload = {
         concept,
@@ -491,8 +480,6 @@ function IncomeModal({
         tax_amount:    tax      ? Number(tax)      : 0,
         net_revenue:   netRevenue,
         image_url:     imageUrl,
-        inventory_id:  inventoryId || null,
-        quantity_sold: inventoryId ? Number(quantitySold || 0) : 0,
       };
 
       const res = incomeToEdit
@@ -513,8 +500,6 @@ function IncomeModal({
           setShipping("");
           setTax("");
           setImageUrl(null);
-          setInventoryId("");
-          setQuantitySold("");
           setSuccessMessage("¡Ingreso registrado con éxito!");
           setTimeout(() => setSuccessMessage(""), 4000);
         }
@@ -607,49 +592,11 @@ function IncomeModal({
             </div>
           </div>
 
-          {/* Vincular con Inventario (Opcional) */}
-          <div className="p-4 bg-[#f9f7f0] rounded-xl space-y-3 border border-foreground/5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-foreground/50">Vincular con Inventario (Salida de Stock)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="field-label">Producto Vendido</label>
-                <select
-                  value={inventoryId}
-                  onChange={(e) => {
-                    setInventoryId(e.target.value);
-                    if (!e.target.value) setQuantitySold("");
-                  }}
-                  className="field-input text-xs font-bold"
-                >
-                  <option value="">Ninguno / Sin stock asociado</option>
-                  {inventoryList?.map((prod) => (
-                    <option key={prod.id} value={prod.id}>
-                      {prod.product_name} ({prod.product_code}) - Stock: {prod.current_stock} {prod.unit || 'und'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Cantidad Vendida</label>
-                <input
-                  type="number"
-                  min="0.001"
-                  step="any"
-                  value={quantitySold}
-                  onChange={(e) => setQuantitySold(e.target.value)}
-                  disabled={!inventoryId}
-                  required={!!inventoryId}
-                  placeholder={selectedProduct ? `En ${selectedProduct.unit || 'unidades'}` : "Cantidad"}
-                  className="field-input text-xs"
-                />
-              </div>
-            </div>
-            {selectedProduct && (
-              <p className="text-[10px] text-foreground/50 italic">
-                Nota: Se registrará una salida de {quantitySold || 0} {selectedProduct.unit || 'unidades'} de '{selectedProduct.product_name}' (Stock actual: {selectedProduct.current_stock} {selectedProduct.unit || 'und'}).
-              </p>
-            )}
-          </div>
+          <p className="text-[11px] text-foreground/50 bg-[#f9f7f0] rounded-xl px-4 py-3 border border-foreground/5">
+            Los ingresos del flujo de caja no afectan el inventario. Para registrar
+            una venta de producto, usa <strong>Inventario → Salidas</strong> y marca
+            la salida como venta pagada: se descuenta el stock y se crea el ingreso aquí.
+          </p>
 
           {/* Soporte */}
           <div>
@@ -1393,7 +1340,6 @@ export default function CashflowClient() {
   const [expenses,       setExpenses]       = useState<any[]>([]);
   const [incomes,        setIncomes]        = useState<any[]>([]);
   const [historyLogs,    setHistoryLogs]    = useState<any[]>([]);
-  const [inventory,      setInventory]      = useState<any[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [missingDays,    setMissingDays]    = useState<string[]>([]);
   const [alertExpanded,  setAlertExpanded]  = useState(false);
@@ -1433,14 +1379,13 @@ export default function CashflowClient() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [exp, inc, hist, missing, inv] = await Promise.all([
-      getAllExpenses(era), getAllIncomes(era), getCashflowHistory(), getMissingCashflowDays(), getInventory(),
+    const [exp, inc, hist, missing] = await Promise.all([
+      getAllExpenses(era), getAllIncomes(era), getCashflowHistory(), getMissingCashflowDays(),
     ]);
     setExpenses(exp   || []);
     setIncomes(inc    || []);
     setHistoryLogs(hist  || []);
     setMissingDays(missing || []);
-    setInventory(inv || []);
     setLoading(false);
   }, [era]);
 
@@ -2067,11 +2012,20 @@ export default function CashflowClient() {
                           </td>
                           <td className="px-5 py-4 text-xs text-foreground/60">{inc.category}</td>
                           <td className="px-5 py-4 text-center">
-                            <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
-                              inc.type === "manual" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
-                            }`}>
-                              {inc.type}
-                            </span>
+                            {inc.from_salida ? (
+                              <span
+                                className="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-100 text-amber-700"
+                                title="Generado por una salida de inventario pagada"
+                              >
+                                salida
+                              </span>
+                            ) : (
+                              <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
+                                inc.type === "manual" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                              }`}>
+                                {inc.type}
+                              </span>
+                            )}
                           </td>
                           <td className="px-5 py-4 font-mono text-right text-green-600 font-bold">{formatCurrency(inc.gross_amount ?? inc.amount)}</td>
                           <td className="px-5 py-4 font-mono text-right text-foreground/60">{formatCurrency(inc.net_revenue ?? inc.amount)}</td>
@@ -2087,7 +2041,11 @@ export default function CashflowClient() {
                               )}
                               
                               {era === 'v2' ? (
-                                inc.type === "manual" && (
+                                inc.from_salida ? (
+                                  <span className="text-[10px] text-foreground/40 px-2" title="Edítalo desde Inventario → Salidas">
+                                    Inventario → Salidas
+                                  </span>
+                                ) : inc.type === "manual" && (
                                   <>
                                     <button
                                       onClick={() => {
@@ -2102,7 +2060,8 @@ export default function CashflowClient() {
                                     <button
                                       onClick={async () => {
                                         if (confirm("¿Eliminar este ingreso manual?")) {
-                                          await deleteIncomeDirect(inc.id);
+                                          const res = await deleteIncomeDirect(inc.id);
+                                          if (res?.error) alert(res.error);
                                           loadData();
                                         }
                                       }}
@@ -2239,7 +2198,6 @@ export default function CashflowClient() {
         <IncomeModal
           initialDate={selectedDate}
           incomeToEdit={incomeToEdit}
-          inventoryList={inventory}
           onClose={() => {
             setShowIncModal(false);
             setSelectedDate(undefined);
