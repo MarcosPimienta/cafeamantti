@@ -11,12 +11,14 @@ import {
   Package,
   FileText,
   Wallet,
-  Building2
+  Building2,
+  UploadCloud
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", Icon: LayoutDashboard, exact: true },
   { href: "/admin/orders", label: "Órdenes", Icon: ShoppingBag },
+  { href: "/admin/orders/import", label: "Cargar Siigo", Icon: UploadCloud },
   { href: "/admin/inventory", label: "Inventario", Icon: Package },
   { href: "/admin/subscriptions", label: "Suscripciones", Icon: Coffee },
   { href: "/admin/users", label: "Usuarios", Icon: Users },

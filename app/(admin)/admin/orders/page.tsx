@@ -1,8 +1,9 @@
 import React from "react";
+import Link from "next/link";
 import { checkIsAdmin, updateOrderStatus, getClientsCRM } from "../../actions";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { Search, Filter, Mail, Phone, Package, MapPin } from "lucide-react";
+import { Search, Filter, Mail, Phone, Package, MapPin, UploadCloud } from "lucide-react";
 import ManualOrderModal from "./ManualOrderModal";
 import OrderActions from "./OrderActions";
 
@@ -76,7 +77,14 @@ export default async function AdminOrdersPage() {
               className="w-full pl-11 pr-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             />
           </div>
-          <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+            <Link
+              href="/admin/orders/import"
+              className="flex items-center gap-2 px-5 py-3 bg-[#C59F59] text-white hover:bg-[#b08d4b] rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-sm shrink-0"
+            >
+              <UploadCloud className="w-4 h-4" />
+              Importar Siigo
+            </Link>
             <button className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-foreground/5 transition-all w-full md:w-auto shrink-0">
               <Filter className="w-4 h-4" />
               Filtrar
@@ -94,15 +102,23 @@ export default async function AdminOrdersPage() {
               <p className="text-sm text-foreground/50">Las órdenes nuevas aparecerán aquí.</p>
             </div>
           ) : (
-            orders.map((order) => (
+            orders.map((order) => {
+              const siigoInv = (order as any).siigo_invoice || (order.shipping_info as any)?.siigo_invoice;
+
+              return (
               <div key={order.id} className="border border-foreground/10 rounded-2xl p-6 hover:shadow-md transition-shadow">
                 <div className="flex flex-col lg:flex-row gap-8 justify-between">
                   {/* Left Column: Details */}
                   <div className="flex-1 space-y-6">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <span className="font-mono text-sm font-bold bg-foreground/5 px-3 py-1 rounded-lg">
                         #{order.id.split('-')[0]}
                       </span>
+                      {siigoInv && (
+                        <span className="bg-[#C59F59]/15 text-[#C59F59] font-bold text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 border border-[#C59F59]/30">
+                          Siigo #{siigoInv}
+                        </span>
+                      )}
                       <span className="text-sm text-foreground/50">
                         {new Date(order.created_at).toLocaleString("es-CO")}
                       </span>
@@ -181,10 +197,11 @@ export default async function AdminOrdersPage() {
                   </div>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            );
+          })
+        )}
       </div>
     </div>
-  );
+  </div>
+);
 }
