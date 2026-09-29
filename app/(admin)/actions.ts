@@ -1909,6 +1909,161 @@ export async function getMoliendaBalances(era: 'v1' | 'v2' = 'v2') {
 }
 
 // ============================================================
+// KARDEX
+// ============================================================
+
+/**
+ * Kardex (tarjeta de inventario) for one product: every movement in date
+ * order with its running balance, the opening balance before `from` and the
+ * closing balance at `to`.
+ *
+ * Quantities are stored signed (salidas negative), so the balance is a plain
+ * running sum. Paid-sale salidas carry the linked cashflow income, so the
+ * card also shows what was collected for each sale.
+ *
+ * `molienda` narrows the card to Grano or Molido for roasted coffee; the
+ * balances then describe that grind only.
+ */
+export async function getKardex(
+  inventoryId: string,
+  opts: {
+    from?: string | null; // YYYY-MM-DD, inclusive
+    to?: string | null;   // YYYY-MM-DD, inclusive
+    molienda?: Molienda | null;
+    era?: 'v1' | 'v2';
+  } = {}
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const era = opts.era ?? 'v2';
+  const supabase = await createClient();
+
+  const { data: item, error: itemErr } = await supabase
+    .from('inventory')
+    .select('id, product_code, product_name, unit, current_stock, legacy_stock')
+    .eq('id', inventoryId)
+    .single();
+  if (itemErr || !item) throw new Error('Producto no encontrado');
+
+  type KardexMovement = {
+    id: string;
+    type: string;
+    quantity: number;
+    reason: string | null;
+    lote: string | null;
+    movement_date: string | null;
+    responsable: string | null;
+    entry_type: string | null;
+    tab_source: string | null;
+    molienda: string | null;
+    production_batch_id: string | null;
+    income_id: string | null;
+    created_at: string;
+    income: { gross_amount: number | null; concept: string | null } | null;
+  };
+
+  // Page through — an active product can exceed the default row cap.
+  const PAGE = 1000;
+  const movements: KardexMovement[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    let q = supabase
+      .from('inventory_movements')
+      .select(`
+        id, type, quantity, reason, lote, movement_date, responsable,
+        entry_type, tab_source, molienda, production_batch_id, income_id,
+        created_at, income:income_id ( gross_amount, concept )
+      `)
+      .eq('inventory_id', inventoryId)
+      .eq('era', era)
+      .order('movement_date', { ascending: true, nullsFirst: true })
+      .order('created_at', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (opts.molienda) q = q.eq('molienda', opts.molienda);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    for (const m of data ?? []) {
+      const inc = Array.isArray(m.income) ? m.income[0] : m.income;
+      movements.push({ ...m, income: inc ?? null } as KardexMovement);
+    }
+    if (!data || data.length < PAGE) break;
+  }
+
+  // movement_date is a DATE; rows written before it existed fall back to
+  // created_at. Re-sort on that effective date so both kinds interleave.
+  const dayOf = (m: KardexMovement) => m.movement_date ?? m.created_at.slice(0, 10);
+  movements.sort((a, b) =>
+    dayOf(a) === dayOf(b)
+      ? a.created_at.localeCompare(b.created_at)
+      : dayOf(a).localeCompare(dayOf(b))
+  );
+
+  let opening = 0;
+  let balance = 0;
+  let entradas = 0;
+  let salidas = 0;
+  let ventasCobradas = 0;
+  const rows: (Omit<KardexMovement, 'income'> & {
+    date: string;
+    entrada: number;
+    salida: number;
+    saldo: number;
+    sale_amount: number | null;
+    sale_concept: string | null;
+  })[] = [];
+
+  for (const m of movements) {
+    const qty = Number(m.quantity) || 0;
+    const day = dayOf(m);
+    if (opts.from && day < opts.from) {
+      opening += qty;
+      balance += qty;
+      continue;
+    }
+    if (opts.to && day > opts.to) break;
+
+    balance += qty;
+    if (qty >= 0) entradas += qty;
+    else salidas += -qty;
+    const saleAmount = m.income?.gross_amount != null ? Number(m.income.gross_amount) : null;
+    if (saleAmount !== null) ventasCobradas += saleAmount;
+
+    const { income, ...rest } = m;
+    rows.push({
+      ...rest,
+      date: day,
+      entrada: qty >= 0 ? qty : 0,
+      salida: qty < 0 ? -qty : 0,
+      saldo: balance,
+      sale_amount: saleAmount,
+      sale_concept: income?.concept ?? null,
+    });
+  }
+
+  // The full-history ledger should equal the stored stock. A difference means
+  // stock was changed without a movement (or a movement without stock).
+  // Only meaningful for the whole product, not a single grind.
+  const ledgerTotal = movements.reduce((sum, m) => sum + (Number(m.quantity) || 0), 0);
+  const systemStock = Number(era === 'v1' ? item.legacy_stock ?? item.current_stock : item.current_stock);
+
+  return {
+    item,
+    rows,
+    summary: {
+      opening,
+      entradas,
+      salidas,
+      closing: balance,
+      ventasCobradas,
+      count: rows.length,
+    },
+    reconciliation: opts.molienda
+      ? null
+      : { ledgerTotal, systemStock, difference: systemStock - ledgerTotal },
+  };
+}
+
+// ============================================================
 // EDIT / DELETE ACTIONS
 // ============================================================
 

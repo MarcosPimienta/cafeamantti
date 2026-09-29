@@ -25,6 +25,8 @@ import {
   Trash2,
   Archive,
   Sparkles,
+  ScrollText,
+  Download,
 } from "lucide-react";
 import {
   BarChart,
@@ -62,6 +64,7 @@ import {
   getAuditLogs,
   getInventory,
   getMoliendaBalances,
+  getKardex,
 } from "../../actions";
 import {
   MOLIENDAS,
@@ -140,6 +143,7 @@ const TABS = [
   { id: "prod_altas", label: "Empaque/Altas", Icon: TrendingUp },
   { id: "cold_brew", label: "Cold Brew (11:11)", Icon: Sparkles },
   { id: "salidas", label: "Salidas", Icon: PackageMinus },
+  { id: "kardex", label: "Kardex", Icon: ScrollText },
   { id: "reportes", label: "Reportes", Icon: BarChart2 },
   { id: "auditoria", label: "Auditoría", Icon: History },
 ] as const;
@@ -3881,6 +3885,336 @@ function SalidasTab({
   );
 }
 
+// ─── Kardex Tab ──────────────────────────────────────────────────────────────
+
+type KardexData = Awaited<ReturnType<typeof getKardex>>;
+
+const KARDEX_ORIGIN: Record<string, string> = {
+  entrada: "Entrada",
+  salida: "Salida",
+  trilla: "Trilla",
+  prod_consumo: "Consumo producción",
+  prod_alta: "Empaque / Alta",
+  cold_brew: "Cold Brew",
+};
+
+function kardexOrigin(row: { tab_source: string | null; type: string; income_id: string | null }) {
+  if (row.income_id) return "Venta pagada";
+  if (row.tab_source && KARDEX_ORIGIN[row.tab_source]) return KARDEX_ORIGIN[row.tab_source];
+  return row.type === "ajuste" ? "Ajuste" : row.type.charAt(0).toUpperCase() + row.type.slice(1);
+}
+
+function fmtQty(n: number) {
+  return Number.isInteger(n) ? n.toLocaleString("es-CO") : n.toLocaleString("es-CO", { maximumFractionDigits: 3 });
+}
+
+/**
+ * Tarjeta de inventario for one product: opening balance, every movement
+ * with its running balance, closing balance, and — for paid-sale salidas —
+ * the amount that entered Flujo de Caja.
+ */
+function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" | "v2" }) {
+  const [inventoryId, setInventoryId] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [molienda, setMolienda] = useState<Molienda | "">("");
+  const [data, setData] = useState<KardexData | null>(null);
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  const selectedItem = useMemo(
+    () => inventory.find((i) => i.id === inventoryId) ?? null,
+    [inventory, inventoryId]
+  );
+  const grindTracked = isGrindTracked(selectedItem?.product_code);
+
+  useEffect(() => {
+    if (!inventoryId) return;
+    if (from && to && from > to) return;
+    let cancelled = false;
+    startTransition(async () => {
+      try {
+        const res = await getKardex(inventoryId, {
+          from: from || null,
+          to: to || null,
+          molienda: grindTracked && molienda ? molienda : null,
+          era,
+        });
+        if (!cancelled) {
+          setData(res);
+          setError("");
+        }
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar el kardex");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [inventoryId, from, to, molienda, grindTracked, era]);
+
+  const rangeInvalid = !!from && !!to && from > to;
+  const unit = data?.item.unit ?? selectedItem?.unit ?? "";
+
+  async function handleExport() {
+    if (!data) return;
+    const XLSX = await import("xlsx");
+    const period = `${from ? fmtDate(from) : "Inicio"} — ${to ? fmtDate(to) : "Hoy"}`;
+    const aoa: (string | number | null)[][] = [
+      ["Kardex", `${data.item.product_code} — ${data.item.product_name}`],
+      ["Periodo", period],
+      ["Unidad", unit],
+      ...(grindTracked && molienda ? [["Molienda", MOLIENDA_LABELS[molienda]]] : []),
+      [],
+      ["Fecha", "Origen", "Motivo / Documento", "Lote", "Molienda", "Entrada", "Salida", "Saldo", "Valor cobrado (COP)", "Responsable"],
+      [from || "", "Saldo inicial", "", "", "", null, null, data.summary.opening, null, ""],
+      ...data.rows.map((r) => [
+        r.date,
+        kardexOrigin(r),
+        r.reason ?? r.sale_concept ?? "",
+        r.lote ?? "",
+        isMolienda(r.molienda) ? MOLIENDA_LABELS[r.molienda] : "",
+        r.entrada || null,
+        r.salida || null,
+        r.saldo,
+        r.sale_amount,
+        r.responsable ?? "",
+      ]),
+      [to || "", "Saldo final", "", "", "", data.summary.entradas, data.summary.salidas, data.summary.closing, data.summary.ventasCobradas || null, ""],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [12, 18, 40, 12, 10, 10, 10, 10, 18, 18].map((wch) => ({ wch }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Kardex");
+    const suffix = [from, to].filter(Boolean).join("_a_") || "completo";
+    XLSX.writeFile(wb, `Kardex_${data.item.product_code}_${suffix}.xlsx`);
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
+        <div className="mb-6">
+          <h2 className="text-xl font-serif">Kardex por producto</h2>
+          <p className="text-sm text-foreground/50 mt-1">
+            Trazabilidad completa de un producto: saldo inicial, cada entrada y
+            salida con su saldo acumulado, y el valor cobrado de las ventas pagadas.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="lg:col-span-2">
+            <label htmlFor="kardex-product" className={labelCls}>
+              Producto
+            </label>
+            <ProductSelect
+              id="kardex-product"
+              value={inventoryId}
+              onChange={(v) => {
+                setInventoryId(v);
+                setData(null);
+                const next = inventory.find((i) => i.id === v);
+                if (!isGrindTracked(next?.product_code)) setMolienda("");
+              }}
+              inventory={inventory}
+              searchable
+            />
+          </div>
+          <div>
+            <label htmlFor="kardex-from" className={labelCls}>
+              Desde
+            </label>
+            <input
+              id="kardex-from"
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label htmlFor="kardex-to" className={labelCls}>
+              Hasta
+            </label>
+            <input
+              id="kardex-to"
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          {grindTracked && (
+            <div>
+              <label htmlFor="kardex-molienda" className={labelCls}>
+                Molienda
+              </label>
+              <select
+                id="kardex-molienda"
+                value={molienda}
+                onChange={(e) => setMolienda(e.target.value as Molienda | "")}
+                className={inputCls}
+              >
+                <option value="">Todas</option>
+                {MOLIENDAS.map((m) => (
+                  <option key={m} value={m}>
+                    {MOLIENDA_LABELS[m]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        {rangeInvalid && (
+          <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">
+            La fecha &quot;Desde&quot; no puede ser posterior a &quot;Hasta&quot;.
+          </p>
+        )}
+        {error && (
+          <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>
+        )}
+      </div>
+
+      {!inventoryId ? (
+        <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm text-center py-16">
+          <ScrollText className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
+          <p className="font-serif text-foreground/50">Selecciona un producto para ver su kardex</p>
+        </div>
+      ) : !data ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 text-[#C59F59] animate-spin" />
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <KpiCard label="Saldo inicial" value={fmtQty(data.summary.opening)} sub={unit} />
+            <KpiCard label="Entradas" value={`+${fmtQty(data.summary.entradas)}`} sub={unit} color="text-emerald-700" />
+            <KpiCard label="Salidas" value={`−${fmtQty(data.summary.salidas)}`} sub={unit} color="text-red-600" />
+            <KpiCard label="Saldo final" value={fmtQty(data.summary.closing)} sub={unit} color="text-[#C59F59]" />
+            <KpiCard label="Ventas cobradas" value={fmtCOP(data.summary.ventasCobradas)} sub="Flujo de Caja" />
+          </div>
+
+          {data.reconciliation && Math.abs(data.reconciliation.difference) > 0.0005 && (
+            <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">El kardex no cuadra con el stock del sistema.</span>{" "}
+                La suma de todos los movimientos da {fmtQty(data.reconciliation.ledgerTotal)} {unit},
+                pero el stock registrado es {fmtQty(data.reconciliation.systemStock)} {unit}
+                {" "}(diferencia {data.reconciliation.difference > 0 ? "+" : ""}
+                {fmtQty(data.reconciliation.difference)} {unit}). Algún cambio de stock
+                quedó sin movimiento; revisa la pestaña Auditoría.
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between gap-4 bg-[#fdfbf7]">
+              <div>
+                <h3 className="font-serif text-lg">
+                  {data.item.product_name}{" "}
+                  <span className="text-foreground/40 text-base font-sans">· {data.summary.count} movimientos</span>
+                </h3>
+                <p className="text-xs text-foreground/50 font-mono">{data.item.product_code}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {isPending && <Loader2 className="w-4 h-4 text-[#C59F59] animate-spin" />}
+                <button
+                  onClick={handleExport}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-foreground/10 text-xs font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Excel
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-[#fdfbf7] border-b border-foreground/5">
+                    <th className={thCls}>Fecha</th>
+                    <th className={thCls}>Origen</th>
+                    <th className={thCls}>Motivo / Documento</th>
+                    {grindTracked && <th className={thCls}>Molienda</th>}
+                    <th className={`${thCls} text-right`}>Entrada</th>
+                    <th className={`${thCls} text-right`}>Salida</th>
+                    <th className={`${thCls} text-right`}>Saldo</th>
+                    <th className={`${thCls} text-right`}>Valor cobrado</th>
+                    <th className={thCls}>Responsable</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-foreground/5">
+                  <tr className="bg-[#fdfbf7]">
+                    <td className={`${tdCls} text-foreground/50`}>{from ? fmtDate(from) : "—"}</td>
+                    <td className={`${tdCls} font-bold`} colSpan={grindTracked ? 6 : 5}>
+                      Saldo inicial
+                    </td>
+                    <td className={`${tdCls} text-right font-bold`}>{fmtQty(data.summary.opening)}</td>
+                    <td className={tdCls} colSpan={2} />
+                  </tr>
+                  {data.rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={grindTracked ? 9 : 8} className="text-center py-10 text-sm text-foreground/40">
+                        Sin movimientos en el periodo seleccionado.
+                      </td>
+                    </tr>
+                  ) : (
+                    data.rows.map((r) => (
+                      <tr key={r.id} className="hover:bg-[#fdfbf7]">
+                        <td className={`${tdCls} whitespace-nowrap`}>{fmtDate(r.date)}</td>
+                        <td className={tdCls}>
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap ${
+                              r.income_id
+                                ? "bg-green-100 text-green-700"
+                                : r.entrada > 0
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {kardexOrigin(r)}
+                          </span>
+                        </td>
+                        <td className={`${tdCls} text-foreground/60 max-w-[280px]`}>
+                          <div className="truncate" title={r.reason ?? r.sale_concept ?? ""}>
+                            {r.reason ?? r.sale_concept ?? "—"}
+                          </div>
+                          {r.lote && <div className="text-[10px] text-foreground/40">Lote {r.lote}</div>}
+                        </td>
+                        {grindTracked && (
+                          <td className={tdCls}>
+                            <MoliendaBadge value={r.molienda} />
+                          </td>
+                        )}
+                        <td className={`${tdCls} text-right text-emerald-700`}>{r.entrada ? `+${fmtQty(r.entrada)}` : ""}</td>
+                        <td className={`${tdCls} text-right text-red-600`}>{r.salida ? `−${fmtQty(r.salida)}` : ""}</td>
+                        <td className={`${tdCls} text-right font-bold ${r.saldo < 0 ? "text-red-600" : ""}`}>{fmtQty(r.saldo)}</td>
+                        <td className={`${tdCls} text-right font-mono text-xs`}>{r.sale_amount !== null ? fmtCOP(r.sale_amount) : ""}</td>
+                        <td className={`${tdCls} text-foreground/50`}>{r.responsable ?? "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                  <tr className="bg-[#fdfbf7]">
+                    <td className={`${tdCls} text-foreground/50`}>{to ? fmtDate(to) : "Hoy"}</td>
+                    <td className={`${tdCls} font-bold`} colSpan={grindTracked ? 3 : 2}>
+                      Saldo final
+                    </td>
+                    <td className={`${tdCls} text-right font-bold text-emerald-700`}>+{fmtQty(data.summary.entradas)}</td>
+                    <td className={`${tdCls} text-right font-bold text-red-600`}>−{fmtQty(data.summary.salidas)}</td>
+                    <td className={`${tdCls} text-right font-bold text-[#C59F59]`}>{fmtQty(data.summary.closing)}</td>
+                    <td className={`${tdCls} text-right font-mono text-xs font-bold`}>
+                      {data.summary.ventasCobradas ? fmtCOP(data.summary.ventasCobradas) : ""}
+                    </td>
+                    <td className={tdCls} />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Reportes Tab ────────────────────────────────────────────────────────────
 
 const PIE_COLORS = [
@@ -4766,6 +5100,7 @@ export default function InventoryClient({
       {activeTab === "salidas" && (
         <SalidasTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
       )}
+      {activeTab === "kardex" && <KardexTab inventory={displayedInventory} era={era} />}
       {activeTab === "reportes" && <ReportesTab inventory={displayedInventory} era={era} />}
       {activeTab === "auditoria" && <AuditoriaTab inventory={displayedInventory} />}
     </div>
