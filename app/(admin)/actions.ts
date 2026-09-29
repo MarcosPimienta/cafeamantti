@@ -1913,6 +1913,23 @@ export async function getMoliendaBalances(era: 'v1' | 'v2' = 'v2') {
 // ============================================================
 
 /**
+ * Effective day of a movement. movement_date is a DATE; rows written before
+ * it existed (and plain ajustes) fall back to created_at.
+ */
+function _movementDay(m: { movement_date: string | null; created_at: string }) {
+  return m.movement_date ?? m.created_at.slice(0, 10);
+}
+
+function _compareMovements(
+  a: { movement_date: string | null; created_at: string },
+  b: { movement_date: string | null; created_at: string }
+) {
+  const da = _movementDay(a);
+  const db = _movementDay(b);
+  return da === db ? a.created_at.localeCompare(b.created_at) : da.localeCompare(db);
+}
+
+/**
  * Kardex (tarjeta de inventario) for one product: every movement in date
  * order with its running balance, the opening balance before `from` and the
  * closing balance at `to`.
@@ -1989,14 +2006,8 @@ export async function getKardex(
     if (!data || data.length < PAGE) break;
   }
 
-  // movement_date is a DATE; rows written before it existed fall back to
-  // created_at. Re-sort on that effective date so both kinds interleave.
-  const dayOf = (m: KardexMovement) => m.movement_date ?? m.created_at.slice(0, 10);
-  movements.sort((a, b) =>
-    dayOf(a) === dayOf(b)
-      ? a.created_at.localeCompare(b.created_at)
-      : dayOf(a).localeCompare(dayOf(b))
-  );
+  // Re-sort on the effective day so dated and undated rows interleave.
+  movements.sort(_compareMovements);
 
   let opening = 0;
   let balance = 0;
@@ -2014,7 +2025,7 @@ export async function getKardex(
 
   for (const m of movements) {
     const qty = Number(m.quantity) || 0;
-    const day = dayOf(m);
+    const day = _movementDay(m);
     if (opts.from && day < opts.from) {
       opening += qty;
       balance += qty;
@@ -2060,6 +2071,170 @@ export async function getKardex(
     reconciliation: opts.molienda
       ? null
       : { ledgerTotal, systemStock, difference: systemStock - ledgerTotal },
+  };
+}
+
+/**
+ * Kardex general: every product's inventario inicial, entradas, salidas and
+ * inventario final for the period, plus the full movement history with each
+ * product's running balance.
+ *
+ * Products are measured in different units (kg, unidades…), so quantities
+ * are only ever summed per product, never across products.
+ */
+export async function getKardexGeneral(
+  opts: {
+    from?: string | null; // YYYY-MM-DD, inclusive
+    to?: string | null;   // YYYY-MM-DD, inclusive
+    era?: 'v1' | 'v2';
+  } = {}
+) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const era = opts.era ?? 'v2';
+  const supabase = await createClient();
+
+  const { data: items, error: itemsErr } = await supabase
+    .from('inventory')
+    .select('id, product_code, product_name, category, unit, current_stock, legacy_stock')
+    .order('product_code', { ascending: true });
+  if (itemsErr) throw new Error(itemsErr.message);
+
+  type GeneralMovement = {
+    id: string;
+    inventory_id: string;
+    type: string;
+    quantity: number;
+    reason: string | null;
+    lote: string | null;
+    movement_date: string | null;
+    responsable: string | null;
+    tab_source: string | null;
+    molienda: string | null;
+    income_id: string | null;
+    created_at: string;
+    income: { gross_amount: number | null } | { gross_amount: number | null }[] | null;
+  };
+
+  // Page through the whole era; order by id last so pages never overlap.
+  const PAGE = 1000;
+  const movements: GeneralMovement[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .from('inventory_movements')
+      .select(`
+        id, inventory_id, type, quantity, reason, lote, movement_date,
+        responsable, tab_source, molienda, income_id, created_at,
+        income:income_id ( gross_amount )
+      `)
+      .eq('era', era)
+      .order('movement_date', { ascending: true, nullsFirst: true })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw new Error(error.message);
+    movements.push(...((data ?? []) as GeneralMovement[]));
+    if (!data || data.length < PAGE) break;
+  }
+  movements.sort(_compareMovements);
+
+  const blank = () => ({
+    opening: 0, entradas: 0, salidas: 0, closing: 0,
+    ventasCobradas: 0, movimientos: 0, ledgerTotal: 0,
+  });
+  const byProduct = new Map<string, ReturnType<typeof blank>>();
+  const running = new Map<string, number>();
+  const history: {
+    id: string;
+    inventory_id: string;
+    date: string;
+    type: string;
+    tab_source: string | null;
+    reason: string | null;
+    lote: string | null;
+    molienda: string | null;
+    responsable: string | null;
+    income_id: string | null;
+    entrada: number;
+    salida: number;
+    saldo: number;
+    sale_amount: number | null;
+  }[] = [];
+
+  for (const m of movements) {
+    const qty = Number(m.quantity) || 0;
+    const day = _movementDay(m);
+    if (!byProduct.has(m.inventory_id)) byProduct.set(m.inventory_id, blank());
+    const p = byProduct.get(m.inventory_id)!;
+    p.ledgerTotal += qty;
+
+    if (opts.to && day > opts.to) continue;
+    const saldo = (running.get(m.inventory_id) ?? 0) + qty;
+    running.set(m.inventory_id, saldo);
+
+    if (opts.from && day < opts.from) {
+      p.opening += qty;
+      continue;
+    }
+
+    if (qty >= 0) p.entradas += qty;
+    else p.salidas += -qty;
+    p.movimientos += 1;
+    const inc = Array.isArray(m.income) ? m.income[0] : m.income;
+    const saleAmount = inc?.gross_amount != null ? Number(inc.gross_amount) : null;
+    if (saleAmount !== null) p.ventasCobradas += saleAmount;
+
+    history.push({
+      id: m.id,
+      inventory_id: m.inventory_id,
+      date: day,
+      type: m.type,
+      tab_source: m.tab_source,
+      reason: m.reason,
+      lote: m.lote,
+      molienda: m.molienda,
+      responsable: m.responsable,
+      income_id: m.income_id,
+      entrada: qty >= 0 ? qty : 0,
+      salida: qty < 0 ? -qty : 0,
+      saldo,
+      sale_amount: saleAmount,
+    });
+  }
+
+  const products = (items ?? []).map((it) => {
+    const p = byProduct.get(it.id) ?? blank();
+    const closing = p.opening + p.entradas - p.salidas;
+    const systemStock = Number(era === 'v1' ? it.legacy_stock ?? it.current_stock : it.current_stock);
+    return {
+      id: it.id,
+      product_code: it.product_code,
+      product_name: it.product_name,
+      category: it.category,
+      unit: it.unit,
+      opening: p.opening,
+      entradas: p.entradas,
+      salidas: p.salidas,
+      closing,
+      movimientos: p.movimientos,
+      ventasCobradas: p.ventasCobradas,
+      // Whole-history ledger vs stored stock; non-zero means stock changed
+      // without a movement somewhere.
+      difference: systemStock - p.ledgerTotal,
+    };
+  });
+
+  return {
+    products,
+    history,
+    summary: {
+      productos: products.length,
+      productosConMovimiento: products.filter((p) => p.movimientos > 0).length,
+      movimientos: history.length,
+      ventasCobradas: products.reduce((sum, p) => sum + p.ventasCobradas, 0),
+      descuadres: products.filter((p) => Math.abs(p.difference) > 0.0005).length,
+    },
   };
 }
 

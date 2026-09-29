@@ -65,6 +65,7 @@ import {
   getInventory,
   getMoliendaBalances,
   getKardex,
+  getKardexGeneral,
 } from "../../actions";
 import {
   MOLIENDAS,
@@ -3913,10 +3914,21 @@ function fmtQty(n: number) {
  * with its running balance, closing balance, and — for paid-sale salidas —
  * the amount that entered Flujo de Caja.
  */
-function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" | "v2" }) {
-  const [inventoryId, setInventoryId] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+function KardexProducto({
+  inventory,
+  era,
+  from,
+  to,
+  inventoryId,
+  onInventoryChange,
+}: {
+  inventory: InventoryItem[];
+  era: "v1" | "v2";
+  from: string;
+  to: string;
+  inventoryId: string;
+  onInventoryChange: (id: string) => void;
+}) {
   const [molienda, setMolienda] = useState<Molienda | "">("");
   const [data, setData] = useState<KardexData | null>(null);
   const [error, setError] = useState("");
@@ -3953,7 +3965,6 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
     };
   }, [inventoryId, from, to, molienda, grindTracked, era]);
 
-  const rangeInvalid = !!from && !!to && from > to;
   const unit = data?.item.unit ?? selectedItem?.unit ?? "";
 
   async function handleExport() {
@@ -3993,13 +4004,6 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
-        <div className="mb-6">
-          <h2 className="text-xl font-serif">Kardex por producto</h2>
-          <p className="text-sm text-foreground/50 mt-1">
-            Trazabilidad completa de un producto: saldo inicial, cada entrada y
-            salida con su saldo acumulado, y el valor cobrado de las ventas pagadas.
-          </p>
-        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="lg:col-span-2">
             <label htmlFor="kardex-product" className={labelCls}>
@@ -4009,37 +4013,13 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
               id="kardex-product"
               value={inventoryId}
               onChange={(v) => {
-                setInventoryId(v);
+                onInventoryChange(v);
                 setData(null);
                 const next = inventory.find((i) => i.id === v);
                 if (!isGrindTracked(next?.product_code)) setMolienda("");
               }}
               inventory={inventory}
               searchable
-            />
-          </div>
-          <div>
-            <label htmlFor="kardex-from" className={labelCls}>
-              Desde
-            </label>
-            <input
-              id="kardex-from"
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label htmlFor="kardex-to" className={labelCls}>
-              Hasta
-            </label>
-            <input
-              id="kardex-to"
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className={inputCls}
             />
           </div>
           {grindTracked && (
@@ -4063,11 +4043,6 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
             </div>
           )}
         </div>
-        {rangeInvalid && (
-          <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">
-            La fecha &quot;Desde&quot; no puede ser posterior a &quot;Hasta&quot;.
-          </p>
-        )}
         {error && (
           <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>
         )}
@@ -4210,6 +4185,492 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+type KardexGeneralData = Awaited<ReturnType<typeof getKardexGeneral>>;
+
+const KARDEX_HISTORY_PAGE = 50;
+
+/**
+ * Kardex general: inventario inicial, entradas, salidas e inventario final
+ * of every product for the period, plus the full movement history.
+ * Quantities are never totalled across products — they are in different units.
+ */
+function KardexGeneral({
+  inventory,
+  era,
+  from,
+  to,
+  onOpenProduct,
+}: {
+  inventory: InventoryItem[];
+  era: "v1" | "v2";
+  from: string;
+  to: string;
+  onOpenProduct: (id: string) => void;
+}) {
+  const [data, setData] = useState<KardexGeneralData | null>(null);
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [category, setCategory] = useState("");
+  const [search, setSearch] = useState("");
+  const [onlyActive, setOnlyActive] = useState(true);
+  const [newestFirst, setNewestFirst] = useState(true);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (from && to && from > to) return;
+    let cancelled = false;
+    startTransition(async () => {
+      try {
+        const res = await getKardexGeneral({ from: from || null, to: to || null, era });
+        if (!cancelled) {
+          setData(res);
+          setError("");
+          setPage(1);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar el kardex");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to, era]);
+
+  const itemsById = useMemo(() => new Map(inventory.map((i) => [i.id, i])), [inventory]);
+
+  const products = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (data?.products ?? []).filter((p) => {
+      if (category && p.category !== category) return false;
+      if (term && !`${p.product_code} ${p.product_name}`.toLowerCase().includes(term)) return false;
+      return !onlyActive || p.movimientos > 0 || p.opening !== 0;
+    });
+  }, [data, category, search, onlyActive]);
+
+  const productIds = useMemo(() => new Set(products.map((p) => p.id)), [products]);
+
+  const history = useMemo(() => {
+    const rows = (data?.history ?? []).filter((h) => productIds.has(h.inventory_id));
+    return newestFirst ? [...rows].reverse() : rows;
+  }, [data, productIds, newestFirst]);
+
+  const totalPages = Math.max(1, Math.ceil(history.length / KARDEX_HISTORY_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = history.slice((currentPage - 1) * KARDEX_HISTORY_PAGE, currentPage * KARDEX_HISTORY_PAGE);
+
+  const ventasFiltradas = products.reduce((sum, p) => sum + p.ventasCobradas, 0);
+  const descuadres = products.filter((p) => Math.abs(p.difference) > 0.0005);
+
+  async function handleExport() {
+    if (!data) return;
+    const XLSX = await import("xlsx");
+    const period = `${from ? fmtDate(from) : "Inicio"} — ${to ? fmtDate(to) : "Hoy"}`;
+
+    const resumen: (string | number | null)[][] = [
+      ["Kardex general", period],
+      ...(category ? [["Categoría", CATEGORY_LABELS[category] ?? category]] : []),
+      [],
+      ["Código", "Producto", "Categoría", "Unidad", "Inventario inicial", "Entradas", "Salidas", "Inventario final", "Movimientos", "Ventas cobradas (COP)"],
+      ...products.map((p) => [
+        p.product_code,
+        p.product_name,
+        CATEGORY_LABELS[p.category] ?? p.category,
+        p.unit,
+        p.opening,
+        p.entradas,
+        p.salidas,
+        p.closing,
+        p.movimientos,
+        p.ventasCobradas || null,
+      ]),
+    ];
+    const movs: (string | number | null)[][] = [
+      ["Fecha", "Código", "Producto", "Unidad", "Origen", "Motivo / Documento", "Lote", "Molienda", "Entrada", "Salida", "Saldo producto", "Valor cobrado (COP)", "Responsable"],
+      ...(data.history ?? [])
+        .filter((h) => productIds.has(h.inventory_id))
+        .map((h) => {
+          const it = itemsById.get(h.inventory_id);
+          return [
+            h.date,
+            it?.product_code ?? "",
+            it?.product_name ?? "",
+            it?.unit ?? "",
+            kardexOrigin(h),
+            h.reason ?? "",
+            h.lote ?? "",
+            isMolienda(h.molienda) ? MOLIENDA_LABELS[h.molienda] : "",
+            h.entrada || null,
+            h.salida || null,
+            h.saldo,
+            h.sale_amount,
+            h.responsable ?? "",
+          ];
+        }),
+    ];
+
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumen);
+    wsResumen["!cols"] = [14, 36, 12, 10, 16, 12, 12, 16, 12, 20].map((wch) => ({ wch }));
+    const wsMovs = XLSX.utils.aoa_to_sheet(movs);
+    wsMovs["!cols"] = [12, 14, 32, 10, 18, 40, 12, 10, 10, 10, 14, 18, 18].map((wch) => ({ wch }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
+    XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+    const suffix = [from, to].filter(Boolean).join("_a_") || "completo";
+    XLSX.writeFile(wb, `Kardex_General_${suffix}.xlsx`);
+  }
+
+  if (error) {
+    return <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>;
+  }
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 text-[#C59F59] animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          label="Productos con movimiento"
+          value={products.filter((p) => p.movimientos > 0).length}
+          sub={`de ${products.length} listados`}
+        />
+        <KpiCard label="Movimientos" value={history.length.toLocaleString("es-CO")} sub="en el periodo" />
+        <KpiCard label="Ventas cobradas" value={fmtCOP(ventasFiltradas)} sub="Flujo de Caja" color="text-emerald-700" />
+        <KpiCard
+          label="Descuadres"
+          value={descuadres.length}
+          sub="stock ≠ movimientos"
+          color={descuadres.length ? "text-amber-600" : "text-foreground"}
+        />
+      </div>
+
+      {/* Resumen por producto */}
+      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7] flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
+          <div>
+            <h3 className="font-serif text-lg">Resumen por producto</h3>
+            <p className="text-xs text-foreground/50 mt-0.5">
+              Inventario final = inicial + entradas − salidas. Haz clic en un producto para ver su kardex.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-foreground/30" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Buscar producto..."
+                aria-label="Buscar producto en el kardex general"
+                className="pl-8 pr-3 py-2 rounded-xl border border-foreground/10 text-xs bg-white w-44"
+              />
+            </div>
+            <select
+              value={category}
+              onChange={(e) => { setCategory(e.target.value); setPage(1); }}
+              aria-label="Filtrar por categoría"
+              className="px-3 py-2 rounded-xl border border-foreground/10 text-xs bg-white"
+            >
+              <option value="">Todas las categorías</option>
+              {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-xs text-foreground/60 cursor-pointer px-2">
+              <input
+                type="checkbox"
+                checked={onlyActive}
+                onChange={(e) => { setOnlyActive(e.target.checked); setPage(1); }}
+                className="accent-[#C59F59]"
+              />
+              Solo con saldo o movimiento
+            </label>
+            {isPending && <Loader2 className="w-4 h-4 text-[#C59F59] animate-spin" />}
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-foreground/10 text-xs font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5 bg-white"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Excel
+            </button>
+          </div>
+        </div>
+        {products.length === 0 ? (
+          <p className="text-sm text-foreground/40 text-center py-12">Ningún producto coincide con los filtros.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-[#fdfbf7] border-b border-foreground/5">
+                  <th className={thCls}>Código</th>
+                  <th className={thCls}>Producto</th>
+                  <th className={thCls}>Unidad</th>
+                  <th className={`${thCls} text-right`}>Inv. inicial</th>
+                  <th className={`${thCls} text-right`}>Entradas</th>
+                  <th className={`${thCls} text-right`}>Salidas</th>
+                  <th className={`${thCls} text-right`}>Inv. final</th>
+                  <th className={`${thCls} text-right`}>Mov.</th>
+                  <th className={`${thCls} text-right`}>Ventas cobradas</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-foreground/5">
+                {products.map((p) => {
+                  const off = Math.abs(p.difference) > 0.0005;
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => onOpenProduct(p.id)}
+                      className="hover:bg-[#fdfbf7] cursor-pointer"
+                      title="Ver kardex del producto"
+                    >
+                      <td className={tdCls}>
+                        <span className="font-mono text-xs bg-foreground/5 px-2 py-1 rounded-lg">{p.product_code}</span>
+                      </td>
+                      <td className={`${tdCls} font-bold`}>
+                        <span className="flex items-center gap-2">
+                          {p.product_name}
+                          {off && (
+                            <span title={`El stock registrado difiere de la suma de movimientos en ${fmtQty(p.difference)} ${p.unit}`}>
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className={`${tdCls} text-foreground/50`}>{p.unit}</td>
+                      <td className={`${tdCls} text-right`}>{fmtQty(p.opening)}</td>
+                      <td className={`${tdCls} text-right text-emerald-700`}>{p.entradas ? `+${fmtQty(p.entradas)}` : "0"}</td>
+                      <td className={`${tdCls} text-right text-red-600`}>{p.salidas ? `−${fmtQty(p.salidas)}` : "0"}</td>
+                      <td className={`${tdCls} text-right font-bold ${p.closing < 0 ? "text-red-600" : "text-[#C59F59]"}`}>{fmtQty(p.closing)}</td>
+                      <td className={`${tdCls} text-right text-foreground/50`}>{p.movimientos}</td>
+                      <td className={`${tdCls} text-right font-mono text-xs`}>{p.ventasCobradas ? fmtCOP(p.ventasCobradas) : ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Histórico de movimientos */}
+      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7] flex items-center justify-between gap-4">
+          <h3 className="font-serif text-lg">
+            Histórico de movimientos{" "}
+            <span className="text-foreground/40 text-base font-sans">· {history.length}</span>
+          </h3>
+          <button
+            onClick={() => { setNewestFirst(!newestFirst); setPage(1); }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-foreground/10 text-[10px] font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5 bg-white"
+          >
+            {newestFirst ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            {newestFirst ? "Más recientes primero" : "Más antiguos primero"}
+          </button>
+        </div>
+        {history.length === 0 ? (
+          <p className="text-sm text-foreground/40 text-center py-12">Sin movimientos en el periodo seleccionado.</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-[#fdfbf7] border-b border-foreground/5">
+                    <th className={thCls}>Fecha</th>
+                    <th className={thCls}>Producto</th>
+                    <th className={thCls}>Origen</th>
+                    <th className={thCls}>Motivo / Documento</th>
+                    <th className={thCls}>Molienda</th>
+                    <th className={`${thCls} text-right`}>Entrada</th>
+                    <th className={`${thCls} text-right`}>Salida</th>
+                    <th className={`${thCls} text-right`}>Saldo producto</th>
+                    <th className={`${thCls} text-right`}>Valor cobrado</th>
+                    <th className={thCls}>Responsable</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-foreground/5">
+                  {pageRows.map((h) => {
+                    const it = itemsById.get(h.inventory_id);
+                    return (
+                      <tr key={h.id} className="hover:bg-[#fdfbf7]">
+                        <td className={`${tdCls} whitespace-nowrap`}>{fmtDate(h.date)}</td>
+                        <td className={tdCls}>
+                          <button
+                            onClick={() => onOpenProduct(h.inventory_id)}
+                            className="text-left hover:text-[#C59F59]"
+                            title="Ver kardex del producto"
+                          >
+                            <div className="font-bold text-sm">{it?.product_name ?? "—"}</div>
+                            <div className="font-mono text-[10px] text-foreground/40">{it?.product_code}</div>
+                          </button>
+                        </td>
+                        <td className={tdCls}>
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap ${
+                              h.income_id
+                                ? "bg-green-100 text-green-700"
+                                : h.entrada > 0
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {kardexOrigin(h)}
+                          </span>
+                        </td>
+                        <td className={`${tdCls} text-foreground/60 max-w-[240px]`}>
+                          <div className="truncate" title={h.reason ?? ""}>{h.reason ?? "—"}</div>
+                          {h.lote && <div className="text-[10px] text-foreground/40">Lote {h.lote}</div>}
+                        </td>
+                        <td className={tdCls}>
+                          {h.molienda ? <MoliendaBadge value={h.molienda} /> : <span className="text-foreground/30">—</span>}
+                        </td>
+                        <td className={`${tdCls} text-right text-emerald-700`}>{h.entrada ? `+${fmtQty(h.entrada)}` : ""}</td>
+                        <td className={`${tdCls} text-right text-red-600`}>{h.salida ? `−${fmtQty(h.salida)}` : ""}</td>
+                        <td className={`${tdCls} text-right font-bold ${h.saldo < 0 ? "text-red-600" : ""}`}>
+                          {fmtQty(h.saldo)} <span className="text-[10px] font-normal text-foreground/40">{it?.unit}</span>
+                        </td>
+                        <td className={`${tdCls} text-right font-mono text-xs`}>{h.sale_amount !== null ? fmtCOP(h.sale_amount) : ""}</td>
+                        <td className={`${tdCls} text-foreground/50`}>{h.responsable ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-foreground/5 px-6 py-4 bg-[#fdfbf7] gap-4">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-foreground/50">
+                  Página <span className="text-[#C59F59] text-sm">{currentPage}</span> de {totalPages}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl disabled:opacity-30 disabled:pointer-events-none hover:bg-foreground/5"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    onClick={() => setPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl disabled:opacity-30 disabled:pointer-events-none hover:bg-foreground/5"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" | "v2" }) {
+  const [mode, setMode] = useState<"general" | "producto">("general");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [inventoryId, setInventoryId] = useState("");
+  const rangeInvalid = !!from && !!to && from > to;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-xl font-serif">Kardex</h2>
+            <p className="text-sm text-foreground/50 mt-1">
+              {mode === "general"
+                ? "Histórico de todo el inventario: inventario inicial, entradas, salidas e inventario final por producto."
+                : "Trazabilidad de un producto: saldo inicial, cada entrada y salida con su saldo acumulado, y el valor cobrado de las ventas pagadas."}
+            </p>
+          </div>
+          <div className="flex gap-1 bg-foreground/5 rounded-xl p-1 self-start">
+            {(["general", "producto"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
+                  mode === m ? "bg-white text-foreground shadow-sm" : "text-foreground/50 hover:text-foreground"
+                }`}
+              >
+                {m === "general" ? "General" : "Por producto"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label htmlFor="kardex-from" className={labelCls}>
+              Desde
+            </label>
+            <input
+              id="kardex-from"
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label htmlFor="kardex-to" className={labelCls}>
+              Hasta
+            </label>
+            <input
+              id="kardex-to"
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          {(from || to) && (
+            <div className="flex items-end">
+              <button
+                onClick={() => { setFrom(""); setTo(""); }}
+                className="px-4 py-3 rounded-2xl text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5"
+              >
+                Todo el histórico
+              </button>
+            </div>
+          )}
+        </div>
+        {rangeInvalid && (
+          <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">
+            La fecha &quot;Desde&quot; no puede ser posterior a &quot;Hasta&quot;.
+          </p>
+        )}
+      </div>
+
+      {mode === "general" ? (
+        <KardexGeneral
+          inventory={inventory}
+          era={era}
+          from={from}
+          to={to}
+          onOpenProduct={(id) => {
+            setInventoryId(id);
+            setMode("producto");
+          }}
+        />
+      ) : (
+        <KardexProducto
+          inventory={inventory}
+          era={era}
+          from={from}
+          to={to}
+          inventoryId={inventoryId}
+          onInventoryChange={setInventoryId}
+        />
       )}
     </div>
   );
