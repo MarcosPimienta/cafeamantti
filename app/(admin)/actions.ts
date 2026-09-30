@@ -9,6 +9,9 @@ import {
   isGrindTracked,
   isMolienda,
   profileForCode,
+  unitWeightKg,
+  bulkCodeForProfile,
+  PROFILE_LABELS,
 } from "./coffeeProfiles";
 import { ensureCashflowDate } from "./admin/cashflow/actions";
 
@@ -44,7 +47,7 @@ export async function getCurrentUserProfile() {
 
 export async function logAuditAction(
   actionType: "CREATE" | "UPDATE" | "DELETE",
-  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH" | "COLD_BREW_BATCH",
+  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH" | "COLD_BREW_BATCH" | "REPACK_BATCH",
   entityId: string,
   inventoryId?: string,
   details?: Record<string, any>
@@ -957,6 +960,7 @@ async function _insertMovement(
     lote?: string;
     molienda?: Molienda | null;
     income_id?: string | null;
+    repack_batch_id?: string | null;
   } = {}
 ) {
   const { data, error } = await supabase.from('inventory_movements').insert({
@@ -972,6 +976,7 @@ async function _insertMovement(
     lote: opts.lote ?? null,
     molienda: opts.molienda ?? null,
     income_id: opts.income_id ?? null,
+    repack_batch_id: opts.repack_batch_id ?? null,
   }).select('id').single();
   if (error) throw new Error(error.message);
   return data.id;
@@ -1906,6 +1911,291 @@ export async function getMoliendaBalances(era: 'v1' | 'v2' = 'v2') {
   });
 
   return { packaged: shape(groups.packaged), bulk: shape(groups.bulk) };
+}
+
+// ============================================================
+// REEMPAQUE (repack)
+// ============================================================
+//
+// Opening packed coffee and packing it again: one 2.5kg bag split into 250g
+// bags or samples, or several small bags combined into a bigger one. Every
+// movement of the operation hangs off one repack_batches row so it reads as
+// one step in the Kardex and is reverted as a whole.
+//
+// Rules:
+//  - Origin and destination lines are roasted coffee of ONE profile.
+//  - Kilos are conserved: output ≤ input. The leftover goes back to the
+//    profile's bulk coffee ('granel') or is written off ('merma').
+//  - Grano can become Molido (it gets ground); Molido never becomes Grano,
+//    so Grano out ≤ Grano in.
+
+const KG_EPS = 0.0005;
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+type RepackLine = { inventoryId: string; qty: number; molienda: string | null | undefined };
+
+export async function createRepackBatch(input: {
+  date: string;
+  origins: RepackLine[];
+  destinations: RepackLine[];
+  consumos?: { id: string; qty: number }[];
+  sobranteDestino?: 'granel' | 'merma';
+  notes?: string;
+}) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = user?.id ?? null;
+
+  const origins = input.origins.filter((l) => l.inventoryId && l.qty > 0);
+  const destinations = input.destinations.filter((l) => l.inventoryId && l.qty > 0);
+  const consumos = (input.consumos ?? []).filter((c) => c.id && c.qty > 0);
+  const sobranteDestino = input.sobranteDestino ?? 'granel';
+
+  // Everything applied so far, so a failure can be undone completely.
+  const applied: { movementId: string; inventoryId: string; delta: number }[] = [];
+  let batchId: string | null = null;
+
+  try {
+    if (origins.length === 0) throw new Error('Agrega al menos un producto de origen.');
+    if (destinations.length === 0 && sobranteDestino !== 'granel') {
+      throw new Error('Agrega al menos un producto de destino.');
+    }
+
+    const ids = [...new Set([...origins, ...destinations].map((l) => l.inventoryId).concat(consumos.map((c) => c.id)))];
+    const { data: items, error: itemsErr } = await supabase
+      .from('inventory')
+      .select('id, product_code, product_name, unit, current_stock')
+      .in('id', ids);
+    if (itemsErr) throw new Error(itemsErr.message);
+    const byId = new Map((items ?? []).map((i) => [i.id, i]));
+
+    // ── Validate coffee lines ─────────────────────────────
+    const profiles = new Set<string>();
+    const kg = { inGrano: 0, inMolido: 0, outGrano: 0, outMolido: 0 };
+    const describe = (l: RepackLine) => `${l.qty}× ${byId.get(l.inventoryId)?.product_code}`;
+
+    for (const [lines, side] of [[origins, 'in'], [destinations, 'out']] as const) {
+      for (const l of lines) {
+        const it = byId.get(l.inventoryId);
+        if (!it) throw new Error('Producto no encontrado.');
+        const w = unitWeightKg(it.product_code);
+        if (w === null) {
+          throw new Error(`${it.product_name} no es café tostado con peso conocido; no se puede reempacar.`);
+        }
+        if (!isMolienda(l.molienda)) {
+          throw new Error(`Selecciona la molienda (Grano o Molido) de ${it.product_name}.`);
+        }
+        profiles.add(profileForCode(it.product_code) ?? '');
+        const key = `${side}${l.molienda === 'grano' ? 'Grano' : 'Molido'}` as keyof typeof kg;
+        kg[key] += l.qty * w;
+      }
+    }
+    if (profiles.size > 1) {
+      throw new Error('Todos los productos del reempaque deben ser del mismo perfil (Premium, Honey o Chiroso).');
+    }
+    const originIds = new Set(origins.map((l) => l.inventoryId));
+    const overlap = destinations.find((l) => originIds.has(l.inventoryId));
+    if (overlap) {
+      throw new Error(`${byId.get(overlap.inventoryId)?.product_name} no puede ser origen y destino a la vez.`);
+    }
+
+    const inKg = round3(kg.inGrano + kg.inMolido);
+    const outKg = round3(kg.outGrano + kg.outMolido);
+    if (outKg > inKg + KG_EPS) {
+      throw new Error(`El destino (${outKg} kg) supera el café abierto (${inKg} kg).`);
+    }
+    if (kg.outGrano > kg.inGrano + KG_EPS) {
+      throw new Error('El café molido no puede volver a grano: hay más Grano en el destino que en el origen.');
+    }
+    const sobranteKg = round3(inKg - outKg);
+    // Molido out is served from Molido in first; any excess was ground from Grano.
+    const groundFromGrano = Math.max(0, kg.outMolido - kg.inMolido);
+    const sobranteGrano = round3(Math.max(0, kg.inGrano - kg.outGrano - groundFromGrano));
+    const sobranteMolido = round3(sobranteKg - sobranteGrano);
+
+    const profile = [...profiles][0] as keyof typeof PROFILE_LABELS;
+    let bulk: { id: string; product_code: string } | null = null;
+    if (sobranteKg > KG_EPS && sobranteDestino === 'granel') {
+      const { data: b } = await supabase
+        .from('inventory')
+        .select('id, product_code')
+        .eq('product_code', bulkCodeForProfile(profile))
+        .single();
+      if (!b) throw new Error(`No existe el café a granel ${bulkCodeForProfile(profile)} para recibir el sobrante.`);
+      bulk = b;
+    }
+
+    // ── Stock check before touching anything ─────────────
+    const need = new Map<string, number>();
+    for (const l of origins) need.set(l.inventoryId, (need.get(l.inventoryId) ?? 0) + l.qty);
+    for (const c of consumos) need.set(c.id, (need.get(c.id) ?? 0) + c.qty);
+    for (const [id, qty] of need) {
+      const it = byId.get(id);
+      if (!it) throw new Error('Material consumido no encontrado.');
+      if (Number(it.current_stock) < qty - KG_EPS) {
+        throw new Error(`Stock insuficiente: ${it.product_name} (disponible ${it.current_stock}, requerido ${qty}).`);
+      }
+    }
+
+    const summary = `${origins.map(describe).join(' + ')} → ${destinations.map(describe).join(' + ') || 'granel'}`;
+    const reason = `Reempaque ${PROFILE_LABELS[profile]}: ${summary}${input.notes ? ` — ${input.notes}` : ''}`;
+
+    // ── Persist ──────────────────────────────────────────
+    const { data: batch, error: batchErr } = await supabase
+      .from('repack_batches')
+      .insert({
+        movement_date: input.date,
+        input_kg: inKg,
+        output_kg: outKg,
+        sobrante_kg: sobranteKg,
+        sobrante_destino: sobranteKg > KG_EPS ? sobranteDestino : null,
+        notes: input.notes || null,
+        created_by: userId,
+      })
+      .select('id')
+      .single();
+    if (batchErr) throw new Error(batchErr.message);
+    batchId = batch.id as string;
+
+    const move = async (
+      inventoryId: string,
+      delta: number,
+      molienda: Molienda | null,
+      opts: { reason: string; entry_type?: string }
+    ) => {
+      const mId = await _insertMovement(supabase, userId, inventoryId, delta < 0 ? 'salida' : 'entrada', delta, {
+        movement_date: input.date,
+        reason: opts.reason,
+        entry_type: opts.entry_type,
+        tab_source: 'reempaque',
+        molienda,
+        repack_batch_id: batchId,
+      });
+      await _updateStockBy(supabase, inventoryId, delta);
+      applied.push({ movementId: mId, inventoryId, delta });
+    };
+
+    for (const l of origins) await move(l.inventoryId, -l.qty, l.molienda as Molienda, { reason: `${reason} (abierto)` });
+    for (const l of destinations) await move(l.inventoryId, l.qty, l.molienda as Molienda, { reason });
+    if (bulk) {
+      if (sobranteGrano > KG_EPS) await move(bulk.id, sobranteGrano, 'grano', { reason: `${reason} (sobrante a granel)` });
+      if (sobranteMolido > KG_EPS) await move(bulk.id, sobranteMolido, 'molido', { reason: `${reason} (sobrante a granel)` });
+    }
+    for (const c of consumos) await move(c.id, -c.qty, null, { reason: `Consumo para ${reason}`, entry_type: 'MAT' });
+
+    await logAuditAction('CREATE', 'REPACK_BATCH', batchId, undefined, {
+      origins, destinations, consumos, inKg, outKg, sobranteKg, sobranteDestino,
+    });
+
+    // Final stock per touched product, for the client to refresh in place.
+    const touched = [...new Set(applied.map((a) => a.inventoryId))];
+    const { data: fresh } = await supabase.from('inventory').select('id, current_stock').in('id', touched);
+
+    revalidatePath('/admin/inventory');
+    return {
+      success: true as const,
+      updates: (fresh ?? []).map((f) => ({ id: f.id as string, newStock: Number(f.current_stock) })),
+      sobranteKg,
+    };
+  } catch (err: unknown) {
+    // Undo in reverse order so stock never dips below zero on the way back.
+    for (const a of [...applied].reverse()) {
+      try {
+        await _updateStockBy(supabase, a.inventoryId, -a.delta);
+        await supabase.from('inventory_movements').delete().eq('id', a.movementId);
+      } catch (undoErr) {
+        console.error('createRepackBatch rollback error:', undoErr);
+      }
+    }
+    if (batchId) await supabase.from('repack_batches').delete().eq('id', batchId);
+    return { success: false as const, error: err instanceof Error ? err.message : 'Error al registrar el reempaque' };
+  }
+}
+
+export async function getRepackBatches(era: 'v1' | 'v2' = 'v2') {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('repack_batches')
+    .select(`
+      id, movement_date, input_kg, output_kg, sobrante_kg, sobrante_destino, notes, created_at,
+      movements:inventory_movements (
+        id, inventory_id, quantity, molienda, entry_type, reason,
+        inventory ( product_code, product_name, unit )
+      )
+    `)
+    .eq('era', era)
+    .order('movement_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.error('getRepackBatches error:', error);
+    return [];
+  }
+  return data;
+}
+
+/** Reverts every movement of a repack batch and deletes it. */
+export async function deleteRepackBatch(batchId: string) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+
+  const { data: movs, error: movErr } = await supabase
+    .from('inventory_movements')
+    .select('id, inventory_id, quantity, inventory ( product_name, current_stock )')
+    .eq('repack_batch_id', batchId);
+  if (movErr) throw new Error(movErr.message);
+
+  // Products that received stock must still have it to give back.
+  const giveBack = new Map<string, { qty: number; name: string; stock: number }>();
+  for (const m of movs ?? []) {
+    const q = Number(m.quantity);
+    if (q <= 0) continue;
+    const inv = Array.isArray(m.inventory) ? m.inventory[0] : m.inventory;
+    const prev = giveBack.get(m.inventory_id);
+    giveBack.set(m.inventory_id, {
+      qty: (prev?.qty ?? 0) + q,
+      name: inv?.product_name ?? 'Producto',
+      stock: Number(inv?.current_stock ?? 0),
+    });
+  }
+  for (const g of giveBack.values()) {
+    if (g.stock < g.qty - KG_EPS) {
+      throw new Error(
+        `No se puede revertir: '${g.name}' tiene ${g.stock} y el reempaque le sumó ${round3(g.qty)}. Ya se usó parte de ese stock.`
+      );
+    }
+  }
+
+  // Take back what was added first, then return what was consumed.
+  const ordered = [...(movs ?? [])].sort((a, b) => Number(b.quantity) - Number(a.quantity));
+  for (const m of ordered) {
+    await _updateStockBy(supabase, m.inventory_id, -Number(m.quantity));
+  }
+  await supabase.from('inventory_movements').delete().eq('repack_batch_id', batchId);
+  const { error } = await supabase.from('repack_batches').delete().eq('id', batchId);
+  if (error) throw new Error(error.message);
+
+  await logAuditAction('DELETE', 'REPACK_BATCH', batchId, undefined, { movements: movs });
+
+  const touched = [...new Set((movs ?? []).map((m) => m.inventory_id))];
+  const { data: fresh } = touched.length
+    ? await supabase.from('inventory').select('id, current_stock').in('id', touched)
+    : { data: [] };
+
+  revalidatePath('/admin/inventory');
+  return {
+    success: true,
+    updates: (fresh ?? []).map((f) => ({ id: f.id as string, newStock: Number(f.current_stock) })),
+  };
 }
 
 // ============================================================

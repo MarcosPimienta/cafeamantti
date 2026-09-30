@@ -78,3 +78,53 @@ export function profileLabelForCode(
   const id = profileForCode(productCode);
   return id ? PROFILE_LABELS[id] : null;
 }
+
+// ── Reempaque helpers ────────────────────────────────────────────────────
+
+/**
+ * Kilos of coffee in one stock unit of a roasted-coffee code: bulk is stored
+ * in kg (1), packaged sizes are encoded in the code. Returns null when the
+ * size cannot be read, so callers can refuse instead of guessing.
+ */
+export function unitWeightKg(productCode: string | null | undefined): number | null {
+  if (!isGrindTracked(productCode)) return null;
+  const code = productCode as string;
+  if (isBulkCoffee(code)) return 1;
+  const m = code.match(/-(\d+(?:K\d+)?)(G|K)?$/);
+  if (!m) return null;
+  const [, size] = m;
+  if (/^\d+K\d+$/.test(size)) {
+    // 2K5 → 2.5 kg
+    const [whole, frac] = size.split("K");
+    return Number(`${whole}.${frac}`);
+  }
+  if (code.endsWith("G")) return Number(size) / 1000;
+  if (code.endsWith("K")) return Number(size);
+  return null;
+}
+
+/** Code fragment used by bags and stickers for each profile. */
+export const PROFILE_FLAVOR: Record<CoffeeProfileId, string> = {
+  premium: "FIR",
+  honey: "HON",
+  chiroso: "MIC",
+};
+
+/** Bulk (kg) roasted-coffee code of a profile — where repack leftovers go. */
+export function bulkCodeForProfile(profile: CoffeeProfileId): string {
+  const marker = COFFEE_PROFILES.find((p) => p.id === profile)?.marker;
+  return marker ? `CAFT${marker}001` : "CAFT-001";
+}
+
+/**
+ * Packaging a packed unit of this code consumes: its bag and the profile
+ * sticker. Bulk coffee needs neither.
+ */
+export function packagingCodesFor(productCode: string | null | undefined): string[] {
+  if (!isGrindTracked(productCode) || isBulkCoffee(productCode)) return [];
+  const profile = profileForCode(productCode);
+  if (!profile) return [];
+  const flavor = PROFILE_FLAVOR[profile];
+  const size = (productCode as string).split("-").pop();
+  return [`EMP-BOLSA-${flavor}-${size}`, `STK-AMT-${flavor}`];
+}

@@ -27,6 +27,8 @@ import {
   Sparkles,
   ScrollText,
   Download,
+  Shuffle,
+  Plus,
 } from "lucide-react";
 import {
   BarChart,
@@ -66,6 +68,9 @@ import {
   getMoliendaBalances,
   getKardex,
   getKardexGeneral,
+  createRepackBatch,
+  getRepackBatches,
+  deleteRepackBatch,
 } from "../../actions";
 import {
   MOLIENDAS,
@@ -73,6 +78,11 @@ import {
   type Molienda,
   isGrindTracked,
   isMolienda,
+  unitWeightKg,
+  packagingCodesFor,
+  bulkCodeForProfile,
+  profileForCode,
+  PROFILE_LABELS,
 } from "../../coffeeProfiles";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -142,6 +152,7 @@ const TABS = [
   { id: "trilla", label: "Trilla", Icon: FlaskConical },
   { id: "tostion", label: "Proceso Tostión", Icon: Factory },
   { id: "prod_altas", label: "Empaque/Altas", Icon: TrendingUp },
+  { id: "reempaque", label: "Reempaque", Icon: Shuffle },
   { id: "cold_brew", label: "Cold Brew (11:11)", Icon: Sparkles },
   { id: "salidas", label: "Salidas", Icon: PackageMinus },
   { id: "kardex", label: "Kardex", Icon: ScrollText },
@@ -3886,6 +3897,522 @@ function SalidasTab({
   );
 }
 
+// ─── Reempaque Tab ───────────────────────────────────────────────────────────
+
+type RepackFormLine = { key: number; inventoryId: string; qty: string; molienda: Molienda | "" };
+type RepackBatch = Awaited<ReturnType<typeof getRepackBatches>>[number];
+
+let repackLineKey = 0;
+const newRepackLine = (): RepackFormLine => ({ key: ++repackLineKey, inventoryId: "", qty: "", molienda: "" });
+
+const fmtKg = (n: number) => `${Number(n.toFixed(3)).toLocaleString("es-CO")} kg`;
+
+/**
+ * Open packed coffee and pack it again — split a 2.5kg bag into 250g bags or
+ * samples, or combine small bags into a big one. Kilos are conserved; the
+ * leftover goes back to bulk or is written off as merma.
+ */
+function ReempaqueTab({
+  inventory,
+  onStocksUpdate,
+  era,
+}: {
+  inventory: InventoryItem[];
+  onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
+  era: "v1" | "v2";
+}) {
+  const [date, setDate] = useState(today());
+  const [notes, setNotes] = useState("");
+  const [origins, setOrigins] = useState<RepackFormLine[]>(() => [newRepackLine()]);
+  const [destinations, setDestinations] = useState<RepackFormLine[]>(() => [newRepackLine()]);
+  const [sobranteDestino, setSobranteDestino] = useState<"granel" | "merma">("granel");
+  // null = follow the suggestion computed from the destinations.
+  const [customConsumos, setCustomConsumos] = useState<{ id: string; qty: string }[] | null>(null);
+  const [batches, setBatches] = useState<RepackBatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const byId = useMemo(() => new Map(inventory.map((i) => [i.id, i])), [inventory]);
+  const byCode = useMemo(() => new Map(inventory.map((i) => [i.product_code, i])), [inventory]);
+  const repackable = (i: InventoryItem) => unitWeightKg(i.product_code) !== null;
+
+  function loadHistory() {
+    setLoading(true);
+    getRepackBatches(era)
+      .then((d) => setBatches(d as RepackBatch[]))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => {
+    loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [era]);
+
+  // ── Live kg reconciliation (the server re-checks all of this) ──
+  const calc = useMemo(() => {
+    const kg = { inGrano: 0, inMolido: 0, outGrano: 0, outMolido: 0 };
+    const profiles = new Set<string>();
+    for (const [lines, side] of [[origins, "in"], [destinations, "out"]] as const) {
+      for (const l of lines) {
+        const it = byId.get(l.inventoryId);
+        const q = parseFloat(l.qty);
+        if (!it || !(q > 0)) continue;
+        profiles.add(profileForCode(it.product_code) ?? "");
+        const w = unitWeightKg(it.product_code) ?? 0;
+        if (l.molienda === "grano") kg[side === "in" ? "inGrano" : "outGrano"] += q * w;
+        else if (l.molienda === "molido") kg[side === "in" ? "inMolido" : "outMolido"] += q * w;
+      }
+    }
+    const inKg = kg.inGrano + kg.inMolido;
+    const outKg = kg.outGrano + kg.outMolido;
+    const profile = profiles.size === 1 ? ([...profiles][0] as keyof typeof PROFILE_LABELS) : null;
+    const errors: string[] = [];
+    if (profiles.size > 1) errors.push("Mezclas perfiles: todos los productos deben ser del mismo perfil.");
+    if (outKg > inKg + 0.0005) errors.push(`El destino (${fmtKg(outKg)}) supera el café abierto (${fmtKg(inKg)}).`);
+    if (kg.outGrano > kg.inGrano + 0.0005) errors.push("El molido no puede volver a grano: hay más Grano en el destino que en el origen.");
+    const originIds = new Set(origins.map((l) => l.inventoryId).filter(Boolean));
+    if (destinations.some((l) => l.inventoryId && originIds.has(l.inventoryId))) {
+      errors.push("Un mismo producto no puede ser origen y destino.");
+    }
+    return { ...kg, inKg, outKg, sobrante: Math.max(0, inKg - outKg), profile, errors };
+  }, [origins, destinations, byId]);
+
+  // ── Packaging suggested from the destination bags ──
+  const suggestedConsumos = useMemo(() => {
+    const need = new Map<string, number>();
+    for (const l of destinations) {
+      const it = byId.get(l.inventoryId);
+      const q = parseFloat(l.qty);
+      if (!it || !(q > 0)) continue;
+      for (const code of packagingCodesFor(it.product_code)) {
+        const pkg = byCode.get(code);
+        if (pkg) need.set(pkg.id, (need.get(pkg.id) ?? 0) + q);
+      }
+    }
+    return [...need].map(([id, qty]) => ({ id, qty: String(qty) }));
+  }, [destinations, byId, byCode]);
+  const consumos = customConsumos ?? suggestedConsumos;
+  const editConsumos = (next: { id: string; qty: string }[]) => setCustomConsumos(next);
+
+  const bulkItem = calc.profile ? byCode.get(bulkCodeForProfile(calc.profile)) : undefined;
+
+  function resetForm() {
+    setOrigins([newRepackLine()]);
+    setDestinations([newRepackLine()]);
+    setCustomConsumos(null);
+    setNotes("");
+    setSobranteDestino("granel");
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const parse = (lines: RepackFormLine[]) =>
+      lines
+        .filter((l) => l.inventoryId && parseFloat(l.qty) > 0)
+        .map((l) => ({ inventoryId: l.inventoryId, qty: parseFloat(l.qty), molienda: l.molienda || null }));
+    const o = parse(origins);
+    const d = parse(destinations);
+    if (o.length === 0) return setFeedback({ type: "error", msg: "Agrega al menos un producto de origen" });
+    if ([...o, ...d].some((l) => !l.molienda)) {
+      return setFeedback({ type: "error", msg: "Selecciona la molienda de cada línea" });
+    }
+    if (calc.errors.length) return setFeedback({ type: "error", msg: calc.errors[0] });
+
+    startTransition(async () => {
+      const res = await createRepackBatch({
+        date,
+        origins: o,
+        destinations: d,
+        consumos: consumos
+          .filter((c) => c.id && parseFloat(c.qty) > 0)
+          .map((c) => ({ id: c.id, qty: parseFloat(c.qty) })),
+        sobranteDestino,
+        notes: notes || undefined,
+      });
+      if (!res.success) {
+        setFeedback({ type: "error", msg: res.error });
+        return;
+      }
+      onStocksUpdate(res.updates);
+      setFeedback({
+        type: "success",
+        msg: res.sobranteKg > 0
+          ? `✓ Reempaque registrado. Sobrante ${fmtKg(res.sobranteKg)} ${sobranteDestino === "granel" ? "devuelto a granel" : "registrado como merma"}`
+          : "✓ Reempaque registrado",
+      });
+      resetForm();
+      loadHistory();
+    });
+  }
+
+  function handleDelete(batchId: string) {
+    startTransition(async () => {
+      try {
+        const res = await deleteRepackBatch(batchId);
+        onStocksUpdate(res.updates);
+        setDeletingId(null);
+        loadHistory();
+      } catch (err: unknown) {
+        setDeletingId(null);
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al revertir" });
+      }
+    });
+  }
+
+  const renderLines = (
+    lines: RepackFormLine[],
+    setLines: (next: RepackFormLine[]) => void,
+    side: "origen" | "destino"
+  ) => (
+    <div className="space-y-3">
+      {lines.map((l, idx) => {
+        const it = byId.get(l.inventoryId);
+        const w = unitWeightKg(it?.product_code);
+        const q = parseFloat(l.qty);
+        const update = (patch: Partial<RepackFormLine>) =>
+          setLines(lines.map((x) => (x.key === l.key ? { ...x, ...patch } : x)));
+        return (
+          <div key={l.key} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1.4fr_auto] gap-3 items-end p-4 rounded-2xl border border-foreground/5 bg-[#fdfbf7]">
+            <div>
+              <label className={labelCls}>Producto</label>
+              <ProductSelect
+                id={`rep-${side}-${l.key}`}
+                value={l.inventoryId}
+                onChange={(v) => update({ inventoryId: v })}
+                inventory={inventory}
+                filter={repackable}
+                searchable
+              />
+            </div>
+            <div>
+              <label htmlFor={`rep-${side}-qty-${l.key}`} className={labelCls}>
+                Cantidad {it ? `(${it.unit})` : ""}
+              </label>
+              <input
+                id={`rep-${side}-qty-${l.key}`}
+                type="number"
+                min="0.001"
+                step="any"
+                value={l.qty}
+                onChange={(e) => update({ qty: e.target.value })}
+                placeholder="ej. 1"
+                className={inputCls}
+              />
+              {w !== null && q > 0 && (
+                <p className="text-[10px] text-foreground/40 mt-1">
+                  = {fmtKg(q * w)}
+                  {side === "origen" && it ? ` · stock ${it.current_stock}` : ""}
+                </p>
+              )}
+            </div>
+            <MoliendaField
+              idPrefix={`rep-${side}-${l.key}`}
+              value={l.molienda}
+              onChange={(v) => update({ molienda: v })}
+              productCode={it?.product_code ?? "CAFT-"}
+            />
+            <button
+              type="button"
+              onClick={() => setLines(lines.length > 1 ? lines.filter((x) => x.key !== l.key) : [newRepackLine()])}
+              className="p-3 rounded-xl text-foreground/30 hover:text-red-500 hover:bg-red-50"
+              aria-label={`Quitar línea ${idx + 1} de ${side}`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => setLines([...lines, newRepackLine()])}
+        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-foreground/20 text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Agregar {side}
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {era === "v2" && (
+        <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
+          <div className="mb-6">
+            <h2 className="text-xl font-serif">Registrar Reempaque</h2>
+            <p className="text-sm text-foreground/50 mt-1">
+              Abre bolsas y vuelve a empacar el café: divide una grande en varias
+              pequeñas (ej. 2.5 kg → 250 g o muestras) o combina pequeñas en una
+              grande. Los kilos se conservan y el sobrante vuelve a granel o se
+              registra como merma.
+            </p>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="rep-date" className={labelCls}>
+                  Fecha <span className="text-red-400">*</span>
+                </label>
+                <input id="rep-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
+              </div>
+              <div className="md:col-span-2">
+                <label htmlFor="rep-notes" className={labelCls}>Notas (opcional)</label>
+                <input
+                  id="rep-notes"
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="ej. Muestras para feria, cliente X..."
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-bold mb-3">1. Bolsas que se abren (origen)</p>
+              {renderLines(origins, setOrigins, "origen")}
+            </div>
+            <div>
+              <p className="text-sm font-bold mb-3">2. Bolsas que se empacan (destino)</p>
+              {renderLines(destinations, setDestinations, "destino")}
+            </div>
+
+            {/* Cuadre */}
+            <div className="rounded-2xl border border-foreground/10 p-5 space-y-4">
+              <p className="text-sm font-bold">3. Cuadre en kilos{calc.profile ? ` · ${PROFILE_LABELS[calc.profile]}` : ""}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div className="rounded-xl bg-[#fdfbf7] p-3">
+                  <p className={labelCls}>Café abierto</p>
+                  <p className="font-bold text-lg">{fmtKg(calc.inKg)}</p>
+                  <p className="text-[10px] text-foreground/40">Grano {fmtKg(calc.inGrano)} · Molido {fmtKg(calc.inMolido)}</p>
+                </div>
+                <div className="rounded-xl bg-[#fdfbf7] p-3">
+                  <p className={labelCls}>Café empacado</p>
+                  <p className="font-bold text-lg">{fmtKg(calc.outKg)}</p>
+                  <p className="text-[10px] text-foreground/40">Grano {fmtKg(calc.outGrano)} · Molido {fmtKg(calc.outMolido)}</p>
+                </div>
+                <div className={`rounded-xl p-3 ${calc.errors.length ? "bg-red-50" : "bg-[#fdfbf7]"}`}>
+                  <p className={labelCls}>Sobrante</p>
+                  <p className={`font-bold text-lg ${calc.errors.length ? "text-red-600" : "text-[#C59F59]"}`}>
+                    {calc.errors.length ? "—" : fmtKg(calc.sobrante)}
+                  </p>
+                </div>
+              </div>
+              {calc.errors.map((e) => (
+                <p key={e} className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-xl">{e}</p>
+              ))}
+              {calc.sobrante > 0.0005 && !calc.errors.length && (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {(["granel", "merma"] as const).map((opt) => (
+                    <label
+                      key={opt}
+                      className={`flex-1 flex items-start gap-3 p-3 rounded-xl border cursor-pointer ${
+                        sobranteDestino === opt ? "border-[#C59F59] bg-[#C59F59]/5" : "border-foreground/10"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="rep-sobrante"
+                        checked={sobranteDestino === opt}
+                        onChange={() => setSobranteDestino(opt)}
+                        className="mt-1 accent-[#C59F59]"
+                      />
+                      <span className="text-sm">
+                        <span className="font-bold">{opt === "granel" ? "Devolver a granel" : "Registrar como merma"}</span>
+                        <span className="block text-xs text-foreground/50">
+                          {opt === "granel"
+                            ? bulkItem
+                              ? `Entra ${fmtKg(calc.sobrante)} a ${bulkItem.product_name} (${bulkItem.product_code}) con su molienda`
+                              : "No se encontró el café a granel de este perfil"
+                            : "El sobrante no vuelve al inventario; queda registrado en el lote"}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Empaques */}
+            <div className="rounded-2xl border border-foreground/10 p-5 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold">4. Empaques consumidos</p>
+                  <p className="text-xs text-foreground/50">
+                    Sugeridos según el destino (bolsa y sticker). Para muestras, cambia la bolsa por la blanca de muestras.
+                  </p>
+                </div>
+                {customConsumos && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomConsumos(null)}
+                    className="text-[10px] font-bold uppercase tracking-widest text-[#C59F59] hover:underline whitespace-nowrap"
+                  >
+                    Restablecer sugeridos
+                  </button>
+                )}
+              </div>
+              {consumos.length === 0 && (
+                <p className="text-sm text-foreground/40">Sin empaques.</p>
+              )}
+              {consumos.map((c, i) => (
+                <div key={i} className="grid grid-cols-[2fr_1fr_auto] gap-3 items-end">
+                  <ProductSelect
+                    id={`rep-consumo-${i}`}
+                    value={c.id}
+                    onChange={(v) => editConsumos(consumos.map((x, j) => (j === i ? { ...x, id: v } : x)))}
+                    inventory={inventory}
+                    filter={(inv) => inv.category === "empaque" || inv.category === "accesorio"}
+                    searchable
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={c.qty}
+                    onChange={(e) => editConsumos(consumos.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
+                    aria-label="Cantidad de empaque"
+                    className={inputCls}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => editConsumos(consumos.filter((_, j) => j !== i))}
+                    className="p-3 rounded-xl text-foreground/30 hover:text-red-500 hover:bg-red-50"
+                    aria-label="Quitar empaque"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => editConsumos([...consumos, { id: "", qty: "" }])}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-foreground/20 text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Agregar empaque
+              </button>
+            </div>
+
+            <FeedbackBanner feedback={feedback} />
+            <button
+              type="submit"
+              disabled={isPending || calc.errors.length > 0}
+              className="flex items-center gap-2 px-8 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-2xl transition-all disabled:opacity-60"
+            >
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shuffle className="w-4 h-4" />}
+              {isPending ? "Registrando..." : "Registrar Reempaque"}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Historial */}
+      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
+          <h3 className="font-serif text-lg">
+            Historial <span className="text-foreground/40 text-base font-sans">· {batches.length}</span>
+          </h3>
+          <button onClick={loadHistory} className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40" aria-label="Recargar historial">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+        {loading || batches.length === 0 ? (
+          <HistoryLoadingOrEmpty loading={loading} empty={batches.length === 0} />
+        ) : (
+          <div className="divide-y divide-foreground/5">
+            {batches.map((b) => {
+              const movs = (b.movements ?? []) as {
+                id: string;
+                quantity: number;
+                molienda: string | null;
+                entry_type: string | null;
+                reason: string | null;
+                inventory: unknown;
+              }[];
+              const line = (m: (typeof movs)[number]) => {
+                const inv = getRelation(m.inventory);
+                return (
+                  <li key={m.id} className="flex items-center gap-2 text-sm">
+                    <span className={`font-bold ${m.quantity < 0 ? "text-red-600" : "text-emerald-700"}`}>
+                      {m.quantity > 0 ? "+" : "−"}{fmtQty(Math.abs(Number(m.quantity)))} {inv?.unit}
+                    </span>
+                    <span>{inv?.product_name}</span>
+                    {m.molienda && <MoliendaBadge value={m.molienda} />}
+                  </li>
+                );
+              };
+              const coffee = movs.filter((m) => m.entry_type !== "MAT");
+              const opened = coffee.filter((m) => m.quantity < 0);
+              const packed = coffee.filter((m) => m.quantity > 0);
+              const pkg = movs.filter((m) => m.entry_type === "MAT");
+              return (
+                <div key={b.id} className="px-6 py-5 grid grid-cols-1 lg:grid-cols-[140px_1fr_1fr_200px_auto] gap-4 items-start">
+                  <div>
+                    <p className="text-sm font-bold">{fmtDate(b.movement_date)}</p>
+                    {b.notes && <p className="text-xs text-foreground/50 mt-1">{b.notes}</p>}
+                  </div>
+                  <div>
+                    <p className={labelCls}>Abierto</p>
+                    <ul className="space-y-1">{opened.map(line)}</ul>
+                  </div>
+                  <div>
+                    <p className={labelCls}>Empacado</p>
+                    <ul className="space-y-1">{packed.map(line)}</ul>
+                    {pkg.length > 0 && (
+                      <p className="text-[10px] text-foreground/40 mt-2">
+                        Empaques: {pkg.map((m) => `${fmtQty(Math.abs(Number(m.quantity)))} ${getRelation(m.inventory)?.product_code}`).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-xs text-foreground/60 space-y-0.5">
+                    <p>Entró {fmtKg(Number(b.input_kg))} · salió {fmtKg(Number(b.output_kg))}</p>
+                    {Number(b.sobrante_kg) > 0 && (
+                      <p className="font-bold text-[#C59F59]">
+                        Sobrante {fmtKg(Number(b.sobrante_kg))} → {b.sobrante_destino === "merma" ? "merma" : "granel"}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    {era === "v2" &&
+                      (deletingId === b.id ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleDelete(b.id)}
+                            disabled={isPending}
+                            className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            Revertir
+                          </button>
+                          <button
+                            onClick={() => setDeletingId(null)}
+                            className="px-3 py-1.5 rounded-lg border border-foreground/10 text-[10px] font-bold uppercase tracking-widest"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeletingId(b.id)}
+                          className="p-2 rounded-lg text-foreground/30 hover:text-red-500 hover:bg-red-50"
+                          title="Revertir reempaque completo"
+                          aria-label="Revertir reempaque"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Kardex Tab ──────────────────────────────────────────────────────────────
 
 type KardexData = Awaited<ReturnType<typeof getKardex>>;
@@ -3897,6 +4424,7 @@ const KARDEX_ORIGIN: Record<string, string> = {
   prod_consumo: "Consumo producción",
   prod_alta: "Empaque / Alta",
   cold_brew: "Cold Brew",
+  reempaque: "Reempaque",
 };
 
 function kardexOrigin(row: { tab_source: string | null; type: string; income_id: string | null }) {
@@ -4693,6 +5221,7 @@ const TAB_LABELS: Record<string, string> = {
   trilla: "Trilla",
   prod_consumo: "Prod. Consumos",
   prod_alta: "Prod. Altas",
+  reempaque: "Reempaque",
 };
 
 function KpiCard({
@@ -5551,6 +6080,9 @@ export default function InventoryClient({
       )}
       {activeTab === "tostion" && (
         <TostionTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
+      )}
+      {activeTab === "reempaque" && (
+        <ReempaqueTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
       )}
       {activeTab === "prod_altas" && (
         <ProdAltasTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
