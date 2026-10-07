@@ -16,6 +16,7 @@ import {
 import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
 import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
+import { isSellable } from "@/utils/inventory/sellable";
 
 export async function checkIsAdmin() {
   const supabase = await createClient();
@@ -409,11 +410,15 @@ export async function createManualAdminOrder(
     if (item.quantity <= 0) continue;
     const { data: matInfo, error } = await supabase
       .from('inventory')
-      .select('current_stock, product_name')
+      .select('*')
       .eq('id', item.inventory_id)
       .single();
     
     if (error || !matInfo) throw new Error(`Producto en inventario no encontrado: ${item.product_name}`);
+    // Orders only carry what we sell, never supplies (bolsas, pergamino…).
+    if (!isSellable(matInfo)) {
+      throw new Error(`${matInfo.product_name} es un insumo, no un producto de venta. Márcalo como "Se vende" en Inventario si sí lo vendes.`);
+    }
     // Stock validation temporarily bypassed for sales without inventory restrictions
     // if (Number(matInfo.current_stock) < item.quantity) throw new Error(`Stock insuficiente: ${matInfo.product_name}.`);
   }
@@ -3046,6 +3051,29 @@ export async function migrateLegacyAltas() {
   } catch (err: any) {
     return { success: false, message: "ERROR: " + err.message };
   }
+}
+
+/** Whether an item is offered when creating orders (vs. a supply/material). */
+export async function setInventorySellable(id: string, sellable: boolean) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('inventory')
+    .update({ is_sellable: sellable })
+    .eq('id', id);
+  if (error) {
+    throw new Error(
+      error.message.includes('is_sellable')
+        ? 'Falta aplicar la migración 20261008000000_inventory_is_sellable.sql'
+        : error.message
+    );
+  }
+
+  revalidatePath('/admin/inventory');
+  revalidatePath('/admin/orders');
+  return { success: true };
 }
 
 export async function createInventoryProduct(data: {

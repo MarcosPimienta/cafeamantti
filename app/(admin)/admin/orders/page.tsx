@@ -19,9 +19,11 @@ export default async function AdminOrdersPage() {
         client:client_id ( name )
       `)
       .order('created_at', { ascending: false }),
+    // '*' so is_sellable comes along when its migration is applied; the
+    // order forms fall back to the product-code rule otherwise.
     supabase
       .from('inventory')
-      .select('id, product_code, product_name, current_stock')
+      .select('*')
       .order('product_name', { ascending: true }),
     getClientsCRM(),
     // Table exists once the tracking migration runs; until then this is just null.

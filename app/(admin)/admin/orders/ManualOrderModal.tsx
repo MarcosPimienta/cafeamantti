@@ -3,12 +3,14 @@
 import React, { useState } from "react";
 import { Plus, X, Trash2, UserRound, MapPin, CalendarClock, Package } from "lucide-react";
 import { createManualAdminOrder } from "../../actions";
+import { isSellable } from "@/utils/inventory/sellable";
 
 interface InventoryItem {
   id: string;
   product_code: string;
   product_name: string;
   current_stock: number;
+  is_sellable?: boolean | null;
 }
 
 interface ManualOrderModalProps {
@@ -83,6 +85,8 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
   const [items, setItems] = useState<ItemRow[]>([]);
 
   const isNewClient = !selectedClientId;
+  // Only what we sell — supplies (bolsas, pergamino, stickers…) stay out.
+  const sellable = inventory.filter(isSellable);
 
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
@@ -368,7 +372,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
                           className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#C59F59]/20"
                         >
                           <option value="">Seleccione producto...</option>
-                          {inventory.map(inv => (
+                          {sellable.map(inv => (
                             <option key={inv.id} value={inv.id}>
                               {inv.product_name} (Stock: {Number(inv.current_stock)})
                             </option>

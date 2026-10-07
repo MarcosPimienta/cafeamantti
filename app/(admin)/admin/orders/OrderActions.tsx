@@ -3,12 +3,14 @@
 import React, { useState } from "react";
 import { Edit, Trash2, X, Plus, UserRound, MapPin, CalendarClock, Package } from "lucide-react";
 import { deleteManualAdminOrder, updateManualAdminOrder } from "../../actions";
+import { isSellable } from "@/utils/inventory/sellable";
 
 interface InventoryItem {
   id: string;
   product_code: string;
   product_name: string;
   current_stock: number;
+  is_sellable?: boolean | null;
 }
 
 type ItemRow = {
@@ -393,11 +395,14 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                           className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#C59F59]/20 disabled:opacity-50 disabled:bg-foreground/5"
                         >
                           <option value="">Seleccione producto...</option>
-                          {inventory.map(inv => (
-                            <option key={inv.id} value={inv.id}>
-                              {inv.product_name} (Stock: {Number(inv.current_stock)})
-                            </option>
-                          ))}
+                          {/* Products we sell, plus whatever this line already had (older orders). */}
+                          {inventory
+                            .filter(inv => isSellable(inv) || inv.id === item.inventory_id)
+                            .map(inv => (
+                              <option key={inv.id} value={inv.id}>
+                                {inv.product_name} (Stock: {Number(inv.current_stock)}){isSellable(inv) ? "" : " · insumo"}
+                              </option>
+                            ))}
                         </select>
                         {!item.inventory_id && <p className="text-[10px] text-red-500 mt-1">Este producto no está mapeado a un item de inventario actual.</p>}
                       </div>

@@ -29,6 +29,7 @@ import {
   Download,
   Shuffle,
   Plus,
+  ShoppingBag,
 } from "lucide-react";
 import {
   BarChart,
@@ -71,7 +72,9 @@ import {
   createRepackBatch,
   getRepackBatches,
   deleteRepackBatch,
+  setInventorySellable,
 } from "../../actions";
+import { isSellable } from "@/utils/inventory/sellable";
 import {
   MOLIENDAS,
   MOLIENDA_LABELS,
@@ -96,6 +99,7 @@ interface InventoryItem {
   current_stock: number;
   legacy_stock?: number;
   min_stock: number;
+  is_sellable?: boolean | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -903,6 +907,25 @@ function InventarioTab({
   const [sortAsc, setSortAsc] = useState(true);
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
   const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null);
+  // Optimistic "Se vende" values until the server confirms.
+  const [sellableOverride, setSellableOverride] = useState<Record<string, boolean>>({});
+  const [sellableError, setSellableError] = useState("");
+  const [, startSellable] = useTransition();
+  const sellableOf = (item: InventoryItem) => sellableOverride[item.id] ?? isSellable(item);
+
+  function toggleSellable(item: InventoryItem) {
+    const next = !sellableOf(item);
+    setSellableOverride((m) => ({ ...m, [item.id]: next }));
+    setSellableError("");
+    startSellable(async () => {
+      try {
+        await setInventorySellable(item.id, next);
+      } catch (err: unknown) {
+        setSellableOverride((m) => ({ ...m, [item.id]: !next }));
+        setSellableError(err instanceof Error ? err.message : "No se pudo actualizar");
+      }
+    });
+  }
 
   const totalSKUs = inventory.length;
   const lowStockCount = inventory.filter((i) => i.current_stock <= i.min_stock).length;
@@ -1053,6 +1076,10 @@ function InventarioTab({
           </div>
         </div>
 
+        {sellableError && (
+          <p className="mx-5 mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{sellableError}</p>
+        )}
+
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -1073,6 +1100,7 @@ function InventarioTab({
                   onSort={(f) => toggleSort(f as keyof InventoryItem)} 
                 />
                 <th className={thCls}>Categoría</th>
+                <th className={`${thCls} text-center`} title="Se ofrece al crear órdenes de venta">Venta</th>
                 <SortableTh 
                   label="Stock" 
                   field="current_stock" 
@@ -1089,7 +1117,7 @@ function InventarioTab({
             <tbody className="divide-y divide-foreground/5">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
+                  <td colSpan={8} className="py-16 text-center">
                     <Package className="w-10 h-10 text-foreground/20 mx-auto mb-3" />
                     <p className="font-serif text-foreground/60">
                       No se encontraron productos
@@ -1125,6 +1153,30 @@ function InventarioTab({
                       >
                         {CATEGORY_LABELS[item.category] ?? item.category}
                       </span>
+                    </td>
+                    <td className={`${tdCls} text-center`}>
+                      {(() => {
+                        const on = sellableOf(item);
+                        return (
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={on}
+                            aria-label={`${item.product_name}: ${on ? "se vende" : "insumo, no se vende"}`}
+                            onClick={() => toggleSellable(item)}
+                            disabled={era !== "v2"}
+                            title={on ? "Se vende — aparece al crear órdenes" : "Insumo — no aparece en órdenes"}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all disabled:opacity-60 ${
+                              on
+                                ? "bg-[#C59F59] text-white border-[#C59F59]"
+                                : "bg-white text-foreground/40 border-foreground/10 hover:border-foreground/30"
+                            }`}
+                          >
+                            <ShoppingBag className="w-3 h-3" />
+                            {on ? "Se vende" : "Insumo"}
+                          </button>
+                        );
+                      })()}
                     </td>
                     <td className={`${tdCls} text-right`}>
                       <span
