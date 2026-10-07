@@ -345,6 +345,16 @@ async function _syncManualOrderStock(
 export async function createManualAdminOrder(
   data: {
     client_id?: string;
+    /** Name shown on the order; for a CRM client it defaults to the CRM name. */
+    customer_name?: string;
+    /** A walk-in customer to save in the CRM and link to this order. */
+    new_client?: {
+      name: string;
+      document_type?: string | null;
+      document_number?: string | null;
+    } | null;
+    delivery_due_date?: string | null;
+    notes?: string | null;
     contact_email: string;
     contact_phone: string;
     shipping_info: { address: string; details?: string; city: string; state: string };
@@ -365,6 +375,34 @@ export async function createManualAdminOrder(
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+
+  if (data.delivery_due_date && !/^\d{4}-\d{2}-\d{2}$/.test(data.delivery_due_date)) {
+    throw new Error('Fecha de entrega inválida');
+  }
+
+  // A new customer typed into the order can be saved to the CRM right away.
+  let clientId = data.client_id || null;
+  if (!clientId && data.new_client) {
+    const name = data.new_client.name?.trim();
+    if (!name) throw new Error('Escribe el nombre del cliente para guardarlo en el CRM.');
+    const { data: created, error: clientErr } = await supabase
+      .from('clients')
+      .insert({
+        name,
+        document_type: data.new_client.document_type || null,
+        document_number: data.new_client.document_number?.trim() || null,
+        email: data.contact_email && data.contact_email !== 'manual@tienda.local' ? data.contact_email : null,
+        phone: data.contact_phone && data.contact_phone !== '0000000000' ? data.contact_phone : null,
+        address: data.shipping_info.address || null,
+        city: data.shipping_info.city || null,
+        department: data.shipping_info.state || null,
+      })
+      .select('id')
+      .single();
+    if (clientErr) throw new Error(`No se pudo crear el cliente: ${clientErr.message}`);
+    clientId = created.id;
+    revalidatePath('/admin/customers');
+  }
 
   // Validate stock for all items
   for (const item of data.items) {
@@ -388,9 +426,13 @@ export async function createManualAdminOrder(
   // Insert Order
   const { data: order, error: orderErr } = await supabase.from('orders').insert({
     user_id: null,
-    client_id: data.client_id || null,
+    client_id: clientId,
     total_amount,
-    shipping_info: data.shipping_info,
+    shipping_info: {
+      ...data.shipping_info,
+      department: data.shipping_info.state,
+      recipient_name: data.customer_name?.trim() || null,
+    },
     contact_email: data.contact_email,
     contact_phone: data.contact_phone,
     status: data.status
@@ -419,6 +461,15 @@ export async function createManualAdminOrder(
     throw new Error(itemsErr.message);
   }
 
+  // Follow-up fields (later migrations): best-effort, reported back on failure.
+  const now = new Date().toISOString();
+  const { error: trackErr } = await supabase.from('orders').update({
+    delivery_due_date: data.delivery_due_date || null,
+    notes: data.notes?.trim() || null,
+    status_changed_at: now,
+    delivered_at: data.status === 'delivered' ? now : null,
+  }).eq('id', order.id);
+
   // Inventory moves only once the order is paid — same moment it enters Flujo de Caja.
   await _syncManualOrderStock(supabase, user?.id ?? null, order.id, data.status);
 
@@ -427,7 +478,13 @@ export async function createManualAdminOrder(
   revalidatePath('/admin/inventory');
   revalidatePath('/admin/inventory', 'page');
 
-  return { success: true, orderId: order.id };
+  return {
+    success: true,
+    orderId: order.id,
+    warning: trackErr
+      ? `La orden se creó, pero no se guardaron la fecha de entrega ni las notas (${trackErr.message}). ¿Ya aplicaste las migraciones?`
+      : undefined,
+  };
 }
 
 export async function deleteManualAdminOrder(orderId: string) {
