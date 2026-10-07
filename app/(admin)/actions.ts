@@ -469,23 +469,45 @@ export async function deleteManualAdminOrder(orderId: string) {
   return { success: true };
 }
 
+export type OrderItemInput = {
+  inventory_id: string;
+  product_code: string;
+  product_name: string;
+  quantity: number;
+  price: number;
+  weight?: string;
+  grind?: string;
+};
+
+/**
+ * Edits any field of an order. `items` is only sent when the products
+ * changed: then the old items and their stock movements are replaced.
+ * Otherwise products and stock are left alone (a contact fix should not
+ * rewrite inventory history). `client_update` also saves the customer's
+ * data to their CRM record.
+ */
 export async function updateManualAdminOrder(
   orderId: string,
   data: {
-    client_id?: string;
+    client_id?: string | null;
+    customer_name?: string;
     contact_email: string;
     contact_phone: string;
     shipping_info: { address: string; details?: string; city: string; state: string };
     status: string;
-    items: {
-      inventory_id: string;
-      product_code: string;
-      product_name: string;
-      quantity: number;
-      price: number;
-      weight?: string;
-      grind?: string;
-    }[];
+    delivery_due_date?: string | null;
+    notes?: string | null;
+    items?: OrderItemInput[];
+    client_update?: {
+      name: string;
+      document_type?: string | null;
+      document_number?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      address?: string | null;
+      city?: string | null;
+      department?: string | null;
+    } | null;
   }
 ) {
   const isAdmin = await checkIsAdmin();
@@ -494,101 +516,129 @@ export async function updateManualAdminOrder(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const shortId = orderId.split('-')[0];
-  const reasonStr = `Orden Manual #${shortId}`;
+  const { data: current, error: curErr } = await supabase
+    .from('orders')
+    .select('status, shipping_info')
+    .eq('id', orderId)
+    .single();
+  if (curErr || !current) throw new Error('Orden no encontrada');
 
-  // 1. Validate stock for new items (considering what was already deducted)
-  // To keep it simple and safe: Revert old inventory, then check new inventory, then apply new inventory.
-  // Actually, checking stock should be done before mutating. 
-  // For a robust implementation:
-  
-  // A. Revert old inventory movements
-  const { data: oldMovements } = await supabase
-    .from('inventory_movements')
-    .select('id, inventory_id, quantity')
-    .eq('reason', reasonStr);
+  if (data.delivery_due_date && !/^\d{4}-\d{2}-\d{2}$/.test(data.delivery_due_date)) {
+    throw new Error('Fecha de entrega inválida');
+  }
+  if (data.client_update && !data.client_update.name?.trim()) {
+    throw new Error('El nombre del cliente es obligatorio para actualizar el CRM.');
+  }
 
-  if (oldMovements) {
-    for (const mov of oldMovements) {
+  // ── Products (only when they changed) ───────────────────
+  let total_amount: number | undefined;
+  if (data.items) {
+    if (data.items.length === 0) throw new Error('Debes agregar al menos un producto.');
+    for (const item of data.items) {
+      if (item.quantity <= 0) continue;
+      const { data: matInfo, error } = await supabase
+        .from('inventory')
+        .select('id')
+        .eq('id', item.inventory_id)
+        .single();
+      if (error || !matInfo) throw new Error(`Producto en inventario no encontrado: ${item.product_name}`);
+    }
+
+    // Revert the old salidas; the sync below re-applies them if the order is paid.
+    const reasonStr = `Orden Manual #${orderId.split('-')[0]}`;
+    const { data: oldMovements } = await supabase
+      .from('inventory_movements')
+      .select('id, inventory_id, quantity')
+      .eq('reason', reasonStr);
+    for (const mov of oldMovements ?? []) {
       await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
     }
-    await supabase.from('inventory_movements').delete().eq('reason', reasonStr);
-  }
-
-  // B. Delete old order items
-  await supabase.from('order_items').delete().eq('order_id', orderId);
-
-  // C. Validate new stock
-  for (const item of data.items) {
-    if (item.quantity <= 0) continue;
-    const { data: matInfo, error } = await supabase
-      .from('inventory')
-      .select('current_stock, product_name')
-      .eq('id', item.inventory_id)
-      .single();
-    
-    if (error || !matInfo) throw new Error(`Producto en inventario no encontrado: ${item.product_name}`);
-    // Stock validation temporarily bypassed for sales without inventory restrictions
-    /*
-    if (Number(matInfo.current_stock) < item.quantity) {
-      // Re-apply old movements to restore state since we are aborting!
-      if (oldMovements) {
-        for (const mov of oldMovements) {
-          await _updateStockBy(supabase, mov.inventory_id, Number(mov.quantity));
-          await supabase.from('inventory_movements').insert({
-            inventory_id: mov.inventory_id,
-            type: 'salida',
-            quantity: mov.quantity,
-            reason: reasonStr,
-            created_by: user?.id,
-            tab_source: 'salida',
-          });
-        }
-      }
-      throw new Error(`Stock insuficiente: ${matInfo.product_name}.`);
+    if (oldMovements?.length) {
+      await supabase.from('inventory_movements').delete().eq('reason', reasonStr);
     }
-    */
+
+    await supabase.from('order_items').delete().eq('order_id', orderId);
+    const { error: itemsErr } = await supabase.from('order_items').insert(
+      data.items.map((item) => ({
+        order_id: orderId,
+        product_id: item.product_name,
+        inventory_id: item.inventory_id || null,
+        weight: item.weight || null,
+        grind: item.grind || null,
+        quantity: item.quantity,
+        price_at_time: item.price,
+      }))
+    );
+    if (itemsErr) throw new Error(itemsErr.message);
+    total_amount = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }
 
-  // D. Insert new order items and update order details
-  let total_amount = 0;
-  for (const item of data.items) {
-    total_amount += item.price * item.quantity;
-  }
+  // ── Order fields ────────────────────────────────────────
+  // Merge, so fields this form does not show (siigo_invoice, source…) survive.
+  const shipping_info = {
+    ...(current.shipping_info ?? {}),
+    address: data.shipping_info.address,
+    details: data.shipping_info.details ?? '',
+    city: data.shipping_info.city,
+    state: data.shipping_info.state,
+    department: data.shipping_info.state,
+    ...(data.customer_name !== undefined ? { recipient_name: data.customer_name.trim() || null } : {}),
+  };
 
   const { error: orderErr } = await supabase.from('orders').update({
     client_id: data.client_id || null,
-    total_amount,
-    shipping_info: data.shipping_info,
+    shipping_info,
     contact_email: data.contact_email,
     contact_phone: data.contact_phone,
-    status: data.status
+    status: data.status,
+    ...(total_amount !== undefined ? { total_amount } : {}),
   }).eq('id', orderId);
-
   if (orderErr) throw new Error(orderErr.message);
 
-  const orderItemsData = data.items.map(item => ({
-    order_id: orderId,
-    product_id: item.product_name,
-    inventory_id: item.inventory_id || null,
-    weight: item.weight || null,
-    grind: item.grind || null,
-    quantity: item.quantity,
-    price_at_time: item.price
-  }));
+  // Follow-up fields live in later migrations; a failure here must not undo
+  // the save above, but it is reported back instead of being swallowed.
+  const statusChanged = current.status !== data.status;
+  const now = new Date().toISOString();
+  const { error: trackErr } = await supabase.from('orders').update({
+    delivery_due_date: data.delivery_due_date || null,
+    notes: data.notes?.trim() || null,
+    ...(statusChanged
+      ? { status_changed_at: now, delivered_at: data.status === 'delivered' ? now : null }
+      : {}),
+  }).eq('id', orderId);
 
-  const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsData);
-  if (itemsErr) throw new Error(itemsErr.message);
-
-  // E. Re-apply inventory only if the order is paid
+  // ── Stock follows payment state ─────────────────────────
   await _syncManualOrderStock(supabase, user?.id ?? null, orderId, data.status);
+
+  // ── CRM record ──────────────────────────────────────────
+  if (data.client_id && data.client_update) {
+    const c = data.client_update;
+    const { error: clientErr } = await supabase.from('clients').update({
+      name: c.name.trim(),
+      document_type: c.document_type || null,
+      document_number: c.document_number || null,
+      email: c.email || null,
+      phone: c.phone || null,
+      address: c.address || null,
+      city: c.city || null,
+      department: c.department || null,
+      updated_at: now,
+    }).eq('id', data.client_id);
+    if (clientErr) throw new Error(`La orden se guardó, pero no la ficha del cliente: ${clientErr.message}`);
+    revalidatePath('/admin/customers');
+  }
 
   revalidatePath('/admin');
   revalidatePath('/admin/orders');
   revalidatePath('/admin/inventory');
   revalidatePath('/admin/inventory', 'page');
 
-  return { success: true };
+  return {
+    success: true,
+    warning: trackErr
+      ? `No se guardaron la fecha de entrega ni las notas (${trackErr.message}). ¿Ya aplicaste las migraciones?`
+      : undefined,
+  };
 }
 
 export async function createManualCustomer(data: {
