@@ -14,6 +14,8 @@ import {
   PROFILE_LABELS,
 } from "./coffeeProfiles";
 import { ensureCashflowDate } from "./admin/cashflow/actions";
+import { sendWhatsApp } from "@/utils/whatsapp";
+import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
 
 export async function checkIsAdmin() {
   const supabase = await createClient();
@@ -131,13 +133,72 @@ export async function updateOrderStatus(orderId: string, newStatus: string) {
 
   if (error) throw new Error(error.message);
 
+  // Follow-up timestamps for the orders board. Separate, best-effort update
+  // so status changes keep working even before the tracking migration runs.
+  const now = new Date().toISOString();
+  const { error: trackErr } = await supabase
+    .from('orders')
+    .update({
+      status_changed_at: now,
+      delivered_at: newStatus === 'delivered' ? now : null,
+    })
+    .eq('id', orderId);
+  if (trackErr) console.warn('updateOrderStatus tracking fields:', trackErr.message);
+
   await _syncManualOrderStock(supabase, user?.id ?? null, orderId, newStatus);
 
   revalidatePath('/admin');
   revalidatePath('/admin/orders');
   revalidatePath('/admin/inventory');
-  
+
   return { success: true };
+}
+
+/** Promised delivery day shown on the orders board; null clears it. */
+export async function updateOrderDueDate(orderId: string, dueDate: string | null) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) throw new Error('Fecha inválida');
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('orders')
+    .update({ delivery_due_date: dueDate || null })
+    .eq('id', orderId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/admin/orders');
+  return { success: true };
+}
+
+/**
+ * Sends the "órdenes por entregar" summary to the company WhatsApp now, and
+ * logs the attempt (sent or failed) in notification_logs.
+ */
+export async function sendPendingOrdersWhatsApp() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const pending = await getPendingDeliveries(supabase);
+  const message = buildPendingDeliveriesMessage(pending);
+  const result = await sendWhatsApp(message);
+
+  await supabase.from('notification_logs').insert({
+    channel: 'whatsapp',
+    kind: 'pending_deliveries',
+    trigger: 'manual',
+    recipients: result.recipients,
+    message,
+    success: result.success,
+    error: result.error ?? null,
+    created_by: user?.id ?? null,
+  });
+
+  revalidatePath('/admin/orders');
+  return { ...result, message, pendingCount: pending.length };
 }
 
 export async function updateSubscriptionStatus(subId: string, newStatus: string) {
