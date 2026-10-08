@@ -15,7 +15,6 @@ import {
   type PLReportResult,
 } from './calculations';
 
-export type { PLReportResult };
 
 /**
  * El flujo de caja ya no mueve inventario. Un ingreso que nació de una Salida

@@ -19,8 +19,8 @@ import {
   getMissingCashflowDays, getMonthlyPLReport,
   markDateAsNoMovements,
   updateExpenseDirect, updateIncomeDirect,
-  type PLReportResult,
 } from "./actions";
+import type { PLReportResult } from "./calculations";
 import { EXPENSE_CATEGORY_TYPE_MAP, type ExpenseType } from "./types";
 
 // ─────────────────────────────────────────────────────────────
