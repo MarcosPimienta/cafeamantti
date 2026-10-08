@@ -7,7 +7,6 @@ import {
   ShoppingBag,
   Coffee,
   Users,
-  Settings,
   Package,
   FileText,
   Wallet,
@@ -29,22 +28,32 @@ const NAV_ITEMS = [
   { href: "/admin/cashflow", label: "Flujo de Caja", Icon: Wallet },
 ];
 
-export default function AdminNav() {
-  const pathname = usePathname();
-
-  function isActive(href: string, exact = false) {
-    if (exact) return pathname === href;
-    return pathname.startsWith(href);
+/** The single nav item for this path: the longest href that matches. */
+function activeHref(pathname: string): string | null {
+  let best: string | null = null;
+  for (const { href, exact } of NAV_ITEMS) {
+    const matches = exact
+      ? pathname === href
+      : pathname === href || pathname.startsWith(`${href}/`);
+    if (matches && (!best || href.length > best.length)) best = href;
   }
+  return best;
+}
+
+export default function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const current = activeHref(pathname);
 
   return (
-    <nav className="flex-1 p-6 space-y-2">
-      {NAV_ITEMS.map(({ href, label, Icon, exact }) => {
-        const active = isActive(href, exact);
+    <nav className="flex-1 p-4 lg:p-6 space-y-1.5">
+      {NAV_ITEMS.map(({ href, label, Icon }) => {
+        const active = href === current;
         return (
           <Link
             key={href}
             href={href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
             className={`flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl transition-all group ${
               active
                 ? "bg-[#C59F59] text-white shadow-sm"
@@ -52,7 +61,7 @@ export default function AdminNav() {
             }`}
           >
             <Icon
-              className={`w-4 h-4 transition-colors ${
+              className={`w-4 h-4 shrink-0 transition-colors ${
                 active ? "text-white/80" : "text-foreground/40 group-hover:text-white/80"
               }`}
             />

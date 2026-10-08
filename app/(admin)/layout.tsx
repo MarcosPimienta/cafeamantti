@@ -4,6 +4,7 @@ import { Coffee, LogOut, Settings } from "lucide-react";
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import AdminNav from "./AdminNav";
+import AdminMobileNav from "./AdminMobileNav";
 
 export default async function AdminLayout({
   children,
@@ -30,8 +31,9 @@ export default async function AdminLayout({
   return (
     <div className="min-h-screen bg-[#f9f7f0] flex font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-foreground/5 hidden md:flex flex-col">
-        <div className="p-8 border-b border-foreground/5 flex items-center justify-center">
+      {/* Sticky so the menu stays in reach while long pages scroll. */}
+      <aside className="w-56 lg:w-64 shrink-0 bg-white border-r border-foreground/5 hidden md:flex flex-col sticky top-0 h-screen overflow-y-auto">
+        <div className="p-6 lg:p-8 border-b border-foreground/5 flex items-center justify-center">
           <Link href="/">
             <Coffee className="w-10 h-10 text-[#C59F59]" />
           </Link>
@@ -39,7 +41,7 @@ export default async function AdminLayout({
 
         <AdminNav />
 
-        <div className="p-6 border-t border-foreground/5">
+        <div className="p-4 lg:p-6 border-t border-foreground/5">
           <Link href="/admin/settings" className="flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl text-foreground/60 hover:bg-foreground/5 transition-all mb-2">
             <Settings className="w-4 h-4 text-foreground/40" />
             Ajustes
@@ -54,16 +56,13 @@ export default async function AdminLayout({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-h-screen">
-        {/* Mobile Header */}
-        <header className="md:hidden bg-white px-6 py-4 flex items-center justify-between border-b border-foreground/5 sticky top-0 z-10">
-          <Link href="/">
-            <Coffee className="w-8 h-8 text-[#C59F59]" />
-          </Link>
-          <h1 className="font-serif text-lg">Amantti Admin</h1>
-        </header>
-        
-        <div className="flex-1 p-6 lg:p-12 overflow-y-auto">
+      {/* min-w-0 lets this flex child shrink to the viewport: wide tables and
+          the orders board scroll inside their own box instead of pushing the
+          whole page sideways. */}
+      <main className="flex-1 min-w-0 flex flex-col min-h-screen">
+        <AdminMobileNav />
+
+        <div className="flex-1 min-w-0 px-4 py-5 sm:p-6 lg:p-10 xl:p-12">
           {children}
         </div>
       </main>
