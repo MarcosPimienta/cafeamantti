@@ -30,6 +30,7 @@ import {
   Shuffle,
   Plus,
   ShoppingBag,
+  Calculator,
 } from "lucide-react";
 import {
   BarChart,
@@ -73,8 +74,11 @@ import {
   getRepackBatches,
   deleteRepackBatch,
   setInventorySellable,
+  getPackagingRecipes,
 } from "../../actions";
+import { packagingFor, type PackagingRecipes } from "@/utils/costing/packaging";
 import { isSellable } from "@/utils/inventory/sellable";
+import CostosTab from "./CostosTab";
 import {
   MOLIENDAS,
   MOLIENDA_LABELS,
@@ -82,7 +86,6 @@ import {
   isGrindTracked,
   isMolienda,
   unitWeightKg,
-  packagingCodesFor,
   bulkCodeForProfile,
   profileForCode,
   PROFILE_LABELS,
@@ -160,6 +163,7 @@ const TABS = [
   { id: "cold_brew", label: "Cold Brew (11:11)", Icon: Sparkles },
   { id: "salidas", label: "Salidas", Icon: PackageMinus },
   { id: "kardex", label: "Kardex", Icon: ScrollText },
+  { id: "costos", label: "Costos", Icon: Calculator },
   { id: "reportes", label: "Reportes", Icon: BarChart2 },
   { id: "auditoria", label: "Auditoría", Icon: History },
 ] as const;
@@ -215,6 +219,18 @@ function getRelation(rel: any): { product_code: string; product_name: string; un
   if (!rel) return null;
   if (Array.isArray(rel)) return rel[0] ?? null;
   return rel;
+}
+
+/**
+ * Saved packaging recipes (what packing one unit consumes). Until they load,
+ * or if the table is missing, every reference uses its default recipe.
+ */
+function usePackagingRecipes(): PackagingRecipes {
+  const [recipes, setRecipes] = useState<PackagingRecipes>({});
+  useEffect(() => {
+    getPackagingRecipes().then(setRecipes).catch(() => {});
+  }, []);
+  return recipes;
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
@@ -2685,6 +2701,7 @@ function ProdAltasTab({
   };
   const [form, setForm] = useState(initForm);
   const [consumos, setConsumos] = useState<{ id: string; qty: string }[]>([]);
+  const recipes = usePackagingRecipes();
   const [records, setRecords] = useState<MovementRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -2837,34 +2854,14 @@ function ProdAltasTab({
       list.push({ id: bulkCoffee.id, qty: coffeeNeeded.toFixed(3) });
     }
 
-    // 2. Bag
-    let flavor = "FIR";
-    if (selectedProd.product_code.includes("-HON-")) flavor = "HON";
-    else if (selectedProd.product_code.includes("-MIC-")) flavor = "MIC";
-
-    let size = "";
-    if (selectedProd.product_code.includes("125G")) size = "125G";
-    else if (selectedProd.product_code.includes("250G")) size = "250G";
-    else if (selectedProd.product_code.includes("500G")) size = "500G";
-    else if (selectedProd.product_code.includes("2K5")) size = "2K5";
-
-    if (size) {
-      const bagCode = `EMP-BOLSA-${flavor}-${size}`;
-      const bagItem = inventory.find(i => i.product_code === bagCode);
-      if (bagItem) {
-        list.push({ id: bagItem.id, qty: String(qtyNum) });
-      }
-    }
-
-    // 3. Sticker
-    const stickerCode = `STK-AMT-${flavor}`;
-    const stickerItem = inventory.find(i => i.product_code === stickerCode);
-    if (stickerItem) {
-      list.push({ id: stickerItem.id, qty: String(qtyNum) });
+    // 2. Packaging: the reference's recipe (bag, sticker only if it uses one…)
+    for (const line of packagingFor(selectedProd.product_code, recipes).lines) {
+      const pkg = inventory.find(i => i.product_code === line.code);
+      if (pkg) list.push({ id: pkg.id, qty: String(qtyNum * line.qty) });
     }
 
     setConsumos(list);
-  }, [form.inventoryId, form.qty, inventory]);
+  }, [form.inventoryId, form.qty, inventory, recipes]);
 
   return (
     <div className="space-y-6">
@@ -3988,6 +3985,7 @@ function ReempaqueTab({
 
   const byId = useMemo(() => new Map(inventory.map((i) => [i.id, i])), [inventory]);
   const byCode = useMemo(() => new Map(inventory.map((i) => [i.product_code, i])), [inventory]);
+  const recipes = usePackagingRecipes();
   const repackable = (i: InventoryItem) => unitWeightKg(i.product_code) !== null;
 
   function loadHistory() {
@@ -4038,13 +4036,13 @@ function ReempaqueTab({
       const it = byId.get(l.inventoryId);
       const q = parseFloat(l.qty);
       if (!it || !(q > 0)) continue;
-      for (const code of packagingCodesFor(it.product_code)) {
-        const pkg = byCode.get(code);
-        if (pkg) need.set(pkg.id, (need.get(pkg.id) ?? 0) + q);
+      for (const line of packagingFor(it.product_code, recipes).lines) {
+        const pkg = byCode.get(line.code);
+        if (pkg) need.set(pkg.id, (need.get(pkg.id) ?? 0) + q * line.qty);
       }
     }
     return [...need].map(([id, qty]) => ({ id, qty: String(qty) }));
-  }, [destinations, byId, byCode]);
+  }, [destinations, byId, byCode, recipes]);
   const consumos = customConsumos ?? suggestedConsumos;
   const editConsumos = (next: { id: string; qty: string }[]) => setCustomConsumos(next);
 
@@ -4292,7 +4290,7 @@ function ReempaqueTab({
                 <div>
                   <p className="text-sm font-bold">4. Empaques consumidos</p>
                   <p className="text-xs text-foreground/50">
-                    Sugeridos según el destino (bolsa y sticker). Para muestras, cambia la bolsa por la blanca de muestras.
+                    Sugeridos según la receta de empaque de cada destino (Inventario → Costos). Para muestras, cambia la bolsa por la blanca de muestras.
                   </p>
                 </div>
                 {customConsumos && (
@@ -6146,6 +6144,7 @@ export default function InventoryClient({
         <SalidasTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
       )}
       {activeTab === "kardex" && <KardexTab inventory={displayedInventory} era={era} />}
+      {activeTab === "costos" && <CostosTab />}
       {activeTab === "reportes" && <ReportesTab inventory={displayedInventory} era={era} />}
       {activeTab === "auditoria" && <AuditoriaTab inventory={displayedInventory} />}
     </div>

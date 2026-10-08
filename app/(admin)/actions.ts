@@ -18,6 +18,14 @@ import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/ord
 import { isSellable } from "@/utils/inventory/sellable";
 import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
 import { buildProductKardex, buildGeneralKardex } from "@/utils/inventory/kardex";
+import {
+  buildCostSheet,
+  DEFAULT_COST_SETTINGS,
+  type CostItem,
+  type CostSettings,
+  type SoldLine,
+} from "@/utils/costing/costPerKg";
+import { cleanRecipe, type PackagingLine, type PackagingRecipes } from "@/utils/costing/packaging";
 
 export async function checkIsAdmin() {
   const supabase = await createClient();
@@ -2325,6 +2333,239 @@ export async function deleteRepackBatch(batchId: string) {
     success: true,
     updates: (fresh ?? []).map((f) => ({ id: f.id as string, newStock: Number(f.current_stock) })),
   };
+}
+
+// ============================================================
+// COSTEO (direct cost per kg of roasted coffee)
+// ============================================================
+
+/** Days of paid orders used for kg per dispatch and selling price per kg. */
+const COSTING_SALES_WINDOW_DAYS = 90;
+
+/**
+ * Everything the Costos tab needs: priced items, cost settings and the
+ * cost sheet built from real batches, verde receipts and recent paid orders.
+ */
+export async function getCostingData() {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const supabase = await createClient();
+  const since = new Date(Date.now() - COSTING_SALES_WINDOW_DAYS * 86400000).toISOString();
+
+  const [{ data: items, error: itemsErr }, { data: settingsRow }, { data: batches }, { data: verdeIn }, { data: orders }, recipes] =
+    await Promise.all([
+      // '*' so standard_cost comes along once its migration is applied.
+      supabase.from('inventory').select('*').order('product_code', { ascending: true }),
+      supabase.from('cost_settings').select('*').eq('id', 1).maybeSingle(),
+      supabase
+        .from('production_batches')
+        .select('process_type, input_inventory_id, output_inventory_id, input_quantity_kg, output_quantity_kg')
+        .in('process_type', ['trilla', 'tostion'])
+        .eq('era', 'v2'),
+      supabase
+        .from('inventory_movements')
+        .select('inventory_id, quantity')
+        .eq('tab_source', 'entrada')
+        .eq('era', 'v2'),
+      supabase
+        .from('orders')
+        .select('id, order_items ( inventory_id, quantity, price_at_time )')
+        .in('status', ['paid', 'processing', 'shipped', 'delivered'])
+        .gte('created_at', since),
+      _loadPackagingRecipes(supabase),
+    ]);
+  if (itemsErr) throw new Error(itemsErr.message);
+
+  const inv = items ?? [];
+  const codeOf = new Map(inv.map((i) => [i.id as string, i.product_code as string]));
+
+  const verdePurchasedKg: Record<string, number> = {};
+  for (const m of verdeIn ?? []) {
+    const code = codeOf.get(m.inventory_id);
+    if (code?.startsWith('CAFV-') && Number(m.quantity) > 0) {
+      verdePurchasedKg[code] = (verdePurchasedKg[code] ?? 0) + Number(m.quantity);
+    }
+  }
+
+  const soldLines: SoldLine[] = [];
+  for (const o of orders ?? []) {
+    for (const it of (o.order_items ?? []) as { inventory_id: string | null; quantity: number; price_at_time: number }[]) {
+      const code = it.inventory_id ? codeOf.get(it.inventory_id) : undefined;
+      if (!code) continue;
+      soldLines.push({
+        order_id: o.id,
+        product_code: code,
+        quantity: Number(it.quantity) || 0,
+        revenue: (Number(it.price_at_time) || 0) * (Number(it.quantity) || 0),
+      });
+    }
+  }
+
+  const settings: CostSettings = settingsRow
+    ? {
+        roasting_fee_per_kg: Number(settingsRow.roasting_fee_per_kg) || 0,
+        roasting_fee_basis: settingsRow.roasting_fee_basis === 'tostado' ? 'tostado' : 'verde',
+        dispatch_cost_per_order: Number(settingsRow.dispatch_cost_per_order) || 0,
+        dispatch_kg_per_order: settingsRow.dispatch_kg_per_order != null ? Number(settingsRow.dispatch_kg_per_order) : null,
+        default_roast_yield: Number(settingsRow.default_roast_yield) || DEFAULT_COST_SETTINGS.default_roast_yield,
+        default_trilla_yield: Number(settingsRow.default_trilla_yield) || DEFAULT_COST_SETTINGS.default_trilla_yield,
+      }
+    : DEFAULT_COST_SETTINGS;
+
+  const costItems: CostItem[] = inv.map((i) => ({
+    id: i.id,
+    product_code: i.product_code,
+    product_name: i.product_name,
+    standard_cost: i.standard_cost === null || i.standard_cost === undefined ? null : Number(i.standard_cost),
+  }));
+
+  const sheet = buildCostSheet({
+    items: costItems,
+    settings,
+    batches: (batches ?? []).map((b) => ({
+      process_type: b.process_type,
+      input_code: codeOf.get(b.input_inventory_id) ?? '',
+      output_code: codeOf.get(b.output_inventory_id) ?? '',
+      input_kg: Number(b.input_quantity_kg) || 0,
+      output_kg: Number(b.output_quantity_kg) || 0,
+    })),
+    verdePurchasedKg,
+    soldLines,
+    recipes,
+  });
+
+  // Items whose price feeds the sheet: raw coffee and the packaging the
+  // roasted references consume.
+  const packaging = new Set(sheet.lines.flatMap((l) => l.packaging.map((p) => p.code)));
+  const pricedItems = costItems.filter(
+    (i) => /^(CAFV|CAPG)-/.test(i.product_code) || packaging.has(i.product_code)
+  );
+  // What a recipe can be built from: packaging and accessories.
+  const packagingOptions = inv
+    .filter((i) => i.category === 'empaque' || i.category === 'accesorio')
+    .map((i) => ({ code: i.product_code as string, name: i.product_name as string }));
+
+  return {
+    sheet,
+    settings,
+    pricedItems,
+    packagingOptions,
+    salesWindowDays: COSTING_SALES_WINDOW_DAYS,
+    migrated: settingsRow !== null && inv.some((i) => 'standard_cost' in i),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function _loadPackagingRecipes(supabase: any): Promise<PackagingRecipes> {
+  const { data, error } = await supabase.from('packaging_recipes').select('reference_code, items');
+  if (error) return {}; // table not migrated yet → everything uses the default recipe
+  const out: PackagingRecipes = {};
+  for (const r of data ?? []) out[r.reference_code] = cleanRecipe(Array.isArray(r.items) ? r.items : []);
+  return out;
+}
+
+/** Saved packaging recipes, for the consumption suggested in Altas and Reempaque. */
+export async function getPackagingRecipes(): Promise<PackagingRecipes> {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+  return _loadPackagingRecipes(await createClient());
+}
+
+/**
+ * What packing one unit of `referenceCode` consumes. An empty list means the
+ * reference uses no packaging; `null` drops the saved recipe and goes back
+ * to the default (bag + profile sticker).
+ */
+export async function savePackagingRecipe(referenceCode: string, lines: PackagingLine[] | null) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+  if (!referenceCode.startsWith('CAFT-')) throw new Error('Solo el café tostado tiene receta de empaque.');
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (lines === null) {
+    const { error } = await supabase.from('packaging_recipes').delete().eq('reference_code', referenceCode);
+    if (error) throw new Error(error.message);
+  } else {
+    const items = cleanRecipe(lines);
+    if (items.length) {
+      const { data: found } = await supabase.from('inventory').select('product_code').in('product_code', items.map((i) => i.code));
+      const known = new Set((found ?? []).map((f) => f.product_code));
+      const unknown = items.filter((i) => !known.has(i.code)).map((i) => i.code);
+      if (unknown.length) throw new Error(`No existen en el inventario: ${unknown.join(', ')}`);
+    }
+    const { error } = await supabase
+      .from('packaging_recipes')
+      .upsert(
+        { reference_code: referenceCode, items, updated_by: user?.id ?? null, updated_at: new Date().toISOString() },
+        { onConflict: 'reference_code' }
+      );
+    if (error) {
+      throw new Error(error.message.includes('packaging_recipes') ? 'Falta aplicar la migración 20261009010000_packaging_recipes.sql' : error.message);
+    }
+  }
+  revalidatePath('/admin/inventory');
+  return { success: true };
+}
+
+/** Standard cost of one item ($/kg for coffee, $/unidad for packaging); null clears it. */
+export async function updateStandardCost(inventoryId: string, cost: number | null) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+  if (cost !== null && !(Number.isFinite(cost) && cost >= 0)) throw new Error('El costo debe ser un número mayor o igual a cero.');
+
+  const supabase = await createClient();
+  const { error } = await supabase.from('inventory').update({ standard_cost: cost }).eq('id', inventoryId);
+  if (error) {
+    throw new Error(
+      error.message.includes('standard_cost') ? 'Falta aplicar la migración 20261009000000_costing.sql' : error.message
+    );
+  }
+  revalidatePath('/admin/inventory');
+  return { success: true };
+}
+
+export async function updateCostSettings(patch: Partial<CostSettings>) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+
+  const clean: Record<string, unknown> = {};
+  const nonNegative = (k: keyof CostSettings) => {
+    const v = patch[k];
+    if (v === undefined) return;
+    if (!(typeof v === 'number' && Number.isFinite(v) && v >= 0)) throw new Error('Los valores deben ser números mayores o iguales a cero.');
+    clean[k] = v;
+  };
+  nonNegative('roasting_fee_per_kg');
+  nonNegative('dispatch_cost_per_order');
+  if (patch.roasting_fee_basis !== undefined) {
+    if (patch.roasting_fee_basis !== 'verde' && patch.roasting_fee_basis !== 'tostado') throw new Error('Base de maquila inválida.');
+    clean.roasting_fee_basis = patch.roasting_fee_basis;
+  }
+  if (patch.dispatch_kg_per_order !== undefined) {
+    const v = patch.dispatch_kg_per_order;
+    if (v !== null && !(Number.isFinite(v) && v > 0)) throw new Error('Los kg por despacho deben ser mayores a cero.');
+    clean.dispatch_kg_per_order = v;
+  }
+  for (const k of ['default_roast_yield', 'default_trilla_yield'] as const) {
+    const v = patch[k];
+    if (v === undefined) continue;
+    if (!(Number.isFinite(v) && v > 0 && v <= 1)) throw new Error('El rendimiento debe estar entre 0 y 100 %.');
+    clean[k] = v;
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from('cost_settings')
+    .upsert({ id: 1, ...clean, updated_by: user?.id ?? null, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  if (error) {
+    throw new Error(error.message.includes('cost_settings') ? 'Falta aplicar la migración 20261009000000_costing.sql' : error.message);
+  }
+  revalidatePath('/admin/inventory');
+  return { success: true };
 }
 
 // ============================================================
