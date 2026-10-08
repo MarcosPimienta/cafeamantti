@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
+import Link from "next/link";
 import {
   Package,
   PackagePlus,
@@ -147,6 +148,18 @@ interface TrillaBatch {
 }
 
 // ─── Constants + Helpers ──────────────────────────────────────────────────────
+
+/** Entry types in Entradas: raw material, packaging/supplies, equipment. */
+type EntryType = "MP" | "MAT" | "EQP";
+const ENTRY_TYPE_LABELS: Record<EntryType, string> = {
+  MP: "Materia Prima",
+  MAT: "Material",
+  EQP: "Equipo",
+};
+/** Coffee is materia prima, equipment is equipo, everything else material. */
+function entryTypeFor(category: string): EntryType {
+  return category === "cafe" ? "MP" : category === "equipo" ? "EQP" : "MAT";
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   cafe: "Café",
@@ -1665,7 +1678,7 @@ function EntradasTab({
     inventoryId: "",
     qty: "",
     date: today(),
-    entryType: "MP" as "MP" | "MAT",
+    entryType: "MP" as EntryType,
     responsable: "",
     lote: "",
     molienda: "" as Molienda | "",
@@ -1851,6 +1864,7 @@ function EntradasTab({
                     inventoryId: v,
                     // A grind on a bag of stickers makes no sense — drop it.
                     molienda: isGrindTracked(next?.product_code) ? form.molienda : "",
+                    entryType: next ? entryTypeFor(next.category) : form.entryType,
                   });
                 }}
                 inventory={inventory}
@@ -1887,14 +1901,24 @@ function EntradasTab({
                 id="ent-type"
                 value={form.entryType}
                 onChange={(e) =>
-                  setForm({ ...form, entryType: e.target.value as "MP" | "MAT" })
+                  setForm({ ...form, entryType: e.target.value as EntryType })
                 }
                 className={`${inputCls} appearance-none cursor-pointer`}
               >
-                <option value="MP">MP — Materia Prima</option>
-                <option value="MAT">MAT — Material</option>
+                {(Object.keys(ENTRY_TYPE_LABELS) as EntryType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {t} — {ENTRY_TYPE_LABELS[t]}
+                  </option>
+                ))}
               </select>
             </div>
+            {selectedItem?.category === "equipo" && (
+              <p className="md:col-span-2 lg:col-span-3 text-xs text-foreground/60 bg-[#fdfbf7] border border-foreground/5 rounded-xl px-4 py-3">
+                Después de registrar la entrada, da de alta cada máquina con su serial en{" "}
+                <Link href="/admin/comodatos" className="underline font-bold">Comodatos</Link> para saber qué cliente la tiene.
+                Las máquinas que registres allí se cuentan contra este stock, sin duplicarlo.
+              </p>
+            )}
             <div>
               <label htmlFor="ent-resp" className={labelCls}>
                 Responsable (opcional)
@@ -2055,6 +2079,8 @@ function EntradasTab({
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                               r.entry_type === "MP"
                                 ? "bg-[#C59F59]/10 text-[#C59F59]"
+                                : r.entry_type === "EQP"
+                                ? "bg-slate-100 text-slate-700"
                                 : "bg-blue-50 text-blue-600"
                             }`}
                           >

@@ -1410,7 +1410,7 @@ export async function createEntrada(
   inventoryId: string,
   qty: number,
   date: string,
-  entryType: 'MP' | 'MAT',
+  entryType: 'MP' | 'MAT' | 'EQP',
   responsable?: string,
   lote?: string,
   molienda?: string | null
