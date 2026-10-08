@@ -30,11 +30,19 @@ export function numeroALetras(num: number): string {
           case 3: return 'TRECE';
           case 4: return 'CATORCE';
           case 5: return 'QUINCE';
+          case 6: return 'DIECISÉIS';
           default: return 'DIECI' + Unidades(unidad);
         }
       case 2:
-        if (unidad === 0) return 'VEINTE';
-        return 'VEINTI' + Unidades(unidad);
+        // Compound forms carry their written accent (RAE): veintiún, veintidós…
+        switch (unidad) {
+          case 0: return 'VEINTE';
+          case 1: return 'VEINTIÚN';
+          case 2: return 'VEINTIDÓS';
+          case 3: return 'VEINTITRÉS';
+          case 6: return 'VEINTISÉIS';
+          default: return 'VEINTI' + Unidades(unidad);
+        }
       case 3: return DecenasY('TREINTA', unidad);
       case 4: return DecenasY('CUARENTA', unidad);
       case 5: return DecenasY('CINCUENTA', unidad);
@@ -108,7 +116,9 @@ export function numeroALetras(num: number): string {
   if (cleanNum === 0) return 'CERO PESOS M/CTE';
   if (cleanNum === 1) return 'UN PESO M/CTE';
   
-  return (Millones(cleanNum) + ' PESOS M/CTE').replace(/\s+/g, ' ').trim();
+  // Exact millions take "de": "dos millones de pesos", but "dos millones cien mil pesos".
+  const exactMillions = cleanNum >= 1000000 && cleanNum % 1000000 === 0;
+  return (Millones(cleanNum) + (exactMillions ? ' DE' : '') + ' PESOS M/CTE').replace(/\s+/g, ' ').trim();
 }
 
 /**

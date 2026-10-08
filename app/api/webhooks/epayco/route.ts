@@ -2,9 +2,25 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
+/**
+ * ePayco posts its confirmation as a form (application/x-www-form-urlencoded);
+ * accept JSON too.
+ */
+async function readPayload(req: Request): Promise<Record<string, string>> {
+  const type = req.headers.get('content-type') || '';
+  if (type.includes('application/json')) return await req.json();
+  const text = await req.text();
+  return Object.fromEntries(new URLSearchParams(text));
+}
+
+/** Amounts are compared in whole pesos; ePayco sends them as "93000.00". */
+function sameAmount(a: unknown, b: unknown) {
+  return Math.abs(Math.round(Number(a)) - Math.round(Number(b))) <= 1;
+}
+
 export async function POST(req: Request) {
   try {
-    const data = await req.json();
+    const data = await readPayload(req);
 
     const p_cust_id = process.env.P_CUST_ID_CLIENTE || '';
     const p_key = process.env.P_KEY || '';
@@ -16,16 +32,22 @@ export async function POST(req: Request) {
     const x_currency_code = data.x_currency_code;
     const x_signature = data.x_signature;
     
-    // Validate signature to ensure the request is from ePayco (skip check if signature not provided in dev/testing mode)
-    if (x_signature && p_cust_id && p_key) {
-      const signature = crypto.createHash('sha256')
-        .update(`${p_cust_id}^${p_key}^${x_ref_payco}^${x_transaction_id}^${x_amount}^${x_currency_code}`)
-        .digest('hex');
-
-      if (signature !== x_signature) {
-        console.error('Invalid ePayco Signature');
-        return NextResponse.json({ error: 'Firma no válida' }, { status: 400 });
-      }
+    // Only ePayco can mark orders paid: the signature is mandatory. Without
+    // keys configured nothing can be verified, so nothing is accepted.
+    if (!p_cust_id || !p_key) {
+      console.error('ePayco webhook: P_CUST_ID_CLIENTE / P_KEY not configured');
+      return NextResponse.json({ error: 'Webhook no configurado' }, { status: 500 });
+    }
+    const expected = crypto.createHash('sha256')
+      .update(`${p_cust_id}^${p_key}^${x_ref_payco}^${x_transaction_id}^${x_amount}^${x_currency_code}`)
+      .digest('hex');
+    const given = String(x_signature || '');
+    if (
+      given.length !== expected.length ||
+      !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected))
+    ) {
+      console.error('Invalid ePayco Signature');
+      return NextResponse.json({ error: 'Firma no válida' }, { status: 400 });
     }
 
     const orderId = String(data.x_id_invoice || '');
@@ -124,6 +146,22 @@ export async function POST(req: Request) {
       newStatus = 'cancelled';
     }
     
+    // A payment only settles the order it was meant for: the amount must match.
+    if (newStatus === 'paid') {
+      const { data: order } = await supabaseAdmin
+        .from('orders')
+        .select('total_amount')
+        .eq('id', orderId)
+        .single();
+      if (!order) {
+        return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
+      }
+      if (!sameAmount(order.total_amount, x_amount)) {
+        console.error(`ePayco amount mismatch for order ${orderId}: paid ${x_amount}, expected ${order.total_amount}`);
+        return NextResponse.json({ error: 'El monto pagado no coincide con el pedido' }, { status: 400 });
+      }
+    }
+
     if (newStatus !== 'pending') {
       const { error } = await supabaseAdmin
         .from('orders')

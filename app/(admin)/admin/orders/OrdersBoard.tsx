@@ -39,29 +39,24 @@ import {
 } from "lucide-react";
 import { updateOrderStatus, updateOrderDueDate, sendPendingOrdersWhatsApp } from "../../actions";
 import ManualOrderModal from "./ManualOrderModal";
+import {
+  type BoardOrder,
+  UNDELIVERED,
+  NEXT_STATUS,
+  DELIVERED_WINDOW_DAYS,
+  bogotaToday,
+  relDays,
+  fmtDay,
+  customerOf,
+  siigoOf,
+  dueState,
+  waLink,
+  groupOrdersByStatus,
+} from "./boardUtils";
 import OrderActions from "./OrderActions";
 
 // ─── Types & vocabulary ───────────────────────────────────────────────────────
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type BoardOrder = {
-  id: string;
-  status: string;
-  total_amount: number;
-  created_at: string;
-  updated_at?: string | null;
-  status_changed_at?: string | null;
-  delivered_at?: string | null;
-  delivery_due_date?: string | null;
-  contact_email?: string | null;
-  contact_phone?: string | null;
-  shipping_info?: any;
-  siigo_invoice?: string | null;
-  client?: { name: string | null } | { name: string | null }[] | null;
-  order_items?: any[];
-  [key: string]: any;
-};
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 type InventoryItem = { id: string; product_code: string; product_name: string; current_stock: number };
 
@@ -90,61 +85,10 @@ function StatusIcon({ status, size = "md" }: { status: string; size?: "sm" | "md
   );
 }
 const LABEL: Record<string, string> = Object.fromEntries(COLUMNS.map((c) => [c.id, c.label]));
-const UNDELIVERED = new Set(["pending", "paid", "processing", "shipped"]);
-/** One-tap "advance" on mobile, where there is no drag and drop. */
-const NEXT_STATUS: Record<string, string> = {
-  pending: "paid",
-  paid: "processing",
-  processing: "shipped",
-  shipped: "delivered",
-};
-const DELIVERED_WINDOW_DAYS = 30;
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const cop = (n: number) =>
   new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
-
-/** Today in Colombia (UTC-5) as YYYY-MM-DD. */
-const bogotaToday = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
-
-function daysBetween(fromIso: string, to = Date.now()) {
-  return Math.max(0, Math.floor((to - new Date(fromIso).getTime()) / 86400000));
-}
-
-function relDays(iso: string) {
-  const d = daysBetween(iso);
-  return d === 0 ? "hoy" : d === 1 ? "ayer" : `hace ${d} d`;
-}
-
-function fmtDay(ymd: string) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("es-CO", { day: "numeric", month: "short" });
-}
-
-function customerOf(o: BoardOrder) {
-  const client = Array.isArray(o.client) ? o.client[0] : o.client;
-  return client?.name || o.shipping_info?.recipient_name || o.contact_email || "Sin cliente";
-}
-
-function siigoOf(o: BoardOrder): string | null {
-  return o.siigo_invoice || o.shipping_info?.siigo_invoice || null;
-}
-
-/** Due-date state of an order that is not delivered yet. */
-function dueState(o: BoardOrder, today: string): "overdue" | "today" | "soon" | "later" | null {
-  if (!o.delivery_due_date || !UNDELIVERED.has(o.status)) return null;
-  if (o.delivery_due_date < today) return "overdue";
-  if (o.delivery_due_date === today) return "today";
-  const diff = (new Date(o.delivery_due_date).getTime() - new Date(today).getTime()) / 86400000;
-  return diff <= 2 ? "soon" : "later";
-}
-
-function waLink(phone: string | null | undefined) {
-  const digits = (phone || "").replace(/\D/g, "");
-  if (digits.length < 7) return null;
-  return `https://wa.me/${digits.length === 10 ? `57${digits}` : digits}`;
-}
 
 // ─── Board ────────────────────────────────────────────────────────────────────
 
@@ -211,25 +155,10 @@ export default function OrdersBoard({
     });
   }, [orders, search, onlyOverdue, today]);
 
-  const byColumn = useMemo(() => {
-    const map = new Map<string, BoardOrder[]>(COLUMNS.map((c) => [c.id, []]));
-    for (const o of filtered) {
-      if (o.status === "delivered" && !allDelivered) {
-        const when = o.delivered_at || o.status_changed_at || o.updated_at || o.created_at;
-        if (daysBetween(when) > DELIVERED_WINDOW_DAYS) continue;
-      }
-      (map.get(o.status) ?? map.get("pending"))!.push(o);
-    }
-    // Overdue and soonest-due first, then oldest first: what needs attention on top.
-    for (const list of map.values()) {
-      list.sort((a, b) => {
-        const da = a.delivery_due_date || "9999";
-        const db = b.delivery_due_date || "9999";
-        return da === db ? a.created_at.localeCompare(b.created_at) : da.localeCompare(db);
-      });
-    }
-    return map;
-  }, [filtered, allDelivered]);
+  const byColumn = useMemo(
+    () => groupOrdersByStatus(filtered, COLUMNS.map((c) => c.id), { allDelivered }),
+    [filtered, allDelivered]
+  );
 
   const pending = orders.filter((o) => UNDELIVERED.has(o.status));
   const overdueCount = pending.filter((o) => dueState(o, today) === "overdue").length;

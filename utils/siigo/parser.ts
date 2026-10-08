@@ -207,6 +207,16 @@ export function parseNumber(val: any): number {
     } else {
       str = str.replace(/,/g, '');
     }
+  } else if (str.includes('.')) {
+    // Only dots: Colombian exports use the dot as thousands separator
+    // ("12.500", "1.234.567"). Keep it as a decimal point only when it
+    // cannot be a thousands group ("12.5", "0.125").
+    const parts = str.split('.');
+    const groupsOfThree = parts.slice(1).every((p) => p.length === 3);
+    const leadsWithZero = /^-?0$/.test(parts[0]);
+    if (parts.length > 2 || (groupsOfThree && !leadsWithZero)) {
+      str = parts.join('');
+    }
   }
 
   const num = parseFloat(str);
@@ -271,10 +281,10 @@ export function detectColumnMapping(headers: string[]): ColumnMapping {
     notes: '',
   };
 
-  const normalizedHeaders = headers.map(h => ({
-    original: h,
-    normalized: normalizeKey(h),
-  }));
+  // Blank or symbol-only headers ("#", "  ") carry no meaning; never map them.
+  const normalizedHeaders = headers
+    .map(h => ({ original: h, normalized: normalizeKey(h) }))
+    .filter(nh => nh.normalized.length > 0);
 
   const assignedOriginals = new Set<string>();
 
@@ -417,11 +427,16 @@ export function matchInventoryItem(
     const byCode = inventory.find(i => normalizeKey(i.product_code) === cleanCode);
     if (byCode) return byCode;
 
-    // Partial code match (e.g. "CAFT-250G" inside "PROD-CAFT-250G")
-    const byCodePart = inventory.find(
-      i => normalizeKey(i.product_code).includes(cleanCode) || cleanCode.includes(normalizeKey(i.product_code))
-    );
-    if (byCodePart) return byCodePart;
+    // Partial code match (e.g. "CAFT-250G" inside "PROD-CAFT-250G"). Only for
+    // codes with letters: a bare Siigo number like "001" would otherwise be
+    // "found" inside "CAFT-001" and silently pick the wrong product.
+    if (/[a-z]/.test(cleanCode) && cleanCode.length >= 4) {
+      const byCodePart = inventory.find(i => {
+        const invCode = normalizeKey(i.product_code);
+        return invCode.length >= 4 && (invCode.includes(cleanCode) || cleanCode.includes(invCode));
+      });
+      if (byCodePart) return byCodePart;
+    }
   }
 
   // 2. Try matching by product_name

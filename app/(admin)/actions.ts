@@ -9,7 +9,6 @@ import {
   isGrindTracked,
   isMolienda,
   profileForCode,
-  unitWeightKg,
   bulkCodeForProfile,
   PROFILE_LABELS,
 } from "./coffeeProfiles";
@@ -17,6 +16,8 @@ import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
 import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
 import { isSellable } from "@/utils/inventory/sellable";
+import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
+import { buildProductKardex, buildGeneralKardex } from "@/utils/inventory/kardex";
 
 export async function checkIsAdmin() {
   const supabase = await createClient();
@@ -2102,10 +2103,6 @@ export async function getMoliendaBalances(era: 'v1' | 'v2' = 'v2') {
 //  - Grano can become Molido (it gets ground); Molido never becomes Grano,
 //    so Grano out ≤ Grano in.
 
-const KG_EPS = 0.0005;
-const round3 = (n: number) => Math.round(n * 1000) / 1000;
-
-type RepackLine = { inventoryId: string; qty: number; molienda: string | null | undefined };
 
 export async function createRepackBatch(input: {
   date: string;
@@ -2145,51 +2142,10 @@ export async function createRepackBatch(input: {
     if (itemsErr) throw new Error(itemsErr.message);
     const byId = new Map((items ?? []).map((i) => [i.id, i]));
 
-    // ── Validate coffee lines ─────────────────────────────
-    const profiles = new Set<string>();
-    const kg = { inGrano: 0, inMolido: 0, outGrano: 0, outMolido: 0 };
+    // ── Validate coffee lines (kilos, grind, profile) ────
+    const { profile, inKg, outKg, sobranteKg, sobranteGrano, sobranteMolido } = planRepack(origins, destinations, byId);
     const describe = (l: RepackLine) => `${l.qty}× ${byId.get(l.inventoryId)?.product_code}`;
 
-    for (const [lines, side] of [[origins, 'in'], [destinations, 'out']] as const) {
-      for (const l of lines) {
-        const it = byId.get(l.inventoryId);
-        if (!it) throw new Error('Producto no encontrado.');
-        const w = unitWeightKg(it.product_code);
-        if (w === null) {
-          throw new Error(`${it.product_name} no es café tostado con peso conocido; no se puede reempacar.`);
-        }
-        if (!isMolienda(l.molienda)) {
-          throw new Error(`Selecciona la molienda (Grano o Molido) de ${it.product_name}.`);
-        }
-        profiles.add(profileForCode(it.product_code) ?? '');
-        const key = `${side}${l.molienda === 'grano' ? 'Grano' : 'Molido'}` as keyof typeof kg;
-        kg[key] += l.qty * w;
-      }
-    }
-    if (profiles.size > 1) {
-      throw new Error('Todos los productos del reempaque deben ser del mismo perfil (Premium, Honey o Chiroso).');
-    }
-    const originIds = new Set(origins.map((l) => l.inventoryId));
-    const overlap = destinations.find((l) => originIds.has(l.inventoryId));
-    if (overlap) {
-      throw new Error(`${byId.get(overlap.inventoryId)?.product_name} no puede ser origen y destino a la vez.`);
-    }
-
-    const inKg = round3(kg.inGrano + kg.inMolido);
-    const outKg = round3(kg.outGrano + kg.outMolido);
-    if (outKg > inKg + KG_EPS) {
-      throw new Error(`El destino (${outKg} kg) supera el café abierto (${inKg} kg).`);
-    }
-    if (kg.outGrano > kg.inGrano + KG_EPS) {
-      throw new Error('El café molido no puede volver a grano: hay más Grano en el destino que en el origen.');
-    }
-    const sobranteKg = round3(inKg - outKg);
-    // Molido out is served from Molido in first; any excess was ground from Grano.
-    const groundFromGrano = Math.max(0, kg.outMolido - kg.inMolido);
-    const sobranteGrano = round3(Math.max(0, kg.inGrano - kg.outGrano - groundFromGrano));
-    const sobranteMolido = round3(sobranteKg - sobranteGrano);
-
-    const profile = [...profiles][0] as keyof typeof PROFILE_LABELS;
     let bulk: { id: string; product_code: string } | null = null;
     if (sobranteKg > KG_EPS && sobranteDestino === 'granel') {
       const { data: b } = await supabase
@@ -2376,23 +2332,6 @@ export async function deleteRepackBatch(batchId: string) {
 // ============================================================
 
 /**
- * Effective day of a movement. movement_date is a DATE; rows written before
- * it existed (and plain ajustes) fall back to created_at.
- */
-function _movementDay(m: { movement_date: string | null; created_at: string }) {
-  return m.movement_date ?? m.created_at.slice(0, 10);
-}
-
-function _compareMovements(
-  a: { movement_date: string | null; created_at: string },
-  b: { movement_date: string | null; created_at: string }
-) {
-  const da = _movementDay(a);
-  const db = _movementDay(b);
-  return da === db ? a.created_at.localeCompare(b.created_at) : da.localeCompare(db);
-}
-
-/**
  * Kardex (tarjeta de inventario) for one product: every movement in date
  * order with its running balance, the opening balance before `from` and the
  * closing balance at `to`.
@@ -2469,68 +2408,18 @@ export async function getKardex(
     if (!data || data.length < PAGE) break;
   }
 
-  // Re-sort on the effective day so dated and undated rows interleave.
-  movements.sort(_compareMovements);
-
-  let opening = 0;
-  let balance = 0;
-  let entradas = 0;
-  let salidas = 0;
-  let ventasCobradas = 0;
-  const rows: (Omit<KardexMovement, 'income'> & {
-    date: string;
-    entrada: number;
-    salida: number;
-    saldo: number;
-    sale_amount: number | null;
-    sale_concept: string | null;
-  })[] = [];
-
-  for (const m of movements) {
-    const qty = Number(m.quantity) || 0;
-    const day = _movementDay(m);
-    if (opts.from && day < opts.from) {
-      opening += qty;
-      balance += qty;
-      continue;
-    }
-    if (opts.to && day > opts.to) break;
-
-    balance += qty;
-    if (qty >= 0) entradas += qty;
-    else salidas += -qty;
-    const saleAmount = m.income?.gross_amount != null ? Number(m.income.gross_amount) : null;
-    if (saleAmount !== null) ventasCobradas += saleAmount;
-
-    const { income, ...rest } = m;
-    rows.push({
-      ...rest,
-      date: day,
-      entrada: qty >= 0 ? qty : 0,
-      salida: qty < 0 ? -qty : 0,
-      saldo: balance,
-      sale_amount: saleAmount,
-      sale_concept: income?.concept ?? null,
-    });
-  }
+  // Sorted by effective day inside, so dated and undated rows interleave.
+  const { rows, summary, ledgerTotal } = buildProductKardex(movements, opts);
 
   // The full-history ledger should equal the stored stock. A difference means
   // stock was changed without a movement (or a movement without stock).
   // Only meaningful for the whole product, not a single grind.
-  const ledgerTotal = movements.reduce((sum, m) => sum + (Number(m.quantity) || 0), 0);
   const systemStock = Number(era === 'v1' ? item.legacy_stock ?? item.current_stock : item.current_stock);
 
   return {
     item,
     rows,
-    summary: {
-      opening,
-      entradas,
-      salidas,
-      closing: balance,
-      ventasCobradas,
-      count: rows.length,
-    },
+    summary,
     reconciliation: opts.molienda
       ? null
       : { ledgerTotal, systemStock, difference: systemStock - ledgerTotal },
@@ -2600,105 +2489,18 @@ export async function getKardexGeneral(
     movements.push(...((data ?? []) as GeneralMovement[]));
     if (!data || data.length < PAGE) break;
   }
-  movements.sort(_compareMovements);
-
-  const blank = () => ({
-    opening: 0, entradas: 0, salidas: 0, closing: 0,
-    ventasCobradas: 0, movimientos: 0, ledgerTotal: 0,
-  });
-  const byProduct = new Map<string, ReturnType<typeof blank>>();
-  const running = new Map<string, number>();
-  const history: {
-    id: string;
-    inventory_id: string;
-    date: string;
-    type: string;
-    tab_source: string | null;
-    reason: string | null;
-    lote: string | null;
-    molienda: string | null;
-    responsable: string | null;
-    income_id: string | null;
-    entrada: number;
-    salida: number;
-    saldo: number;
-    sale_amount: number | null;
-  }[] = [];
-
-  for (const m of movements) {
-    const qty = Number(m.quantity) || 0;
-    const day = _movementDay(m);
-    if (!byProduct.has(m.inventory_id)) byProduct.set(m.inventory_id, blank());
-    const p = byProduct.get(m.inventory_id)!;
-    p.ledgerTotal += qty;
-
-    if (opts.to && day > opts.to) continue;
-    const saldo = (running.get(m.inventory_id) ?? 0) + qty;
-    running.set(m.inventory_id, saldo);
-
-    if (opts.from && day < opts.from) {
-      p.opening += qty;
-      continue;
-    }
-
-    if (qty >= 0) p.entradas += qty;
-    else p.salidas += -qty;
-    p.movimientos += 1;
-    const inc = Array.isArray(m.income) ? m.income[0] : m.income;
-    const saleAmount = inc?.gross_amount != null ? Number(inc.gross_amount) : null;
-    if (saleAmount !== null) p.ventasCobradas += saleAmount;
-
-    history.push({
-      id: m.id,
-      inventory_id: m.inventory_id,
-      date: day,
-      type: m.type,
-      tab_source: m.tab_source,
-      reason: m.reason,
-      lote: m.lote,
-      molienda: m.molienda,
-      responsable: m.responsable,
-      income_id: m.income_id,
-      entrada: qty >= 0 ? qty : 0,
-      salida: qty < 0 ? -qty : 0,
-      saldo,
-      sale_amount: saleAmount,
-    });
-  }
-
-  const products = (items ?? []).map((it) => {
-    const p = byProduct.get(it.id) ?? blank();
-    const closing = p.opening + p.entradas - p.salidas;
-    const systemStock = Number(era === 'v1' ? it.legacy_stock ?? it.current_stock : it.current_stock);
-    return {
+  return buildGeneralKardex(
+    (items ?? []).map((it) => ({
       id: it.id,
       product_code: it.product_code,
       product_name: it.product_name,
       category: it.category,
       unit: it.unit,
-      opening: p.opening,
-      entradas: p.entradas,
-      salidas: p.salidas,
-      closing,
-      movimientos: p.movimientos,
-      ventasCobradas: p.ventasCobradas,
-      // Whole-history ledger vs stored stock; non-zero means stock changed
-      // without a movement somewhere.
-      difference: systemStock - p.ledgerTotal,
-    };
-  });
-
-  return {
-    products,
-    history,
-    summary: {
-      productos: products.length,
-      productosConMovimiento: products.filter((p) => p.movimientos > 0).length,
-      movimientos: history.length,
-      ventasCobradas: products.reduce((sum, p) => sum + p.ventasCobradas, 0),
-      descuadres: products.filter((p) => Math.abs(p.difference) > 0.0005).length,
-    },
-  };
+      systemStock: Number(era === 'v1' ? it.legacy_stock ?? it.current_stock : it.current_stock),
+    })),
+    movements,
+    opts
+  );
 }
 
 // ============================================================

@@ -1,17 +1,16 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import {
+  addToCart,
+  removeFromCart,
+  setCartQuantity,
+  cartTotals,
+  parseSavedCart,
+  type CartLine,
+} from "@/utils/cart";
 
-export interface CartItem {
-  id: string;
-  nameKey: string;
-  price: number;
-  weight: string;
-  grind: string;
-  grindLevel?: string;
-  image: string;
-  quantity: number;
-}
+export type CartItem = CartLine;
 
 interface CartContextType {
   items: CartItem[];
@@ -30,14 +29,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const savedCart = localStorage.getItem("amantti_cart");
-    if (savedCart) {
-      try {
-        setItems(JSON.parse(savedCart));
-      } catch (e) {
-        console.error("Failed to parse cart from localStorage", e);
-      }
-    }
+    const saved = parseSavedCart(localStorage.getItem("amantti_cart"));
+    if (saved.length) setItems(saved);
   }, []);
 
   // Save to localStorage whenever items change
@@ -46,37 +39,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items]);
 
   const addItem = (newItem: Omit<CartItem, "quantity">) => {
-    setItems((prevItems) => {
-      const existingItemIndex = prevItems.findIndex(
-        (item) =>
-          item.id === newItem.id &&
-          item.weight === newItem.weight &&
-          item.grind === newItem.grind &&
-          item.grindLevel === newItem.grindLevel
-      );
-
-      if (existingItemIndex > -1) {
-        const updatedItems = [...prevItems];
-        updatedItems[existingItemIndex].quantity += 1;
-        return updatedItems;
-      }
-
-      return [...prevItems, { ...newItem, quantity: 1 }];
-    });
+    setItems((prev) => addToCart(prev, newItem));
   };
 
   const removeItem = (id: string, weight: string, grind: string, grindLevel?: string) => {
-    setItems((prevItems) =>
-      prevItems.filter(
-        (item) =>
-          !(
-            item.id === id &&
-            item.weight === weight &&
-            item.grind === grind &&
-            item.grindLevel === grindLevel
-          )
-      )
-    );
+    setItems((prev) => removeFromCart(prev, { id, weight, grind, grindLevel }));
   };
 
   const updateQuantity = (
@@ -86,29 +53,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     grindLevel: string | undefined,
     quantity: number
   ) => {
-    if (quantity <= 0) {
-      removeItem(id, weight, grind, grindLevel);
-      return;
-    }
-
-    setItems((prevItems) =>
-      prevItems.map((item) =>
-        item.id === id &&
-        item.weight === weight &&
-        item.grind === grind &&
-        item.grindLevel === grindLevel
-          ? { ...item, quantity }
-          : item
-      )
-    );
+    setItems((prev) => setCartQuantity(prev, { id, weight, grind, grindLevel }, quantity));
   };
 
   const clearCart = useCallback(() => {
     setItems([]);
   }, []);
 
-  const itemCount = items.reduce((total, item) => total + item.quantity, 0);
-  const subtotal = items.reduce((total, item) => total + item.price * item.quantity, 0);
+  const { itemCount, subtotal } = cartTotals(items);
 
   return (
     <CartContext.Provider

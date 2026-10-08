@@ -29,7 +29,7 @@ const NAV_ITEMS = [
 ];
 
 /** The single nav item for this path: the longest href that matches. */
-function activeHref(pathname: string): string | null {
+export function activeHref(pathname: string): string | null {
   let best: string | null = null;
   for (const { href, exact } of NAV_ITEMS) {
     const matches = exact

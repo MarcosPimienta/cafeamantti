@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { computeQuoteTotals } from "@/utils/quotes/totals";
 import { generateQuotePDF } from '@/utils/pdf/quoteGenerator';
 import { Plus, Trash2, FileDown, Save, Eye, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -61,28 +62,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const subtotal = items.reduce((sum, item) => sum + Number(item.total_price), 0);
-  const discountVal = Number(discountAmount) || 0;
-  const baseAmount = Math.max(0, subtotal - discountVal);
-  const discountFactor = subtotal > 0 ? baseAmount / subtotal : 1;
-
-  let tax5 = 0;
-  let tax19 = 0;
-  items.forEach(item => {
-    const itemSubtotal = Number(item.total_price) || 0;
-    const itemTaxBase = itemSubtotal * discountFactor;
-    const rate = Number(item.iva_rate) || 0;
-    if (rate === 5) {
-      tax5 += itemTaxBase * 0.05;
-    } else if (rate === 19) {
-      tax19 += itemTaxBase * 0.19;
-    }
-  });
-
-  const taxAmount = tax5 + tax19;
-  const applyIva = taxAmount > 0;
-  const ivaRate = tax19 > 0 ? 19 : (tax5 > 0 ? 5 : 0);
-  const totalAmount = baseAmount + taxAmount;
+  const { subtotal, tax5, tax19, taxAmount, applyIva, ivaRate, totalAmount } = computeQuoteTotals(items, discountAmount);
 
   const buildPdfData = () => {
     let clientName, clientDocument, clientDocumentType, clientEmail, clientPhone;

@@ -6,150 +6,16 @@ import {
   DailyCashflow,
   CashflowExpense,
   CashflowIncome,
-  ExpenseType,
-  EXPENSE_CATEGORY_TYPE_MAP,
 } from './types';
+import {
+  resolveExpenseFields,
+  resolveIncomeFields,
+  monthBounds,
+  summarizeMonthlyPL,
+  type PLReportResult,
+} from './calculations';
 
-// ─────────────────────────────────────────────────────────────
-// BUSINESS LOGIC HELPERS
-// ─────────────────────────────────────────────────────────────
-
-/** IVA estándar Colombia (19 %) */
-const CO_VAT_RATE = 0.19;
-
-/**
- * Tasa de comisión de pasarela por defecto para Ventas Web.
- * ePayco cobra ~2.99% + IVA sobre la comisión.
- * Expresado como fracción del bruto (≈ 3.56 % efectivo con IVA).
- */
-const DEFAULT_GATEWAY_FEE_RATE = 0.0356;
-
-/**
- * Redondea a 2 decimales para evitar errores de punto flotante
- * en valores monetarios (COP).
- */
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
-// ── Expense helpers ──────────────────────────────────────────
-
-interface ResolvedExpense {
-  expense_type: ExpenseType;
-  tax_amount: number;
-  net_amount: number;
-  depreciation_months: number | null;
-  amount: number;          // total bruto (neto + IVA) que se paga
-}
-
-/**
- * Deriva y valida los campos contables de un gasto.
- *
- * Reglas:
- *  - net_amount = amount - tax_amount
- *  - expense_type se infiere de la categoría si no viene explícito
- *  - CAPEX exige depreciation_months > 0
- *  - OPEX/COGS exigen depreciation_months null
- */
-function resolveExpenseFields(
-  raw: Partial<CashflowExpense>
-): { fields: ResolvedExpense; validationError?: string } {
-  const amount       = Number(raw.amount ?? 0);
-  const tax_amount   = round2(Number(raw.tax_amount ?? 0));
-  const net_amount   = round2(amount - tax_amount);
-
-  // Inferir expense_type desde categoría si no viene
-  const category     = raw.category ?? '';
-  const inferred     = EXPENSE_CATEGORY_TYPE_MAP[category];
-  const expense_type: ExpenseType =
-    (raw.expense_type as ExpenseType) ?? inferred ?? 'OPEX';
-
-  let depreciation_months = raw.depreciation_months ?? null;
-
-  // Validación CAPEX
-  if (expense_type === 'CAPEX') {
-    if (!depreciation_months || depreciation_months <= 0) {
-      return {
-        fields: { expense_type, tax_amount, net_amount, depreciation_months: null, amount },
-        validationError:
-          'Un gasto CAPEX debe tener depreciation_months > 0 (vida útil del activo en meses).',
-      };
-    }
-    depreciation_months = Math.floor(depreciation_months);
-  } else {
-    // OPEX / COGS nunca tienen depreciación
-    depreciation_months = null;
-  }
-
-  return {
-    fields: { expense_type, tax_amount, net_amount, depreciation_months, amount },
-  };
-}
-
-// ── Income helpers ───────────────────────────────────────────
-
-interface ResolvedIncome {
-  gross_amount:  number;
-  fee_amount:    number;
-  shipping_cost: number;
-  tax_amount:    number;
-  net_revenue:   number;
-  amount:        number;   // alias de gross_amount (compatibilidad)
-}
-
-/**
- * Deriva los campos de desglose de un ingreso.
- *
- * Reglas para categoría 'Ventas Web' (si los campos vienen en 0 / undefined):
- *  - tax_amount   = gross_amount × CO_VAT_RATE  (IVA incluido en el precio)
- *  - fee_amount   = gross_amount × DEFAULT_GATEWAY_FEE_RATE
- *  - shipping_cost: se respeta el valor que venga (puede ser 0)
- *
- * Para cualquier otra categoría se usan los valores tal como vienen
- * (el admin los ingresa manualmente).
- *
- * net_revenue = gross_amount - fee_amount - shipping_cost - tax_amount
- */
-function resolveIncomeFields(
-  raw: Partial<CashflowIncome>
-): { fields: ResolvedIncome } {
-  const gross_amount  = round2(Number(raw.gross_amount ?? raw.amount ?? 0));
-  const category      = raw.category ?? '';
-  const isWebSale     = category === 'Ventas Web';
-
-  // IVA: para Ventas Web se calcula si no viene explícito
-  const tax_amount = round2(
-    raw.tax_amount !== undefined && Number(raw.tax_amount) > 0
-      ? Number(raw.tax_amount)
-      : isWebSale
-      ? gross_amount * CO_VAT_RATE
-      : 0
-  );
-
-  // Comisión pasarela: para Ventas Web se calcula si no viene explícita
-  const fee_amount = round2(
-    raw.fee_amount !== undefined && Number(raw.fee_amount) > 0
-      ? Number(raw.fee_amount)
-      : isWebSale
-      ? gross_amount * DEFAULT_GATEWAY_FEE_RATE
-      : 0
-  );
-
-  const shipping_cost = round2(Number(raw.shipping_cost ?? 0));
-
-  const net_revenue = round2(
-    gross_amount - fee_amount - shipping_cost - tax_amount
-  );
-
-  return {
-    fields: {
-      gross_amount,
-      fee_amount,
-      shipping_cost,
-      tax_amount,
-      net_revenue,
-      amount: gross_amount, // mantener columna legacy en sync
-    },
-  };
-}
+export type { PLReportResult };
 
 /**
  * El flujo de caja ya no mueve inventario. Un ingreso que nació de una Salida
@@ -704,66 +570,6 @@ export async function getMissingCashflowDays(): Promise<string[]> {
 // ANALYTICAL READ ACTIONS — P&L + CASHFLOW
 // ─────────────────────────────────────────────────────────────
 
-/** Shape del resultado de getMonthlyPLReport */
-export interface PLReportResult {
-  // ── Identificación del período ────────────────────────
-  period_start:       string;   // 'YYYY-MM-DD'
-  period_end:         string;
-
-  // ── Líneas de ingreso ──────────────────────────────
-  /** Suma bruta de todos los ingresos del período (gross_amount) */
-  gross_revenue:      number;
-  /** Comisiones pasarela (fee_amount acumulado) */
-  gateway_fees:       number;
-  /** Fletes cobrados (shipping_cost acumulado) */
-  shipping_revenue:   number;
-  /** IVA de ingresos (tax_amount acumulado) */
-  sales_tax:          number;
-  /** Ingresos netos operacionales = gross - fees - shipping - tax */
-  net_revenue:        number;
-
-  // ── COGS ─────────────────────────────────────────
-  /** Gastos marcados COGS en cashflow_expenses */
-  explicit_cogs:      number;
-  /** Consumos de inventario (inventory_logs type=CONSUMPTION) */
-  inventory_cogs:     number;
-  /** COGS total = explicit_cogs + inventory_cogs */
-  total_cogs:         number;
-
-  // ── Utilidad Bruta ────────────────────────────────
-  /** net_revenue - total_cogs */
-  gross_profit:       number;
-  /** gross_profit / net_revenue × 100 (0 si net_revenue = 0) */
-  gross_margin_pct:   number;
-
-  // ── OPEX ─────────────────────────────────────────
-  /** Gastos operativos (expense_type=OPEX) del período */
-  opex:               number;
-
-  // ── EBITDA ────────────────────────────────────────
-  /** gross_profit - opex */
-  ebitda:             number;
-  /** ebitda / net_revenue × 100 */
-  ebitda_margin_pct:  number;
-
-  // ── Depreciación CAPEX ─────────────────────────────
-  /**
-   * Cuota mensual acumulada de todos los activos CAPEX vigentes.
-   * Vigente = creado en o antes del fin del período y cuya vida útil
-   * (depreciation_months desde created_at) aún no expiró.
-   */
-  monthly_depreciation: number;
-
-  // ── Utilidad Operativa y Burn Rate ───────────────────
-  /** ebitda - monthly_depreciation */
-  operating_income:   number;
-  /**
-   * Burn rate = total de salidas de caja reales del período.
-   * Incluye OPEX + COGS explícito + CAPEX pagado (no depreciación).
-   * Representa cuánto dinero salió efectivamente de la caja.
-   */
-  burn_rate:          number;
-}
 
 /**
  * Calcula el Estado de Resultados mensual (P&L) vs Flujo de Caja.
@@ -778,227 +584,88 @@ export async function getMonthlyPLReport(
   month: number,
   year: number
 ): Promise<PLReportResult> {
-  // ── 0. Construir límites del período en formato ISO ─────────────────
-  const pad       = (n: number) => String(n).padStart(2, '0');
-  const period_start = `${year}-${pad(month)}-01`;
-  // Primer día del mes siguiente (límite exclusivo)
-  const nextMonth    = month === 12 ? 1  : month + 1;
-  const nextYear     = month === 12 ? year + 1 : year;
-  const period_end   = `${nextYear}-${pad(nextMonth)}-01`;
-
+  const { period_start, period_end } = monthBounds(month, year);
   const supabase = await createClient();
 
-  // ── 1. Ingresos del período ──────────────────────────────────────────
-  // 1a. Ingresos manuales registrados en cashflow_incomes
-  //     Filtramos por la fecha del cashflow padre (columna 'date' en daily_cashflows)
-  const { data: manualIncomes, error: incErr } = await supabase
-    .from('cashflow_incomes')
-    .select(`
-      gross_amount,
-      fee_amount,
-      shipping_cost,
-      tax_amount,
-      net_revenue,
-      amount,
-      cashflow:cashflow_id ( date )
-    `)
-    .gte('cashflow.date', period_start)
-    .lt('cashflow.date',  period_end);
+  // Filters on an embedded row only narrow the parent rows when the embed is
+  // !inner; without it PostgREST returns every row (with cashflow = null) and
+  // the "monthly" figures become all-time totals.
+  const [
+    { data: manualIncomes, error: incErr },
+    { data: webOrders, error: ordErr },
+    { data: cogsExpenses, error: cogsErr },
+    { data: inventoryConsumptions, error: invErr },
+    { data: opexExpenses, error: opexErr },
+    { data: capexItems, error: capexErr },
+    { data: paidExpenses, error: burnErr },
+  ] = await Promise.all([
+    supabase
+      .from('cashflow_incomes')
+      .select('gross_amount, fee_amount, shipping_cost, tax_amount, net_revenue, amount, cashflow:cashflow_id!inner ( date )')
+      .gte('cashflow.date', period_start)
+      .lt('cashflow.date', period_end),
+    supabase
+      .from('orders')
+      .select('total_amount, created_at')
+      .in('status', ['paid', 'processing', 'shipped', 'delivered'])
+      .gte('created_at', `${period_start}T00:00:00Z`)
+      .lt('created_at', `${period_end}T00:00:00Z`),
+    supabase
+      .from('cashflow_expenses')
+      .select('net_amount, cashflow:cashflow_id!inner ( date )')
+      .eq('expense_type', 'COGS')
+      .gte('cashflow.date', period_start)
+      .lt('cashflow.date', period_end),
+    supabase
+      .from('inventory_logs')
+      .select('total_cost, created_at')
+      .eq('movement_type', 'CONSUMPTION')
+      .gte('created_at', `${period_start}T00:00:00Z`)
+      .lt('created_at', `${period_end}T00:00:00Z`),
+    supabase
+      .from('cashflow_expenses')
+      .select('net_amount, cashflow:cashflow_id!inner ( date )')
+      .eq('expense_type', 'OPEX')
+      .gte('cashflow.date', period_start)
+      .lt('cashflow.date', period_end),
+    // Every CAPEX bought before the period ends; summarizeMonthlyPL keeps the
+    // ones still depreciating.
+    supabase
+      .from('cashflow_expenses')
+      .select('net_amount, depreciation_months, created_at, cashflow:cashflow_id!inner ( date )')
+      .eq('expense_type', 'CAPEX')
+      .lt('cashflow.date', period_end),
+    supabase
+      .from('cashflow_expenses')
+      .select('amount, cashflow:cashflow_id!inner ( date )')
+      .in('expense_type', ['OPEX', 'COGS', 'CAPEX'])
+      .gte('cashflow.date', period_start)
+      .lt('cashflow.date', period_end),
+  ]);
 
-  if (incErr) console.error('getMonthlyPLReport: manualIncomes error', incErr);
-
-  // 1b. Órdenes web automáticas del período
-  const { data: webOrders, error: ordErr } = await supabase
-    .from('orders')
-    .select('total_amount, created_at')
-    .in('status', ['paid', 'processing', 'shipped', 'delivered'])
-    .gte('created_at', `${period_start}T00:00:00Z`)
-    .lt('created_at',  `${period_end}T00:00:00Z`);
-
-  if (ordErr) console.error('getMonthlyPLReport: webOrders error', ordErr);
-
-  // Acumular ingresos manuales
-  let gross_revenue    = 0;
-  let gateway_fees     = 0;
-  let shipping_revenue = 0;
-  let sales_tax        = 0;
-
-  for (const inc of (manualIncomes || [])) {
-    gross_revenue    += Number(inc.gross_amount ?? inc.amount ?? 0);
-    gateway_fees     += Number(inc.fee_amount    ?? 0);
-    shipping_revenue += Number(inc.shipping_cost ?? 0);
-    sales_tax        += Number(inc.tax_amount    ?? 0);
+  for (const [label, err] of [
+    ['manualIncomes', incErr],
+    ['webOrders', ordErr],
+    ['cogsExpenses', cogsErr],
+    ['inventoryConsumptions', invErr],
+    ['opexExpenses', opexErr],
+    ['capexItems', capexErr],
+    ['burnRate', burnErr],
+  ] as const) {
+    if (err) console.error(`getMonthlyPLReport: ${label} error`, err);
   }
 
-  // Proyectar y acumular órdenes web con campos P&L derivados
-  for (const o of (webOrders || [])) {
-    const { fields } = resolveIncomeFields({
-      gross_amount: o.total_amount,
-      amount:       o.total_amount,
-      category:     'Ventas Web',
-    });
-    gross_revenue    += fields.gross_amount;
-    gateway_fees     += fields.fee_amount;
-    shipping_revenue += fields.shipping_cost;
-    sales_tax        += fields.tax_amount;
-  }
-
-  const net_revenue = round2(gross_revenue - gateway_fees - shipping_revenue - sales_tax);
-
-  // ── 2. COGS ──────────────────────────────────────────────────────────
-  // 2a. Gastos explícitamente marcados como COGS en el período
-  const { data: cogsExpenses, error: cogsErr } = await supabase
-    .from('cashflow_expenses')
-    .select(`
-      net_amount,
-      cashflow:cashflow_id ( date )
-    `)
-    .eq('expense_type', 'COGS')
-    .gte('cashflow.date', period_start)
-    .lt('cashflow.date',  period_end);
-
-  if (cogsErr) console.error('getMonthlyPLReport: cogsExpenses error', cogsErr);
-
-  const explicit_cogs = round2(
-    (cogsExpenses || []).reduce((s, e) => s + Number(e.net_amount ?? 0), 0)
-  );
-
-  // 2b. Consumos de inventario (CONSUMPTION) del período
-  //     total_cost es columna GENERATED en la DB (quantity × unit_cost)
-  const { data: inventoryConsumptions, error: invErr } = await supabase
-    .from('inventory_logs')
-    .select('total_cost, created_at')
-    .eq('movement_type', 'CONSUMPTION')
-    .gte('created_at', `${period_start}T00:00:00Z`)
-    .lt('created_at',  `${period_end}T00:00:00Z`);
-
-  if (invErr) console.error('getMonthlyPLReport: inventoryConsumptions error', invErr);
-
-  const inventory_cogs = round2(
-    (inventoryConsumptions || []).reduce((s, r) => s + Number(r.total_cost ?? 0), 0)
-  );
-
-  const total_cogs   = round2(explicit_cogs + inventory_cogs);
-  const gross_profit = round2(net_revenue - total_cogs);
-  const gross_margin_pct = net_revenue !== 0
-    ? round2((gross_profit / net_revenue) * 100)
-    : 0;
-
-  // ── 3. OPEX del período ──────────────────────────────────────────────
-  const { data: opexExpenses, error: opexErr } = await supabase
-    .from('cashflow_expenses')
-    .select(`
-      net_amount,
-      cashflow:cashflow_id ( date )
-    `)
-    .eq('expense_type', 'OPEX')
-    .gte('cashflow.date', period_start)
-    .lt('cashflow.date',  period_end);
-
-  if (opexErr) console.error('getMonthlyPLReport: opexExpenses error', opexErr);
-
-  const opex = round2(
-    (opexExpenses || []).reduce((s, e) => s + Number(e.net_amount ?? 0), 0)
-  );
-
-  const ebitda           = round2(gross_profit - opex);
-  const ebitda_margin_pct = net_revenue !== 0
-    ? round2((ebitda / net_revenue) * 100)
-    : 0;
-
-  // ── 4. Depreciación CAPEX — cuota mensual de activos vigentes ────────
-  //
-  // Un activo CAPEX es "vigente" en el período si:
-  //   a) Se creó en o antes del último día del mes (period_end exclusivo)
-  //   b) Su vida útil no expiró:
-  //      created_at + depreciation_months > period_start
-  //
-  // Traemos TODOS los CAPEX creados hasta period_end y filtramos en memoria
-  // (la tabla de activos es pequeña en este contexto).
-  const { data: capexItems, error: capexErr } = await supabase
-    .from('cashflow_expenses')
-    .select('net_amount, depreciation_months, created_at')
-    .eq('expense_type', 'CAPEX')
-    .lt('cashflow.date', period_end);          // creado antes del fin del período
-
-  if (capexErr) console.error('getMonthlyPLReport: capexItems error', capexErr);
-
-  const periodStartDate = new Date(`${period_start}T00:00:00Z`);
-
-  let monthly_depreciation = 0;
-
-  for (const asset of (capexItems || [])) {
-    const months = Number(asset.depreciation_months ?? 0);
-    if (months <= 0) continue;
-
-    const createdAt   = new Date(asset.created_at);
-    // Fecha en que el activo termina de depreciarse
-    const expiresAt   = new Date(createdAt);
-    expiresAt.setMonth(expiresAt.getMonth() + months);
-
-    // El activo está vigente si aún no expiró al inicio del período
-    if (expiresAt > periodStartDate) {
-      const monthlyQuota = round2(Number(asset.net_amount ?? 0) / months);
-      monthly_depreciation += monthlyQuota;
-    }
-  }
-
-  monthly_depreciation = round2(monthly_depreciation);
-  const operating_income = round2(ebitda - monthly_depreciation);
-
-  // ── 5. Burn Rate — salidas reales de caja del período ──────────────
-  //
-  // El burn rate refleja el dinero que SALIÓ efectivamente de la cuenta,
-  // independiente de la clasificación contable.
-  // = OPEX (bruto pagado) + COGS explícito (bruto pagado) + CAPEX pagado
-  //
-  // Usamos 'amount' (total bruto con IVA) en lugar de 'net_amount'
-  // porque la caja se debitó por el total pagado al proveedor.
-  const { data: allExpensesRaw, error: burnErr } = await supabase
-    .from('cashflow_expenses')
-    .select(`
-      amount,
-      cashflow:cashflow_id ( date )
-    `)
-    .in('expense_type', ['OPEX', 'COGS', 'CAPEX'])
-    .gte('cashflow.date', period_start)
-    .lt('cashflow.date',  period_end);
-
-  if (burnErr) console.error('getMonthlyPLReport: burnRate error', burnErr);
-
-  const burn_rate = round2(
-    (allExpensesRaw || []).reduce((s, e) => s + Number(e.amount ?? 0), 0)
-  );
-
-  // ── 6. Componer y retornar el resultado ────────────────────────────
-  return {
+  return summarizeMonthlyPL({
     period_start,
     period_end,
-    // Ingresos
-    gross_revenue:       round2(gross_revenue),
-    gateway_fees:        round2(gateway_fees),
-    shipping_revenue:    round2(shipping_revenue),
-    sales_tax:           round2(sales_tax),
-    net_revenue,
-    // COGS
-    explicit_cogs,
-    inventory_cogs,
-    total_cogs,
-    // Utilidad Bruta
-    gross_profit,
-    gross_margin_pct,
-    // OPEX
-    opex,
-    // EBITDA
-    ebitda,
-    ebitda_margin_pct,
-    // Depreciación
-    monthly_depreciation,
-    // Utilidad Operativa
-    operating_income,
-    // Burn Rate
-    burn_rate,
-  };
+    manualIncomes: manualIncomes ?? [],
+    webOrders: webOrders ?? [],
+    cogsExpenses: cogsExpenses ?? [],
+    inventoryConsumptions: inventoryConsumptions ?? [],
+    opexExpenses: opexExpenses ?? [],
+    capexItems: capexItems ?? [],
+    paidExpenses: paidExpenses ?? [],
+  });
 }
 
 export async function markDateAsNoMovements(date: string) {
