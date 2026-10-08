@@ -1,7 +1,9 @@
 import React from "react";
 import { checkIsAdmin, getClientsCRM } from "../../actions";
 import { redirect } from "next/navigation";
-import { Users, Phone, MapPin, Search, Mail, CreditCard, Calendar, Building2 } from "lucide-react";
+import Link from "next/link";
+import { Users, Phone, MapPin, Search, Mail, CreditCard, Calendar, Building2, Handshake } from "lucide-react";
+import { createClient } from "@/utils/supabase/server";
 import CreateCRMClientModal from "./CreateCRMClientModal";
 
 export default async function AdminCRMCustomersPage() {
@@ -9,6 +11,18 @@ export default async function AdminCRMCustomersPage() {
   if (!isAdmin) redirect('/dashboard');
 
   const clients = await getClientsCRM();
+
+  // Machines each client currently has in comodato (none until the
+  // comodatos migration is applied).
+  const supabase = await createClient();
+  const { data: openComodatos } = await supabase
+    .from("comodato_assignments")
+    .select("client_id")
+    .is("end_date", null);
+  const machinesByClient = new Map<string, number>();
+  for (const a of openComodatos ?? []) {
+    machinesByClient.set(a.client_id, (machinesByClient.get(a.client_id) ?? 0) + 1);
+  }
 
   return (
     <div className="space-y-8">
@@ -45,13 +59,14 @@ export default async function AdminCRMCustomersPage() {
                 <th className="px-6 py-4 font-medium">Contacto</th>
                 <th className="px-6 py-4 font-medium">Ubicación</th>
                 <th className="px-6 py-4 font-medium text-center">Órdenes</th>
+                <th className="px-6 py-4 font-medium text-center">Comodato</th>
                 <th className="px-6 py-4 font-medium">Registro</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-foreground/5">
               {!clients || clients.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center">
+                  <td colSpan={7} className="px-6 py-20 text-center">
                     <Building2 className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
                     <p className="text-lg font-serif text-foreground">Aún no hay clientes registrados</p>
                     <p className="text-sm text-foreground/50">Crea tu primer cliente manual para empezar.</p>
@@ -103,6 +118,20 @@ export default async function AdminCRMCustomersPage() {
                       <div className="inline-flex items-center justify-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold">
                         {client.orders?.[0]?.count || 0}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {machinesByClient.get(client.id) ? (
+                        <Link
+                          href="/admin/comodatos"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#C59F59]/15 text-[#9a7a3c] rounded-full text-xs font-bold hover:bg-[#C59F59]/25"
+                          title="Máquinas en comodato"
+                        >
+                          <Handshake className="w-3.5 h-3.5" />
+                          {machinesByClient.get(client.id)}
+                        </Link>
+                      ) : (
+                        <span className="text-foreground/30">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 text-xs text-foreground/60">

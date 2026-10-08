@@ -36,6 +36,12 @@ const RELATIONS: Record<string, Record<string, Relation>> = {
   repack_batches: {
     inventory_movements: { table: "inventory_movements", foreignKey: "repack_batch_id", many: true },
   },
+  comodato_assignments: {
+    client_id: { table: "clients", localKey: "client_id" },
+  },
+  equipment_events: {
+    client_id: { table: "clients", localKey: "client_id" },
+  },
 };
 
 /** Column defaults applied on insert, mirroring the migrations. */
