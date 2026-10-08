@@ -3119,36 +3119,75 @@ export async function setInventorySellable(id: string, sellable: boolean) {
   return { success: true };
 }
 
+export type InventoryCategory = 'cafe' | 'empaque' | 'accesorio' | 'equipo';
+
+/**
+ * Creates an inventory item. An opening stock is registered as an entrada
+ * movement (not just written to current_stock) so the Kardex reconciles
+ * from day one.
+ */
 export async function createInventoryProduct(data: {
   product_code: string;
   product_name: string;
-  category: 'cafe' | 'empaque' | 'accesorio';
+  category: InventoryCategory;
   unit: string;
   min_stock?: number;
   current_stock?: number;
   notes?: string;
+  is_sellable?: boolean;
 }) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
 
+  const product_code = (data.product_code || '').toUpperCase().trim().replace(/\s+/g, '-');
+  const product_name = (data.product_name || '').trim();
+  if (!/^[A-Z0-9][A-Z0-9.-]{1,39}$/.test(product_code)) {
+    throw new Error('El código solo puede tener letras, números, guiones y puntos (ej. EQP-ESP-001).');
+  }
+  if (product_name.length < 2) throw new Error('Escribe el nombre del producto.');
+  if (!['cafe', 'empaque', 'accesorio', 'equipo'].includes(data.category)) throw new Error('Categoría inválida.');
+  if (!(data.unit || '').trim()) throw new Error('Indica la unidad de medida.');
+  const opening = Number(data.current_stock || 0);
+  const minStock = data.min_stock === undefined ? 0 : Number(data.min_stock);
+  if (!Number.isFinite(opening) || opening < 0) throw new Error('El stock inicial no puede ser negativo.');
+  if (!Number.isFinite(minStock) || minStock < 0) throw new Error('El stock mínimo no puede ser negativo.');
+
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: existing } = await supabase.from('inventory').select('id').eq('product_code', product_code).maybeSingle();
+  if (existing) throw new Error(`Ya existe un producto con el código ${product_code}.`);
 
   const { data: newItem, error } = await supabase
     .from('inventory')
     .insert({
-      product_code: data.product_code.toUpperCase().trim(),
-      product_name: data.product_name.trim(),
+      product_code,
+      product_name,
       category: data.category,
-      unit: data.unit,
-      current_stock: data.current_stock || 0,
-      min_stock: data.min_stock || 5,
-      notes: data.notes || null,
+      unit: data.unit.trim(),
+      current_stock: 0,
+      min_stock: minStock,
+      notes: data.notes?.trim() || null,
+      ...(data.is_sellable !== undefined ? { is_sellable: data.is_sellable } : {}),
     })
     .select('*')
     .single();
 
   if (error) {
+    if (error.message.includes('inventory_category_check')) {
+      throw new Error('Falta aplicar la migración 20261010000000_inventory_category_equipo.sql para usar la categoría Equipo.');
+    }
     throw new Error(error.message);
+  }
+
+  if (opening > 0) {
+    const mId = await _insertMovement(supabase, user?.id ?? null, newItem.id, 'entrada', opening, {
+      movement_date: new Date().toISOString().slice(0, 10),
+      reason: 'Saldo inicial al crear el producto',
+      tab_source: 'entrada',
+    });
+    newItem.current_stock = await _updateStockBy(supabase, newItem.id, opening);
+    await logAuditAction("CREATE", "MOVEMENT", mId, newItem.id, { qty: opening, reason: 'Saldo inicial' });
   }
 
   revalidatePath('/admin/inventory');

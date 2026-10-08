@@ -75,6 +75,7 @@ import {
   deleteRepackBatch,
   setInventorySellable,
   getPackagingRecipes,
+  createInventoryProduct,
 } from "../../actions";
 import { packagingFor, type PackagingRecipes } from "@/utils/costing/packaging";
 import { isSellable } from "@/utils/inventory/sellable";
@@ -151,6 +152,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   cafe: "Café",
   empaque: "Empaque",
   accesorio: "Accesorio",
+  equipo: "Equipo",
 };
 
 const TABS = [
@@ -583,6 +585,196 @@ function AdjustModal({
   );
 }
 
+// ─── New product ─────────────────────────────────────────────────────────────
+
+const NEW_PRODUCT_DEFAULTS: Record<string, { prefix: string; unit: string; sellable: boolean }> = {
+  cafe: { prefix: "CAFT-", unit: "unidad", sellable: true },
+  empaque: { prefix: "EMP-", unit: "unidad", sellable: false },
+  accesorio: { prefix: "ACC-", unit: "unidad", sellable: false },
+  equipo: { prefix: "EQP-", unit: "unidad", sellable: false },
+};
+
+/**
+ * Creates an inventory item (coffee, packaging, accessory or equipment such
+ * as an espresso machine lent in comodato). Opening stock becomes an entrada.
+ */
+function NewProductModal({
+  existingCodes,
+  onClose,
+  onCreated,
+}: {
+  existingCodes: string[];
+  onClose: () => void;
+  onCreated: (item: InventoryItem) => void;
+}) {
+  const [category, setCategory] = useState("equipo");
+  const [code, setCode] = useState("EQP-");
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("unidad");
+  const [stock, setStock] = useState("");
+  const [minStock, setMinStock] = useState("0");
+  const [sellable, setSellable] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  const normalized = code.toUpperCase().trim().replace(/\s+/g, "-");
+  const duplicate = existingCodes.includes(normalized);
+
+  function pickCategory(next: string) {
+    const prev = NEW_PRODUCT_DEFAULTS[category];
+    const d = NEW_PRODUCT_DEFAULTS[next];
+    setCategory(next);
+    // Only replace the code prefix if the user has not typed past it.
+    if (!code || code === prev.prefix) setCode(d.prefix);
+    setUnit(d.unit);
+    setSellable(d.sellable);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (duplicate) return setError(`Ya existe un producto con el código ${normalized}.`);
+    startTransition(async () => {
+      try {
+        const res = await createInventoryProduct({
+          product_code: code,
+          product_name: name,
+          category: category as "cafe" | "empaque" | "accesorio" | "equipo",
+          unit,
+          current_stock: stock ? parseFloat(stock) : 0,
+          min_stock: minStock ? parseFloat(minStock) : 0,
+          notes: notes || undefined,
+          is_sellable: sellable,
+        });
+        onCreated(res.item as InventoryItem);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "No se pudo crear el producto");
+      }
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg max-h-[95vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Nuevo producto"
+      >
+        <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-5 border-b border-foreground/5 flex items-start justify-between gap-4">
+          <div>
+            <p className={labelCls}>Inventario</p>
+            <h3 className="text-xl font-serif">Nuevo producto</h3>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5" aria-label="Cerrar">
+            <X className="w-5 h-5 text-foreground/40" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4">
+          <div>
+            <label className={labelCls}>Categoría</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {Object.keys(NEW_PRODUCT_DEFAULTS).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-pressed={category === c}
+                  onClick={() => pickCategory(c)}
+                  className={`px-3 py-2.5 rounded-xl border text-xs font-bold uppercase tracking-wider ${
+                    category === c ? "bg-[#C59F59] text-white border-[#C59F59]" : "bg-white text-foreground/60 border-foreground/10"
+                  }`}
+                >
+                  {CATEGORY_LABELS[c]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr] gap-4">
+            <div>
+              <label htmlFor="np-code" className={labelCls}>Código <span className="text-red-400">*</span></label>
+              <input
+                id="np-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="EQP-ESP-001"
+                className={`${inputCls} font-mono uppercase ${duplicate ? "border-red-300" : ""}`}
+                required
+              />
+              {duplicate && <p className="text-[11px] text-red-600 mt-1">Ese código ya existe.</p>}
+            </div>
+            <div>
+              <label htmlFor="np-name" className={labelCls}>Nombre <span className="text-red-400">*</span></label>
+              <input
+                id="np-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={category === "equipo" ? "Máquina espresso 2 grupos (comodato)" : "Nombre del producto"}
+                className={inputCls}
+                required
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label htmlFor="np-unit" className={labelCls}>Unidad</label>
+              <select id="np-unit" value={unit} onChange={(e) => setUnit(e.target.value)} className={inputCls}>
+                {["unidad", "kg", "g", "litro", "ml", "caja", "paquete"].map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="np-stock" className={labelCls}>Stock inicial</label>
+              <input id="np-stock" type="number" min="0" step="any" inputMode="decimal" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" className={inputCls} />
+            </div>
+            <div>
+              <label htmlFor="np-min" className={labelCls}>Stock mínimo</label>
+              <input id="np-min" type="number" min="0" step="any" inputMode="decimal" value={minStock} onChange={(e) => setMinStock(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="np-notes" className={labelCls}>Notas</label>
+            <textarea
+              id="np-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder={category === "equipo" ? "Marca, modelo, serial, cliente que la tiene en comodato…" : "Opcional"}
+              className={`${inputCls} resize-y`}
+            />
+          </div>
+          <label className="flex items-start gap-3 p-3 rounded-xl bg-[#fdfbf7] border border-foreground/5 cursor-pointer">
+            <input type="checkbox" checked={sellable} onChange={(e) => setSellable(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#C59F59]" />
+            <span className="text-sm">
+              <span className="font-bold">Se vende</span>
+              <span className="block text-xs text-foreground/50">Aparece al crear órdenes. Déjalo apagado para equipos en comodato e insumos.</span>
+            </span>
+          </label>
+          {Number(stock) > 0 && (
+            <p className="text-[11px] text-foreground/50">
+              El stock inicial queda registrado como una entrada "Saldo inicial", así el Kardex cuadra desde el primer día.
+            </p>
+          )}
+          {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
+          <div className="flex gap-3 pt-2 pb-[env(safe-area-inset-bottom)]">
+            <button type="button" onClick={onClose} className="flex-1 py-3 border border-foreground/10 rounded-2xl text-sm font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5">
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isPending || duplicate}
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white rounded-2xl text-sm font-bold uppercase tracking-widest disabled:opacity-60"
+            >
+              {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              Crear producto
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── History Drawer ───────────────────────────────────────────────────────────
 
 function HistoryDrawer({
@@ -910,12 +1102,15 @@ function MoliendaBreakdown({ era }: { era: "v1" | "v2" }) {
 function InventarioTab({
   inventory,
   onStockUpdate,
+  onItemCreated,
   era,
 }: {
   inventory: InventoryItem[];
   onStockUpdate: (id: string, newStock: number) => void;
+  onItemCreated: (item: InventoryItem) => void;
   era: 'v1' | 'v2';
 }) {
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [lowStockOnly, setLowStockOnly] = useState(false);
@@ -1075,6 +1270,7 @@ function InventarioTab({
                 <option value="cafe">Café</option>
                 <option value="empaque">Empaque</option>
                 <option value="accesorio">Accesorio</option>
+                <option value="equipo">Equipo</option>
               </select>
             </div>
             <button
@@ -1089,8 +1285,28 @@ function InventarioTab({
               <AlertTriangle className="w-4 h-4" />
               Stock bajo
             </button>
+            {era === "v2" && (
+              <button
+                onClick={() => setCreating(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest bg-foreground text-background hover:bg-[#C59F59] hover:text-white transition-all whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                Nuevo producto
+              </button>
+            )}
           </div>
         </div>
+
+        {creating && (
+          <NewProductModal
+            existingCodes={inventory.map((i) => i.product_code)}
+            onClose={() => setCreating(false)}
+            onCreated={(item) => {
+              onItemCreated(item);
+              setCreating(false);
+            }}
+          />
+        )}
 
         {sellableError && (
           <p className="mx-5 mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{sellableError}</p>
@@ -1164,6 +1380,8 @@ function InventarioTab({
                             ? "bg-[#C59F59]/10 text-[#C59F59]"
                             : item.category === "empaque"
                             ? "bg-blue-50 text-blue-600"
+                            : item.category === "equipo"
+                            ? "bg-slate-100 text-slate-700"
                             : "bg-purple-50 text-purple-600"
                         }`}
                       >
@@ -6120,7 +6338,12 @@ export default function InventoryClient({
 
       {/* Tab content */}
       {activeTab === "inventario" && (
-        <InventarioTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
+        <InventarioTab
+          inventory={displayedInventory}
+          onStockUpdate={updateStock}
+          onItemCreated={(item) => setInventory((prev) => [...prev, item])}
+          era={era}
+        />
       )}
       {activeTab === "entradas" && (
         <EntradasTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
