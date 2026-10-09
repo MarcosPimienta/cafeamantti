@@ -9,6 +9,12 @@ vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
 import { saveMaquilaProposal, getMaquilaProposals, getMaquilaProposal, deleteMaquilaProposal, getMaquilaOptionPrices, saveMaquilaOptionPrices } from "../actions";
 
+/** Unwraps a successful action result, failing the test with its error otherwise. */
+function ok<T extends object>(r: ({ success: true } & T) | { success: false; error: string }) {
+  if (!r.success) throw new Error(r.error);
+  return r;
+}
+
 let db: FakeDB;
 beforeEach(() => {
   db = seedDB({ clients: [{ id: "okus", name: "Okus" }] });
@@ -47,7 +53,7 @@ const input = (over: Partial<MaquilaProposalInput> = {}): MaquilaProposalInput =
 
 describe("maquila proposals", () => {
   it("creates, lists with the client name, updates and deletes", async () => {
-    const { id } = await saveMaquilaProposal(input());
+    const { id } = ok(await saveMaquilaProposal(input()));
     expect(db.byId("maquila_proposals", id)).toMatchObject({ client_id: "okus", custom_client_name: null, created_by: ADMIN_ID, minimum_units: 200 });
 
     const list = await getMaquilaProposals();
@@ -62,24 +68,24 @@ describe("maquila proposals", () => {
 
   it("keeps background and logo as storage paths and rejects anything else", async () => {
     const settings = { ...input().settings, background_path: "proposals/123_bg.jpg", ally_logo_path: "proposals/123_logo.png", background_opacity: 0.3 };
-    const { id } = await saveMaquilaProposal(input({ settings }));
+    const { id } = ok(await saveMaquilaProposal(input({ settings })));
     expect(db.byId("maquila_proposals", id)!.settings).toMatchObject({ background_path: "proposals/123_bg.jpg", ally_logo_path: "proposals/123_logo.png" });
 
-    await expect(saveMaquilaProposal(input({ settings: { ...settings, background_path: "https://evil.example/x.jpg" } }))).rejects.toThrow(/Imagen inválida/);
-    await expect(saveMaquilaProposal(input({ settings: { ...settings, ally_logo_path: "../secret" } }))).rejects.toThrow(/Imagen inválida/);
-    await expect(saveMaquilaProposal(input({ settings: { ...settings, background_opacity: 1.5 } }))).rejects.toThrow(/opacidad/);
+    expect((await saveMaquilaProposal(input({ settings: { ...settings, background_path: "https://evil.example/x.jpg" } }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/Imagen inválida/) });
+    expect((await saveMaquilaProposal(input({ settings: { ...settings, ally_logo_path: "../secret" } }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/Imagen inválida/) });
+    expect((await saveMaquilaProposal(input({ settings: { ...settings, background_opacity: 1.5 } }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/opacidad/) });
     // "" = no background, null = Amantti's default: both valid
     await saveMaquilaProposal(input({ settings: { ...settings, background_path: "" } }));
     await saveMaquilaProposal(input({ settings: { ...settings, background_path: null } }));
   });
 
   it("without a minimum, the 200-unit rule is stored", async () => {
-    const { id } = await saveMaquilaProposal(input({ minimum_units: null }));
+    const { id } = ok(await saveMaquilaProposal(input({ minimum_units: null })));
     expect(db.byId("maquila_proposals", id)!.minimum_units).toBe(200);
   });
 
   it("a new client can be typed instead of picked", async () => {
-    const { id } = await saveMaquilaProposal(input({ client_id: null, custom_client_name: "  Tostadora La Loma " }));
+    const { id } = ok(await saveMaquilaProposal(input({ client_id: null, custom_client_name: "  Tostadora La Loma " })));
     expect(db.byId("maquila_proposals", id)).toMatchObject({ client_id: null, custom_client_name: "Tostadora La Loma" });
   });
 
@@ -92,35 +98,33 @@ describe("maquila proposals", () => {
     ["a minimum under 200", { minimum_units: 150 }, /200 unidades por presentación/],
     ["a negative design fee", { settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: -1, design_cost: 0, background_path: null, background_opacity: 0.5, ally_logo_path: null, option_prices: null } }, /diseño/],
   ])("rejects %s", async (_label, over, msg) => {
-    await expect(saveMaquilaProposal(input(over as Partial<MaquilaProposalInput>))).rejects.toThrow(msg);
+    expect((await saveMaquilaProposal(input(over as Partial<MaquilaProposalInput>))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(msg) });
     expect(db.rows("maquila_proposals")).toHaveLength(0);
   });
 
   it("validates each presentation and material", async () => {
     const line = input().lines[0];
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, presentation: "" }] }))).rejects.toThrow(/nombre/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, grams: 0 }] }))).rejects.toThrow(/gramos/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, price_per_unit: null }] }))).rejects.toThrow(/cobras por bolsa/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, resale_price: -1 }] }))).rejects.toThrow(/venta sugerido/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, price_per_unit: -5 }] }))).rejects.toThrow(/cobras por bolsa/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, units: 150 }] }))).rejects.toThrow(/al menos 200 unidades/);
-    await expect(saveMaquilaProposal(input({ minimum_units: 300, lines: [{ ...line, units: 250 }] }))).rejects.toThrow(/al menos 300 unidades/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, units: 200.5 }] }))).rejects.toThrow(/entero/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, profile: "robusta" as never }] }))).rejects.toThrow(/perfil/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, coffee_cost_per_kg: -1 }] }))).rejects.toThrow(/Costo del café/);
-    await expect(
-      saveMaquilaProposal(input({ lines: [{ ...line, materials: [{ ...line.materials[0], unit_cost: -1 }] }] }))
-    ).rejects.toThrow(/Costo o cantidad/);
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, presentation: "" }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/nombre/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, grams: 0 }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/gramos/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, price_per_unit: null }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/cobras por bolsa/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, resale_price: -1 }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/venta sugerido/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, price_per_unit: -5 }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/cobras por bolsa/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, units: 150 }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/al menos 200 unidades/) });
+    expect((await saveMaquilaProposal(input({ minimum_units: 300, lines: [{ ...line, units: 250 }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/al menos 300 unidades/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, units: 200.5 }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/entero/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, profile: "robusta" as never }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/perfil/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, coffee_cost_per_kg: -1 }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/Costo del café/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, materials: [{ ...line.materials[0], unit_cost: -1 }] }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/Costo o cantidad/) });
   });
 
   it("explains a missing migration", async () => {
     db.failOn("maquila_proposals", "insert", 'relation "public.maquila_proposals" does not exist');
-    await expect(saveMaquilaProposal(input())).rejects.toThrow(/20261012000000_maquila_proposals/);
+    expect((await saveMaquilaProposal(input())) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/20261012000000_maquila_proposals/) });
   });
 
   it("is admin-only", async () => {
     h.client = createFakeClient(db, null);
-    await expect(saveMaquilaProposal(input())).rejects.toThrow("Unauthorized");
+    expect((await saveMaquilaProposal(input())) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching("Unauthorized") });
     await expect(getMaquilaProposals()).rejects.toThrow("Unauthorized");
   });
 });
@@ -136,12 +140,12 @@ describe("bag option prices", () => {
     await saveMaquilaOptionPrices(P);
     expect(await getMaquilaOptionPrices()).toEqual(P);
     expect(db.rows("maquila_option_prices")).toHaveLength(5);
-    await expect(saveMaquilaOptionPrices({ ...P, sticker: { price: -1, cost: 0 } })).rejects.toThrow(/Sticker/);
+    expect((await saveMaquilaOptionPrices({ ...P, sticker: { price: -1, cost: 0 } })) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/Sticker/) });
   });
 
   it("a proposal keeps a copy of the prices it was quoted with", async () => {
     db.tables.maquila_option_prices = table(100, 50);
-    const { id } = await saveMaquilaProposal(input());
+    const { id } = ok(await saveMaquilaProposal(input()));
     expect(db.byId("maquila_proposals", id)!.settings.option_prices.cara).toEqual({ price: 100, cost: 50 });
     // Later changes to the general table do not touch it…
     await saveMaquilaOptionPrices(P);
@@ -153,15 +157,15 @@ describe("bag option prices", () => {
 
   it("validates the options of each presentation", async () => {
     const line = input().lines[0];
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, options: { ...line.options, tintas: 0 } }] }))).rejects.toThrow(/tintas/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, options: { ...line.options, tintas: 9 } }] }))).rejects.toThrow(/tintas/);
-    await expect(saveMaquilaProposal(input({ lines: [{ ...line, options: { ...line.options, valvula: "sí" as never } }] }))).rejects.toThrow(/Opciones de empaque/);
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, options: { ...line.options, tintas: 0 } }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/tintas/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, options: { ...line.options, tintas: 9 } }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/tintas/) });
+    expect((await saveMaquilaProposal(input({ lines: [{ ...line, options: { ...line.options, valvula: "sí" as never } }] }))) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/Opciones de empaque/) });
   });
 
   it("works with zeros before the migration is applied", async () => {
     db.failOn("maquila_option_prices", "select", 'relation "public.maquila_option_prices" does not exist');
     expect((await getMaquilaOptionPrices()).cara).toEqual({ price: 0, cost: 0 });
     db.failOn("maquila_option_prices", "insert", 'relation "public.maquila_option_prices" does not exist');
-    await expect(saveMaquilaOptionPrices(P)).rejects.toThrow(/20261014000000_maquila_option_prices/);
+    expect((await saveMaquilaOptionPrices(P)) as { error?: string }).toMatchObject({ success: false, error: expect.stringMatching(/20261014000000_maquila_option_prices/) });
   });
 });

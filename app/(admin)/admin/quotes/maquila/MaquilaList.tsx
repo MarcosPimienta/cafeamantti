@@ -23,7 +23,8 @@ export default function MaquilaList({ proposals, onDeleted }: { proposals: any[]
     if (!window.confirm("¿Eliminar esta propuesta de maquila?")) return;
     setDeleting(id);
     try {
-      await deleteMaquilaProposal(id);
+      const res = await deleteMaquilaProposal(id);
+      if (!res.success) throw new Error(res.error);
       onDeleted(id);
     } catch (err) {
       alert(err instanceof Error ? err.message : "No se pudo eliminar");

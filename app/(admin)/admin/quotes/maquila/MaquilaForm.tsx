@@ -160,7 +160,8 @@ export default function MaquilaForm({
     setNotice("");
     startSavingPrices(async () => {
       try {
-        await saveMaquilaOptionPrices(prices);
+        const res = await saveMaquilaOptionPrices(prices);
+        if (!res.success) throw new Error(res.error);
         setGeneralPrices(prices);
         setNotice("✓ Tabla general de opciones actualizada");
       } catch (err) {
@@ -204,6 +205,7 @@ export default function MaquilaForm({
     startTransition(async () => {
       try {
         const res = await saveMaquilaProposal(payload(), initial?.id);
+        if (!res.success) throw new Error(res.error);
         setNotice("✓ Propuesta guardada");
         if (thenPdf) await downloadPdf();
         if (!initial?.id) router.replace(`/admin/quotes/maquila/${res.id}`);

@@ -42,6 +42,19 @@ async function requireAdmin() {
   return { supabase, userId: user?.id ?? null };
 }
 
+/**
+ * Runs a mutation and returns its error message instead of throwing:
+ * production builds hide messages thrown by server actions, so the admin
+ * would only see a generic "Server Components render" error.
+ */
+async function asResult<T extends object>(run: () => Promise<T>): Promise<({ success: true } & T) | { success: false; error: string }> {
+  try {
+    return { success: true, ...(await run()) };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Error inesperado' };
+  }
+}
+
 function friendly(error: { message: string }) {
   return new Error(/maquila_proposals/.test(error.message) && /exist|relation|schema/i.test(error.message) ? MIGRATION_HINT : error.message);
 }
@@ -123,16 +136,18 @@ export async function getMaquilaOptionPrices(): Promise<OptionPrices> {
 
 /** Replaces the general option price table (used by new proposals). */
 export async function saveMaquilaOptionPrices(prices: OptionPrices) {
-  const { supabase } = await requireAdmin();
-  validateOptionPrices(prices);
-  const now = new Date().toISOString();
-  const rows = OPTION_KEYS.map((key) => ({ key, price: prices[key].price, cost: prices[key].cost, updated_at: now }));
-  const { error } = await supabase.from('maquila_option_prices').upsert(rows, { onConflict: 'key' });
-  if (error) {
-    throw new Error(/maquila_option_prices/.test(error.message) && /exist|relation|schema/i.test(error.message) ? OPTIONS_MIGRATION_HINT : error.message);
-  }
-  revalidatePath('/admin/quotes');
-  return { success: true };
+  return asResult(async () => {
+    const { supabase } = await requireAdmin();
+    validateOptionPrices(prices);
+    const now = new Date().toISOString();
+    const rows = OPTION_KEYS.map((key) => ({ key, price: prices[key].price, cost: prices[key].cost, updated_at: now }));
+    const { error } = await supabase.from('maquila_option_prices').upsert(rows, { onConflict: 'key' });
+    if (error) {
+      throw new Error(/maquila_option_prices/.test(error.message) && /exist|relation|schema/i.test(error.message) ? OPTIONS_MIGRATION_HINT : error.message);
+    }
+    revalidatePath('/admin/quotes');
+    return {};
+  });
 }
 
 export async function getMaquilaProposals() {
@@ -156,40 +171,44 @@ export async function getMaquilaProposal(id: string) {
 }
 
 export async function saveMaquilaProposal(input: MaquilaProposalInput, id?: string | null) {
-  const { supabase, userId } = await requireAdmin();
-  validate(input);
-  // Keep the option prices this proposal was quoted with.
-  const settings: MaquilaSettings = {
-    ...input.settings,
-    option_prices: input.settings.option_prices ?? (await getMaquilaOptionPrices()),
-  };
-  const row = {
-    client_id: input.client_id || null,
-    custom_client_name: input.client_id ? null : input.custom_client_name?.trim() || null,
-    title: input.title.trim(),
-    proposal_date: input.proposal_date,
-    valid_until: input.valid_until || null,
-    status: input.status,
-    intro: input.intro?.trim() || null,
-    conditions: input.conditions?.trim() || null,
-    minimum_units: input.minimum_units ?? MIN_UNITS_PER_PRESENTATION,
-    settings,
-    lines: input.lines,
-    internal_notes: input.internal_notes?.trim() || null,
-    updated_at: new Date().toISOString(),
-  };
-  const { data, error } = id
-    ? await supabase.from('maquila_proposals').update(row).eq('id', id).select('id').single()
-    : await supabase.from('maquila_proposals').insert({ ...row, created_by: userId }).select('id').single();
-  if (error) throw friendly(error);
-  revalidatePath('/admin/quotes');
-  return { success: true, id: data.id as string };
+  return asResult(async () => {
+    const { supabase, userId } = await requireAdmin();
+    validate(input);
+    // Keep the option prices this proposal was quoted with.
+    const settings: MaquilaSettings = {
+      ...input.settings,
+      option_prices: input.settings.option_prices ?? (await getMaquilaOptionPrices()),
+    };
+    const row = {
+      client_id: input.client_id || null,
+      custom_client_name: input.client_id ? null : input.custom_client_name?.trim() || null,
+      title: input.title.trim(),
+      proposal_date: input.proposal_date,
+      valid_until: input.valid_until || null,
+      status: input.status,
+      intro: input.intro?.trim() || null,
+      conditions: input.conditions?.trim() || null,
+      minimum_units: input.minimum_units ?? MIN_UNITS_PER_PRESENTATION,
+      settings,
+      lines: input.lines,
+      internal_notes: input.internal_notes?.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = id
+      ? await supabase.from('maquila_proposals').update(row).eq('id', id).select('id').single()
+      : await supabase.from('maquila_proposals').insert({ ...row, created_by: userId }).select('id').single();
+    if (error) throw friendly(error);
+    revalidatePath('/admin/quotes');
+    return { id: data.id as string };
+  });
 }
 
 export async function deleteMaquilaProposal(id: string) {
-  const { supabase } = await requireAdmin();
-  const { error } = await supabase.from('maquila_proposals').delete().eq('id', id);
-  if (error) throw friendly(error);
-  revalidatePath('/admin/quotes');
-  return { success: true };
+  return asResult(async () => {
+    const { supabase } = await requireAdmin();
+    const { error } = await supabase.from('maquila_proposals').delete().eq('id', id);
+    if (error) throw friendly(error);
+    revalidatePath('/admin/quotes');
+    return {};
+  });
 }

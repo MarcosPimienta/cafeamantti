@@ -51,6 +51,8 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
         <td style="${td}"><strong>${esc(r.presentation)}</strong><br/><span style="color:#78716c; font-size:11px;">Café ${esc(r.profileLabel)} · ${esc(r.grams)} g por unidad<br/>${esc(r.optionsSummary)}</span></td>
         <td style="${td} text-align:right; white-space:nowrap; font-weight:700;">${formatCOP(r.price)}</td>
         <td style="${td} text-align:right; white-space:nowrap;">${r.resale != null ? formatCOP(r.resale) : "—"}</td>
+        <td style="${td} text-align:right;">${r.units.toLocaleString("es-CO")}</td>
+        <td style="${td} text-align:right; white-space:nowrap;">${formatCOP(r.revenue)}</td>
       </tr>`
     )
     .join("");
@@ -112,10 +114,17 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
         <th style="${th}">Presentación</th>
         <th style="${th} text-align:right;">Precio por bolsa</th>
         <th style="${th} text-align:right;">Precio de venta sugerido</th>
+        <th style="${th} text-align:right;">Unidades</th>
+        <th style="${th} text-align:right;">Valor</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
 
+    <table style="margin:16px 0 0 auto; border-collapse:collapse; min-width:300px;">
+      <tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">Subtotal</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(totals.subtotal)}</td></tr>
+      ${data.settings.apply_iva ? `<tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">IVA (${esc(data.settings.iva_pct)} %)</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(totals.iva)}</td></tr>` : ""}
+      <tr><td style="padding:8px 12px; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">Total del pedido</td><td style="padding:8px 12px; text-align:right; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">${formatCOP(totals.total)}</td></tr>
+    </table>
     <p style="font-size:11px; color:#78716c; margin:10px 0 0;">${
       data.settings.apply_iva ? `Precios por bolsa antes de IVA (${esc(data.settings.iva_pct)} %).` : "Precios por bolsa."
     } El precio de venta sugerido se basa en el de nuestro propio café en la misma presentación y empaque.</p>
