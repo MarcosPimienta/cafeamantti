@@ -35,13 +35,16 @@ const flat = (s: string) => s.replace(/\s/g, " ");
 describe("buildMaquilaHtml (client PDF)", () => {
   const html = buildMaquilaHtml(data);
 
-  it("shows each presentation with its Amantti profile, price, order value and total", () => {
-    expect(html).toContain("Total del pedido");
-    expect(html).not.toMatch(/mensual|\/ mes/);
+  it("shows what we charge per bag and the suggested resale price, without order totals", () => {
     expect(html).toContain("Café Honey · 250 g por unidad");
+    expect(html).toContain("Precio por bolsa");
+    expect(html).toContain("Precio de venta sugerido");
     expect(flat(html)).toContain("$ 22.000");
-    expect(flat(html)).toContain("$ 8.800.000"); // 22.000 × 400
-    expect(flat(html)).toContain("$ 10.472.000"); // with 19 % IVA
+    expect(flat(html)).toContain("$ 48.000"); // our Honey 250 g store price
+    expect(html).toContain("antes de IVA (19 %)");
+    for (const gone of ["Total del pedido", "Subtotal", "$ 8.800.000", "Unidades"]) expect(flat(html)).not.toContain(gone);
+    const other = buildMaquilaHtml({ ...data, lines: [{ ...data.lines[0], grams: 340 }] });
+    expect(other).toContain("—");
   });
 
   it("describes how each bag is made, without option costs", () => {

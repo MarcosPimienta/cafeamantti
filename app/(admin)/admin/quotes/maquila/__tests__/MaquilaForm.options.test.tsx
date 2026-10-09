@@ -19,21 +19,29 @@ const P = {
 };
 
 describe("MaquilaForm bag options", () => {
-  it("starts with the reference bag at the store price and moves it with each option", () => {
+  it("shows the resale price of the reference bag and moves it with each option", () => {
     render(<MaquilaForm clients={[]} packaging={[]} coffeeCostPerKg={{ premium: 40000 }} optionPrices={P} />);
-    const price = screen.getByLabelText("Precio por unidad") as HTMLInputElement;
-    expect(price.placeholder).toMatch(/35\.000/);
-    expect(screen.getByText(/Precio de referencia \(Premium 250 g/)).toBeTruthy();
+    const resale = () => screen.getByText(/Precio de venta sugerido al cliente/).textContent ?? "";
+    expect(resale()).toMatch(/Premium 250 g.*35\.000/);
 
     fireEvent.click(screen.getByLabelText("Cara trasera"));
-    expect(price.placeholder).toMatch(/34\.000/);
+    expect(resale()).toMatch(/34\.000/);
     fireEvent.click(screen.getByLabelText("Peel stick"));
-    expect(price.placeholder).toMatch(/34\.600/);
+    expect(resale()).toMatch(/34\.600/);
     fireEvent.change(screen.getByLabelText("Número de tintas por cara"), { target: { value: "2" } });
-    expect(price.placeholder).toMatch(/35\.100/);
+    expect(resale()).toMatch(/35\.100/);
   });
 
-  it("sizes without a reference product fall back to the target margin", () => {
+  it("what we charge follows cost and margin, including the options' cost", () => {
+    render(<MaquilaForm clients={[]} packaging={[]} coffeeCostPerKg={{ premium: 40000 }} optionPrices={P} />);
+    const price = screen.getByLabelText("Precio por unidad") as HTMLInputElement;
+    // 0.25 kg × 40.000 × 1.01 merma = 10.100 + valve 450 + 2 faces × 350 = 11.250; at 35 % → 17.350
+    expect(price.placeholder).toMatch(/17\.350/);
+    fireEvent.click(screen.getByLabelText("Peel stick"));
+    expect(price.placeholder).toMatch(/17\.700/); // 11.500 ÷ 0,65
+  });
+
+  it("sizes without a reference product have no resale price", () => {
     render(<MaquilaForm clients={[]} packaging={[]} coffeeCostPerKg={{ premium: 40000 }} optionPrices={P} />);
     fireEvent.change(screen.getByLabelText("Gramos por unidad"), { target: { value: "340" } });
     expect(screen.getByText(/Sin producto de referencia para 340 g/)).toBeTruthy();

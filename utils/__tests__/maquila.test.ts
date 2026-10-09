@@ -3,8 +3,7 @@ import {
   roundPrice,
   unitCost,
   suggestedPrice,
-  marginPrice,
-  referencePrice,
+  resalePrice,
   optionsCost,
   optionsPriceDelta,
   describeOptions,
@@ -65,14 +64,9 @@ describe("unit cost (Amantti supplies the coffee)", () => {
     expect(unitCost(line(), S({ merma_pct: 2 })).coffee).toBeCloseTo(10200, 6);
   });
 
-  it("the margin price leaves the target margin of the price", () => {
-    expect(marginPrice(line(), S())).toBe(roundPrice(11700 / 0.6)); // 19.500
-    expect(marginPrice(line({ target_margin_pct: 0 }), S())).toBe(11700);
-  });
-
-  it("sizes without a reference product are suggested by margin", () => {
-    expect(suggestedPrice(line({ grams: 340 }), S())).toBe(marginPrice(line({ grams: 340 }), S()));
-    expect(referencePrice(line({ grams: 1000 }), S())).toBeNull();
+  it("the price we charge leaves the target margin of the price", () => {
+    expect(suggestedPrice(line(), S())).toBe(roundPrice(11700 / 0.6)); // 19.500
+    expect(suggestedPrice(line({ target_margin_pct: 0 }), S())).toBe(11700);
   });
 });
 
@@ -100,11 +94,11 @@ describe("calculateLine", () => {
 
   it("an agreed price overrides the suggestion", () => {
     expect(calculateLine(line({ price_per_unit: 22000 })).price).toBe(22000);
-    expect(calculateLine(line({ price_per_unit: 0 }), S()).price).toBe(35000); // reference price
+    expect(calculateLine(line({ price_per_unit: 0 }), S()).price).toBe(19500);
   });
 });
 
-describe("bag options and the reference price", () => {
+describe("bag options and the suggested resale price", () => {
   const P: OptionPrices = {
     valvula: { price: 800, cost: 450 },
     peel_stick: { price: 600, cost: 250 },
@@ -114,11 +108,18 @@ describe("bag options and the reference price", () => {
   };
   const withPrices = S({ option_prices: P });
 
-  it("the reference bag sells at the store price (with shipping) of the same profile and size", () => {
-    expect(referencePrice(line(), withPrices)).toBe(35000);
-    expect(referencePrice(line({ grams: 500, profile: "honey" }), withPrices)).toBe(86400);
-    expect(referencePrice(line({ grams: 2500, profile: "chiroso" }), withPrices)).toBe(320000);
-    expect(suggestedPrice(line(), withPrices)).toBe(35000);
+  it("the reference bag resells at our store price (with shipping) of the same profile and size", () => {
+    expect(resalePrice(line(), withPrices)).toBe(35000);
+    expect(resalePrice(line({ grams: 500, profile: "honey" }), withPrices)).toBe(86400);
+    expect(resalePrice(line({ grams: 2500, profile: "chiroso" }), withPrices)).toBe(320000);
+    expect(resalePrice(line({ grams: 340 }), withPrices)).toBeNull();
+  });
+
+  it("what we charge and what the client keeps", () => {
+    const r = calculateLine(line({ price_per_unit: 21000 }), withPrices);
+    expect(r).toMatchObject({ price: 21000, resale: 35000 });
+    expect(r.clientMarginPct).toBeCloseTo(40, 6); // (35.000 − 21.000) ÷ 35.000
+    expect(calculateLine(line({ grams: 340 }), withPrices)).toMatchObject({ resale: null, clientMarginPct: null });
   });
 
   it("each difference from the reference bag adds or subtracts its price", () => {
@@ -129,15 +130,19 @@ describe("bag options and the reference price", () => {
     // 2 inks on 2 faces = 2 extra inks; on 1 face = 1 extra ink, one face less
     expect(optionsPriceDelta(opt({ tintas: 2 }), P)).toBe(1000);
     expect(optionsPriceDelta(opt({ tintas: 3, cara_frontal: false }), P)).toBe(-1000 + 2 * 500);
-    expect(referencePrice(line({ options: opt({ valvula: false, cara_trasera: false }) }), withPrices)).toBe(35000 - 1800);
+    expect(resalePrice(line({ options: opt({ valvula: false, cara_trasera: false }) }), withPrices)).toBe(35000 - 1800);
   });
 
-  it("the options cost adds to the unit cost, and the margin price follows", () => {
+  it("the options cost adds to the unit cost, and so to what we charge", () => {
     const o = { ...REFERENCE_OPTIONS, tintas: 2, peel_stick: true };
     // valve 450 + peel stick 250 + 2 faces × 350 + 2 faces × 1 extra ink × 120
     expect(optionsCost(o, P)).toBe(450 + 250 + 700 + 240);
     expect(unitCost(line({ options: o }), withPrices).total).toBe(11700 + 1640);
-    expect(calculateLine(line({ options: o }), withPrices)).toMatchObject({ optionsCost: 1640, reference: 35000 + 600 + 1000 });
+    expect(calculateLine(line({ options: o }), withPrices)).toMatchObject({
+      optionsCost: 1640,
+      suggested: roundPrice((11700 + 1640) / 0.6),
+      resale: 35000 + 600 + 1000,
+    });
   });
 
   it("no print means no inks, and the client document describes the bag", () => {

@@ -309,12 +309,12 @@ export default function MaquilaForm({
               </span>
             </summary>
             <p className="text-[11px] text-foreground/50 mt-3">
-              Referencia: nuestra bolsa a 1 tinta en frente y respaldo, con válvula, sin sticker ni peel stick, al precio de la tienda (con envío).
-              Cada diferencia suma o resta el valor al cliente; el costo entra al costo por unidad.
+              El precio de venta sugerido al cliente parte de nuestra bolsa (1 tinta en frente y respaldo, con válvula, sin sticker ni peel stick) al precio de la tienda con envío.
+              Cada diferencia suma o resta su ajuste a ese precio; el costo interno entra al costo por bolsa, y con él a lo que le cobramos.
             </p>
             <div className="hidden sm:grid grid-cols-[1fr_120px_120px] gap-2 mt-3 px-1 text-[10px] font-bold uppercase tracking-widest text-foreground/30">
               <span>Opción</span>
-              <span>Valor al cliente</span>
+              <span>Ajuste precio venta</span>
               <span>Costo interno</span>
             </div>
             <div className="space-y-2 mt-1">
@@ -323,7 +323,7 @@ export default function MaquilaForm({
                   <div className="col-span-2 sm:col-span-1 text-sm">
                     {OPTION_LABELS[k].label} <span className="text-[11px] text-foreground/40">· {OPTION_LABELS[k].hint}</span>
                   </div>
-                  <input inputMode="numeric" value={prices[k].price || ""} onChange={(e) => setOptionPrice(k, "price", n(e.target.value))} placeholder="$ 0" aria-label={`Valor al cliente de ${OPTION_LABELS[k].label}`} className={inputCls} />
+                  <input inputMode="numeric" value={prices[k].price || ""} onChange={(e) => setOptionPrice(k, "price", n(e.target.value))} placeholder="$ 0" aria-label={`Ajuste al precio de venta de ${OPTION_LABELS[k].label}`} className={inputCls} />
                   <input inputMode="numeric" value={prices[k].cost || ""} onChange={(e) => setOptionPrice(k, "cost", n(e.target.value))} placeholder="$ 0" aria-label={`Costo interno de ${OPTION_LABELS[k].label}`} className={inputCls} />
                 </div>
               ))}
@@ -434,10 +434,10 @@ export default function MaquilaForm({
                     </select>
                   </label>
                 </div>
-                <p className="text-[11px] text-foreground/40 mt-1.5">
-                  {r?.reference != null
-                    ? `Precio de referencia (${MAQUILA_PROFILES.find((pr) => pr.id === l.profile)?.label} ${{ "250g": "250 g", "500g": "500 g", "2.5kg": "2,5 kg" }[referenceSizeOf(l.grams)!]}, con estas opciones): ${cop(r.reference)} · por margen objetivo: ${cop(r.byMargin)}`
-                    : `Sin producto de referencia para ${l.grams || 0} g (solo 250 g, 500 g y 2,5 kg): el sugerido sale del margen objetivo.`}
+                <p className={`text-[11px] mt-1.5 ${r?.resale != null && r.price >= r.resale ? "text-red-600" : "text-foreground/40"}`}>
+                  {r?.resale != null
+                    ? `Precio de venta sugerido al cliente (como nuestro ${MAQUILA_PROFILES.find((pr) => pr.id === l.profile)?.label} ${{ "250g": "250 g", "500g": "500 g", "2.5kg": "2,5 kg" }[referenceSizeOf(l.grams)!]}, con estas opciones): ${cop(r.resale)} · al cliente le queda ${pct(r.clientMarginPct)}`
+                    : `Sin producto de referencia para ${l.grams || 0} g (solo 250 g, 500 g y 2,5 kg): el PDF no muestra precio de venta sugerido.`}
                 </p>
               </div>
 

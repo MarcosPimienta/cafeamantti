@@ -11,8 +11,10 @@ import { STORE_PRICES, type StoreWeight } from "@/utils/pricing";
 //
 // Each presentation picks how its bag is made. Amantti's own retail bags
 // are the reference: printed at 1 ink on both faces, with valve, without
-// sticker or peel stick. Their store price is the reference price, and
-// every difference from that bag adds or subtracts its price delta.
+// sticker or peel stick. Their store price is the price we suggest the
+// client resells at, and every difference from that bag adds or subtracts
+// the option's price. What we charge comes from cost and target margin;
+// the options' cost is part of that cost.
 
 export type PackagingOptions = {
   valvula: boolean;
@@ -36,7 +38,7 @@ export const REFERENCE_OPTIONS: PackagingOptions = {
 
 export type OptionKey = "valvula" | "peel_stick" | "sticker" | "cara" | "tinta_adicional";
 
-/** What the client pays for an option, and what it costs Amantti, per unit. */
+/** How much an option moves the suggested resale price, and what it costs Amantti, per unit. */
 export type OptionPrice = { price: number; cost: number };
 export type OptionPrices = Record<OptionKey, OptionPrice>;
 
@@ -190,7 +192,7 @@ export function optionsCost(o: PackagingOptions, prices: OptionPrices): number {
   );
 }
 
-/** How much the options move the price away from the reference bag. */
+/** How much the options move the resale price away from the reference bag. */
 export function optionsPriceDelta(o: PackagingOptions, prices: OptionPrices): number {
   const ref = printSpec(REFERENCE_OPTIONS);
   const { faces, inks } = printSpec(o);
@@ -211,11 +213,11 @@ export function referenceSizeOf(grams: number): StoreWeight | null {
 }
 
 /**
- * Recommended price from Amantti's own product of the same profile and size
- * (store price, shipping included), adjusted by the options. null when the
- * size has no reference product.
+ * Price we suggest the client resells at: Amantti's own product of the same
+ * profile and size (store price, shipping included), adjusted by the
+ * options. null when the size has no reference product.
  */
-export function referencePrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number | null {
+export function resalePrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number | null {
   const size = referenceSizeOf(line.grams);
   if (!size) return null;
   const base = STORE_PRICES[line.profile]?.[size];
@@ -259,18 +261,10 @@ export function unitCost(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_
   return { coffee, options, materials, labor, total: coffee + options + materials + labor };
 }
 
-/** Price that leaves `margin` % of the price as profit: cost ÷ (1 − margin). */
-export function marginPrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number {
+/** Price we charge that leaves `margin` % of the price as profit: cost ÷ (1 − margin). */
+export function suggestedPrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number {
   const margin = Math.min(95, Math.max(0, num(line.target_margin_pct))) / 100;
   return roundPrice(unitCost(line, settings).total / (1 - margin));
-}
-
-/**
- * Recommended price: Amantti's reference product price adjusted by the
- * options; for sizes without a reference, the target-margin price.
- */
-export function suggestedPrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number {
-  return referencePrice(line, settings) ?? marginPrice(line, settings);
 }
 
 export type LineResult = {
@@ -285,13 +279,14 @@ export type LineResult = {
   optionsCost: number;
   materialsCost: number;
   laborCost: number;
-  /** Recommended price (reference product adjusted, or by margin). */
+  /** Price that meets the target margin. */
   suggested: number;
-  /** Reference product price adjusted by options; null for other sizes. */
-  reference: number | null;
-  /** Price that would meet the target margin. */
-  byMargin: number;
+  /** What we charge per bag (agreed, or suggested). */
   price: number;
+  /** Suggested resale price for the client; null for sizes without a reference. */
+  resale: number | null;
+  /** The client's share of the resale price (%); null without resale price. */
+  clientMarginPct: number | null;
   /** Bag description for the client document. */
   optionsSummary: string;
   /** Profit share of the price (%); null when the price is 0. */
@@ -321,6 +316,7 @@ export function calculateLine(
   const suggested = suggestedPrice(line, settings);
   const price = line.price_per_unit != null && num(line.price_per_unit) > 0 ? num(line.price_per_unit) : suggested;
   const units = Math.max(0, num(line.units));
+  const resale = resalePrice(line, settings);
   return {
     id: line.id,
     presentation: line.presentation,
@@ -334,9 +330,9 @@ export function calculateLine(
     materialsCost: c.materials,
     laborCost: c.labor,
     suggested,
-    reference: referencePrice(line, settings),
-    byMargin: marginPrice(line, settings),
     price,
+    resale,
+    clientMarginPct: resale ? ((resale - price) / resale) * 100 : null,
     optionsSummary: describeOptions(line.options ?? REFERENCE_OPTIONS),
     marginPct: price > 0 ? ((price - c.total) / price) * 100 : null,
     revenue: price * units,
