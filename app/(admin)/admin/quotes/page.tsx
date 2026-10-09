@@ -7,9 +7,12 @@ import { getQuotes, getProposals, getTechSheets } from "./actions";
 import QuoteActions from "./QuoteActions";
 import ProposalActions from "./proposals/ProposalActions";
 import TechSheetActions from "./tech-sheets/TechSheetActions";
+import MaquilaList from "./maquila/MaquilaList";
+import { getMaquilaProposals } from "./maquila/actions";
 
 export default function QuotesListPage() {
-  const [activeTab, setActiveTab] = useState<'quotes' | 'proposals' | 'tech-sheets'>('quotes');
+  const [activeTab, setActiveTab] = useState<'quotes' | 'proposals' | 'tech-sheets' | 'maquila'>('quotes');
+  const [maquilas, setMaquilas] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<any[]>([]);
   const [proposals, setProposals] = useState<any[]>([]);
   const [techSheets, setTechSheets] = useState<any[]>([]);
@@ -19,14 +22,24 @@ export default function QuotesListPage() {
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
-      const [q, p, ts] = await Promise.all([getQuotes(), getProposals(), getTechSheets()]);
+      const [q, p, ts, mq] = await Promise.all([getQuotes(), getProposals(), getTechSheets(), getMaquilaProposals()]);
       setQuotes(q);
       setProposals(p);
       setTechSheets(ts);
+      setMaquilas(mq);
       setIsLoading(false);
     }
     loadData();
+    // Links back from the maquila editor open its tab (?tab=maquila).
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'maquila' || tab === 'proposals' || tab === 'tech-sheets') setActiveTab(tab);
   }, []);
+
+  const filteredMaquilas = maquilas.filter(m =>
+    (Array.isArray(m.clients) ? m.clients[0] : m.clients)?.name?.toLowerCase().includes(search.toLowerCase()) ||
+    m.custom_client_name?.toLowerCase().includes(search.toLowerCase()) ||
+    m.title?.toLowerCase().includes(search.toLowerCase())
+  );
 
   const filteredQuotes = quotes.filter(q => 
     q.clients?.name?.toLowerCase().includes(search.toLowerCase()) || 
@@ -70,6 +83,13 @@ export default function QuotesListPage() {
             Nueva Propuesta
           </Link>
           <Link 
+            href="/admin/quotes/maquila/new"
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white border border-foreground/30 text-foreground/70 rounded-xl font-bold text-xs hover:bg-foreground/5 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nueva Maquila
+          </Link>
+          <Link 
             href="/admin/quotes/tech-sheets/new"
             className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#C59F59] text-white rounded-xl font-bold text-xs hover:bg-[#B38E4D] transition-colors shadow-sm"
           >
@@ -100,6 +120,12 @@ export default function QuotesListPage() {
               className={`px-8 py-4 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === 'tech-sheets' ? 'border-[#C59F59] text-[#C59F59] bg-white' : 'border-transparent text-foreground/40 hover:text-foreground/60'}`}
             >
               Fichas Técnicas
+            </button>
+            <button 
+              onClick={() => setActiveTab('maquila')}
+              className={`px-8 py-4 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === 'maquila' ? 'border-[#C59F59] text-[#C59F59] bg-white' : 'border-transparent text-foreground/40 hover:text-foreground/60'}`}
+            >
+              Maquila
             </button>
           </div>
           
@@ -224,6 +250,8 @@ export default function QuotesListPage() {
                 )}
               </tbody>
             </table>
+          ) : activeTab === 'maquila' ? (
+            <MaquilaList proposals={filteredMaquilas} onDeleted={(id) => setMaquilas((list) => list.filter((m) => m.id !== id))} />
           ) : (
             /* TECH SHEETS TABLE */
             <table className="w-full text-left text-sm text-foreground/80">

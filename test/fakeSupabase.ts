@@ -42,6 +42,9 @@ const RELATIONS: Record<string, Record<string, Relation>> = {
   equipment_events: {
     client_id: { table: "clients", localKey: "client_id" },
   },
+  maquila_proposals: {
+    client_id: { table: "clients", localKey: "client_id" },
+  },
 };
 
 /** Column defaults applied on insert, mirroring the migrations. */
