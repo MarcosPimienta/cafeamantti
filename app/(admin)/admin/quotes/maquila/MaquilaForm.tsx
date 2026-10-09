@@ -4,6 +4,8 @@ import React, { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Copy, FileDown, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { saveMaquilaProposal, type MaquilaProposalInput } from "./actions";
+import MaquilaPreview from "./MaquilaPreview";
+import type { MaquilaPdfData } from "@/utils/pdf/maquilaPdf";
 import {
   calculateProposal,
   linesBelowCost,
@@ -77,6 +79,23 @@ export default function MaquilaForm({
   const belowCost = useMemo(() => linesBelowCost(lines, settings), [lines, settings]);
   const clientName = clientId ? clients.find((c) => c.id === clientId)?.name ?? "" : customClient;
 
+  // What the client document shows; the preview and the PDF use the same data.
+  const pdfData: MaquilaPdfData = useMemo(
+    () => ({
+      title,
+      clientName: clientName || "Cliente",
+      proposalDate: date,
+      validUntil: validUntil || null,
+      intro,
+      conditions,
+      minimumUnits: minimumUnits.trim() === "" ? null : Math.round(n(minimumUnits)),
+      settings,
+      lines,
+      sellerName,
+    }),
+    [title, clientName, date, validUntil, intro, conditions, minimumUnits, settings, lines, sellerName]
+  );
+
   const updateLine = (id: string, patch: Partial<MaquilaLine>) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const updateMaterial = (lineId: string, idx: number, patch: Partial<MaterialLine>) =>
     setLines((ls) => ls.map((l) => (l.id === lineId ? { ...l, materials: l.materials.map((m, i) => (i === idx ? { ...m, ...patch } : m)) } : l)));
@@ -118,18 +137,7 @@ export default function MaquilaForm({
     setIsPdf(true);
     try {
       const { generateMaquilaPDF } = await import("@/utils/pdf/maquilaPdf");
-      const blob = await generateMaquilaPDF({
-        title,
-        clientName,
-        proposalDate: date,
-        validUntil: validUntil || null,
-        intro,
-        conditions,
-        minimumUnits: minimumUnits.trim() === "" ? null : Math.round(n(minimumUnits)),
-        settings,
-        lines,
-        sellerName,
-      });
+      const blob = await generateMaquilaPDF(pdfData);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -341,7 +349,7 @@ export default function MaquilaForm({
       </div>
 
       {/* Internal summary */}
-      <aside className="xl:sticky xl:top-6 space-y-4">
+      <aside className="xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto space-y-4 pb-2">
         <section className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">Resumen interno · mensual</p>
           <Row label="Unidades" value={calc.totals.units.toLocaleString("es-CO")} />
@@ -378,6 +386,8 @@ export default function MaquilaForm({
           </button>
           <p className="text-[11px] text-foreground/40 text-center">El PDF muestra precios y condiciones; nunca costos ni márgenes.</p>
         </div>
+
+        <MaquilaPreview data={pdfData} />
       </aside>
     </div>
   );

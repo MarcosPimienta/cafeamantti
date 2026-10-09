@@ -59,7 +59,7 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
   const clientSupplies = [...supplyTotals].map(([name, qty]) => `${esc(name)} (${qty.toLocaleString("es-CO")} und.)`);
 
   const deliver = `
-    <ul style="margin:8px 0 0; padding-left:18px; font-size:12px; color:#44403c; line-height:1.7;">
+    <ul style="list-style:disc; margin:8px 0 0; padding-left:18px; font-size:12px; color:#44403c; line-height:1.7;">
       <li>Café tostado: <strong>${kg(totals.coffeeKg)}</strong> al mes${data.settings.merma_pct > 0 ? ` (incluye ${esc(data.settings.merma_pct)} % de merma de empaque)` : ""}.</li>
       ${clientSupplies.map((s) => `<li>${s}</li>`).join("")}
     </ul>`;
@@ -103,7 +103,7 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
     ${
       paragraphs(data.conditions).length
         ? `<h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 4px;">Condiciones</h2>
-           <ul style="margin:8px 0 0; padding-left:18px; font-size:12px; color:#44403c; line-height:1.7;">${paragraphs(data.conditions).map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`
+           <ul style="list-style:disc; margin:8px 0 0; padding-left:18px; font-size:12px; color:#44403c; line-height:1.7;">${paragraphs(data.conditions).map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`
         : ""
     }
 
