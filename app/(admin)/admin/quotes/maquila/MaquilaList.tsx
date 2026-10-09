@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { Edit2, Loader2, Package, Trash2 } from "lucide-react";
 import { deleteMaquilaProposal } from "./actions";
-import { calculateProposal, DEFAULT_SETTINGS, type MaquilaLine, type MaquilaSettings } from "@/utils/maquila";
+import { calculateProposal, normalizeLine, DEFAULT_SETTINGS, type MaquilaLine, type MaquilaSettings } from "@/utils/maquila";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const STATUS_STYLE: Record<string, string> = {
@@ -39,7 +39,7 @@ export default function MaquilaList({ proposals, onDeleted }: { proposals: any[]
           <th className="px-6 py-4 font-medium">Cliente / Propuesta</th>
           <th className="px-6 py-4 font-medium">Fecha</th>
           <th className="px-6 py-4 font-medium">Presentaciones</th>
-          <th className="px-6 py-4 font-medium text-right">Valor mensual</th>
+          <th className="px-6 py-4 font-medium text-right">Valor del pedido</th>
           <th className="px-6 py-4 font-medium">Estado</th>
           <th className="px-6 py-4 font-medium text-center">Acciones</th>
         </tr>
@@ -55,9 +55,9 @@ export default function MaquilaList({ proposals, onDeleted }: { proposals: any[]
         ) : (
           proposals.map((p) => {
             const client = Array.isArray(p.clients) ? p.clients[0] : p.clients;
-            const lines = (p.lines ?? []) as MaquilaLine[];
+            const lines = ((p.lines ?? []) as MaquilaLine[]).map(normalizeLine);
             const settings = { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) } as MaquilaSettings;
-            const { totals } = calculateProposal(lines, settings);
+            const { totals } = calculateProposal(lines, settings, p.minimum_units);
             return (
               <tr key={p.id} className="hover:bg-foreground/[0.02]">
                 <td className="px-6 py-4">

@@ -16,6 +16,7 @@ import {
   DEFAULT_CONDITIONS,
   DEFAULT_BACKGROUND_URL,
   MAQUILA_PROFILES,
+  effectiveMinimum,
   MIN_UNITS_PER_PRESENTATION,
   type MaquilaLine,
   type MaterialLine,
@@ -43,7 +44,7 @@ const blankLine = (costs: Partial<Record<CoffeeProfileId, number>>): MaquilaLine
   profile: "premium",
   coffee_cost_per_kg: costs.premium ?? 0,
   grams: 250,
-  monthly_units: MIN_UNITS_PER_PRESENTATION,
+  units: MIN_UNITS_PER_PRESENTATION,
   materials: [],
   labor_per_unit: 0,
   target_margin_pct: 35,
@@ -97,9 +98,11 @@ export default function MaquilaForm({
   const [isPending, startTransition] = useTransition();
   const [isPdf, setIsPdf] = useState(false);
 
-  const calc = useMemo(() => calculateProposal(lines, settings), [lines, settings]);
+  const minimumNum = minimumUnits.trim() === "" ? null : Math.round(n(minimumUnits));
+  const minimum = effectiveMinimum(minimumNum);
+  const calc = useMemo(() => calculateProposal(lines, settings, minimumNum), [lines, settings, minimumNum]);
   const belowCost = useMemo(() => linesBelowCost(lines, settings), [lines, settings]);
-  const belowMinimum = useMemo(() => linesBelowMinimum(lines, settings), [lines, settings]);
+  const belowMinimum = useMemo(() => linesBelowMinimum(lines, settings, minimumNum), [lines, settings, minimumNum]);
   const minimumInvalid = minimumUnits.trim() !== "" && n(minimumUnits) < MIN_UNITS_PER_PRESENTATION;
   const clientName = clientId ? clients.find((c) => c.id === clientId)?.name ?? "" : customClient;
 
@@ -112,7 +115,7 @@ export default function MaquilaForm({
       validUntil: validUntil || null,
       intro,
       conditions,
-      minimumUnits: minimumUnits.trim() === "" ? null : Math.round(n(minimumUnits)),
+      minimumUnits: minimumNum,
       settings,
       lines,
       sellerName,
@@ -120,7 +123,7 @@ export default function MaquilaForm({
       backgroundOpacity: settings.background_opacity,
       allyLogo: allyLogoUrl || null,
     }),
-    [title, clientName, date, validUntil, intro, conditions, minimumUnits, settings, lines, sellerName, effectiveBackground, allyLogoUrl]
+    [title, clientName, date, validUntil, intro, conditions, minimumNum, settings, lines, sellerName, effectiveBackground, allyLogoUrl]
   );
 
   const updateLine = (id: string, patch: Partial<MaquilaLine>) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -147,6 +150,10 @@ export default function MaquilaForm({
   function save(thenPdf = false) {
     setError("");
     setNotice("");
+    if (belowMinimum.length) {
+      setError(`El pedido mínimo es de ${minimum.toLocaleString("es-CO")} unidades por presentación: revisa ${belowMinimum.join(", ")}.`);
+      return;
+    }
     startTransition(async () => {
       try {
         const res = await saveMaquilaProposal(payload(), initial?.id);
@@ -280,9 +287,9 @@ export default function MaquilaForm({
                   <input inputMode="decimal" value={l.grams || ""} onChange={(e) => updateLine(l.id, { grams: n(e.target.value) })} aria-label="Gramos por unidad" className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Unidades al mes</label>
-                  <input inputMode="numeric" value={l.monthly_units || ""} onChange={(e) => updateLine(l.id, { monthly_units: n(e.target.value) })} aria-label="Unidades al mes" className={`${inputCls} ${r?.belowMinimum ? "border-amber-300" : ""}`} />
-                  {r?.belowMinimum && <p className="text-[11px] text-amber-700 mt-1">Menos del mínimo de {MIN_UNITS_PER_PRESENTATION} und.</p>}
+                  <label className={labelCls}>Unidades del pedido</label>
+                  <input inputMode="numeric" value={l.units || ""} onChange={(e) => updateLine(l.id, { units: Math.round(n(e.target.value.replace(/[^\d]/g, ""))) })} placeholder={String(minimum)} aria-label="Unidades del pedido" className={`${inputCls} ${r?.belowMinimum ? "border-red-300" : ""}`} />
+                  <p className={`text-[11px] mt-1 ${r?.belowMinimum ? "text-red-600" : "text-foreground/40"}`}>Mínimo {minimum.toLocaleString("es-CO")} und.</p>
                 </div>
               </div>
 
@@ -461,7 +468,7 @@ export default function MaquilaForm({
       {/* Internal summary */}
       <aside className="xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto space-y-4 pb-2">
         <section className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">Resumen interno · mensual</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">Resumen interno · por pedido</p>
           <Row label="Unidades" value={calc.totals.units.toLocaleString("es-CO")} />
           {MAQUILA_PROFILES.filter((pr) => calc.totals.coffeeKgByProfile[pr.id]).map((pr) => (
             <Row key={pr.id} label={`Café ${pr.label} a tostar`} value={`${calc.totals.coffeeKgByProfile[pr.id]!.toLocaleString("es-CO", { maximumFractionDigits: 1 })} kg`} />
@@ -496,9 +503,9 @@ export default function MaquilaForm({
           </div>
         )}
         {belowMinimum.length > 0 && (
-          <div className="flex items-start gap-2 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <div className="flex items-start gap-2 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-            <span>Por debajo del mínimo de {MIN_UNITS_PER_PRESENTATION} und. por presentación: {belowMinimum.join(", ")}.</span>
+            <span>No se puede guardar: el pedido mínimo es de {minimum.toLocaleString("es-CO")} und. por presentación ({belowMinimum.join(", ")}).</span>
           </div>
         )}
         {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-2xl">{error}</p>}

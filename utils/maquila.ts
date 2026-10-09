@@ -27,8 +27,8 @@ export type MaquilaLine = {
   coffee_cost_per_kg: number;
   /** Coffee per packed unit, in grams. */
   grams: number;
-  /** Estimated units per month (for totals and coffee needed). */
-  monthly_units: number;
+  /** Units quoted for one order of this presentation (at least the minimum). */
+  units: number;
   materials: MaterialLine[];
   /** Packing labor per unit (COP). */
   labor_per_unit: number;
@@ -83,16 +83,18 @@ const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const isProfile = (v: unknown): v is CoffeeProfileId => COFFEE_PROFILES.some((p) => p.id === v);
 
 /** Fills fields added after a proposal was saved (older proposals had no profile or design). */
-export function normalizeLine(line: Partial<MaquilaLine> & { id: string }): MaquilaLine {
+export function normalizeLine(line: Partial<MaquilaLine> & { id: string; monthly_units?: number }): MaquilaLine {
+  // Proposals saved before quoting per order stored a monthly estimate.
+  const { monthly_units, ...rest } = line;
   return {
     presentation: "",
     grams: 250,
-    monthly_units: 0,
     materials: [],
     labor_per_unit: 0,
     target_margin_pct: 35,
     price_per_unit: null,
-    ...line,
+    ...rest,
+    units: num(rest.units ?? monthly_units ?? MIN_UNITS_PER_PRESENTATION),
     profile: isProfile(line.profile) ? line.profile : "premium",
     coffee_cost_per_kg: num(line.coffee_cost_per_kg),
   };
@@ -147,19 +149,28 @@ export type LineResult = {
   revenue: number;
   totalCost: number;
   profit: number;
-  /** Kg of roasted coffee Amantti needs for the month, with merma. */
+  /** Kg of roasted coffee Amantti needs for the order, with merma. */
   coffeeKg: number;
   /** Below the minimum order per presentation. */
   belowMinimum: boolean;
-  /** Materials the client must deliver per month. */
+  /** Materials the client must deliver for the order. */
   clientMaterials: { name: string; qty: number }[];
 };
 
-export function calculateLine(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): LineResult {
+/** The minimum that applies: the proposal's, never below the house rule. */
+export function effectiveMinimum(minimum?: number | null): number {
+  return Math.max(MIN_UNITS_PER_PRESENTATION, num(minimum));
+}
+
+export function calculateLine(
+  line: MaquilaLine,
+  settings: MaquilaSettings = DEFAULT_SETTINGS,
+  minimum: number | null = null
+): LineResult {
   const c = unitCost(line, settings);
   const suggested = suggestedPrice(line, settings);
   const price = line.price_per_unit != null && num(line.price_per_unit) > 0 ? num(line.price_per_unit) : suggested;
-  const units = Math.max(0, num(line.monthly_units));
+  const units = Math.max(0, num(line.units));
   return {
     id: line.id,
     presentation: line.presentation,
@@ -178,15 +189,15 @@ export function calculateLine(line: MaquilaLine, settings: MaquilaSettings = DEF
     totalCost: c.total * units,
     profit: (price - c.total) * units,
     coffeeKg: units * coffeeKgPerUnit(line, settings),
-    belowMinimum: units > 0 && units < MIN_UNITS_PER_PRESENTATION,
+    belowMinimum: units < effectiveMinimum(minimum),
     clientMaterials: line.materials
       .filter((m) => m.supplied_by === "cliente" && num(m.qty) > 0)
       .map((m) => ({ name: m.name, qty: num(m.qty) * units })),
   };
 }
 
-export function calculateProposal(lines: MaquilaLine[], settings: MaquilaSettings = DEFAULT_SETTINGS) {
-  const results = lines.map((l) => calculateLine(l, settings));
+export function calculateProposal(lines: MaquilaLine[], settings: MaquilaSettings = DEFAULT_SETTINGS, minimum: number | null = null) {
+  const results = lines.map((l) => calculateLine(l, settings, minimum));
   const ivaRate = settings.apply_iva ? num(settings.iva_pct) / 100 : 0;
 
   const subtotal = results.reduce((s, r) => s + r.revenue, 0);
@@ -205,7 +216,7 @@ export function calculateProposal(lines: MaquilaLine[], settings: MaquilaSetting
       units: results.reduce((s, r) => s + r.units, 0),
       coffeeKg: results.reduce((s, r) => s + r.coffeeKg, 0),
       coffeeKgByProfile,
-      // Monthly service
+      // The order
       subtotal,
       iva: subtotal * ivaRate,
       total: subtotal * (1 + ivaRate),
@@ -229,9 +240,9 @@ export function linesBelowCost(lines: MaquilaLine[], settings: MaquilaSettings =
   return lines.map((l) => calculateLine(l, settings)).filter((r) => r.price < r.cost).map((r) => r.presentation);
 }
 
-/** Presentations estimated below the per-presentation minimum order. */
-export function linesBelowMinimum(lines: MaquilaLine[], settings: MaquilaSettings = DEFAULT_SETTINGS): string[] {
-  return lines.map((l) => calculateLine(l, settings)).filter((r) => r.belowMinimum).map((r) => r.presentation);
+/** Presentations quoted below the per-presentation minimum order. */
+export function linesBelowMinimum(lines: MaquilaLine[], settings: MaquilaSettings = DEFAULT_SETTINGS, minimum: number | null = null): string[] {
+  return lines.map((l) => calculateLine(l, settings, minimum)).filter((r) => r.belowMinimum).map((r) => r.presentation);
 }
 
 export const DEFAULT_CONDITIONS = [

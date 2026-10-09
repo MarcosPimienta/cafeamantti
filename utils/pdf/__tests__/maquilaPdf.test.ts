@@ -17,7 +17,7 @@ const data: MaquilaPdfData = {
       profile: "honey",
       coffee_cost_per_kg: 41234,
       grams: 250,
-      monthly_units: 400,
+      units: 400,
       materials: [
         { code: "EMP-1", name: "Bolsa kraft", unit_cost: 1234, qty: 1, supplied_by: "amantti" },
         { code: null, name: "Etiqueta del cliente", unit_cost: 777, qty: 1, supplied_by: "cliente" },
@@ -33,7 +33,9 @@ const flat = (s: string) => s.replace(/\s/g, " ");
 describe("buildMaquilaHtml (client PDF)", () => {
   const html = buildMaquilaHtml(data);
 
-  it("shows each presentation with its Amantti profile, price, monthly value and total", () => {
+  it("shows each presentation with its Amantti profile, price, order value and total", () => {
+    expect(html).toContain("Total del pedido");
+    expect(html).not.toMatch(/mensual|\/ mes/);
     expect(html).toContain("Café Honey · 250 g por unidad");
     expect(flat(html)).toContain("$ 22.000");
     expect(flat(html)).toContain("$ 8.800.000"); // 22.000 × 400
@@ -66,7 +68,7 @@ describe("buildMaquilaHtml (client PDF)", () => {
   });
 
   it("adds up a supply used by several presentations", () => {
-    const two = buildMaquilaHtml({ ...data, lines: [data.lines[0], { ...data.lines[0], id: "l2", presentation: "Bolsa 500 g", monthly_units: 150 }] });
+    const two = buildMaquilaHtml({ ...data, lines: [data.lines[0], { ...data.lines[0], id: "l2", presentation: "Bolsa 500 g", units: 150 }] });
     expect(two).toContain("Etiqueta del cliente (550 und.)");
     expect(two.match(/Etiqueta del cliente/g)).toHaveLength(1);
   });

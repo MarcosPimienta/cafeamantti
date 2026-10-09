@@ -3,7 +3,7 @@
 // one-time design fee, what the client must deliver, IVA and conditions.
 // Never includes costs, margins or internal notes.
 
-import { calculateProposal, MIN_UNITS_PER_PRESENTATION, type MaquilaLine, type MaquilaSettings } from "@/utils/maquila";
+import { calculateProposal, effectiveMinimum, type MaquilaLine, type MaquilaSettings } from "@/utils/maquila";
 import { formatCOP, formatDateSpanish, imageUrlToBase64 } from "./cuentasCobroHelpers";
 
 export type MaquilaPdfData = {
@@ -41,7 +41,7 @@ const paragraphs = (text: string | null) =>
 
 /** The proposal as an HTML string (A4 width), ready for html2pdf. */
 export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
-  const { lines, totals } = calculateProposal(data.lines, data.settings);
+  const { lines, totals } = calculateProposal(data.lines, data.settings, data.minimumUnits);
   const th = "padding:10px 12px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#78716c; text-align:left; border-bottom:2px solid #C59F59;";
   const td = "padding:10px 12px; font-size:12px; color:#292524; border-bottom:1px solid #e7e5e4;";
 
@@ -112,8 +112,8 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
       <thead><tr>
         <th style="${th}">Presentación</th>
         <th style="${th} text-align:right;">Precio por unidad</th>
-        <th style="${th} text-align:right;">Unidades / mes</th>
-        <th style="${th} text-align:right;">Valor mensual</th>
+        <th style="${th} text-align:right;">Unidades</th>
+        <th style="${th} text-align:right;">Valor</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -121,9 +121,9 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
     <table style="margin:16px 0 0 auto; border-collapse:collapse; min-width:300px;">
       <tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">Subtotal</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(totals.subtotal)}</td></tr>
       ${data.settings.apply_iva ? `<tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">IVA (${esc(data.settings.iva_pct)} %)</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(totals.iva)}</td></tr>` : ""}
-      <tr><td style="padding:8px 12px; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">Total mensual estimado</td><td style="padding:8px 12px; text-align:right; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">${formatCOP(totals.total)}</td></tr>
+      <tr><td style="padding:8px 12px; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">Total del pedido</td><td style="padding:8px 12px; text-align:right; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">${formatCOP(totals.total)}</td></tr>
     </table>
-    <p style="font-size:11px; color:#78716c; margin:10px 0 0;">Pedido mínimo: ${Math.max(MIN_UNITS_PER_PRESENTATION, data.minimumUnits ?? 0).toLocaleString("es-CO")} unidades por presentación.</p>
+    <p style="font-size:11px; color:#78716c; margin:10px 0 0;">Pedido mínimo: ${effectiveMinimum(data.minimumUnits).toLocaleString("es-CO")} unidades por presentación.</p>
 
     ${design}
     ${deliver}

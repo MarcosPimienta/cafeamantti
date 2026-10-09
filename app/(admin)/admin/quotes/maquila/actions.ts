@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { checkIsAdmin } from '../../../actions';
-import { MIN_UNITS_PER_PRESENTATION, MAQUILA_PROFILES, type MaquilaLine, type MaquilaSettings } from '@/utils/maquila';
+import { MIN_UNITS_PER_PRESENTATION, MAQUILA_PROFILES, effectiveMinimum, type MaquilaLine, type MaquilaSettings } from '@/utils/maquila';
 
 const STATUSES = ['borrador', 'enviada', 'aceptada', 'rechazada'];
 const MIGRATION_HINT = 'Falta aplicar la migración 20261012000000_maquila_proposals.sql';
@@ -63,7 +63,10 @@ function validate(p: MaquilaProposalInput) {
     if (!(finiteNonNeg(l.grams) && l.grams > 0)) throw new Error(`Indica los gramos por unidad de ${name}.`);
     if (!MAQUILA_PROFILES.some((pr) => pr.id === l.profile)) throw new Error(`Elige el perfil de café de ${name}.`);
     if (!finiteNonNeg(l.coffee_cost_per_kg)) throw new Error(`Costo del café inválido en ${name}.`);
-    if (!finiteNonNeg(l.monthly_units)) throw new Error(`Unidades al mes inválidas en ${name}.`);
+    const minimum = effectiveMinimum(p.minimum_units);
+    if (!(Number.isInteger(l.units) && l.units >= minimum)) {
+      throw new Error(`${name}: el pedido debe ser de al menos ${minimum} unidades (número entero).`);
+    }
     if (!finiteNonNeg(l.labor_per_unit)) throw new Error(`Mano de obra inválida en ${name}.`);
     if (!finiteNonNeg(l.target_margin_pct) || l.target_margin_pct >= 100) throw new Error(`El margen de ${name} debe estar entre 0 y 99 %.`);
     if (l.price_per_unit !== null && !finiteNonNeg(l.price_per_unit)) throw new Error(`Precio inválido en ${name}.`);
@@ -79,7 +82,7 @@ export async function getMaquilaProposals() {
   const { supabase } = await requireAdmin();
   const { data, error } = await supabase
     .from('maquila_proposals')
-    .select('id, title, status, proposal_date, valid_until, custom_client_name, lines, settings, clients:client_id ( name )')
+    .select('id, title, status, proposal_date, valid_until, custom_client_name, minimum_units, lines, settings, clients:client_id ( name )')
     .order('created_at', { ascending: false });
   if (error) {
     console.error('getMaquilaProposals:', error.message);

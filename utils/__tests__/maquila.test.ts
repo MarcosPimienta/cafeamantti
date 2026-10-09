@@ -10,6 +10,7 @@ import {
   linesBelowMinimum,
   normalizeLine,
   normalizeSettings,
+  effectiveMinimum,
   MIN_UNITS_PER_PRESENTATION,
   DEFAULT_SETTINGS,
   type MaquilaLine,
@@ -24,7 +25,7 @@ const line = (over: Partial<MaquilaLine> = {}): MaquilaLine => ({
   profile: "premium",
   coffee_cost_per_kg: 40000,
   grams: 250,
-  monthly_units: 400,
+  units: 400,
   materials: [
     { code: "EMP-BOLSA-FIR-250G", name: "Bolsa 250 g", unit_cost: 1200, qty: 1, supplied_by: "amantti" },
     { code: null, name: "Etiqueta del cliente", unit_cost: 300, qty: 1, supplied_by: "cliente" },
@@ -62,7 +63,7 @@ describe("unit cost (Amantti supplies the coffee)", () => {
 });
 
 describe("calculateLine", () => {
-  it("monthly figures, coffee to roast per profile and client supplies", () => {
+  it("order figures, coffee to roast per profile and client supplies", () => {
     const r = calculateLine(line({ profile: "honey" }), S({ merma_pct: 2 }));
     expect(r.profileLabel).toBe("Honey");
     expect(r.coffeeKg).toBeCloseTo(400 * 0.255, 6);
@@ -71,12 +72,16 @@ describe("calculateLine", () => {
     expect(r.clientMaterials).toEqual([{ name: "Etiqueta del cliente", qty: 400 }]);
   });
 
-  it("flags presentations under the 200-unit minimum (but not empty ones)", () => {
+  it("each presentation is quoted for at least the minimum order (200, or the proposal's if higher)", () => {
     expect(MIN_UNITS_PER_PRESENTATION).toBe(200);
-    expect(calculateLine(line({ monthly_units: 150 })).belowMinimum).toBe(true);
-    expect(calculateLine(line({ monthly_units: 200 })).belowMinimum).toBe(false);
-    expect(calculateLine(line({ monthly_units: 0 })).belowMinimum).toBe(false);
-    expect(linesBelowMinimum([line({ monthly_units: 50 }), line({ id: "b", presentation: "500 g" })])).toEqual(["Bolsa 250 g con válvula"]);
+    expect(calculateLine(line({ units: 150 })).belowMinimum).toBe(true);
+    expect(calculateLine(line({ units: 0 })).belowMinimum).toBe(true);
+    expect(calculateLine(line({ units: 200 })).belowMinimum).toBe(false);
+    expect(calculateLine(line({ units: 250 }), S(), 300).belowMinimum).toBe(true);
+    expect(calculateLine(line({ units: 250 }), S(), 100).belowMinimum).toBe(false); // never below 200
+    expect(effectiveMinimum(null)).toBe(200);
+    expect(effectiveMinimum(500)).toBe(500);
+    expect(linesBelowMinimum([line({ units: 50 }), line({ id: "b", presentation: "500 g" })])).toEqual(["Bolsa 250 g con válvula"]);
   });
 
   it("an agreed price overrides the suggestion", () => {
@@ -86,9 +91,9 @@ describe("calculateLine", () => {
 });
 
 describe("calculateProposal", () => {
-  it("monthly service and the one-time design fee are totalled separately, each with IVA", () => {
+  it("the order and the one-time design fee are totalled separately, each with IVA", () => {
     const p = calculateProposal(
-      [line({ price_per_unit: 20000 }), line({ id: "l2", presentation: "Bolsa 2.5 kg", profile: "chiroso", grams: 2500, monthly_units: 200, price_per_unit: 150000 })],
+      [line({ price_per_unit: 20000 }), line({ id: "l2", presentation: "Bolsa 2.5 kg", profile: "chiroso", grams: 2500, units: 200, price_per_unit: 150000 })],
       S({ design_fee: 1500000, design_cost: 600000 })
     );
     expect(p.totals.subtotal).toBe(20000 * 400 + 150000 * 200);
@@ -113,6 +118,13 @@ describe("calculateProposal", () => {
 });
 
 describe("older proposals", () => {
+  it("a monthly estimate saved before becomes the order quantity", () => {
+    expect(normalizeLine({ id: "x", monthly_units: 350 } as never).units).toBe(350);
+    expect(normalizeLine({ id: "x" }).units).toBe(200);
+    expect(normalizeLine({ id: "x", units: 400, monthly_units: 50 } as never).units).toBe(400);
+    expect(normalizeLine({ id: "x", monthly_units: 350 } as never)).not.toHaveProperty("monthly_units");
+  });
+
   it("lines without profile or coffee cost become Premium at $0/kg", () => {
     const l = normalizeLine({ id: "x", presentation: "Vieja", grams: 250 });
     expect(l).toMatchObject({ profile: "premium", coffee_cost_per_kg: 0, materials: [], price_per_unit: null });

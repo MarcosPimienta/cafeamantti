@@ -32,7 +32,7 @@ const input = (over: Partial<MaquilaProposalInput> = {}): MaquilaProposalInput =
       profile: "premium",
       coffee_cost_per_kg: 40000,
       grams: 250,
-      monthly_units: 400,
+      units: 400,
       materials: [{ code: null, name: "Bolsa kraft", unit_cost: 1200, qty: 1, supplied_by: "amantti" }],
       labor_per_unit: 400,
       target_margin_pct: 35,
@@ -100,6 +100,9 @@ describe("maquila proposals", () => {
     await expect(saveMaquilaProposal(input({ lines: [{ ...line, grams: 0 }] }))).rejects.toThrow(/gramos/);
     await expect(saveMaquilaProposal(input({ lines: [{ ...line, target_margin_pct: 100 }] }))).rejects.toThrow(/margen/);
     await expect(saveMaquilaProposal(input({ lines: [{ ...line, price_per_unit: -5 }] }))).rejects.toThrow(/Precio/);
+    await expect(saveMaquilaProposal(input({ lines: [{ ...line, units: 150 }] }))).rejects.toThrow(/al menos 200 unidades/);
+    await expect(saveMaquilaProposal(input({ minimum_units: 300, lines: [{ ...line, units: 250 }] }))).rejects.toThrow(/al menos 300 unidades/);
+    await expect(saveMaquilaProposal(input({ lines: [{ ...line, units: 200.5 }] }))).rejects.toThrow(/entero/);
     await expect(saveMaquilaProposal(input({ lines: [{ ...line, profile: "robusta" as never }] }))).rejects.toThrow(/perfil/);
     await expect(saveMaquilaProposal(input({ lines: [{ ...line, coffee_cost_per_kg: -1 }] }))).rejects.toThrow(/Costo del café/);
     await expect(

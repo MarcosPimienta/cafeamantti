@@ -21,7 +21,7 @@ const data: MaquilaPdfData = {
       profile: "premium",
       coffee_cost_per_kg: 41234,
       grams: 250,
-      monthly_units: 100,
+      units: 200,
       materials: [{ code: null, name: "Bolsa", unit_cost: 1234, qty: 1, supplied_by: "amantti" }],
       labor_per_unit: 400,
       target_margin_pct: 35,
