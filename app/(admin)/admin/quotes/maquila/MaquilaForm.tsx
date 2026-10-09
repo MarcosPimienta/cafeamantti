@@ -12,6 +12,8 @@ import {
   linesBelowCost,
   linesBelowMinimum,
   linesWithoutPrice,
+  designItems,
+  type DesignItem,
   normalizeLine,
   normalizeSettings,
   DEFAULT_CONDITIONS,
@@ -100,7 +102,7 @@ export default function MaquilaForm({
   // A saved proposal keeps the option prices it was quoted with; a new one starts from the general table.
   const [settings, setSettings] = useState<MaquilaSettings>(() => {
     const st = normalizeSettings(initial?.settings);
-    return { ...st, option_prices: normalizeOptionPrices(st.option_prices ?? generalOptionPrices) };
+    return { ...st, option_prices: normalizeOptionPrices(st.option_prices ?? generalOptionPrices), design_items: designItems(st) };
   });
   const prices = normalizeOptionPrices(settings.option_prices);
   const [savingPrices, startSavingPrices] = useTransition();
@@ -147,6 +149,12 @@ export default function MaquilaForm({
   );
 
   const updateLine = (id: string, patch: Partial<MaquilaLine>) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  // The design fee is always the sum of its concepts.
+  const setDesignItems = (items: DesignItem[]) =>
+    setSettings((st) => ({ ...st, design_items: items, design_fee: items.reduce((sum, i) => sum + i.price, 0) }));
+  const updateDesignItem = (idx: number, patch: Partial<DesignItem>) =>
+    setDesignItems((settings.design_items ?? []).map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+
   const updateOptions = (id: string, patch: Partial<PackagingOptions>) =>
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, options: { ...l.options, ...patch } } : l)));
   const setOptionPrice = (key: (typeof OPTION_KEYS)[number], field: "price" | "cost", value: number) =>
@@ -297,11 +305,28 @@ export default function MaquilaForm({
           </div>
           <div className="rounded-2xl bg-[#fdfbf7] border border-foreground/5 p-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#C59F59] mb-3">Diseño de empaque · pago único por proyecto</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="mq-design-fee" className={labelCls}>Valor al cliente</label>
-                <input id="mq-design-fee" inputMode="numeric" value={settings.design_fee || ""} onChange={(e) => setSettings({ ...settings, design_fee: n(e.target.value) })} placeholder="0 = sin diseño" className={inputCls} />
+            <p className="text-[11px] text-foreground/50 mb-3">Un solo proyecto del que salen todas las presentaciones. Desglósalo en las etapas o entregables que verá el cliente.</p>
+            <p className={labelCls}>Conceptos del proyecto que ve el cliente</p>
+            <div className="space-y-2 mb-4">
+              {(settings.design_items ?? []).map((it, i) => (
+                <div key={i} className="grid grid-cols-[1fr_130px_36px] gap-2 items-center">
+                  <input value={it.description} onChange={(e) => updateDesignItem(i, { description: e.target.value })} placeholder="Ej. Concepto gráfico, adaptación a las presentaciones, artes finales…" aria-label="Concepto de diseño" className={inputCls} />
+                  <input inputMode="numeric" value={it.price || ""} onChange={(e) => updateDesignItem(i, { price: n(e.target.value.replace(/[^\d]/g, "")) })} placeholder="$ valor" aria-label={`Valor de ${it.description || "concepto"}`} className={inputCls} />
+                  <button type="button" onClick={() => setDesignItems((settings.design_items ?? []).filter((_, j) => j !== i))} className="p-2 rounded-lg text-foreground/30 hover:text-red-500 hover:bg-red-50" aria-label="Quitar concepto">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button type="button" onClick={() => setDesignItems([...(settings.design_items ?? []), { description: "", price: 0 }])} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-foreground/20 text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5">
+                  <Plus className="w-3.5 h-3.5" /> Agregar concepto
+                </button>
+                <span className="text-sm">
+                  {settings.design_items?.length ? <>Total diseño (sin IVA): <strong>{cop(settings.design_fee)}</strong></> : <span className="text-foreground/40">Sin diseño</span>}
+                </span>
               </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="mq-design-cost" className={labelCls}>Costo interno (diseñador, pruebas)</label>
                 <input id="mq-design-cost" inputMode="numeric" value={settings.design_cost || ""} onChange={(e) => setSettings({ ...settings, design_cost: n(e.target.value) })} placeholder="No sale en el PDF" className={inputCls} />

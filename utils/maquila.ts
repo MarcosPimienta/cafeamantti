@@ -94,6 +94,8 @@ export type MaquilaLine = {
   options: PackagingOptions;
 };
 
+export type DesignItem = { description: string; price: number };
+
 export type MaquilaSettings = {
   /** Coffee lost while packing (%), a cost for Amantti. */
   merma_pct: number;
@@ -101,8 +103,10 @@ export type MaquilaSettings = {
   apply_iva: boolean;
   /** IVA rate (%). */
   iva_pct: number;
-  /** One-time packaging design fee for the whole project (COP); 0 = none. */
+  /** One-time packaging design fee for the whole project (COP); 0 = none. Sum of design_items when there are any. */
   design_fee: number;
+  /** The design fee itemized for the client (concept + value). */
+  design_items?: DesignItem[];
   /** What the design costs Amantti (designer, proofs), internal. */
   design_cost: number;
   /**
@@ -337,6 +341,18 @@ export function calculateLine(
   };
 }
 
+/**
+ * The design concepts the client sees. Proposals saved before itemizing
+ * had one fee: it becomes a single "Proyecto de diseño de empaque" item.
+ */
+export function designItems(settings: MaquilaSettings): DesignItem[] {
+  if (settings.design_items?.length) {
+    return settings.design_items.map((i) => ({ description: i.description ?? "", price: Math.max(0, num(i.price)) }));
+  }
+  const fee = Math.max(0, num(settings.design_fee));
+  return fee > 0 ? [{ description: "Proyecto de diseño de empaque", price: fee }] : [];
+}
+
 export function calculateProposal(lines: MaquilaLine[], settings: MaquilaSettings = DEFAULT_SETTINGS, minimum: number | null = null) {
   const results = lines.map((l) => calculateLine(l, settings, minimum));
   const ivaRate = settings.apply_iva ? num(settings.iva_pct) / 100 : 0;
@@ -345,7 +361,8 @@ export function calculateProposal(lines: MaquilaLine[], settings: MaquilaSetting
   const totalCost = results.reduce((s, r) => s + r.totalCost, 0);
   const profit = subtotal - totalCost;
 
-  const designFee = Math.max(0, num(settings.design_fee));
+  const items = designItems(settings);
+  const designFee = items.length ? items.reduce((s, i) => s + i.price, 0) : 0;
   const designCost = Math.max(0, num(settings.design_cost));
 
   const coffeeKgByProfile: Partial<Record<CoffeeProfileId, number>> = {};
@@ -366,6 +383,7 @@ export function calculateProposal(lines: MaquilaLine[], settings: MaquilaSetting
       marginPct: subtotal > 0 ? (profit / subtotal) * 100 : null,
       // One-time design
       design: {
+        items,
         fee: designFee,
         iva: designFee * ivaRate,
         total: designFee * (1 + ivaRate),

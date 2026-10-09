@@ -3,6 +3,7 @@ import {
   roundPrice,
   unitCost,
   linesWithoutPrice,
+  designItems,
   resalePrice,
   optionsCost,
   optionsPriceDelta,
@@ -165,8 +166,22 @@ describe("calculateProposal", () => {
     );
     expect(p.totals.subtotal).toBe(20000 * 400 + 150000 * 200);
     expect(p.totals.total).toBeCloseTo(p.totals.subtotal * 1.19, 6);
-    expect(p.totals.design).toEqual({ fee: 1500000, iva: 285000, total: 1785000, cost: 600000, profit: 900000 });
+    expect(p.totals.design).toMatchObject({ fee: 1500000, iva: 285000, total: 1785000, cost: 600000, profit: 900000 });
     expect(p.totals.coffeeKgByProfile).toEqual({ premium: 100, chiroso: 500 });
+  });
+
+  it("the design fee is the sum of its itemized concepts", () => {
+    const p = calculateProposal(
+      [line({ price_per_unit: 20000 })],
+      S({ design_fee: 999, design_items: [{ description: "Etiqueta 250 g", price: 600000 }, { description: "Ajustes de color", price: 150000 }] })
+    );
+    expect(p.totals.design).toMatchObject({ fee: 750000, iva: 142500, total: 892500 });
+    expect(p.totals.design.items).toHaveLength(2);
+  });
+
+  it("older proposals with one design fee show it as a single concept", () => {
+    expect(designItems(S({ design_fee: 1500000 }))).toEqual([{ description: "Proyecto de diseño de empaque", price: 1500000 }]);
+    expect(designItems(S())).toEqual([]);
   });
 
   it("no IVA and no design when not used", () => {

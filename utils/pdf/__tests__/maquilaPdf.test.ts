@@ -66,6 +66,22 @@ describe("buildMaquilaHtml (client PDF)", () => {
     expect(buildMaquilaHtml({ ...data, settings: { ...data.settings, design_fee: 0 } })).not.toContain("Total a pagar");
   });
 
+  it("itemizes the design concepts for the client", () => {
+    const items = [
+      { description: "Concepto gráfico de la marca", price: 700000 },
+      { description: "Adaptación a las presentaciones", price: 500000 },
+      { description: "Artes finales <para imprenta>", price: 300000 },
+    ];
+    const itemized = flat(buildMaquilaHtml({ ...data, settings: { ...data.settings, design_items: items } }));
+    expect(itemized).toContain("Concepto gráfico de la marca");
+    expect(itemized).toContain("Un solo proyecto de diseño del que salen");
+    expect(itemized).toContain("$ 700.000");
+    expect(itemized).toContain("$ 500.000");
+    expect(itemized).toContain("Artes finales &lt;para imprenta&gt;");
+    expect(itemized).toContain("Subtotal diseño");
+    expect(itemized).toContain("$ 1.785.000"); // 1.500.000 + 19 % IVA
+  });
+
   it("charges the packaging design once, with its own IVA", () => {
     expect(html).toContain("Diseño de empaque · pago único");
     expect(flat(html)).toContain("$ 1.500.000");

@@ -54,4 +54,18 @@ describe("MaquilaForm prices", () => {
     fireEvent.click(screen.getByText("Guardar"));
     expect(screen.getByText(/Escribe lo que cobras por bolsa en: Bolsa 250/)).toBeTruthy();
   });
+
+  it("design is itemized in concepts and the total is their sum", () => {
+    setup();
+    fireEvent.click(screen.getByText("Agregar concepto"));
+    fireEvent.click(screen.getByText("Agregar concepto"));
+    const concepts = screen.getAllByLabelText("Concepto de diseño");
+    fireEvent.change(concepts[0], { target: { value: "Etiqueta 250 g" } });
+    fireEvent.change(screen.getByLabelText("Valor de Etiqueta 250 g"), { target: { value: "700000" } });
+    fireEvent.change(concepts[1], { target: { value: "Ajustes" } });
+    fireEvent.change(screen.getByLabelText("Valor de Ajustes"), { target: { value: "100000" } });
+    expect(screen.getByText(/Total diseño/).textContent).toMatch(/800\.000/);
+    fireEvent.click(screen.getAllByLabelText("Quitar concepto")[1]);
+    expect(screen.getByText(/Total diseño/).textContent).toMatch(/700\.000/);
+  });
 });

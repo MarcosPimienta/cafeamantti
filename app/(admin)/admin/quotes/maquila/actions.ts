@@ -85,6 +85,10 @@ function validate(p: MaquilaProposalInput) {
   if (!finiteNonNeg(p.settings?.merma_pct) || p.settings.merma_pct > 50) throw new Error('La merma debe estar entre 0 y 50 %.');
   if (!finiteNonNeg(p.settings?.iva_pct) || p.settings.iva_pct > 100) throw new Error('IVA inválido.');
   if (!finiteNonNeg(p.settings?.design_fee ?? 0) || !finiteNonNeg(p.settings?.design_cost ?? 0)) throw new Error('El valor y el costo del diseño deben ser mayores o iguales a cero.');
+  for (const item of p.settings?.design_items ?? []) {
+    if (!item.description?.trim()) throw new Error('Cada concepto de diseño necesita una descripción.');
+    if (!finiteNonNeg(item.price)) throw new Error(`Valor inválido en el concepto de diseño "${item.description}".`);
+  }
   const opacity = p.settings?.background_opacity ?? 0.5;
   if (!finiteNonNeg(opacity) || opacity > 1) throw new Error('La opacidad del fondo debe estar entre 0 y 100 %.');
   for (const path of [p.settings?.background_path, p.settings?.ally_logo_path]) {
@@ -178,6 +182,13 @@ export async function saveMaquilaProposal(input: MaquilaProposalInput, id?: stri
     const settings: MaquilaSettings = {
       ...input.settings,
       option_prices: input.settings.option_prices ?? (await getMaquilaOptionPrices()),
+      // The fee is always the sum of the concepts the client sees.
+      ...(input.settings.design_items
+        ? {
+            design_items: input.settings.design_items.map((i) => ({ description: i.description.trim(), price: i.price })),
+            design_fee: input.settings.design_items.reduce((s, i) => s + i.price, 0),
+          }
+        : {}),
     };
     const row = {
       client_id: input.client_id || null,

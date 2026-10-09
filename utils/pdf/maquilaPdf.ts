@@ -73,9 +73,12 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
     : "";
 
   const design = totals.design.fee > 0
-    ? `<h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 8px;">Diseño de empaque · pago único</h2>
+    ? `<h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 8px;">Diseño de empaque · pago único por proyecto</h2>
+       <p style="font-size:12px; color:#44403c; line-height:1.6; margin:0 0 8px;">Un solo proyecto de diseño del que salen ${lines.length === 1 ? "la presentación" : `las ${lines.length} presentaciones`} de esta propuesta${lines.length ? ` (${lines.map((r) => esc(r.presentation)).join(", ")})` : ""}.</p>
        <table style="width:100%; border-collapse:collapse;">
-         <tr><td style="${td}">Diseño de empaque para ${lines.length === 1 ? "la presentación" : `las ${lines.length} presentaciones`} de la propuesta</td><td style="${td} text-align:right; white-space:nowrap;">${formatCOP(totals.design.fee)}</td></tr>
+         <thead><tr><th style="${th}">Concepto</th><th style="${th} text-align:right;">Valor</th></tr></thead>
+         ${totals.design.items.map((i) => `<tr><td style="${td}">${esc(i.description)}</td><td style="${td} text-align:right; white-space:nowrap;">${formatCOP(i.price)}</td></tr>`).join("")}
+         ${totals.design.items.length > 1 && data.settings.apply_iva ? `<tr><td style="${td} color:#78716c;">Subtotal diseño</td><td style="${td} text-align:right;">${formatCOP(totals.design.fee)}</td></tr>` : ""}
          ${data.settings.apply_iva ? `<tr><td style="${td} color:#78716c;">IVA (${esc(data.settings.iva_pct)} %)</td><td style="${td} text-align:right;">${formatCOP(totals.design.iva)}</td></tr>` : ""}
          <tr><td style="padding:8px 12px; font-size:13px; font-weight:700;">Total diseño</td><td style="padding:8px 12px; text-align:right; font-size:13px; font-weight:700;">${formatCOP(totals.design.total)}</td></tr>
        </table>`

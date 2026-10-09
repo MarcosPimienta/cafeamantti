@@ -129,6 +129,23 @@ describe("maquila proposals", () => {
   });
 });
 
+describe("design concepts", () => {
+  it("stores the concepts and keeps the fee as their sum", async () => {
+    const settings = { ...input().settings, design_fee: 1, design_items: [{ description: " Etiqueta 250 g ", price: 700000 }, { description: "Ajustes", price: 100000 }] };
+    const { id } = ok(await saveMaquilaProposal(input({ settings })));
+    expect(db.byId("maquila_proposals", id)!.settings).toMatchObject({
+      design_fee: 800000,
+      design_items: [{ description: "Etiqueta 250 g", price: 700000 }, { description: "Ajustes", price: 100000 }],
+    });
+  });
+
+  it("rejects concepts without description or with a negative value", async () => {
+    const bad = (design_items: { description: string; price: number }[]) => saveMaquilaProposal(input({ settings: { ...input().settings, design_items } }));
+    expect(await bad([{ description: "  ", price: 5 }])).toMatchObject({ success: false, error: expect.stringMatching(/descripción/) });
+    expect(await bad([{ description: "Etiqueta", price: -5 }])).toMatchObject({ success: false, error: expect.stringMatching(/Etiqueta/) });
+  });
+});
+
 describe("bag option prices", () => {
   const table = (price: number, cost: number) =>
     ["valvula", "peel_stick", "sticker", "cara", "tinta_adicional"].map((key) => ({ key, price, cost }));
