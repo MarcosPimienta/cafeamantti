@@ -13,11 +13,13 @@ const data: MaquilaPdfData = {
   intro: "Hola",
   conditions: "Pago 50/50",
   minimumUnits: null,
-  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19 },
+  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: 0, design_cost: 0, background_path: null, background_opacity: 0.5, ally_logo_path: null },
   lines: [
     {
       id: "a",
       presentation: "Bolsa 250 g",
+      profile: "premium",
+      coffee_cost_per_kg: 41234,
       grams: 250,
       monthly_units: 100,
       materials: [{ code: null, name: "Bolsa", unit_cost: 1234, qty: 1, supplied_by: "amantti" }],

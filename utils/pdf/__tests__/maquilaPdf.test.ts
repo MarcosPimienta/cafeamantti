@@ -2,18 +2,20 @@ import { describe, it, expect } from "vitest";
 import { buildMaquilaHtml, type MaquilaPdfData } from "../maquilaPdf";
 
 const data: MaquilaPdfData = {
-  title: "Propuesta de maquila de empaque",
+  title: "Propuesta de café con su marca",
   clientName: "Café <Okus> & Co",
   proposalDate: "2026-10-12",
   validUntil: "2026-11-12",
   intro: "Gracias por confiar en Amantti.\nEsta es nuestra propuesta.",
-  conditions: "Pago 50/50\nEntrega en 5 días",
+  conditions: "Pago 50/50\nEntrega en 8 días",
   minimumUnits: 200,
-  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19 },
+  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: 1500000, design_cost: 600123, background_path: null, background_opacity: 0.5, ally_logo_path: null },
   lines: [
     {
       id: "l1",
       presentation: "Bolsa 250 g",
+      profile: "honey",
+      coffee_cost_per_kg: 41234,
       grams: 250,
       monthly_units: 400,
       materials: [
@@ -22,38 +24,66 @@ const data: MaquilaPdfData = {
       ],
       labor_per_unit: 456,
       target_margin_pct: 40,
-      price_per_unit: 2900,
+      price_per_unit: 22000,
     },
   ],
 };
+const flat = (s: string) => s.replace(/\s/g, " ");
 
 describe("buildMaquilaHtml (client PDF)", () => {
   const html = buildMaquilaHtml(data);
 
-  it("shows prices, monthly value, IVA and total", () => {
-    expect(html).toContain("Bolsa 250 g");
-    expect(html.replace(/\s/g, " ")).toContain("$ 2.900"); // price per unit
-    expect(html.replace(/\s/g, " ")).toContain("$ 1.160.000"); // 2.900 × 400
-    expect(html).toContain("IVA (19 %)");
-    expect(html.replace(/\s/g, " ")).toContain("$ 1.380.400"); // total with IVA
-    expect(html).toContain("Pedido mínimo: 200 unidades");
+  it("shows each presentation with its Amantti profile, price, monthly value and total", () => {
+    expect(html).toContain("Café Honey · 250 g por unidad");
+    expect(flat(html)).toContain("$ 22.000");
+    expect(flat(html)).toContain("$ 8.800.000"); // 22.000 × 400
+    expect(flat(html)).toContain("$ 10.472.000"); // with 19 % IVA
   });
 
-  it("tells the client what to deliver: coffee with merma and their own supplies", () => {
-    expect(html).toContain("101 kg"); // 400 × 0.25 × 1.01
+  it("charges the packaging design once, with its own IVA", () => {
+    expect(html).toContain("Diseño de empaque · pago único");
+    expect(flat(html)).toContain("$ 1.500.000");
+    expect(flat(html)).toContain("$ 1.785.000");
+  });
+
+  it("states the minimum per presentation (never below 200)", () => {
+    expect(html).toContain("Pedido mínimo: 200 unidades por presentación");
+    expect(buildMaquilaHtml({ ...data, minimumUnits: null })).toContain("Pedido mínimo: 200 unidades por presentación");
+    expect(buildMaquilaHtml({ ...data, minimumUnits: 300 })).toContain("Pedido mínimo: 300 unidades por presentación");
+  });
+
+  it("asks the client only for their own supplies, not for coffee", () => {
     expect(html).toContain("Etiqueta del cliente (400 und.)");
+    expect(html).not.toMatch(/Café tostado:/);
+    const noSupplies = buildMaquilaHtml({ ...data, lines: [{ ...data.lines[0], materials: [data.lines[0].materials[0]] }] });
+    expect(noSupplies).not.toContain("Lo que entrega el cliente");
   });
 
-  it("never leaks costs, labor or margins", () => {
-    for (const secret of ["1.234", "1234", "456", "777", "40 %", "Margen", "margen", "Costo", "costo"]) {
+  it("never leaks costs, labor, margins or the design cost", () => {
+    for (const secret of ["41.234", "41234", "1.234", "1234", "456", "777", "600.123", "600123", "Margen", "margen", "Costo", "costo"]) {
       expect(html).not.toContain(secret);
     }
   });
 
-  it("a supply used by several presentations is listed once, added up", () => {
+  it("adds up a supply used by several presentations", () => {
     const two = buildMaquilaHtml({ ...data, lines: [data.lines[0], { ...data.lines[0], id: "l2", presentation: "Bolsa 500 g", monthly_units: 150 }] });
     expect(two).toContain("Etiqueta del cliente (550 und.)");
     expect(two.match(/Etiqueta del cliente/g)).toHaveLength(1);
+  });
+
+  it("puts the background behind the content, repeated per page, at the chosen opacity", () => {
+    const bg = buildMaquilaHtml({ ...data, backgroundImage: "/images/Main_Background.jpg", backgroundOpacity: 0.3 });
+    expect(bg).toContain("background-image:url('/images/Main_Background.jpg')");
+    expect(bg).toContain("background-size:794px 1123px; background-repeat:repeat-y");
+    expect(bg).toContain("opacity:0.3");
+    expect(buildMaquilaHtml({ ...data, backgroundImage: null })).not.toContain("background-image");
+    expect(buildMaquilaHtml({ ...data, backgroundImage: "x.jpg", backgroundOpacity: 7 })).toContain("opacity:1;");
+  });
+
+  it("shows the client's logo next to Amantti's", () => {
+    const withLogo = buildMaquilaHtml({ ...data, allyLogo: "https://x/logo.png?token=a&b=c" }, "amantti.png");
+    expect(withLogo).toContain('src="https://x/logo.png?token=a&amp;b=c"');
+    expect(withLogo.indexOf("amantti.png")).toBeLessThan(withLogo.indexOf("logo.png?token"));
   });
 
   it("escapes client-provided text", () => {
@@ -61,11 +91,11 @@ describe("buildMaquilaHtml (client PDF)", () => {
     expect(html).not.toContain("<Okus>");
   });
 
-  it("omits IVA and empty sections when not used", () => {
-    const plain = buildMaquilaHtml({ ...data, settings: { ...data.settings, apply_iva: false }, conditions: null, minimumUnits: null, validUntil: null });
+  it("omits IVA, design and empty sections when not used", () => {
+    const plain = buildMaquilaHtml({ ...data, settings: { ...data.settings, apply_iva: false, design_fee: 0 }, conditions: null, validUntil: null });
     expect(plain).not.toContain("IVA");
+    expect(plain).not.toContain("Diseño de empaque");
     expect(plain).not.toContain("Condiciones");
-    expect(plain).not.toContain("Pedido mínimo");
     expect(plain).not.toContain("Válida hasta");
   });
 });

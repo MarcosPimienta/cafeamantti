@@ -5,16 +5,23 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Copy, FileDown, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { saveMaquilaProposal, type MaquilaProposalInput } from "./actions";
 import MaquilaPreview from "./MaquilaPreview";
+import BrandIdentityPanel from "../proposals/new/BrandIdentityPanel";
 import type { MaquilaPdfData } from "@/utils/pdf/maquilaPdf";
 import {
   calculateProposal,
   linesBelowCost,
+  linesBelowMinimum,
+  normalizeLine,
+  normalizeSettings,
   DEFAULT_CONDITIONS,
-  DEFAULT_SETTINGS,
+  DEFAULT_BACKGROUND_URL,
+  MAQUILA_PROFILES,
+  MIN_UNITS_PER_PRESENTATION,
   type MaquilaLine,
   type MaterialLine,
   type MaquilaSettings,
 } from "@/utils/maquila";
+import type { CoffeeProfileId } from "@/app/(admin)/coffeeProfiles";
 
 type Client = { id: string; name: string };
 type PackagingItem = { product_code: string; product_name: string; standard_cost: number | null };
@@ -30,11 +37,13 @@ const inDays = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T12:00:
 const newId = () => `l_${Math.random().toString(36).slice(2, 9)}`;
 const n = (v: string) => (v.trim() === "" ? 0 : Number(v.replace(",", ".")));
 
-const blankLine = (): MaquilaLine => ({
+const blankLine = (costs: Partial<Record<CoffeeProfileId, number>>): MaquilaLine => ({
   id: newId(),
   presentation: "",
+  profile: "premium",
+  coffee_cost_per_kg: costs.premium ?? 0,
   grams: 250,
-  monthly_units: 0,
+  monthly_units: MIN_UNITS_PER_PRESENTATION,
   materials: [],
   labor_per_unit: 0,
   target_margin_pct: 35,
@@ -45,11 +54,17 @@ const blankLine = (): MaquilaLine => ({
 export default function MaquilaForm({
   clients,
   packaging,
+  coffeeCostPerKg = {},
   initial,
+  initialAssetUrls,
   sellerName,
 }: {
+  /** Signed URLs for the saved background and client logo (they expire, so they are not stored). */
+  initialAssetUrls?: { background?: string | null; allyLogo?: string | null };
   clients: Client[];
   packaging: PackagingItem[];
+  /** Direct cost per kg of each profile (café + tostión), from Inventario → Costos. */
+  coffeeCostPerKg?: Partial<Record<CoffeeProfileId, number>>;
   initial?: any;
   sellerName?: string;
 }) {
@@ -63,12 +78,19 @@ export default function MaquilaForm({
   const [status, setStatus] = useState<string>(initial?.status ?? "borrador");
   const [intro, setIntro] = useState<string>(
     initial?.intro ??
-      "Gracias por considerar a Café Amantti para el empaque de su café. A continuación presentamos nuestra propuesta de servicio de empaque y etiquetado por unidad."
+      "Gracias por considerar a Café Amantti. Le proponemos nuestro café de especialidad, tostado y empacado con su marca, en los perfiles y presentaciones que se detallan a continuación."
   );
   const [conditions, setConditions] = useState<string>(initial?.conditions ?? DEFAULT_CONDITIONS);
-  const [minimumUnits, setMinimumUnits] = useState<string>(initial?.minimum_units != null ? String(initial.minimum_units) : "");
-  const [settings, setSettings] = useState<MaquilaSettings>({ ...DEFAULT_SETTINGS, ...(initial?.settings ?? {}) });
-  const [lines, setLines] = useState<MaquilaLine[]>(initial?.lines?.length ? initial.lines : [blankLine()]);
+  const [minimumUnits, setMinimumUnits] = useState<string>(String(initial?.minimum_units ?? MIN_UNITS_PER_PRESENTATION));
+  const [settings, setSettings] = useState<MaquilaSettings>(normalizeSettings(initial?.settings));
+  const [backgroundUrl, setBackgroundUrl] = useState<string>(initialAssetUrls?.background ?? "");
+  const [allyLogoUrl, setAllyLogoUrl] = useState<string>(initialAssetUrls?.allyLogo ?? "");
+  // null path = Amantti's default background; "" = none; otherwise an uploaded image.
+  const effectiveBackground =
+    settings.background_path === null ? DEFAULT_BACKGROUND_URL : settings.background_path === "" ? null : backgroundUrl || null;
+  const [lines, setLines] = useState<MaquilaLine[]>(
+    initial?.lines?.length ? initial.lines.map(normalizeLine) : [blankLine(coffeeCostPerKg)]
+  );
   const [notes, setNotes] = useState<string>(initial?.internal_notes ?? "");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -77,6 +99,8 @@ export default function MaquilaForm({
 
   const calc = useMemo(() => calculateProposal(lines, settings), [lines, settings]);
   const belowCost = useMemo(() => linesBelowCost(lines, settings), [lines, settings]);
+  const belowMinimum = useMemo(() => linesBelowMinimum(lines, settings), [lines, settings]);
+  const minimumInvalid = minimumUnits.trim() !== "" && n(minimumUnits) < MIN_UNITS_PER_PRESENTATION;
   const clientName = clientId ? clients.find((c) => c.id === clientId)?.name ?? "" : customClient;
 
   // What the client document shows; the preview and the PDF use the same data.
@@ -92,8 +116,11 @@ export default function MaquilaForm({
       settings,
       lines,
       sellerName,
+      backgroundImage: effectiveBackground,
+      backgroundOpacity: settings.background_opacity,
+      allyLogo: allyLogoUrl || null,
     }),
-    [title, clientName, date, validUntil, intro, conditions, minimumUnits, settings, lines, sellerName]
+    [title, clientName, date, validUntil, intro, conditions, minimumUnits, settings, lines, sellerName, effectiveBackground, allyLogoUrl]
   );
 
   const updateLine = (id: string, patch: Partial<MaquilaLine>) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -197,8 +224,9 @@ export default function MaquilaForm({
               </select>
             </div>
             <div>
-              <label htmlFor="mq-min" className={labelCls}>Pedido mínimo (und.)</label>
-              <input id="mq-min" inputMode="numeric" value={minimumUnits} onChange={(e) => setMinimumUnits(e.target.value.replace(/[^\d]/g, ""))} placeholder="Opcional" className={inputCls} />
+              <label htmlFor="mq-min" className={labelCls}>Mínimo por presentación</label>
+              <input id="mq-min" inputMode="numeric" value={minimumUnits} onChange={(e) => setMinimumUnits(e.target.value.replace(/[^\d]/g, ""))} placeholder={String(MIN_UNITS_PER_PRESENTATION)} className={`${inputCls} ${minimumInvalid ? "border-red-300" : ""}`} />
+              {minimumInvalid && <p className="text-[11px] text-red-600 mt-1">No puede ser menor a {MIN_UNITS_PER_PRESENTATION}.</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -210,6 +238,19 @@ export default function MaquilaForm({
               <input type="checkbox" checked={settings.apply_iva} onChange={(e) => setSettings({ ...settings, apply_iva: e.target.checked })} className="w-4 h-4 accent-[#C59F59]" />
               <span className="text-sm">Cobrar IVA ({settings.iva_pct} %)</span>
             </label>
+          </div>
+          <div className="rounded-2xl bg-[#fdfbf7] border border-foreground/5 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#C59F59] mb-3">Diseño de empaque · pago único por proyecto</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="mq-design-fee" className={labelCls}>Valor al cliente</label>
+                <input id="mq-design-fee" inputMode="numeric" value={settings.design_fee || ""} onChange={(e) => setSettings({ ...settings, design_fee: n(e.target.value) })} placeholder="0 = sin diseño" className={inputCls} />
+              </div>
+              <div>
+                <label htmlFor="mq-design-cost" className={labelCls}>Costo interno (diseñador, pruebas)</label>
+                <input id="mq-design-cost" inputMode="numeric" value={settings.design_cost || ""} onChange={(e) => setSettings({ ...settings, design_cost: n(e.target.value) })} placeholder="No sale en el PDF" className={inputCls} />
+              </div>
+            </div>
           </div>
         </section>
 
@@ -240,7 +281,42 @@ export default function MaquilaForm({
                 </div>
                 <div>
                   <label className={labelCls}>Unidades al mes</label>
-                  <input inputMode="numeric" value={l.monthly_units || ""} onChange={(e) => updateLine(l.id, { monthly_units: n(e.target.value) })} aria-label="Unidades al mes" className={inputCls} />
+                  <input inputMode="numeric" value={l.monthly_units || ""} onChange={(e) => updateLine(l.id, { monthly_units: n(e.target.value) })} aria-label="Unidades al mes" className={`${inputCls} ${r?.belowMinimum ? "border-amber-300" : ""}`} />
+                  {r?.belowMinimum && <p className="text-[11px] text-amber-700 mt-1">Menos del mínimo de {MIN_UNITS_PER_PRESENTATION} und.</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
+                <div>
+                  <p className={labelCls}>Perfil de café</p>
+                  <div className="grid grid-cols-3 gap-2" role="group" aria-label="Perfil de café">
+                    {MAQUILA_PROFILES.map((pr) => (
+                      <button
+                        key={pr.id}
+                        type="button"
+                        aria-pressed={l.profile === pr.id}
+                        onClick={() =>
+                          updateLine(l.id, {
+                            profile: pr.id,
+                            // Follow the profile's cost unless there is none on record.
+                            coffee_cost_per_kg: coffeeCostPerKg[pr.id] ?? l.coffee_cost_per_kg,
+                          })
+                        }
+                        className={`px-3 py-2.5 rounded-xl border text-xs font-bold ${l.profile === pr.id ? "bg-[#C59F59] text-white border-[#C59F59]" : "bg-white text-foreground/60 border-foreground/10"}`}
+                      >
+                        {pr.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Costo café tostado / kg</label>
+                  <input inputMode="numeric" value={l.coffee_cost_per_kg || ""} onChange={(e) => updateLine(l.id, { coffee_cost_per_kg: n(e.target.value) })} aria-label="Costo del café tostado por kg" placeholder="$ / kg" className={inputCls} />
+                  <p className="text-[11px] text-foreground/40 mt-1">
+                    {coffeeCostPerKg[l.profile] !== undefined
+                      ? `De Inventario → Costos: ${cop(coffeeCostPerKg[l.profile]!)}`
+                      : "Sin costo en Inventario → Costos: escríbelo a mano."}
+                  </p>
                 </div>
               </div>
 
@@ -318,7 +394,9 @@ export default function MaquilaForm({
                   />
                 </div>
                 <div className="rounded-xl bg-[#fdfbf7] px-3 py-2 text-xs">
-                  <div className="text-foreground/50">Costo {cop(r?.cost)} · margen</div>
+                  <div className="text-foreground/50" title={r ? `Café ${cop(r.coffeeCost)} · insumos ${cop(r.materialsCost)} · mano de obra ${cop(r.laborCost)}` : ""}>
+                    Costo {cop(r?.cost)} · margen
+                  </div>
                   <div className={`font-bold text-sm ${r && r.price < r.cost ? "text-red-600" : r?.marginPct != null && r.marginPct < 20 ? "text-amber-600" : "text-emerald-700"}`}>
                     {pct(r?.marginPct ?? null)} · {cop(r?.price)}
                   </div>
@@ -327,9 +405,41 @@ export default function MaquilaForm({
             </section>
           );
         })}
-        <button type="button" onClick={() => setLines((ls) => [...ls, blankLine()])} className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-foreground/20 text-xs font-bold uppercase tracking-widest text-foreground/60 hover:bg-white">
+        <button type="button" onClick={() => setLines((ls) => [...ls, blankLine(coffeeCostPerKg)])} className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-foreground/20 text-xs font-bold uppercase tracking-widest text-foreground/60 hover:bg-white">
           <Plus className="w-4 h-4" /> Agregar presentación
         </button>
+
+        {/* Look of the document */}
+        <section className="space-y-2">
+          <BrandIdentityPanel
+            allyLogoUrl={settings.ally_logo_path ?? ""}
+            allyLogoSignedUrl={allyLogoUrl}
+            backgroundImageUrl={settings.background_path === null ? DEFAULT_BACKGROUND_URL : settings.background_path}
+            backgroundSignedUrl={effectiveBackground ?? ""}
+            backgroundOpacity={settings.background_opacity}
+            onAllyLogoChange={(path, signed) => {
+              setSettings((st) => ({ ...st, ally_logo_path: path || null }));
+              setAllyLogoUrl(signed);
+            }}
+            onBackgroundChange={(path, signed) => {
+              setSettings((st) => ({ ...st, background_path: path }));
+              setBackgroundUrl(signed);
+            }}
+            onOpacityChange={(o) => setSettings((st) => ({ ...st, background_opacity: o }))}
+          />
+          {settings.background_path !== null && (
+            <button
+              type="button"
+              onClick={() => {
+                setSettings((st) => ({ ...st, background_path: null }));
+                setBackgroundUrl("");
+              }}
+              className="text-xs font-bold text-[#C59F59] hover:underline px-1"
+            >
+              Usar el fondo de Amantti
+            </button>
+          )}
+        </section>
 
         {/* Texts */}
         <section className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-4">
@@ -353,7 +463,9 @@ export default function MaquilaForm({
         <section className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">Resumen interno · mensual</p>
           <Row label="Unidades" value={calc.totals.units.toLocaleString("es-CO")} />
-          <Row label="Café que trae el cliente" value={`${calc.totals.coffeeKg.toLocaleString("es-CO", { maximumFractionDigits: 1 })} kg`} />
+          {MAQUILA_PROFILES.filter((pr) => calc.totals.coffeeKgByProfile[pr.id]).map((pr) => (
+            <Row key={pr.id} label={`Café ${pr.label} a tostar`} value={`${calc.totals.coffeeKgByProfile[pr.id]!.toLocaleString("es-CO", { maximumFractionDigits: 1 })} kg`} />
+          ))}
           <hr className="border-foreground/5" />
           <Row label="Ingreso (sin IVA)" value={cop(calc.totals.subtotal)} />
           <Row label="Costo directo" value={cop(calc.totals.totalCost)} />
@@ -366,12 +478,27 @@ export default function MaquilaForm({
               <Row label="Total cliente" value={cop(calc.totals.total)} strong />
             </>
           )}
+          {calc.totals.design.fee > 0 && (
+            <>
+              <hr className="border-foreground/5" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 pt-1">Diseño · pago único</p>
+              <Row label="Valor (sin IVA)" value={cop(calc.totals.design.fee)} />
+              <Row label="Costo" value={cop(calc.totals.design.cost)} />
+              <Row label="Utilidad diseño" value={cop(calc.totals.design.profit)} strong />
+            </>
+          )}
         </section>
 
         {belowCost.length > 0 && (
           <div className="flex items-start gap-2 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
             <span>Precio por debajo del costo en: {belowCost.join(", ")}.</span>
+          </div>
+        )}
+        {belowMinimum.length > 0 && (
+          <div className="flex items-start gap-2 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>Por debajo del mínimo de {MIN_UNITS_PER_PRESENTATION} und. por presentación: {belowMinimum.join(", ")}.</span>
           </div>
         )}
         {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-2xl">{error}</p>}

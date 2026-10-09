@@ -8,11 +8,11 @@ export const metadata = { title: "Nueva propuesta de maquila - Café Amantti" };
 
 export default async function NewMaquilaPage() {
   if (!(await checkIsAdmin())) redirect("/dashboard");
-  const { clients, packaging, sellerName } = await loadMaquilaFormData();
+  const { clients, packaging, coffeeCostPerKg, sellerName } = await loadMaquilaFormData();
   return (
     <div className="space-y-6">
       <Header title="Nueva propuesta de maquila" />
-      <MaquilaForm clients={clients} packaging={packaging} sellerName={sellerName} />
+      <MaquilaForm clients={clients} packaging={packaging} coffeeCostPerKg={coffeeCostPerKg} sellerName={sellerName} />
     </div>
   );
 }

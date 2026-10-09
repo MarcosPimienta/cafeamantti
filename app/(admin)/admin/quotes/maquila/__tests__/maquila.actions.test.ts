@@ -24,11 +24,13 @@ const input = (over: Partial<MaquilaProposalInput> = {}): MaquilaProposalInput =
   intro: "Hola",
   conditions: "Pago 50/50",
   minimum_units: 200,
-  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19 },
+  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: 1500000, design_cost: 600000, background_path: null, background_opacity: 0.5, ally_logo_path: null },
   lines: [
     {
       id: "l1",
       presentation: "Bolsa 250 g",
+      profile: "premium",
+      coffee_cost_per_kg: 40000,
       grams: 250,
       monthly_units: 400,
       materials: [{ code: null, name: "Bolsa kraft", unit_cost: 1200, qty: 1, supplied_by: "amantti" }],
@@ -56,6 +58,24 @@ describe("maquila proposals", () => {
     expect(db.rows("maquila_proposals")).toHaveLength(0);
   });
 
+  it("keeps background and logo as storage paths and rejects anything else", async () => {
+    const settings = { ...input().settings, background_path: "proposals/123_bg.jpg", ally_logo_path: "proposals/123_logo.png", background_opacity: 0.3 };
+    const { id } = await saveMaquilaProposal(input({ settings }));
+    expect(db.byId("maquila_proposals", id)!.settings).toMatchObject({ background_path: "proposals/123_bg.jpg", ally_logo_path: "proposals/123_logo.png" });
+
+    await expect(saveMaquilaProposal(input({ settings: { ...settings, background_path: "https://evil.example/x.jpg" } }))).rejects.toThrow(/Imagen inválida/);
+    await expect(saveMaquilaProposal(input({ settings: { ...settings, ally_logo_path: "../secret" } }))).rejects.toThrow(/Imagen inválida/);
+    await expect(saveMaquilaProposal(input({ settings: { ...settings, background_opacity: 1.5 } }))).rejects.toThrow(/opacidad/);
+    // "" = no background, null = Amantti's default: both valid
+    await saveMaquilaProposal(input({ settings: { ...settings, background_path: "" } }));
+    await saveMaquilaProposal(input({ settings: { ...settings, background_path: null } }));
+  });
+
+  it("without a minimum, the 200-unit rule is stored", async () => {
+    const { id } = await saveMaquilaProposal(input({ minimum_units: null }));
+    expect(db.byId("maquila_proposals", id)!.minimum_units).toBe(200);
+  });
+
   it("a new client can be typed instead of picked", async () => {
     const { id } = await saveMaquilaProposal(input({ client_id: null, custom_client_name: "  Tostadora La Loma " }));
     expect(db.byId("maquila_proposals", id)).toMatchObject({ client_id: null, custom_client_name: "Tostadora La Loma" });
@@ -66,8 +86,9 @@ describe("maquila proposals", () => {
     ["no presentations", { lines: [] }, /al menos una presentación/],
     ["validity before date", { valid_until: "2026-10-01" }, /vigencia/],
     ["bad status", { status: "ganada" }, /Estado/],
-    ["merma too high", { settings: { merma_pct: 80, apply_iva: true, iva_pct: 19 } }, /merma/],
-    ["fractional minimum", { minimum_units: 1.5 }, /entero/],
+    ["merma too high", { settings: { merma_pct: 80, apply_iva: true, iva_pct: 19, design_fee: 0, design_cost: 0, background_path: null, background_opacity: 0.5, ally_logo_path: null } }, /merma/],
+    ["a minimum under 200", { minimum_units: 150 }, /200 unidades por presentación/],
+    ["a negative design fee", { settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: -1, design_cost: 0, background_path: null, background_opacity: 0.5, ally_logo_path: null } }, /diseño/],
   ])("rejects %s", async (_label, over, msg) => {
     await expect(saveMaquilaProposal(input(over as Partial<MaquilaProposalInput>))).rejects.toThrow(msg);
     expect(db.rows("maquila_proposals")).toHaveLength(0);
@@ -79,6 +100,8 @@ describe("maquila proposals", () => {
     await expect(saveMaquilaProposal(input({ lines: [{ ...line, grams: 0 }] }))).rejects.toThrow(/gramos/);
     await expect(saveMaquilaProposal(input({ lines: [{ ...line, target_margin_pct: 100 }] }))).rejects.toThrow(/margen/);
     await expect(saveMaquilaProposal(input({ lines: [{ ...line, price_per_unit: -5 }] }))).rejects.toThrow(/Precio/);
+    await expect(saveMaquilaProposal(input({ lines: [{ ...line, profile: "robusta" as never }] }))).rejects.toThrow(/perfil/);
+    await expect(saveMaquilaProposal(input({ lines: [{ ...line, coffee_cost_per_kg: -1 }] }))).rejects.toThrow(/Costo del café/);
     await expect(
       saveMaquilaProposal(input({ lines: [{ ...line, materials: [{ ...line.materials[0], unit_cost: -1 }] }] }))
     ).rejects.toThrow(/Costo o cantidad/);

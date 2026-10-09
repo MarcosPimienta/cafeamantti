@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { checkIsAdmin } from '../../../actions';
-import type { MaquilaLine, MaquilaSettings } from '@/utils/maquila';
+import { MIN_UNITS_PER_PRESENTATION, MAQUILA_PROFILES, type MaquilaLine, type MaquilaSettings } from '@/utils/maquila';
 
 const STATUSES = ['borrador', 'enviada', 'aceptada', 'rechazada'];
 const MIGRATION_HINT = 'Falta aplicar la migración 20261012000000_maquila_proposals.sql';
@@ -45,14 +45,24 @@ function validate(p: MaquilaProposalInput) {
   if (!isYmd(p.valid_until)) throw new Error('Fecha de vigencia inválida.');
   if (p.valid_until && p.valid_until < p.proposal_date) throw new Error('La vigencia no puede terminar antes de la fecha de la propuesta.');
   if (!STATUSES.includes(p.status)) throw new Error('Estado inválido.');
-  if (p.minimum_units !== null && !(Number.isInteger(p.minimum_units) && p.minimum_units >= 0)) throw new Error('El pedido mínimo debe ser un número entero.');
+  if (p.minimum_units !== null && !(Number.isInteger(p.minimum_units) && p.minimum_units >= MIN_UNITS_PER_PRESENTATION)) {
+    throw new Error(`El pedido mínimo es de ${MIN_UNITS_PER_PRESENTATION} unidades por presentación (número entero).`);
+  }
   if (!finiteNonNeg(p.settings?.merma_pct) || p.settings.merma_pct > 50) throw new Error('La merma debe estar entre 0 y 50 %.');
   if (!finiteNonNeg(p.settings?.iva_pct) || p.settings.iva_pct > 100) throw new Error('IVA inválido.');
+  if (!finiteNonNeg(p.settings?.design_fee ?? 0) || !finiteNonNeg(p.settings?.design_cost ?? 0)) throw new Error('El valor y el costo del diseño deben ser mayores o iguales a cero.');
+  const opacity = p.settings?.background_opacity ?? 0.5;
+  if (!finiteNonNeg(opacity) || opacity > 1) throw new Error('La opacidad del fondo debe estar entre 0 y 100 %.');
+  for (const path of [p.settings?.background_path, p.settings?.ally_logo_path]) {
+    if (path != null && path !== '' && !/^proposals\/[\w.-]+$/.test(path)) throw new Error('Imagen inválida: súbela de nuevo.');
+  }
   if (!Array.isArray(p.lines) || p.lines.length === 0) throw new Error('Agrega al menos una presentación.');
   for (const l of p.lines) {
     const name = l.presentation?.trim() || 'una presentación';
     if (!l.presentation?.trim()) throw new Error('Cada presentación necesita un nombre.');
     if (!(finiteNonNeg(l.grams) && l.grams > 0)) throw new Error(`Indica los gramos por unidad de ${name}.`);
+    if (!MAQUILA_PROFILES.some((pr) => pr.id === l.profile)) throw new Error(`Elige el perfil de café de ${name}.`);
+    if (!finiteNonNeg(l.coffee_cost_per_kg)) throw new Error(`Costo del café inválido en ${name}.`);
     if (!finiteNonNeg(l.monthly_units)) throw new Error(`Unidades al mes inválidas en ${name}.`);
     if (!finiteNonNeg(l.labor_per_unit)) throw new Error(`Mano de obra inválida en ${name}.`);
     if (!finiteNonNeg(l.target_margin_pct) || l.target_margin_pct >= 100) throw new Error(`El margen de ${name} debe estar entre 0 y 99 %.`);
@@ -97,7 +107,7 @@ export async function saveMaquilaProposal(input: MaquilaProposalInput, id?: stri
     status: input.status,
     intro: input.intro?.trim() || null,
     conditions: input.conditions?.trim() || null,
-    minimum_units: input.minimum_units,
+    minimum_units: input.minimum_units ?? MIN_UNITS_PER_PRESENTATION,
     settings: input.settings,
     lines: input.lines,
     internal_notes: input.internal_notes?.trim() || null,
