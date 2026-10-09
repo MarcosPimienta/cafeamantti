@@ -80,6 +80,16 @@ import {
 } from "../../actions";
 import { packagingFor, type PackagingRecipes } from "@/utils/costing/packaging";
 import { isSellable } from "@/utils/inventory/sellable";
+import {
+  INVENTORY_CATEGORIES,
+  CATEGORY_LABELS,
+  ENTRY_TYPE_LABELS,
+  ENTRY_TYPE_BADGE,
+  categoryInfo,
+  entryTypeFor,
+  type EntryType,
+  type InventoryCategory,
+} from "@/utils/inventory/categories";
 import CostosTab from "./CostosTab";
 import {
   MOLIENDAS,
@@ -149,24 +159,6 @@ interface TrillaBatch {
 
 // ─── Constants + Helpers ──────────────────────────────────────────────────────
 
-/** Entry types in Entradas: raw material, packaging/supplies, equipment. */
-type EntryType = "MP" | "MAT" | "EQP";
-const ENTRY_TYPE_LABELS: Record<EntryType, string> = {
-  MP: "Materia Prima",
-  MAT: "Material",
-  EQP: "Equipo",
-};
-/** Coffee is materia prima, equipment is equipo, everything else material. */
-function entryTypeFor(category: string): EntryType {
-  return category === "cafe" ? "MP" : category === "equipo" ? "EQP" : "MAT";
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  cafe: "Café",
-  empaque: "Empaque",
-  accesorio: "Accesorio",
-  equipo: "Equipo",
-};
 
 const TABS = [
   { id: "inventario", label: "Inventario", Icon: Package },
@@ -600,12 +592,9 @@ function AdjustModal({
 
 // ─── New product ─────────────────────────────────────────────────────────────
 
-const NEW_PRODUCT_DEFAULTS: Record<string, { prefix: string; unit: string; sellable: boolean }> = {
-  cafe: { prefix: "CAFT-", unit: "unidad", sellable: true },
-  empaque: { prefix: "EMP-", unit: "unidad", sellable: false },
-  accesorio: { prefix: "ACC-", unit: "unidad", sellable: false },
-  equipo: { prefix: "EQP-", unit: "unidad", sellable: false },
-};
+const NEW_PRODUCT_DEFAULTS: Record<string, { prefix: string; unit: string; sellable: boolean }> = Object.fromEntries(
+  INVENTORY_CATEGORIES.map((c) => [c.id, { prefix: c.prefix, unit: c.unit, sellable: c.sellable }])
+);
 
 /**
  * Creates an inventory item (coffee, packaging, accessory or equipment such
@@ -652,7 +641,7 @@ function NewProductModal({
         const res = await createInventoryProduct({
           product_code: code,
           product_name: name,
-          category: category as "cafe" | "empaque" | "accesorio" | "equipo",
+          category: category as InventoryCategory,
           unit,
           current_stock: stock ? parseFloat(stock) : 0,
           min_stock: minStock ? parseFloat(minStock) : 0,
@@ -686,7 +675,7 @@ function NewProductModal({
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4">
           <div>
             <label className={labelCls}>Categoría</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {Object.keys(NEW_PRODUCT_DEFAULTS).map((c) => (
                 <button
                   key={c}
@@ -1280,10 +1269,9 @@ function InventarioTab({
                 className="pl-9 pr-4 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none appearance-none cursor-pointer"
               >
                 <option value="all">Todas las categorías</option>
-                <option value="cafe">Café</option>
-                <option value="empaque">Empaque</option>
-                <option value="accesorio">Accesorio</option>
-                <option value="equipo">Equipo</option>
+                {INVENTORY_CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
               </select>
             </div>
             <button
@@ -1389,13 +1377,7 @@ function InventarioTab({
                     <td className={tdCls}>
                       <span
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          item.category === "cafe"
-                            ? "bg-[#C59F59]/10 text-[#C59F59]"
-                            : item.category === "empaque"
-                            ? "bg-blue-50 text-blue-600"
-                            : item.category === "equipo"
-                            ? "bg-slate-100 text-slate-700"
-                            : "bg-purple-50 text-purple-600"
+                          categoryInfo(item.category)?.badge ?? "bg-foreground/5 text-foreground/60"
                         }`}
                       >
                         {CATEGORY_LABELS[item.category] ?? item.category}
@@ -2077,11 +2059,7 @@ function EntradasTab({
                         {r.entry_type && (
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                              r.entry_type === "MP"
-                                ? "bg-[#C59F59]/10 text-[#C59F59]"
-                                : r.entry_type === "EQP"
-                                ? "bg-slate-100 text-slate-700"
-                                : "bg-blue-50 text-blue-600"
+                              ENTRY_TYPE_BADGE[r.entry_type as EntryType] ?? "bg-foreground/5 text-foreground/60"
                             }`}
                           >
                             {r.entry_type}

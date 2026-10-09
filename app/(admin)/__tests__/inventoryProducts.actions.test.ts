@@ -38,6 +38,18 @@ describe("createInventoryProduct", () => {
     });
   });
 
+  it("creates furniture and fixtures in the enseres category", async () => {
+    const { item } = await createInventoryProduct({
+      product_code: "ENS-CAF-001",
+      product_name: "Cafetera de filtro",
+      category: "enseres",
+      unit: "unidad",
+      current_stock: 3,
+      is_sellable: false,
+    });
+    expect(item).toMatchObject({ category: "enseres", current_stock: 3 });
+  });
+
   it("records opening stock as an entrada so the Kardex reconciles", async () => {
     const { item } = await createInventoryProduct(machine);
     const [m] = db.rows("inventory_movements").filter((x) => x.inventory_id === item.id);
@@ -73,5 +85,20 @@ describe("createInventoryProduct", () => {
   it("is admin-only", async () => {
     h.client = createFakeClient(db, null);
     await expect(createInventoryProduct(machine)).rejects.toThrow("Unauthorized");
+  });
+});
+
+describe("createEntrada with EQP", () => {
+  it("registers equipment entradas and explains a missing migration", async () => {
+    const { createEntrada } = await import("../actions");
+    const { item } = await createInventoryProduct({ ...machine, current_stock: 0 });
+    expect(await createEntrada(item.id, 2, "2026-10-10", "EQP")).toMatchObject({ success: true, newStock: 2 });
+    expect(db.rows("inventory_movements").at(-1)).toMatchObject({ entry_type: "EQP", quantity: 2 });
+
+    db.failOn("inventory_movements", "insert", 'new row for relation "inventory_movements" violates check constraint "inventory_movements_entry_type_check"');
+    expect(await createEntrada(item.id, 1, "2026-10-10", "EQP")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/20261010040000_entry_type_enseres/),
+    });
   });
 });

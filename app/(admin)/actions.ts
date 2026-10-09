@@ -16,6 +16,7 @@ import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
 import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
 import { isSellable } from "@/utils/inventory/sellable";
+import { isInventoryCategory, type InventoryCategory, type EntryType } from "@/utils/inventory/categories";
 import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
 import { buildProductKardex, buildGeneralKardex } from "@/utils/inventory/kardex";
 import {
@@ -1410,7 +1411,7 @@ export async function createEntrada(
   inventoryId: string,
   qty: number,
   date: string,
-  entryType: 'MP' | 'MAT' | 'EQP',
+  entryType: EntryType,
   responsable?: string,
   lote?: string,
   molienda?: string | null
@@ -1438,6 +1439,9 @@ export async function createEntrada(
     revalidatePath('/admin/inventory');
     return { success: true, newStock };
   } catch (err: any) {
+    if (String(err.message).includes('inventory_movements_entry_type_check')) {
+      return { success: false, error: `Falta aplicar la migración 20261010040000_entry_type_enseres.sql para registrar entradas de tipo ${entryType}.` };
+    }
     return { success: false, error: err.message };
   }
 }
@@ -3119,8 +3123,6 @@ export async function setInventorySellable(id: string, sellable: boolean) {
   return { success: true };
 }
 
-export type InventoryCategory = 'cafe' | 'empaque' | 'accesorio' | 'equipo';
-
 /**
  * Creates an inventory item. An opening stock is registered as an entrada
  * movement (not just written to current_stock) so the Kardex reconciles
@@ -3145,7 +3147,7 @@ export async function createInventoryProduct(data: {
     throw new Error('El código solo puede tener letras, números, guiones y puntos (ej. EQP-ESP-001).');
   }
   if (product_name.length < 2) throw new Error('Escribe el nombre del producto.');
-  if (!['cafe', 'empaque', 'accesorio', 'equipo'].includes(data.category)) throw new Error('Categoría inválida.');
+  if (!isInventoryCategory(data.category)) throw new Error('Categoría inválida.');
   if (!(data.unit || '').trim()) throw new Error('Indica la unidad de medida.');
   const opening = Number(data.current_stock || 0);
   const minStock = data.min_stock === undefined ? 0 : Number(data.min_stock);
@@ -3175,7 +3177,7 @@ export async function createInventoryProduct(data: {
 
   if (error) {
     if (error.message.includes('inventory_category_check')) {
-      throw new Error('Falta aplicar la migración 20261010000000_inventory_category_equipo.sql para usar la categoría Equipo.');
+      throw new Error('Falta aplicar las migraciones de categorías (20261010000000_inventory_category_equipo.sql y 20261010030000_inventory_category_enseres.sql).');
     }
     throw new Error(error.message);
   }
