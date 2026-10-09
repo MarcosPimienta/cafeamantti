@@ -81,6 +81,15 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
        </table>`
     : "";
 
+  // With design, the client sees one figure to pay: order + design.
+  const grandTotal = totals.design.fee > 0
+    ? `<table style="width:100%; border-collapse:collapse; margin-top:28px; background:#fdfbf7; border:2px solid #C59F59;">
+         <tr><td style="padding:8px 16px 2px; font-size:12px; color:#78716c;">Pedido${data.settings.apply_iva ? " (con IVA)" : ""}</td><td style="padding:8px 16px 2px; text-align:right; font-size:12px;">${formatCOP(totals.total)}</td></tr>
+         <tr><td style="padding:2px 16px 8px; font-size:12px; color:#78716c;">Diseño de empaque${data.settings.apply_iva ? " (con IVA)" : ""}</td><td style="padding:2px 16px 8px; text-align:right; font-size:12px;">${formatCOP(totals.design.total)}</td></tr>
+         <tr><td style="padding:10px 16px; font-size:16px; font-weight:700; border-top:1px solid #C59F59;">Total a pagar</td><td style="padding:10px 16px; text-align:right; font-size:16px; font-weight:700; border-top:1px solid #C59F59;">${formatCOP(totals.total + totals.design.total)}</td></tr>
+       </table>`
+    : "";
+
   const opacity = Math.min(1, Math.max(0, data.backgroundOpacity ?? 0.5));
   // One copy of the background per A4 page (repeat-y), not one stretched image.
   const background = data.backgroundImage
@@ -131,6 +140,7 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
     <p style="font-size:11px; color:#78716c; margin:4px 0 0;">Pedido mínimo: ${effectiveMinimum(data.minimumUnits).toLocaleString("es-CO")} unidades por presentación.</p>
 
     ${design}
+    ${grandTotal}
     ${deliver}
 
     ${

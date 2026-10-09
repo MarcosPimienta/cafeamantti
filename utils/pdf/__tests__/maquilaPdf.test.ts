@@ -60,6 +60,12 @@ describe("buildMaquilaHtml (client PDF)", () => {
     expect(custom).not.toMatch(/45[1-5]9/);
   });
 
+  it("with design, shows one total to pay: order + design, both with IVA", () => {
+    expect(html).toContain("Total a pagar");
+    expect(flat(html)).toContain("$ 12.257.000"); // 10.472.000 + 1.785.000
+    expect(buildMaquilaHtml({ ...data, settings: { ...data.settings, design_fee: 0 } })).not.toContain("Total a pagar");
+  });
+
   it("charges the packaging design once, with its own IVA", () => {
     expect(html).toContain("Diseño de empaque · pago único");
     expect(flat(html)).toContain("$ 1.500.000");
