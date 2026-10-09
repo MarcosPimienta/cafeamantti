@@ -84,12 +84,12 @@ export type MaquilaLine = {
   /** Units quoted for one order of this presentation (at least the minimum). */
   units: number;
   materials: MaterialLine[];
-  /** Packing labor per unit (COP). */
+  /** Packing labor per unit (COP); older proposals only. */
   labor_per_unit: number;
-  /** Margin over the client price used for the suggested price (0–95 %). */
-  target_margin_pct: number;
-  /** Agreed price per unit; null = use the suggested price. */
+  /** What we charge per bag; null = not set yet. */
   price_per_unit: number | null;
+  /** Resale price suggested to the client; null = our reference price. */
+  resale_price: number | null;
   /** How the bag is made (valve, print, sticker…). */
   options: PackagingOptions;
 };
@@ -154,8 +154,8 @@ export function normalizeLine(line: Partial<MaquilaLine> & { id: string; monthly
     grams: 250,
     materials: [],
     labor_per_unit: 0,
-    target_margin_pct: 35,
     price_per_unit: null,
+    resale_price: null,
     ...rest,
     units: num(rest.units ?? monthly_units ?? MIN_UNITS_PER_PRESENTATION),
     profile: isProfile(line.profile) ? line.profile : "premium",
@@ -261,12 +261,6 @@ export function unitCost(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_
   return { coffee, options, materials, labor, total: coffee + options + materials + labor };
 }
 
-/** Price we charge that leaves `margin` % of the price as profit: cost ÷ (1 − margin). */
-export function suggestedPrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number {
-  const margin = Math.min(95, Math.max(0, num(line.target_margin_pct))) / 100;
-  return roundPrice(unitCost(line, settings).total / (1 - margin));
-}
-
 export type LineResult = {
   id: string;
   presentation: string;
@@ -279,14 +273,12 @@ export type LineResult = {
   optionsCost: number;
   materialsCost: number;
   laborCost: number;
-  /** Price that meets the target margin. */
-  suggested: number;
-  /** What we charge per bag (agreed, or suggested). */
+  /** What we charge per bag (0 = not set). */
   price: number;
-  /** Suggested resale price for the client; null for sizes without a reference. */
+  /** Resale price shown to the client: typed, or our reference; null = none. */
   resale: number | null;
-  /** The client's share of the resale price (%); null without resale price. */
-  clientMarginPct: number | null;
+  /** Our reference resale price for this bag; null for sizes without one. */
+  referenceResale: number | null;
   /** Bag description for the client document. */
   optionsSummary: string;
   /** Profit share of the price (%); null when the price is 0. */
@@ -313,10 +305,10 @@ export function calculateLine(
   minimum: number | null = null
 ): LineResult {
   const c = unitCost(line, settings);
-  const suggested = suggestedPrice(line, settings);
-  const price = line.price_per_unit != null && num(line.price_per_unit) > 0 ? num(line.price_per_unit) : suggested;
+  const price = num(line.price_per_unit);
   const units = Math.max(0, num(line.units));
-  const resale = resalePrice(line, settings);
+  const referenceResale = resalePrice(line, settings);
+  const resale = num(line.resale_price) > 0 ? num(line.resale_price) : referenceResale;
   return {
     id: line.id,
     presentation: line.presentation,
@@ -329,10 +321,9 @@ export function calculateLine(
     optionsCost: c.options,
     materialsCost: c.materials,
     laborCost: c.labor,
-    suggested,
     price,
     resale,
-    clientMarginPct: resale ? ((resale - price) / resale) * 100 : null,
+    referenceResale,
     optionsSummary: describeOptions(line.options ?? REFERENCE_OPTIONS),
     marginPct: price > 0 ? ((price - c.total) / price) * 100 : null,
     revenue: price * units,
@@ -387,7 +378,12 @@ export function calculateProposal(lines: MaquilaLine[], settings: MaquilaSetting
 
 /** Lines whose agreed price does not cover their cost (to warn before sending). */
 export function linesBelowCost(lines: MaquilaLine[], settings: MaquilaSettings = DEFAULT_SETTINGS): string[] {
-  return lines.map((l) => calculateLine(l, settings)).filter((r) => r.price < r.cost).map((r) => r.presentation);
+  return lines.map((l) => calculateLine(l, settings)).filter((r) => r.price > 0 && r.price < r.cost).map((r) => r.presentation);
+}
+
+/** Presentations without a price per bag yet. */
+export function linesWithoutPrice(lines: MaquilaLine[]): string[] {
+  return lines.filter((l) => !(num(l.price_per_unit) > 0)).map((l) => l.presentation || "Sin nombre");
 }
 
 /** Presentations quoted below the per-presentation minimum order. */

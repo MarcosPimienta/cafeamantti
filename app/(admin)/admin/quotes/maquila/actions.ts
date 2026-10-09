@@ -90,8 +90,8 @@ function validate(p: MaquilaProposalInput) {
       throw new Error(`${name}: el pedido debe ser de al menos ${minimum} unidades (número entero).`);
     }
     if (!finiteNonNeg(l.labor_per_unit)) throw new Error(`Mano de obra inválida en ${name}.`);
-    if (!finiteNonNeg(l.target_margin_pct) || l.target_margin_pct >= 100) throw new Error(`El margen de ${name} debe estar entre 0 y 99 %.`);
-    if (l.price_per_unit !== null && !finiteNonNeg(l.price_per_unit)) throw new Error(`Precio inválido en ${name}.`);
+    if (!(finiteNonNeg(l.price_per_unit) && (l.price_per_unit as number) > 0)) throw new Error(`Escribe lo que cobras por bolsa en ${name}.`);
+    if (l.resale_price != null && !finiteNonNeg(l.resale_price)) throw new Error(`Precio de venta sugerido inválido en ${name}.`);
     const o = l.options;
     if (o) {
       if (['valvula', 'peel_stick', 'sticker', 'cara_frontal', 'cara_trasera'].some((k) => typeof o[k as keyof typeof o] !== 'boolean')) {

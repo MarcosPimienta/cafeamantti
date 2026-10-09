@@ -11,6 +11,7 @@ import {
   calculateProposal,
   linesBelowCost,
   linesBelowMinimum,
+  linesWithoutPrice,
   normalizeLine,
   normalizeSettings,
   DEFAULT_CONDITIONS,
@@ -39,7 +40,6 @@ const inputCls =
   "w-full px-3 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20";
 const cop = (n: number | null | undefined) =>
   n == null ? "—" : new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
-const pct = (n: number | null) => (n == null ? "—" : `${n.toLocaleString("es-CO", { maximumFractionDigits: 1 })} %`);
 const today = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
 const inDays = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 const newId = () => `l_${Math.random().toString(36).slice(2, 9)}`;
@@ -54,8 +54,8 @@ const blankLine = (costs: Partial<Record<CoffeeProfileId, number>>): MaquilaLine
   units: MIN_UNITS_PER_PRESENTATION,
   materials: [],
   labor_per_unit: 0,
-  target_margin_pct: 35,
   price_per_unit: null,
+  resale_price: null,
   options: { ...REFERENCE_OPTIONS },
 });
 
@@ -192,6 +192,11 @@ export default function MaquilaForm({
   function save(thenPdf = false) {
     setError("");
     setNotice("");
+    const noPrice = linesWithoutPrice(lines);
+    if (noPrice.length) {
+      setError(`Escribe lo que cobras por bolsa en: ${noPrice.join(", ")}.`);
+      return;
+    }
     if (belowMinimum.length) {
       setError(`El pedido mínimo es de ${minimum.toLocaleString("es-CO")} unidades por presentación: revisa ${belowMinimum.join(", ")}.`);
       return;
@@ -434,11 +439,6 @@ export default function MaquilaForm({
                     </select>
                   </label>
                 </div>
-                <p className={`text-[11px] mt-1.5 ${r?.resale != null && r.price >= r.resale ? "text-red-600" : "text-foreground/40"}`}>
-                  {r?.resale != null
-                    ? `Precio de venta sugerido al cliente (como nuestro ${MAQUILA_PROFILES.find((pr) => pr.id === l.profile)?.label} ${{ "250g": "250 g", "500g": "500 g", "2.5kg": "2,5 kg" }[referenceSizeOf(l.grams)!]}, con estas opciones): ${cop(r.resale)} · al cliente le queda ${pct(r.clientMarginPct)}`
-                    : `Sin producto de referencia para ${l.grams || 0} g (solo 250 g, 500 g y 2,5 kg): el PDF no muestra precio de venta sugerido.`}
-                </p>
               </div>
 
               {/* Materials */}
@@ -494,33 +494,36 @@ export default function MaquilaForm({
               </div>
 
               {/* Pricing */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>Mano de obra / und.</label>
-                  <input inputMode="decimal" value={l.labor_per_unit || ""} onChange={(e) => updateLine(l.id, { labor_per_unit: n(e.target.value) })} aria-label="Mano de obra por unidad" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Margen objetivo (%)</label>
-                  <input inputMode="decimal" value={l.target_margin_pct} onChange={(e) => updateLine(l.id, { target_margin_pct: n(e.target.value) })} aria-label="Margen objetivo" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Precio por unidad</label>
+                  <label className={labelCls}>Lo que cobro por bolsa *</label>
                   <input
                     inputMode="numeric"
                     value={l.price_per_unit ?? ""}
-                    onChange={(e) => updateLine(l.id, { price_per_unit: e.target.value.trim() === "" ? null : n(e.target.value) })}
-                    placeholder={`Sugerido ${cop(r?.suggested)}`}
-                    aria-label="Precio por unidad"
+                    onChange={(e) => updateLine(l.id, { price_per_unit: e.target.value.trim() === "" ? null : n(e.target.value.replace(/[^\d]/g, "")) })}
+                    placeholder="$ por bolsa"
+                    aria-label="Lo que cobro por bolsa"
+                    className={`${inputCls} ${r && r.price > 0 && r.price < r.cost ? "border-red-300" : ""}`}
+                  />
+                  {r && r.price > 0 && r.price < r.cost && <p className="text-[11px] text-red-600 mt-1">Por debajo del costo ({cop(r.cost)}).</p>}
+                </div>
+                <div>
+                  <label className={labelCls}>Precio de venta sugerido</label>
+                  <input
+                    inputMode="numeric"
+                    value={l.resale_price ?? ""}
+                    onChange={(e) => updateLine(l.id, { resale_price: e.target.value.trim() === "" ? null : n(e.target.value.replace(/[^\d]/g, "")) })}
+                    placeholder={r?.referenceResale != null ? `${cop(r.referenceResale)} (nuestro precio)` : "$ por bolsa"}
+                    aria-label="Precio de venta sugerido"
                     className={inputCls}
                   />
-                </div>
-                <div className="rounded-xl bg-[#fdfbf7] px-3 py-2 text-xs">
-                  <div className="text-foreground/50" title={r ? `Café ${cop(r.coffeeCost)} · opciones de empaque ${cop(r.optionsCost)} · insumos ${cop(r.materialsCost)} · mano de obra ${cop(r.laborCost)}` : ""}>
-                    Costo {cop(r?.cost)} · margen
-                  </div>
-                  <div className={`font-bold text-sm ${r && r.price < r.cost ? "text-red-600" : r?.marginPct != null && r.marginPct < 20 ? "text-amber-600" : "text-emerald-700"}`}>
-                    {pct(r?.marginPct ?? null)} · {cop(r?.price)}
-                  </div>
+                  <p className="text-[11px] text-foreground/40 mt-1">
+                    {r?.referenceResale != null
+                      ? l.resale_price == null
+                        ? `Vacío = nuestro ${MAQUILA_PROFILES.find((pr) => pr.id === l.profile)?.label} ${{ "250g": "250 g", "500g": "500 g", "2.5kg": "2,5 kg" }[referenceSizeOf(l.grams)!]} con este empaque.`
+                        : `Nuestro precio con este empaque: ${cop(r.referenceResale)}.`
+                      : "Vacío = no sale en el PDF."}
+                  </p>
                 </div>
               </div>
             </section>
@@ -591,7 +594,6 @@ export default function MaquilaForm({
           <Row label="Ingreso (sin IVA)" value={cop(calc.totals.subtotal)} />
           <Row label="Costo directo" value={cop(calc.totals.totalCost)} />
           <Row label="Utilidad" value={cop(calc.totals.profit)} strong />
-          <Row label="Margen" value={pct(calc.totals.marginPct)} strong />
           {settings.apply_iva && (
             <>
               <hr className="border-foreground/5" />

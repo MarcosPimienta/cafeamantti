@@ -18,32 +18,40 @@ const P = {
   tinta_adicional: { price: 500, cost: 120 },
 };
 
-describe("MaquilaForm bag options", () => {
-  it("shows the resale price of the reference bag and moves it with each option", () => {
-    render(<MaquilaForm clients={[]} packaging={[]} coffeeCostPerKg={{ premium: 40000 }} optionPrices={P} />);
-    const resale = () => screen.getByText(/Precio de venta sugerido al cliente/).textContent ?? "";
-    expect(resale()).toMatch(/Premium 250 g.*35\.000/);
+describe("MaquilaForm prices", () => {
+  const setup = () => render(<MaquilaForm clients={[]} packaging={[]} coffeeCostPerKg={{ premium: 40000 }} optionPrices={P} />);
 
+  it("two fields: what I charge per bag and the suggested resale price; no margin", () => {
+    setup();
+    expect(screen.getByLabelText("Lo que cobro por bolsa")).toBeTruthy();
+    expect(screen.queryByLabelText("Margen objetivo")).toBeNull();
+    expect(screen.queryByText(/margen/i)).toBeNull();
+  });
+
+  it("the resale field shows our reference price for the bag, moving with each option", () => {
+    setup();
+    const resale = screen.getByLabelText("Precio de venta sugerido") as HTMLInputElement;
+    expect(resale.placeholder).toMatch(/35\.000/);
     fireEvent.click(screen.getByLabelText("Cara trasera"));
-    expect(resale()).toMatch(/34\.000/);
+    expect(resale.placeholder).toMatch(/34\.000/);
     fireEvent.click(screen.getByLabelText("Peel stick"));
-    expect(resale()).toMatch(/34\.600/);
+    expect(resale.placeholder).toMatch(/34\.600/);
     fireEvent.change(screen.getByLabelText("Número de tintas por cara"), { target: { value: "2" } });
-    expect(resale()).toMatch(/35\.100/);
+    expect(resale.placeholder).toMatch(/35\.100/);
+    fireEvent.change(resale, { target: { value: "39900" } });
+    expect(screen.getByText(/Nuestro precio con este empaque/)).toBeTruthy();
   });
 
-  it("what we charge follows cost and margin, including the options' cost", () => {
-    render(<MaquilaForm clients={[]} packaging={[]} coffeeCostPerKg={{ premium: 40000 }} optionPrices={P} />);
-    const price = screen.getByLabelText("Precio por unidad") as HTMLInputElement;
-    // 0.25 kg × 40.000 × 1.01 merma = 10.100 + valve 450 + 2 faces × 350 = 11.250; at 35 % → 17.350
-    expect(price.placeholder).toMatch(/17\.350/);
-    fireEvent.click(screen.getByLabelText("Peel stick"));
-    expect(price.placeholder).toMatch(/17\.700/); // 11.500 ÷ 0,65
+  it("warns when the price per bag is below cost", () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Lo que cobro por bolsa"), { target: { value: "5000" } });
+    expect(screen.getByText(/Por debajo del costo/)).toBeTruthy();
   });
 
-  it("sizes without a reference product have no resale price", () => {
-    render(<MaquilaForm clients={[]} packaging={[]} coffeeCostPerKg={{ premium: 40000 }} optionPrices={P} />);
-    fireEvent.change(screen.getByLabelText("Gramos por unidad"), { target: { value: "340" } });
-    expect(screen.getByText(/Sin producto de referencia para 340 g/)).toBeTruthy();
+  it("does not save without a price per bag", () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Nombre de la presentación"), { target: { value: "Bolsa 250" } });
+    fireEvent.click(screen.getByText("Guardar"));
+    expect(screen.getByText(/Escribe lo que cobras por bolsa en: Bolsa 250/)).toBeTruthy();
   });
 });
