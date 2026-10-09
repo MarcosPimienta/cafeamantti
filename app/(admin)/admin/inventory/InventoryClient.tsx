@@ -91,6 +91,7 @@ import {
   type InventoryCategory,
 } from "@/utils/inventory/categories";
 import CostosTab from "./CostosTab";
+import QuantityInput from "./QuantityInput";
 import {
   MOLIENDAS,
   MOLIENDA_LABELS,
@@ -540,14 +541,13 @@ function AdjustModal({
             <label htmlFor="adj-qty" className={labelCls}>
               Cantidad ({item.unit})
             </label>
-            <input
+            <QuantityInput
               id="adj-qty"
-              type="number"
-              step="0.001"
               value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
+              onChange={setQuantity}
+              baseUnit={item.unit}
+              allowNegative={type === "ajuste"}
               placeholder={type === "ajuste" ? "ej. -5 o +10" : "ej. 20"}
-              className={inputCls}
               required
             />
           </div>
@@ -1541,7 +1541,7 @@ function EditMovementModal({
         </div>
         <form onSubmit={handleSubmit} className="p-8 space-y-4">
           <div><label className={labelCls}>Fecha</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required /></div>
-          <div><label className={labelCls}>Cantidad (valor absoluto)</label><input type="number" min="0.001" step="0.001" value={qty} onChange={(e) => setQty(e.target.value)} className={inputCls} required /></div>
+          <div><label className={labelCls}>Cantidad (valor absoluto)</label><QuantityInput value={qty} onChange={setQty} baseUnit={getRelation(record.inventory)?.unit} ariaLabel="Cantidad" required /></div>
           <div><label className={labelCls}>Motivo / Notas</label><input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo..." className={inputCls} /></div>
           <div><label className={labelCls}>Responsable</label><input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder="Nombre..." className={inputCls} /></div>
           {needsMolienda && (
@@ -1863,15 +1863,12 @@ function EntradasTab({
               <label htmlFor="ent-qty" className={labelCls}>
                 Cantidad <span className="text-red-400">*</span>
               </label>
-              <input
+              <QuantityInput
                 id="ent-qty"
-                type="number"
-                min="0.001"
-                step="0.001"
                 value={form.qty}
-                onChange={(e) => setForm({ ...form, qty: e.target.value })}
+                onChange={(v) => setForm((f) => ({ ...f, qty: v }))}
+                baseUnit={selectedItem?.unit}
                 placeholder="ej. 100"
-                className={inputCls}
                 required
               />
             </div>
@@ -2349,17 +2346,14 @@ function TrillaTab({
             </div>
             <div>
               <label htmlFor="tri-input" className={labelCls}>
-                Pergamino entrada (kg) <span className="text-red-400">*</span>
+                Pergamino entrada <span className="text-red-400">*</span>
               </label>
-              <input
+              <QuantityInput
                 id="tri-input"
-                type="number"
-                min="0.001"
-                step="0.001"
                 value={inputQty}
-                onChange={(e) => setInputQty(e.target.value)}
+                onChange={setInputQty}
+                baseUnit="kg"
                 placeholder="ej. 287.9"
-                className={inputCls}
                 required
               />
             </div>
@@ -2380,18 +2374,16 @@ function TrillaTab({
             </div>
             <div>
               <label htmlFor="tri-output" className={labelCls}>
-                Verde salida (kg) — real{" "}
+                Verde salida — real{" "}
                 <span className="text-amber-500">auto</span>
               </label>
-              <input
+              <QuantityInput
                 id="tri-output"
-                type="number"
-                min="0.001"
-                step="0.001"
                 value={outputQty}
-                onChange={(e) => setOutputQty(e.target.value)}
+                onChange={setOutputQty}
+                baseUnit="kg"
                 placeholder="Auto-calculado"
-                className={`${inputCls} border-amber-200 bg-amber-50/50`}
+                className="border-amber-200 bg-amber-50/50"
                 required
               />
             </div>
@@ -2748,15 +2740,12 @@ function TostionTab({
               />
             </div>
             <div>
-              <label htmlFor="tos-input-qty" className={labelCls}>Cant. Verde (kg) <span className="text-red-400">*</span></label>
-              <input
+              <label htmlFor="tos-input-qty" className={labelCls}>Cant. Verde <span className="text-red-400">*</span></label>
+              <QuantityInput
                 id="tos-input-qty"
-                type="number"
-                min="0.001"
-                step="0.001"
                 value={form.inputQty}
-                onChange={(e) => setForm({ ...form, inputQty: e.target.value })}
-                className={inputCls}
+                onChange={(v) => setForm((f) => ({ ...f, inputQty: v }))}
+                baseUnit="kg"
                 required
               />
             </div>
@@ -2774,15 +2763,13 @@ function TostionTab({
               />
             </div>
             <div>
-              <label htmlFor="tos-output-qty" className={labelCls}>Cant. Tostado (kg) <span className="text-amber-500">auto</span></label>
-              <input
+              <label htmlFor="tos-output-qty" className={labelCls}>Cant. Tostado <span className="text-amber-500">auto</span></label>
+              <QuantityInput
                 id="tos-output-qty"
-                type="number"
-                min="0.001"
-                step="0.001"
                 value={form.outputQty}
-                onChange={(e) => setForm({ ...form, outputQty: e.target.value })}
-                className={`${inputCls} border-amber-200 bg-amber-50/50`}
+                onChange={(v) => setForm((f) => ({ ...f, outputQty: v }))}
+                baseUnit="kg"
+                className="border-amber-200 bg-amber-50/50"
                 required
               />
             </div>
@@ -3216,20 +3203,14 @@ function ProdAltasTab({
                         placeholder="Seleccionar bolsa o sticker..."
                       />
                     </div>
-                    <div className="w-full sm:w-32">
+                    <div className="w-full sm:w-48">
                       <label className="text-[10px] uppercase font-bold text-foreground/40 mb-1 block">Cantidad</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.001"
+                      <QuantityInput
                         value={c.qty}
-                        onChange={(e) => {
-                          const newC = [...consumos];
-                          newC[i].qty = e.target.value;
-                          setConsumos(newC);
-                        }}
+                        onChange={(v) => setConsumos((prev) => prev.map((x, idx) => (idx === i ? { ...x, qty: v } : x)))}
+                        baseUnit={inventory.find((inv) => inv.id === c.id)?.unit}
                         placeholder="ej. 50"
-                        className={inputCls}
+                        ariaLabel="Cantidad consumida"
                       />
                     </div>
                     <button
@@ -3558,17 +3539,14 @@ function ColdBrewTab({
 
               <div>
                 <label htmlFor="cb-qty-coffee" className={labelCls}>
-                  Cantidad Café Tostado (kg) <span className="text-red-400">*</span>
+                  Cantidad Café Tostado <span className="text-red-400">*</span>
                 </label>
-                <input
+                <QuantityInput
                   id="cb-qty-coffee"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
                   value={form.inputQtyKg}
-                  onChange={(e) => setForm({ ...form, inputQtyKg: e.target.value })}
+                  onChange={(v) => setForm((f) => ({ ...f, inputQtyKg: v }))}
+                  baseUnit="kg"
                   placeholder="ej. 5.0"
-                  className={inputCls}
                   required
                 />
               </div>
@@ -3982,15 +3960,12 @@ function SalidasTab({
               <label htmlFor="sal-qty" className={labelCls}>
                 Cantidad <span className="text-red-400">*</span>
               </label>
-              <input
+              <QuantityInput
                 id="sal-qty"
-                type="number"
-                min="0.001"
-                step="0.001"
                 value={form.qty}
-                onChange={(e) => setForm({ ...form, qty: e.target.value })}
+                onChange={(v) => setForm((f) => ({ ...f, qty: v }))}
+                baseUnit={selectedItem?.unit}
                 placeholder="ej. 10"
-                className={inputCls}
                 required
               />
             </div>
@@ -4362,15 +4337,12 @@ function ReempaqueTab({
               <label htmlFor={`rep-${side}-qty-${l.key}`} className={labelCls}>
                 Cantidad {it ? `(${it.unit})` : ""}
               </label>
-              <input
+              <QuantityInput
                 id={`rep-${side}-qty-${l.key}`}
-                type="number"
-                min="0.001"
-                step="any"
                 value={l.qty}
-                onChange={(e) => update({ qty: e.target.value })}
+                onChange={(v) => update({ qty: v })}
+                baseUnit={it?.unit}
                 placeholder="ej. 1"
-                className={inputCls}
               />
               {w !== null && q > 0 && (
                 <p className="text-[10px] text-foreground/40 mt-1">
@@ -4538,14 +4510,11 @@ function ReempaqueTab({
                     filter={(inv) => inv.category === "empaque" || inv.category === "accesorio"}
                     searchable
                   />
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
+                  <QuantityInput
                     value={c.qty}
-                    onChange={(e) => editConsumos(consumos.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
-                    aria-label="Cantidad de empaque"
-                    className={inputCls}
+                    onChange={(v) => editConsumos(consumos.map((x, j) => (j === i ? { ...x, qty: v } : x)))}
+                    baseUnit={byId.get(c.id)?.unit}
+                    ariaLabel="Cantidad de empaque"
                   />
                   <button
                     type="button"
