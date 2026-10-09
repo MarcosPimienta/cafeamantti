@@ -3,6 +3,13 @@ import {
   roundPrice,
   unitCost,
   suggestedPrice,
+  marginPrice,
+  referencePrice,
+  optionsCost,
+  optionsPriceDelta,
+  describeOptions,
+  normalizeOptionPrices,
+  type OptionPrices,
   coffeeKgPerUnit,
   calculateLine,
   calculateProposal,
@@ -13,6 +20,7 @@ import {
   effectiveMinimum,
   MIN_UNITS_PER_PRESENTATION,
   DEFAULT_SETTINGS,
+  REFERENCE_OPTIONS,
   type MaquilaLine,
   type MaquilaSettings,
 } from "../maquila";
@@ -34,6 +42,7 @@ const line = (over: Partial<MaquilaLine> = {}): MaquilaLine => ({
   labor_per_unit: 400,
   target_margin_pct: 40,
   price_per_unit: null,
+  options: { ...REFERENCE_OPTIONS },
   ...over,
 });
 
@@ -48,7 +57,7 @@ describe("roundPrice", () => {
 describe("unit cost (Amantti supplies the coffee)", () => {
   it("coffee by weight + what Amantti buys + labor; client supplies cost nothing", () => {
     // 0.25 kg × 40.000 = 10.000 coffee; 1.200 + 2 × 50 materials; 400 labor
-    expect(unitCost(line(), S())).toEqual({ coffee: 10000, materials: 1300, labor: 400, total: 11700 });
+    expect(unitCost(line(), S())).toEqual({ coffee: 10000, options: 0, materials: 1300, labor: 400, total: 11700 });
   });
 
   it("packing merma adds coffee cost", () => {
@@ -56,9 +65,14 @@ describe("unit cost (Amantti supplies the coffee)", () => {
     expect(unitCost(line(), S({ merma_pct: 2 })).coffee).toBeCloseTo(10200, 6);
   });
 
-  it("suggested price leaves the target margin of the price", () => {
-    expect(suggestedPrice(line(), S())).toBe(roundPrice(11700 / 0.6)); // 19.500
-    expect(suggestedPrice(line({ target_margin_pct: 0 }), S())).toBe(11700);
+  it("the margin price leaves the target margin of the price", () => {
+    expect(marginPrice(line(), S())).toBe(roundPrice(11700 / 0.6)); // 19.500
+    expect(marginPrice(line({ target_margin_pct: 0 }), S())).toBe(11700);
+  });
+
+  it("sizes without a reference product are suggested by margin", () => {
+    expect(suggestedPrice(line({ grams: 340 }), S())).toBe(marginPrice(line({ grams: 340 }), S()));
+    expect(referencePrice(line({ grams: 1000 }), S())).toBeNull();
   });
 });
 
@@ -86,7 +100,59 @@ describe("calculateLine", () => {
 
   it("an agreed price overrides the suggestion", () => {
     expect(calculateLine(line({ price_per_unit: 22000 })).price).toBe(22000);
-    expect(calculateLine(line({ price_per_unit: 0 }), S()).price).toBe(19500);
+    expect(calculateLine(line({ price_per_unit: 0 }), S()).price).toBe(35000); // reference price
+  });
+});
+
+describe("bag options and the reference price", () => {
+  const P: OptionPrices = {
+    valvula: { price: 800, cost: 450 },
+    peel_stick: { price: 600, cost: 250 },
+    sticker: { price: 400, cost: 150 },
+    cara: { price: 1000, cost: 350 },
+    tinta_adicional: { price: 500, cost: 120 },
+  };
+  const withPrices = S({ option_prices: P });
+
+  it("the reference bag sells at the store price (with shipping) of the same profile and size", () => {
+    expect(referencePrice(line(), withPrices)).toBe(35000);
+    expect(referencePrice(line({ grams: 500, profile: "honey" }), withPrices)).toBe(86400);
+    expect(referencePrice(line({ grams: 2500, profile: "chiroso" }), withPrices)).toBe(320000);
+    expect(suggestedPrice(line(), withPrices)).toBe(35000);
+  });
+
+  it("each difference from the reference bag adds or subtracts its price", () => {
+    const opt = (o: Partial<MaquilaLine["options"]>) => ({ ...REFERENCE_OPTIONS, ...o });
+    expect(optionsPriceDelta(opt({ valvula: false }), P)).toBe(-800);
+    expect(optionsPriceDelta(opt({ cara_trasera: false }), P)).toBe(-1000);
+    expect(optionsPriceDelta(opt({ peel_stick: true, sticker: true }), P)).toBe(1000);
+    // 2 inks on 2 faces = 2 extra inks; on 1 face = 1 extra ink, one face less
+    expect(optionsPriceDelta(opt({ tintas: 2 }), P)).toBe(1000);
+    expect(optionsPriceDelta(opt({ tintas: 3, cara_frontal: false }), P)).toBe(-1000 + 2 * 500);
+    expect(referencePrice(line({ options: opt({ valvula: false, cara_trasera: false }) }), withPrices)).toBe(35000 - 1800);
+  });
+
+  it("the options cost adds to the unit cost, and the margin price follows", () => {
+    const o = { ...REFERENCE_OPTIONS, tintas: 2, peel_stick: true };
+    // valve 450 + peel stick 250 + 2 faces × 350 + 2 faces × 1 extra ink × 120
+    expect(optionsCost(o, P)).toBe(450 + 250 + 700 + 240);
+    expect(unitCost(line({ options: o }), withPrices).total).toBe(11700 + 1640);
+    expect(calculateLine(line({ options: o }), withPrices)).toMatchObject({ optionsCost: 1640, reference: 35000 + 600 + 1000 });
+  });
+
+  it("no print means no inks, and the client document describes the bag", () => {
+    expect(optionsCost({ ...REFERENCE_OPTIONS, cara_frontal: false, cara_trasera: false, tintas: 4 }, P)).toBe(450);
+    expect(describeOptions(REFERENCE_OPTIONS)).toBe("Válvula · Frente y respaldo a 1 tinta");
+    expect(describeOptions({ ...REFERENCE_OPTIONS, valvula: false, sticker: true, peel_stick: true, cara_trasera: false, tintas: 3 })).toBe(
+      "Sin válvula · Peel stick · Sticker · Solo frente a 3 tintas"
+    );
+    expect(describeOptions({ ...REFERENCE_OPTIONS, cara_frontal: false, cara_trasera: false })).toBe("Válvula · Sin impresión");
+  });
+
+  it("lines saved before options are the reference bag; missing option prices are zero", () => {
+    expect(normalizeLine({ id: "old", grams: 250 }).options).toEqual(REFERENCE_OPTIONS);
+    expect(normalizeOptionPrices({ valvula: { price: 500 } }).valvula).toEqual({ price: 500, cost: 0 });
+    expect(normalizeOptionPrices(null).tinta_adicional).toEqual({ price: 0, cost: 0 });
   });
 });
 

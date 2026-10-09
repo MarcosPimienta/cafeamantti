@@ -1,3 +1,4 @@
+import { REFERENCE_OPTIONS } from "@/utils/maquila";
 import { describe, it, expect } from "vitest";
 import { buildMaquilaHtml, type MaquilaPdfData } from "../maquilaPdf";
 
@@ -9,7 +10,7 @@ const data: MaquilaPdfData = {
   intro: "Gracias por confiar en Amantti.\nEsta es nuestra propuesta.",
   conditions: "Pago 50/50\nEntrega en 8 días",
   minimumUnits: 200,
-  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: 1500000, design_cost: 600123, background_path: null, background_opacity: 0.5, ally_logo_path: null },
+  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: 1500000, design_cost: 600123, background_path: null, background_opacity: 0.5, ally_logo_path: null, option_prices: null },
   lines: [
     {
       id: "l1",
@@ -25,6 +26,7 @@ const data: MaquilaPdfData = {
       labor_per_unit: 456,
       target_margin_pct: 40,
       price_per_unit: 22000,
+      options: { ...REFERENCE_OPTIONS },
     },
   ],
 };
@@ -40,6 +42,17 @@ describe("buildMaquilaHtml (client PDF)", () => {
     expect(flat(html)).toContain("$ 22.000");
     expect(flat(html)).toContain("$ 8.800.000"); // 22.000 × 400
     expect(flat(html)).toContain("$ 10.472.000"); // with 19 % IVA
+  });
+
+  it("describes how each bag is made, without option costs", () => {
+    expect(html).toContain("Válvula · Frente y respaldo a 1 tinta");
+    const custom = buildMaquilaHtml({
+      ...data,
+      settings: { ...data.settings, option_prices: { valvula: { price: 800, cost: 4519 }, peel_stick: { price: 600, cost: 4529 }, sticker: { price: 400, cost: 4539 }, cara: { price: 1000, cost: 4549 }, tinta_adicional: { price: 500, cost: 4559 } } },
+      lines: [{ ...data.lines[0], options: { ...data.lines[0].options, peel_stick: true, tintas: 2, cara_trasera: false } }],
+    });
+    expect(custom).toContain("Válvula · Peel stick · Solo frente a 2 tintas");
+    expect(custom).not.toMatch(/45[1-5]9/);
   });
 
   it("charges the packaging design once, with its own IVA", () => {

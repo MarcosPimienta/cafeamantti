@@ -5,6 +5,58 @@
 // client PDF.
 
 import { COFFEE_PROFILES, PROFILE_LABELS, type CoffeeProfileId } from "@/app/(admin)/coffeeProfiles";
+import { STORE_PRICES, type StoreWeight } from "@/utils/pricing";
+
+// ── Packaging options ─────────────────────────────────────────
+//
+// Each presentation picks how its bag is made. Amantti's own retail bags
+// are the reference: printed at 1 ink on both faces, with valve, without
+// sticker or peel stick. Their store price is the reference price, and
+// every difference from that bag adds or subtracts its price delta.
+
+export type PackagingOptions = {
+  valvula: boolean;
+  peel_stick: boolean;
+  sticker: boolean;
+  /** Inks per printed face (1 = reference). */
+  tintas: number;
+  cara_frontal: boolean;
+  cara_trasera: boolean;
+};
+
+/** Amantti's retail bag, whose store price is the reference. */
+export const REFERENCE_OPTIONS: PackagingOptions = {
+  valvula: true,
+  peel_stick: false,
+  sticker: false,
+  tintas: 1,
+  cara_frontal: true,
+  cara_trasera: true,
+};
+
+export type OptionKey = "valvula" | "peel_stick" | "sticker" | "cara" | "tinta_adicional";
+
+/** What the client pays for an option, and what it costs Amantti, per unit. */
+export type OptionPrice = { price: number; cost: number };
+export type OptionPrices = Record<OptionKey, OptionPrice>;
+
+export const OPTION_LABELS: Record<OptionKey, { label: string; hint: string }> = {
+  valvula: { label: "Válvula", hint: "por bolsa" },
+  peel_stick: { label: "Peel stick", hint: "cierre adhesivo, por bolsa" },
+  sticker: { label: "Sticker", hint: "por bolsa" },
+  cara: { label: "Cara impresa", hint: "por cara, a 1 tinta" },
+  tinta_adicional: { label: "Tinta adicional", hint: "por tinta extra, por cara impresa" },
+};
+
+export const OPTION_KEYS = Object.keys(OPTION_LABELS) as OptionKey[];
+
+export const DEFAULT_OPTION_PRICES: OptionPrices = {
+  valvula: { price: 0, cost: 0 },
+  peel_stick: { price: 0, cost: 0 },
+  sticker: { price: 0, cost: 0 },
+  cara: { price: 0, cost: 0 },
+  tinta_adicional: { price: 0, cost: 0 },
+};
 
 export type MaterialLine = {
   /** Inventory code when picked from inventory; null for free text. */
@@ -36,6 +88,8 @@ export type MaquilaLine = {
   target_margin_pct: number;
   /** Agreed price per unit; null = use the suggested price. */
   price_per_unit: number | null;
+  /** How the bag is made (valve, print, sticker…). */
+  options: PackagingOptions;
 };
 
 export type MaquilaSettings = {
@@ -58,6 +112,12 @@ export type MaquilaSettings = {
   background_opacity: number;
   /** Client's logo (proposal-assets path), shown next to Amantti's; null = none. */
   ally_logo_path: string | null;
+  /**
+   * Option prices this proposal was quoted with (a copy of the general
+   * table), so later changes to the table do not alter sent proposals.
+   * null = use the general table.
+   */
+  option_prices: OptionPrices | null;
 };
 
 export const DEFAULT_SETTINGS: MaquilaSettings = {
@@ -69,6 +129,7 @@ export const DEFAULT_SETTINGS: MaquilaSettings = {
   background_path: null,
   background_opacity: 0.5,
   ally_logo_path: null,
+  option_prices: null,
 };
 
 /** Background the other Amantti documents use. */
@@ -97,7 +158,79 @@ export function normalizeLine(line: Partial<MaquilaLine> & { id: string; monthly
     units: num(rest.units ?? monthly_units ?? MIN_UNITS_PER_PRESENTATION),
     profile: isProfile(line.profile) ? line.profile : "premium",
     coffee_cost_per_kg: num(line.coffee_cost_per_kg),
+    options: { ...REFERENCE_OPTIONS, ...(line.options ?? {}) },
   };
+}
+
+/** Option prices with every key present (older or partial tables). */
+export function normalizeOptionPrices(p: Partial<Record<OptionKey, Partial<OptionPrice>>> | null | undefined): OptionPrices {
+  const out = { ...DEFAULT_OPTION_PRICES };
+  for (const k of OPTION_KEYS) out[k] = { price: num(p?.[k]?.price), cost: num(p?.[k]?.cost) };
+  return out;
+}
+
+const pricesOf = (settings: MaquilaSettings) => normalizeOptionPrices(settings.option_prices);
+
+/** Faces printed (0–2) and inks per printed face. */
+export function printSpec(o: PackagingOptions) {
+  const faces = (o.cara_frontal ? 1 : 0) + (o.cara_trasera ? 1 : 0);
+  const inks = faces > 0 ? Math.max(1, Math.round(num(o.tintas))) : 0;
+  return { faces, inks };
+}
+
+/** What the bag's options cost Amantti per unit. */
+export function optionsCost(o: PackagingOptions, prices: OptionPrices): number {
+  const { faces, inks } = printSpec(o);
+  return (
+    (o.valvula ? prices.valvula.cost : 0) +
+    (o.peel_stick ? prices.peel_stick.cost : 0) +
+    (o.sticker ? prices.sticker.cost : 0) +
+    faces * prices.cara.cost +
+    faces * Math.max(0, inks - 1) * prices.tinta_adicional.cost
+  );
+}
+
+/** How much the options move the price away from the reference bag. */
+export function optionsPriceDelta(o: PackagingOptions, prices: OptionPrices): number {
+  const ref = printSpec(REFERENCE_OPTIONS);
+  const { faces, inks } = printSpec(o);
+  const flag = (on: boolean, refOn: boolean) => (on ? 1 : 0) - (refOn ? 1 : 0);
+  return (
+    flag(o.valvula, REFERENCE_OPTIONS.valvula) * prices.valvula.price +
+    flag(o.peel_stick, REFERENCE_OPTIONS.peel_stick) * prices.peel_stick.price +
+    flag(o.sticker, REFERENCE_OPTIONS.sticker) * prices.sticker.price +
+    (faces - ref.faces) * prices.cara.price +
+    (faces * Math.max(0, inks - 1) - ref.faces * Math.max(0, ref.inks - 1)) * prices.tinta_adicional.price
+  );
+}
+
+/** The store size a presentation matches (250 g, 500 g, 2.5 kg), if any. */
+export function referenceSizeOf(grams: number): StoreWeight | null {
+  const g = num(grams);
+  return g === 250 ? "250g" : g === 500 ? "500g" : g === 2500 ? "2.5kg" : null;
+}
+
+/**
+ * Recommended price from Amantti's own product of the same profile and size
+ * (store price, shipping included), adjusted by the options. null when the
+ * size has no reference product.
+ */
+export function referencePrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number | null {
+  const size = referenceSizeOf(line.grams);
+  if (!size) return null;
+  const base = STORE_PRICES[line.profile]?.[size];
+  if (base === undefined) return null;
+  return roundPrice(base + optionsPriceDelta(line.options ?? REFERENCE_OPTIONS, pricesOf(settings)));
+}
+
+/** "Válvula · Peel stick · 2 tintas · Frente y respaldo" for the client document. */
+export function describeOptions(o: PackagingOptions): string {
+  const { faces, inks } = printSpec(o);
+  const print =
+    faces === 0
+      ? "Sin impresión"
+      : `${faces === 2 ? "Frente y respaldo" : o.cara_frontal ? "Solo frente" : "Solo respaldo"} a ${inks} ${inks === 1 ? "tinta" : "tintas"}`;
+  return [o.valvula ? "Válvula" : "Sin válvula", o.peel_stick && "Peel stick", o.sticker && "Sticker", print].filter(Boolean).join(" · ");
 }
 
 export function normalizeSettings(s: Partial<MaquilaSettings> | null | undefined): MaquilaSettings {
@@ -115,20 +248,29 @@ export function coffeeKgPerUnit(line: MaquilaLine, settings: MaquilaSettings = D
   return (num(line.grams) / 1000) * (1 + merma);
 }
 
-/** What one unit costs Amantti: its coffee, the materials it buys, and labor. */
+/** What one unit costs Amantti: coffee, bag options, other materials it buys, and labor. */
 export function unitCost(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS) {
   const coffee = num(line.coffee_cost_per_kg) * coffeeKgPerUnit(line, settings);
+  const options = optionsCost(line.options ?? REFERENCE_OPTIONS, pricesOf(settings));
   const materials = line.materials
     .filter((m) => m.supplied_by === "amantti")
     .reduce((s, m) => s + num(m.unit_cost) * num(m.qty), 0);
   const labor = num(line.labor_per_unit);
-  return { coffee, materials, labor, total: coffee + materials + labor };
+  return { coffee, options, materials, labor, total: coffee + options + materials + labor };
 }
 
 /** Price that leaves `margin` % of the price as profit: cost ÷ (1 − margin). */
-export function suggestedPrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number {
+export function marginPrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number {
   const margin = Math.min(95, Math.max(0, num(line.target_margin_pct))) / 100;
   return roundPrice(unitCost(line, settings).total / (1 - margin));
+}
+
+/**
+ * Recommended price: Amantti's reference product price adjusted by the
+ * options; for sizes without a reference, the target-margin price.
+ */
+export function suggestedPrice(line: MaquilaLine, settings: MaquilaSettings = DEFAULT_SETTINGS): number {
+  return referencePrice(line, settings) ?? marginPrice(line, settings);
 }
 
 export type LineResult = {
@@ -140,10 +282,18 @@ export type LineResult = {
   units: number;
   cost: number;
   coffeeCost: number;
+  optionsCost: number;
   materialsCost: number;
   laborCost: number;
+  /** Recommended price (reference product adjusted, or by margin). */
   suggested: number;
+  /** Reference product price adjusted by options; null for other sizes. */
+  reference: number | null;
+  /** Price that would meet the target margin. */
+  byMargin: number;
   price: number;
+  /** Bag description for the client document. */
+  optionsSummary: string;
   /** Profit share of the price (%); null when the price is 0. */
   marginPct: number | null;
   revenue: number;
@@ -180,10 +330,14 @@ export function calculateLine(
     units,
     cost: c.total,
     coffeeCost: c.coffee,
+    optionsCost: c.options,
     materialsCost: c.materials,
     laborCost: c.labor,
     suggested,
+    reference: referencePrice(line, settings),
+    byMargin: marginPrice(line, settings),
     price,
+    optionsSummary: describeOptions(line.options ?? REFERENCE_OPTIONS),
     marginPct: price > 0 ? ((price - c.total) / price) * 100 : null,
     revenue: price * units,
     totalCost: c.total * units,

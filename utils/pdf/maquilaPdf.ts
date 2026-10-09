@@ -48,7 +48,7 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
   const rows = lines
     .map(
       (r) => `<tr>
-        <td style="${td}"><strong>${esc(r.presentation)}</strong><br/><span style="color:#78716c; font-size:11px;">Café ${esc(r.profileLabel)} · ${esc(r.grams)} g por unidad</span></td>
+        <td style="${td}"><strong>${esc(r.presentation)}</strong><br/><span style="color:#78716c; font-size:11px;">Café ${esc(r.profileLabel)} · ${esc(r.grams)} g por unidad<br/>${esc(r.optionsSummary)}</span></td>
         <td style="${td} text-align:right;">${formatCOP(r.price)}</td>
         <td style="${td} text-align:right;">${r.units.toLocaleString("es-CO")}</td>
         <td style="${td} text-align:right;">${formatCOP(r.revenue)}</td>

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
+import { REFERENCE_OPTIONS } from "@/utils/maquila";
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import MaquilaPreview from "../MaquilaPreview";
@@ -13,7 +14,7 @@ const data: MaquilaPdfData = {
   intro: "Hola",
   conditions: "Pago 50/50",
   minimumUnits: null,
-  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: 0, design_cost: 0, background_path: null, background_opacity: 0.5, ally_logo_path: null },
+  settings: { merma_pct: 1, apply_iva: true, iva_pct: 19, design_fee: 0, design_cost: 0, background_path: null, background_opacity: 0.5, ally_logo_path: null, option_prices: null },
   lines: [
     {
       id: "a",
@@ -26,6 +27,7 @@ const data: MaquilaPdfData = {
       labor_per_unit: 400,
       target_margin_pct: 35,
       price_per_unit: 2500,
+      options: { ...REFERENCE_OPTIONS },
     },
   ],
 };

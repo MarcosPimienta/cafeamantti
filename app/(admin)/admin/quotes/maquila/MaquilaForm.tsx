@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Copy, FileDown, Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { saveMaquilaProposal, type MaquilaProposalInput } from "./actions";
+import { saveMaquilaOptionPrices, saveMaquilaProposal, type MaquilaProposalInput } from "./actions";
 import MaquilaPreview from "./MaquilaPreview";
 import BrandIdentityPanel from "../proposals/new/BrandIdentityPanel";
 import type { MaquilaPdfData } from "@/utils/pdf/maquilaPdf";
@@ -18,7 +18,14 @@ import {
   MAQUILA_PROFILES,
   effectiveMinimum,
   MIN_UNITS_PER_PRESENTATION,
+  OPTION_KEYS,
+  OPTION_LABELS,
+  REFERENCE_OPTIONS,
+  normalizeOptionPrices,
+  referenceSizeOf,
   type MaquilaLine,
+  type OptionPrices,
+  type PackagingOptions,
   type MaterialLine,
   type MaquilaSettings,
 } from "@/utils/maquila";
@@ -49,13 +56,17 @@ const blankLine = (costs: Partial<Record<CoffeeProfileId, number>>): MaquilaLine
   labor_per_unit: 0,
   target_margin_pct: 35,
   price_per_unit: null,
+  options: { ...REFERENCE_OPTIONS },
 });
+
+const sameOptionPrices = (a: OptionPrices, b: OptionPrices) => OPTION_KEYS.every((k) => a[k].price === b[k].price && a[k].cost === b[k].cost);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export default function MaquilaForm({
   clients,
   packaging,
   coffeeCostPerKg = {},
+  optionPrices: generalOptionPrices,
   initial,
   initialAssetUrls,
   sellerName,
@@ -66,6 +77,8 @@ export default function MaquilaForm({
   packaging: PackagingItem[];
   /** Direct cost per kg of each profile (café + tostión), from Inventario → Costos. */
   coffeeCostPerKg?: Partial<Record<CoffeeProfileId, number>>;
+  /** General price table of bag options (valve, peel stick, print…). */
+  optionPrices?: OptionPrices;
   initial?: any;
   sellerName?: string;
 }) {
@@ -83,7 +96,14 @@ export default function MaquilaForm({
   );
   const [conditions, setConditions] = useState<string>(initial?.conditions ?? DEFAULT_CONDITIONS);
   const [minimumUnits, setMinimumUnits] = useState<string>(String(initial?.minimum_units ?? MIN_UNITS_PER_PRESENTATION));
-  const [settings, setSettings] = useState<MaquilaSettings>(normalizeSettings(initial?.settings));
+  const [generalPrices, setGeneralPrices] = useState<OptionPrices>(normalizeOptionPrices(generalOptionPrices));
+  // A saved proposal keeps the option prices it was quoted with; a new one starts from the general table.
+  const [settings, setSettings] = useState<MaquilaSettings>(() => {
+    const st = normalizeSettings(initial?.settings);
+    return { ...st, option_prices: normalizeOptionPrices(st.option_prices ?? generalOptionPrices) };
+  });
+  const prices = normalizeOptionPrices(settings.option_prices);
+  const [savingPrices, startSavingPrices] = useTransition();
   const [backgroundUrl, setBackgroundUrl] = useState<string>(initialAssetUrls?.background ?? "");
   const [allyLogoUrl, setAllyLogoUrl] = useState<string>(initialAssetUrls?.allyLogo ?? "");
   // null path = Amantti's default background; "" = none; otherwise an uploaded image.
@@ -127,6 +147,28 @@ export default function MaquilaForm({
   );
 
   const updateLine = (id: string, patch: Partial<MaquilaLine>) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const updateOptions = (id: string, patch: Partial<PackagingOptions>) =>
+    setLines((ls) => ls.map((l) => (l.id === id ? { ...l, options: { ...l.options, ...patch } } : l)));
+  const setOptionPrice = (key: (typeof OPTION_KEYS)[number], field: "price" | "cost", value: number) =>
+    setSettings((st) => {
+      const cur = normalizeOptionPrices(st.option_prices);
+      return { ...st, option_prices: { ...cur, [key]: { ...cur[key], [field]: value } } };
+    });
+
+  function saveAsGeneral() {
+    setError("");
+    setNotice("");
+    startSavingPrices(async () => {
+      try {
+        await saveMaquilaOptionPrices(prices);
+        setGeneralPrices(prices);
+        setNotice("✓ Tabla general de opciones actualizada");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No se pudo guardar la tabla");
+      }
+    });
+  }
+
   const updateMaterial = (lineId: string, idx: number, patch: Partial<MaterialLine>) =>
     setLines((ls) => ls.map((l) => (l.id === lineId ? { ...l, materials: l.materials.map((m, i) => (i === idx ? { ...m, ...patch } : m)) } : l)));
 
@@ -259,6 +301,44 @@ export default function MaquilaForm({
               </div>
             </div>
           </div>
+          <details className="rounded-2xl bg-[#fdfbf7] border border-foreground/5 p-4 group">
+            <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[#C59F59] list-none flex items-center justify-between gap-2">
+              <span>Precios de opciones de empaque · por unidad</span>
+              <span className="text-foreground/40 normal-case tracking-normal font-normal">
+                {sameOptionPrices(prices, generalPrices) ? "Tabla general" : "Modificados en esta propuesta"}
+              </span>
+            </summary>
+            <p className="text-[11px] text-foreground/50 mt-3">
+              Referencia: nuestra bolsa a 1 tinta en frente y respaldo, con válvula, sin sticker ni peel stick, al precio de la tienda (con envío).
+              Cada diferencia suma o resta el valor al cliente; el costo entra al costo por unidad.
+            </p>
+            <div className="hidden sm:grid grid-cols-[1fr_120px_120px] gap-2 mt-3 px-1 text-[10px] font-bold uppercase tracking-widest text-foreground/30">
+              <span>Opción</span>
+              <span>Valor al cliente</span>
+              <span>Costo interno</span>
+            </div>
+            <div className="space-y-2 mt-1">
+              {OPTION_KEYS.map((k) => (
+                <div key={k} className="grid grid-cols-2 sm:grid-cols-[1fr_120px_120px] gap-2 items-center">
+                  <div className="col-span-2 sm:col-span-1 text-sm">
+                    {OPTION_LABELS[k].label} <span className="text-[11px] text-foreground/40">· {OPTION_LABELS[k].hint}</span>
+                  </div>
+                  <input inputMode="numeric" value={prices[k].price || ""} onChange={(e) => setOptionPrice(k, "price", n(e.target.value))} placeholder="$ 0" aria-label={`Valor al cliente de ${OPTION_LABELS[k].label}`} className={inputCls} />
+                  <input inputMode="numeric" value={prices[k].cost || ""} onChange={(e) => setOptionPrice(k, "cost", n(e.target.value))} placeholder="$ 0" aria-label={`Costo interno de ${OPTION_LABELS[k].label}`} className={inputCls} />
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-3 mt-3">
+              <button type="button" onClick={saveAsGeneral} disabled={savingPrices || sameOptionPrices(prices, generalPrices)} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-foreground text-background text-[11px] font-bold uppercase tracking-widest hover:bg-[#C59F59] disabled:opacity-40">
+                {savingPrices ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Guardar como tabla general
+              </button>
+              {!sameOptionPrices(prices, generalPrices) && (
+                <button type="button" onClick={() => setSettings((st) => ({ ...st, option_prices: generalPrices }))} className="text-xs font-bold text-[#C59F59] hover:underline">
+                  Usar la tabla general
+                </button>
+              )}
+            </div>
+          </details>
         </section>
 
         {/* Presentations */}
@@ -325,6 +405,40 @@ export default function MaquilaForm({
                       : "Sin costo en Inventario → Costos: escríbelo a mano."}
                   </p>
                 </div>
+              </div>
+
+              {/* Bag options */}
+              <div>
+                <p className={labelCls}>Empaque</p>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Opciones de empaque">
+                  {(
+                    [
+                      ["valvula", "Válvula"],
+                      ["peel_stick", "Peel stick"],
+                      ["sticker", "Sticker"],
+                      ["cara_frontal", "Cara frontal"],
+                      ["cara_trasera", "Cara trasera"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer ${l.options[key] ? "bg-[#C59F59]/10 border-[#C59F59]/40 text-foreground" : "bg-white border-foreground/10 text-foreground/50"}`}>
+                      <input type="checkbox" checked={l.options[key]} onChange={(e) => updateOptions(l.id, { [key]: e.target.checked })} className="w-4 h-4 accent-[#C59F59]" />
+                      {label}
+                    </label>
+                  ))}
+                  <label className={`flex items-center gap-2 px-3 py-1 rounded-xl border border-foreground/10 bg-white text-xs font-bold ${l.options.cara_frontal || l.options.cara_trasera ? "" : "opacity-40"}`}>
+                    # Tintas
+                    <select value={l.options.tintas} onChange={(e) => updateOptions(l.id, { tintas: Number(e.target.value) })} disabled={!l.options.cara_frontal && !l.options.cara_trasera} aria-label="Número de tintas por cara" className="bg-transparent py-1 focus:outline-none">
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <p className="text-[11px] text-foreground/40 mt-1.5">
+                  {r?.reference != null
+                    ? `Precio de referencia (${MAQUILA_PROFILES.find((pr) => pr.id === l.profile)?.label} ${{ "250g": "250 g", "500g": "500 g", "2.5kg": "2,5 kg" }[referenceSizeOf(l.grams)!]}, con estas opciones): ${cop(r.reference)} · por margen objetivo: ${cop(r.byMargin)}`
+                    : `Sin producto de referencia para ${l.grams || 0} g (solo 250 g, 500 g y 2,5 kg): el sugerido sale del margen objetivo.`}
+                </p>
               </div>
 
               {/* Materials */}
@@ -401,7 +515,7 @@ export default function MaquilaForm({
                   />
                 </div>
                 <div className="rounded-xl bg-[#fdfbf7] px-3 py-2 text-xs">
-                  <div className="text-foreground/50" title={r ? `Café ${cop(r.coffeeCost)} · insumos ${cop(r.materialsCost)} · mano de obra ${cop(r.laborCost)}` : ""}>
+                  <div className="text-foreground/50" title={r ? `Café ${cop(r.coffeeCost)} · opciones de empaque ${cop(r.optionsCost)} · insumos ${cop(r.materialsCost)} · mano de obra ${cop(r.laborCost)}` : ""}>
                     Costo {cop(r?.cost)} · margen
                   </div>
                   <div className={`font-bold text-sm ${r && r.price < r.cost ? "text-red-600" : r?.marginPct != null && r.marginPct < 20 ? "text-amber-600" : "text-emerald-700"}`}>

@@ -3,10 +3,22 @@
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { checkIsAdmin } from '../../../actions';
-import { MIN_UNITS_PER_PRESENTATION, MAQUILA_PROFILES, effectiveMinimum, type MaquilaLine, type MaquilaSettings } from '@/utils/maquila';
+import {
+  MIN_UNITS_PER_PRESENTATION,
+  MAQUILA_PROFILES,
+  OPTION_KEYS,
+  OPTION_LABELS,
+  effectiveMinimum,
+  normalizeOptionPrices,
+  type MaquilaLine,
+  type MaquilaSettings,
+  type OptionPrices,
+} from '@/utils/maquila';
 
 const STATUSES = ['borrador', 'enviada', 'aceptada', 'rechazada'];
 const MIGRATION_HINT = 'Falta aplicar la migración 20261012000000_maquila_proposals.sql';
+const OPTIONS_MIGRATION_HINT = 'Falta aplicar la migración 20261014000000_maquila_option_prices.sql';
+const MAX_INKS = 8;
 
 export type MaquilaProposalInput = {
   client_id: string | null;
@@ -37,6 +49,15 @@ function friendly(error: { message: string }) {
 const isYmd = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
 const finiteNonNeg = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
+function validateOptionPrices(prices: OptionPrices) {
+  for (const k of OPTION_KEYS) {
+    const o = prices?.[k];
+    if (!o || !finiteNonNeg(o.price) || !finiteNonNeg(o.cost)) {
+      throw new Error(`Precio y costo de ${OPTION_LABELS[k].label} deben ser mayores o iguales a cero.`);
+    }
+  }
+}
+
 /** Rejects proposals that would print nonsense (negative prices, no presentations…). */
 function validate(p: MaquilaProposalInput) {
   if (!p.client_id && !p.custom_client_name?.trim()) throw new Error('Elige un cliente o escribe su nombre.');
@@ -56,6 +77,7 @@ function validate(p: MaquilaProposalInput) {
   for (const path of [p.settings?.background_path, p.settings?.ally_logo_path]) {
     if (path != null && path !== '' && !/^proposals\/[\w.-]+$/.test(path)) throw new Error('Imagen inválida: súbela de nuevo.');
   }
+  if (p.settings?.option_prices != null) validateOptionPrices(p.settings.option_prices);
   if (!Array.isArray(p.lines) || p.lines.length === 0) throw new Error('Agrega al menos una presentación.');
   for (const l of p.lines) {
     const name = l.presentation?.trim() || 'una presentación';
@@ -70,12 +92,47 @@ function validate(p: MaquilaProposalInput) {
     if (!finiteNonNeg(l.labor_per_unit)) throw new Error(`Mano de obra inválida en ${name}.`);
     if (!finiteNonNeg(l.target_margin_pct) || l.target_margin_pct >= 100) throw new Error(`El margen de ${name} debe estar entre 0 y 99 %.`);
     if (l.price_per_unit !== null && !finiteNonNeg(l.price_per_unit)) throw new Error(`Precio inválido en ${name}.`);
+    const o = l.options;
+    if (o) {
+      if (['valvula', 'peel_stick', 'sticker', 'cara_frontal', 'cara_trasera'].some((k) => typeof o[k as keyof typeof o] !== 'boolean')) {
+        throw new Error(`Opciones de empaque inválidas en ${name}.`);
+      }
+      if (!(Number.isInteger(o.tintas) && o.tintas >= 1 && o.tintas <= MAX_INKS)) {
+        throw new Error(`${name}: el número de tintas debe estar entre 1 y ${MAX_INKS}.`);
+      }
+    }
     for (const m of l.materials ?? []) {
       if (!m.name?.trim()) throw new Error(`Hay un insumo sin nombre en ${name}.`);
       if (!finiteNonNeg(m.unit_cost) || !finiteNonNeg(m.qty)) throw new Error(`Costo o cantidad inválidos en ${m.name} (${name}).`);
       if (m.supplied_by !== 'amantti' && m.supplied_by !== 'cliente') throw new Error(`Indica quién aporta ${m.name}.`);
     }
   }
+}
+
+/** The general option price table; zeros when the migration is missing. */
+export async function getMaquilaOptionPrices(): Promise<OptionPrices> {
+  const { supabase } = await requireAdmin();
+  const { data, error } = await supabase.from('maquila_option_prices').select('key, price, cost');
+  if (error) {
+    console.error('getMaquilaOptionPrices:', error.message);
+    return normalizeOptionPrices(null);
+  }
+  const byKey = Object.fromEntries((data ?? []).map((r: { key: string; price: number; cost: number }) => [r.key, { price: Number(r.price), cost: Number(r.cost) }]));
+  return normalizeOptionPrices(byKey);
+}
+
+/** Replaces the general option price table (used by new proposals). */
+export async function saveMaquilaOptionPrices(prices: OptionPrices) {
+  const { supabase } = await requireAdmin();
+  validateOptionPrices(prices);
+  const now = new Date().toISOString();
+  const rows = OPTION_KEYS.map((key) => ({ key, price: prices[key].price, cost: prices[key].cost, updated_at: now }));
+  const { error } = await supabase.from('maquila_option_prices').upsert(rows, { onConflict: 'key' });
+  if (error) {
+    throw new Error(/maquila_option_prices/.test(error.message) && /exist|relation|schema/i.test(error.message) ? OPTIONS_MIGRATION_HINT : error.message);
+  }
+  revalidatePath('/admin/quotes');
+  return { success: true };
 }
 
 export async function getMaquilaProposals() {
@@ -101,6 +158,11 @@ export async function getMaquilaProposal(id: string) {
 export async function saveMaquilaProposal(input: MaquilaProposalInput, id?: string | null) {
   const { supabase, userId } = await requireAdmin();
   validate(input);
+  // Keep the option prices this proposal was quoted with.
+  const settings: MaquilaSettings = {
+    ...input.settings,
+    option_prices: input.settings.option_prices ?? (await getMaquilaOptionPrices()),
+  };
   const row = {
     client_id: input.client_id || null,
     custom_client_name: input.client_id ? null : input.custom_client_name?.trim() || null,
@@ -111,7 +173,7 @@ export async function saveMaquilaProposal(input: MaquilaProposalInput, id?: stri
     intro: input.intro?.trim() || null,
     conditions: input.conditions?.trim() || null,
     minimum_units: input.minimum_units ?? MIN_UNITS_PER_PRESENTATION,
-    settings: input.settings,
+    settings,
     lines: input.lines,
     internal_notes: input.internal_notes?.trim() || null,
     updated_at: new Date().toISOString(),
