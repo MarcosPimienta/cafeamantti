@@ -98,6 +98,7 @@ export function CheckoutModal({
       await updateUserProfile(formData);
 
       let invoiceId = "";
+      let chargeAmount = finalTotalAmount;
 
       if (isSubscription) {
         invoiceId = subscriptionId ? `SUB-${subscriptionId}` : `SUB-${Date.now()}`;
@@ -113,6 +114,8 @@ export function CheckoutModal({
           throw new Error(orderResponse.error || "No se pudo generar el pedido.");
         }
         invoiceId = orderResponse.orderId;
+        // Charge what the server priced, never the browser's own math.
+        chargeAmount = orderResponse.totalAmount ?? finalTotalAmount;
       }
 
       // Compute ePayco periodicity format for recurring charges
@@ -135,7 +138,7 @@ export function CheckoutModal({
           description: isSubscription ? `Suscripción Recurrente (${subscriptionFrequency})` : "Compra de productos en tienda",
           invoice: invoiceId,
           currency: "cop",
-          amount: finalTotalAmount.toString(),
+          amount: chargeAmount.toString(),
           tax_base: "0",
           tax: "0",
           country: "co",

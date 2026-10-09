@@ -15,6 +15,7 @@ import {
 import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
 import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
+import { syncOrderStock, revertOrderStock } from "@/utils/orders/stock";
 import { isSellable } from "@/utils/inventory/sellable";
 import { isInventoryCategory, type InventoryCategory, type EntryType } from "@/utils/inventory/categories";
 import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
@@ -287,13 +288,9 @@ export async function updateShippingSettings(formData: FormData) {
 // MANUAL ORDERS (ADMIN)
 // ============================================================
 
-/** Statuses in which an order counts as cobrada (same set Flujo de Caja uses). */
-const PAID_ORDER_STATUSES = ['paid', 'processing', 'shipped', 'delivered'];
-
 /**
- * Makes a manual order's stock match its payment state: salidas exist while
- * the order is paid and are reverted when it goes back to pending/cancelled.
- * Web-checkout orders have no inventory link and are left untouched.
+ * Makes an order's stock match its payment state (see utils/orders/stock):
+ * salidas while paid, reverted when it goes back to pending/cancelled.
  */
 async function _syncManualOrderStock(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -302,55 +299,15 @@ async function _syncManualOrderStock(
   orderId: string,
   status: string
 ) {
-  const reason = `Orden Manual #${orderId.split('-')[0]}`;
-
-  const { data: existing, error: movErr } = await supabase
-    .from('inventory_movements')
-    .select('id, inventory_id, quantity')
-    .eq('reason', reason);
-  if (movErr) throw new Error(movErr.message);
-
-  const deducted = (existing ?? []).length > 0;
-  const shouldDeduct = PAID_ORDER_STATUSES.includes(status);
-  if (deducted === shouldDeduct) return;
-
-  if (!shouldDeduct) {
-    // Only revert when the order can be re-applied later; older manual
-    // orders without inventory_id on their items are left as they were.
-    const { count } = await supabase
-      .from('order_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('order_id', orderId)
-      .not('inventory_id', 'is', null);
-    if (!count) return;
-
-    for (const mov of existing) {
-      await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
-      await logAuditAction("DELETE", "MOVEMENT", mov.id, mov.inventory_id, { old_quantity: mov.quantity, note: `Orden no pagada (${status})` });
-    }
-    await supabase.from('inventory_movements').delete().eq('reason', reason);
-    return;
-  }
-
-  const { data: items, error: itemsErr } = await supabase
-    .from('order_items')
-    .select('inventory_id, quantity')
-    .eq('order_id', orderId)
-    .not('inventory_id', 'is', null);
-  if (itemsErr) throw new Error(itemsErr.message);
-
-  const movementDate = new Date().toISOString();
-  for (const item of items ?? []) {
-    const qty = Number(item.quantity);
-    if (!(qty > 0)) continue;
-    const mId = await _insertMovement(supabase, userId, item.inventory_id, 'salida', -qty, {
-      movement_date: movementDate,
-      reason,
-      tab_source: 'salida',
-    });
-    await _updateStockBy(supabase, item.inventory_id, -qty);
-    await logAuditAction("CREATE", "MOVEMENT", mId, item.inventory_id, { qty: -qty, reason });
-  }
+  await syncOrderStock(supabase, {
+    orderId,
+    status,
+    userId,
+    onMovement: (m) =>
+      m.reverted
+        ? logAuditAction("DELETE", "MOVEMENT", m.id, m.inventory_id, { old_quantity: m.quantity, note: m.reason })
+        : logAuditAction("CREATE", "MOVEMENT", m.id, m.inventory_id, { qty: m.quantity, reason: m.reason }),
+  });
 }
 
 export async function createManualAdminOrder(
@@ -478,6 +435,9 @@ export async function createManualAdminOrder(
 
   // Follow-up fields (later migrations): best-effort, reported back on failure.
   const now = new Date().toISOString();
+  // Separate so a missing tracking column cannot drop it: the source names
+  // the order's stock movements ("Orden Manual #…").
+  await supabase.from('orders').update({ source: 'manual' }).eq('id', order.id);
   const { error: trackErr } = await supabase.from('orders').update({
     delivery_due_date: data.delivery_due_date || null,
     notes: data.notes?.trim() || null,
@@ -508,25 +468,10 @@ export async function deleteManualAdminOrder(orderId: string) {
 
   const supabase = await createClient();
 
-  // Find the movements associated with this order
-  const shortId = orderId.split('-')[0];
-  const reasonStr = `Orden Manual #${shortId}`;
-
-  const { data: movements, error: movErr } = await supabase
-    .from('inventory_movements')
-    .select('id, inventory_id, quantity')
-    .eq('reason', reasonStr);
-
-  if (movErr) throw new Error(movErr.message);
-
-  // Revert inventory for each movement
-  if (movements && movements.length > 0) {
-    for (const mov of movements) {
-      await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
-      await logAuditAction("DELETE", "MOVEMENT", mov.id, mov.inventory_id, { old_quantity: mov.quantity, note: "Reverted by order deletion" });
-    }
-    // Delete the movements
-    await supabase.from('inventory_movements').delete().eq('reason', reasonStr);
+  // Give back whatever stock the order took.
+  const reverted = await revertOrderStock(supabase, orderId);
+  for (const mov of reverted) {
+    await logAuditAction("DELETE", "MOVEMENT", mov.id, mov.inventory_id, { old_quantity: mov.quantity, note: "Reverted by order deletion" });
   }
 
   // Delete the order (cascade will handle order_items)
@@ -617,17 +562,7 @@ export async function updateManualAdminOrder(
     }
 
     // Revert the old salidas; the sync below re-applies them if the order is paid.
-    const reasonStr = `Orden Manual #${orderId.split('-')[0]}`;
-    const { data: oldMovements } = await supabase
-      .from('inventory_movements')
-      .select('id, inventory_id, quantity')
-      .eq('reason', reasonStr);
-    for (const mov of oldMovements ?? []) {
-      await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
-    }
-    if (oldMovements?.length) {
-      await supabase.from('inventory_movements').delete().eq('reason', reasonStr);
-    }
+    await revertOrderStock(supabase, orderId);
 
     await supabase.from('order_items').delete().eq('order_id', orderId);
     const { error: itemsErr } = await supabase.from('order_items').insert(

@@ -23,29 +23,10 @@ import { useSearchParams } from "next/navigation";
 import { upsertSubscription, getSubscription, getSubscriptionStock } from "./actions";
 import { CheckoutModal } from "@/app/components/CheckoutModal";
 import { calculateMetropolitanShipping } from "@/utils/shipping";
+import { calculateCoffeePrice } from "@/utils/pricing";
 
-export function calculateCoffeePrice(planOrProdId: string, weight: string): number {
-  const isPremium = planOrProdId === "essential" || planOrProdId === "firma" || planOrProdId === "traditional";
-  const isHoney = planOrProdId === "alchemy" || planOrProdId === "honey";
-  const isMicrol = planOrProdId === "curator" || planOrProdId === "microlot" || planOrProdId === "microl";
-
-  if (weight === "250g") {
-    if (isPremium) return 35000;
-    if (isHoney) return 48000;
-    if (isMicrol) return 65000;
-  }
-  if (weight === "500g") {
-    if (isPremium) return 63000;
-    if (isHoney) return 86400;
-    if (isMicrol) return 117000;
-  }
-  if (weight === "2.5kg") {
-    if (isPremium) return 165000;
-    if (isHoney) return 240000;
-    if (isMicrol) return 320000;
-  }
-  return 35000;
-}
+// Prices live in utils/pricing (shared with the server, which charges them).
+export { calculateCoffeePrice } from "@/utils/pricing";
 
 const PLANS = [
   {

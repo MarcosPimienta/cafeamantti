@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { syncOrderStock } from '@/utils/orders/stock';
+import { inventoryCodeFor } from '@/utils/pricing';
 
 /**
  * ePayco posts its confirmation as a form (application/x-www-form-urlencoded);
@@ -11,6 +13,19 @@ async function readPayload(req: Request): Promise<Record<string, string>> {
   if (type.includes('application/json')) return await req.json();
   const text = await req.text();
   return Object.fromEntries(new URLSearchParams(text));
+}
+
+/**
+ * Stock follows payment. A failure here must not fail the webhook: the
+ * payment already happened, so it is logged for the admin to fix by hand.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function moveStock(supabaseAdmin: any, orderId: string, status: string) {
+  try {
+    await syncOrderStock(supabaseAdmin, { orderId, status, userId: null, allowNegative: true });
+  } catch (err) {
+    console.error(`ePayco webhook: stock sync failed for order ${orderId}:`, err);
+  }
 }
 
 /** Amounts are compared in whole pesos; ePayco sends them as "93000.00". */
@@ -114,9 +129,15 @@ export async function POST(req: Request) {
             .single();
 
           if (!orderErr && newOrder) {
+            // Link the bag to inventory so the renewal deducts stock.
+            const code = inventoryCodeFor(sub.plan_id, sub.weight);
+            const { data: inv } = code
+              ? await supabaseAdmin.from('inventory').select('id').eq('product_code', code).maybeSingle()
+              : { data: null };
             // Add subscription item to order items
             await supabaseAdmin.from('order_items').insert({
               order_id: newOrder.id,
+              inventory_id: inv?.id ?? null,
               product_id: sub.plan_id,
               weight: sub.weight,
               grind: sub.grind,
@@ -124,6 +145,7 @@ export async function POST(req: Request) {
               quantity: 1,
               price_at_time: parseFloat(x_amount || '0'),
             });
+            await moveStock(supabaseAdmin, newOrder.id, 'paid');
           }
         } else if (state === 2 || state === 4 || state === 6) { // Rechazada / Fallida
           await supabaseAdmin
@@ -176,6 +198,7 @@ export async function POST(req: Request) {
         console.error('Error updating order:', error);
         return NextResponse.json({ error: 'Error interno al actualizar pedido' }, { status: 500 });
       }
+      await moveStock(supabaseAdmin, orderId, newStatus);
     }
 
     return NextResponse.json({ success: true, message: 'Estado de pedido actualizado' });

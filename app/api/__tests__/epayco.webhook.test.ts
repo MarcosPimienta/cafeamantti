@@ -45,9 +45,14 @@ beforeEach(() => {
   process.env.P_CUST_ID_CLIENTE = CUST;
   process.env.P_KEY = KEY;
   h.db = new FakeDB({
-    orders: [{ id: "order-1", status: "pending", total_amount: 90000 }],
+    orders: [{ id: "order-1", status: "pending", total_amount: 90000, source: "web" }],
+    order_items: [{ id: "oi-1", order_id: "order-1", inventory_id: "inv-250", quantity: 2 }],
+    inventory: [
+      { id: "inv-250", product_code: "CAFT-250G", current_stock: 1 },
+      { id: "inv-500", product_code: "CAFT-500G", current_stock: 4 },
+    ],
     subscriptions: [
-      { id: "sub-1", user_id: "u1", plan_id: "premium", frequency: "bi-weekly", status: "pending", payment_status: "pending", weight: "500g", grind: "whole", shipping_address: "Cra 1", shipping_city: "Medellín", shipping_state: "Antioquia" },
+      { id: "sub-1", user_id: "u1", plan_id: "essential", frequency: "bi-weekly", status: "pending", payment_status: "pending", weight: "500g", grind: "whole", shipping_address: "Cra 1", shipping_city: "Medellín", shipping_state: "Antioquia" },
     ],
   });
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -138,12 +143,34 @@ describe("ePayco webhook — subscriptions", () => {
 
     const renewal = h.db.rows("orders").find((o) => o.subscription_id === "sub-1")!;
     expect(renewal).toMatchObject({ status: "paid", total_amount: 52000, is_subscription_renewal: true, user_id: "u1" });
-    expect(h.db.rows("order_items")[0]).toMatchObject({ order_id: renewal.id, product_id: "premium", quantity: 1, price_at_time: 52000 });
+    expect(h.db.rows("order_items").find((i) => i.order_id === renewal.id)).toMatchObject({ product_id: "essential", inventory_id: "inv-500", quantity: 1, price_at_time: 52000 });
+    expect(h.db.byId("inventory", "inv-500")!.current_stock).toBe(3); // the renewal bag left stock
   });
 
   it("a failed renewal marks the payment as failed without creating orders", async () => {
     await POST(asForm(payload({ x_id_invoice: "SUB-sub-1", x_cod_transaction_state: "4" })));
     expect(h.db.byId("subscriptions", "sub-1")!.payment_status).toBe("failed");
     expect(h.db.rows("orders")).toHaveLength(1);
+  });
+});
+
+describe("ePayco webhook — stock follows payment", () => {
+  it("a paid web order deducts its products, even past zero (the sale happened)", async () => {
+    await POST(asForm(payload()));
+    expect(h.db.byId("inventory", "inv-250")!.current_stock).toBe(-1);
+    expect(h.db.rows("inventory_movements")[0]).toMatchObject({ order_id: "order-1", quantity: -2, reason: "Orden Web #order" });
+  });
+
+  it("a repeated confirmation does not deduct twice", async () => {
+    await POST(asForm(payload()));
+    await POST(asForm(payload()));
+    expect(h.db.rows("inventory_movements")).toHaveLength(1);
+  });
+
+  it("a stock failure never fails the webhook", async () => {
+    h.db.failOn("inventory_movements", "insert", "db down");
+    const res = await POST(asForm(payload()));
+    expect(res.status).toBe(200);
+    expect(order().status).toBe("paid");
   });
 });

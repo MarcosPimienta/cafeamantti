@@ -1,0 +1,46 @@
+# Applies supabase/migrations to the production database, in order, and
+# records them so each one runs exactly once. Started by hand from the
+# Actions tab; "apply: false" only lists what would run.
+#
+# Needs repository secrets:
+#   SUPABASE_ACCESS_TOKEN  personal access token (supabase.com → Account → Access Tokens)
+#   SUPABASE_DB_PASSWORD   database password of the project
+#   SUPABASE_PROJECT_REF   project ref (the id in the project URL)
+#
+# ONE-TIME SETUP: migrations were applied by hand until now, so the database
+# has no record of them. Before the first real run, mark the ones already
+# applied (see supabase/README.md), or the CLI would try to run them again.
+name: Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply pending migrations (false = dry run)"
+        type: boolean
+        default: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Pending migrations (dry run)
+        run: supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Apply
+        if: ${{ inputs.apply }}
+        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
