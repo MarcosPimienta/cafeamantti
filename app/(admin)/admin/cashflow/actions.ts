@@ -14,6 +14,7 @@ import {
   summarizeMonthlyPL,
   type PLReportResult,
   type MonthlyPLInput,
+  type FixedAssetInput,
 } from './calculations';
 
 
@@ -608,6 +609,24 @@ export async function getMissingCashflowDays(): Promise<string[]> {
  * Todas las queries del período usan filtros >= period_start AND < period_end
  * para garantizar que las horas locales no introduzcan registros del mes adyacente.
  */
+/** Every fixed asset (CAPEX expense), for the asset register. */
+export async function getFixedAssets(): Promise<FixedAssetInput[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('cashflow_expenses')
+    .select('*, cashflow:cashflow_id ( date )')
+    .eq('expense_type', 'CAPEX')
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('getFixedAssets:', error.message);
+    return [];
+  }
+  return ((data ?? []) as (FixedAssetInput & { cashflow?: { date: string } | { date: string }[] | null })[]).map(({ cashflow, ...a }) => ({
+    ...a,
+    purchase_date: (Array.isArray(cashflow) ? cashflow[0] : cashflow)?.date ?? null,
+  }));
+}
+
 type CapexRow = MonthlyPLInput['capexItems'][number] & { cashflow?: { date: string } | { date: string }[] | null };
 
 export async function getMonthlyPLReport(

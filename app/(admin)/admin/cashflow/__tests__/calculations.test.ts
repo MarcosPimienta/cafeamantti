@@ -5,6 +5,7 @@ import {
   resolveIncomeFields,
   monthBounds,
   summarizeMonthlyPL,
+  fixedAssetRegister,
   CO_VAT_RATE,
   DEFAULT_GATEWAY_FEE_RATE,
   type MonthlyPLInput,
@@ -184,5 +185,41 @@ describe("summarizeMonthlyPL", () => {
     expect(r.depreciation_by_use).toEqual({ produccion: 100000, punto_venta: 0, comodato: 80000, administracion: 20000, sin_destino: 10000 });
     expect(r.monthly_depreciation).toBe(210000);
     expect(r.operating_income).toBe(r.ebitda - 210000);
+  });
+});
+
+describe("fixedAssetRegister", () => {
+  const machine = {
+    id: "m1", concept: "Máquina de espresso", category: "Maquinaria y Equipo (PUC 1520)",
+    net_amount: 1340000, depreciation_months: 60, residual_value: 0, asset_kind: "Máquina de espresso",
+    asset_use: "comodato" as const, in_service_date: "2026-09-30", purchase_date: "2026-09-30", created_at: "2026-10-10T18:35:00Z",
+  };
+
+  it("depreciates by whole months from the month of start of use, same as the P&L", () => {
+    const [r] = fixedAssetRegister([machine], "2026-10-10");
+    expect(r).toMatchObject({
+      start_date: "2026-09-30", last_month: "2031-08", cost: 1340000, monthly_quota: 22333.33,
+      months_elapsed: 2, accumulated: 44666.66, book_value: 1295333.34, status: "depreciando", current_month_quota: 22333.33,
+    });
+    expect(fixedAssetRegister([machine], "2026-08-31")[0]).toMatchObject({ months_elapsed: 0, accumulated: 0, status: "por_iniciar", current_month_quota: 0 });
+  });
+
+  it("ends exactly at the residual value, even with rounding", () => {
+    const end = fixedAssetRegister([{ ...machine, residual_value: 100000 }], "2031-08-15")[0];
+    expect(end).toMatchObject({ months_elapsed: 60, accumulated: 1240000, book_value: 100000, status: "depreciado" });
+    expect(end.current_month_quota).toBeCloseTo(1240000 - 20666.67 * 59, 2); // last quota absorbs rounding
+    expect(fixedAssetRegister([machine], "2035-01-01")[0]).toMatchObject({ months_elapsed: 60, current_month_quota: 0, book_value: 0 });
+  });
+
+  it("without start-of-use date it uses the purchase, then the record date; skips rows without life", () => {
+    const rows = fixedAssetRegister(
+      [
+        { ...machine, id: "a", in_service_date: null },
+        { ...machine, id: "b", in_service_date: null, purchase_date: null },
+        { ...machine, id: "c", depreciation_months: null },
+      ],
+      "2026-10-31"
+    );
+    expect(rows.map((r) => [r.id, r.start_date])).toEqual([["a", "2026-09-30"], ["b", "2026-10-10"]]);
   });
 });

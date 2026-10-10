@@ -374,3 +374,103 @@ export function summarizeMonthlyPL(input: MonthlyPLInput): PLReportResult {
     burn_rate,
   };
 }
+
+// ── Fixed asset register ─────────────────────────────────────
+
+export interface FixedAssetInput {
+  id: string;
+  concept: string;
+  category: string;
+  net_amount: Num;
+  depreciation_months: Num;
+  residual_value?: Num;
+  asset_kind?: string | null;
+  asset_use?: AssetUse | null;
+  in_service_date?: string | null;
+  /** Fecha del gasto en el flujo de caja (compra). */
+  purchase_date?: string | null;
+  created_at: string;
+}
+
+export interface FixedAssetRow {
+  id: string;
+  concept: string;
+  category: string;
+  asset_kind: string | null;
+  asset_use: AssetUse | null;
+  purchase_date: string | null;
+  /** 'YYYY-MM-DD' desde el que se deprecia. */
+  start_date: string;
+  /** Último mes de depreciación, 'YYYY-MM'. */
+  last_month: string;
+  cost: number;
+  residual_value: number;
+  months: number;
+  monthly_quota: number;
+  /** Meses ya depreciados hasta la fecha de corte (inclusive su mes). */
+  months_elapsed: number;
+  accumulated: number;
+  /** Costo − depreciación acumulada. */
+  book_value: number;
+  /** Depreciación que carga el mes de la fecha de corte (0 si no deprecia ese mes). */
+  current_month_quota: number;
+  status: 'por_iniciar' | 'depreciando' | 'depreciado';
+}
+
+/** Whole months from `fromYm` to `toYm` ('YYYY-MM'), inclusive of both. */
+function monthsInclusive(fromYm: string, toYm: string) {
+  const [fy, fm] = fromYm.split('-').map(Number);
+  const [ty, tm] = toYm.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm) + 1;
+}
+
+function addMonthsYm(ym: string, add: number) {
+  const [y, m] = ym.split('-').map(Number);
+  const idx = y * 12 + (m - 1) + add;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Registro de activos fijos a una fecha de corte, con la misma regla del
+ * P&L: cuota = (costo − residual) ÷ meses, por meses completos desde el
+ * mes de puesta en uso (si no hay, el de la compra).
+ */
+export function fixedAssetRegister(assets: FixedAssetInput[], asOf: string): FixedAssetRow[] {
+  const n = (v: Num) => Number(v ?? 0) || 0;
+  const asOfYm = asOf.slice(0, 7);
+  return assets
+    .filter((a) => n(a.depreciation_months) > 0)
+    .map((a) => {
+      const months = Math.floor(n(a.depreciation_months));
+      const cost = round2(n(a.net_amount));
+      const residual_value = round2(n(a.residual_value));
+      const start_date = a.in_service_date || a.purchase_date || a.created_at.slice(0, 10);
+      const startYm = start_date.slice(0, 7);
+      const monthly_quota = round2(Math.max(0, cost - residual_value) / months);
+      const months_elapsed = Math.min(months, Math.max(0, monthsInclusive(startYm, asOfYm)));
+      // The last quota absorbs rounding so the asset ends exactly at its residual value.
+      const accumulated = months_elapsed === months ? round2(Math.max(0, cost - residual_value)) : round2(monthly_quota * months_elapsed);
+      return {
+        id: a.id,
+        concept: a.concept,
+        category: a.category,
+        asset_kind: a.asset_kind ?? null,
+        asset_use: a.asset_use ?? null,
+        purchase_date: a.purchase_date ?? null,
+        start_date,
+        last_month: addMonthsYm(startYm, months - 1),
+        cost,
+        residual_value,
+        months,
+        monthly_quota,
+        months_elapsed,
+        accumulated,
+        book_value: round2(cost - accumulated),
+        current_month_quota: asOfYm >= startYm && months_elapsed > 0 && monthsInclusive(startYm, asOfYm) <= months
+          ? (months_elapsed === months ? round2(accumulated - monthly_quota * (months - 1)) : monthly_quota)
+          : 0,
+        status: months_elapsed === 0 ? 'por_iniciar' : months_elapsed >= months ? 'depreciado' : 'depreciando',
+      } satisfies FixedAssetRow;
+    })
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
+}

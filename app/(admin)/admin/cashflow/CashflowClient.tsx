@@ -5,7 +5,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, BarChart2, History, Plus, Upload,
   Image as ImageIcon, Trash2, X, Loader2, Check, Calendar, AlertTriangle,
   ChevronDown, ChevronUp, TrendingUp, TrendingDown, DollarSign,
-  Activity, Layers, Zap, Package, Pencil, Archive,
+  Activity, Layers, Zap, Package, Pencil, Archive, FileSpreadsheet, Landmark,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -19,19 +19,22 @@ import {
   getMissingCashflowDays, getMonthlyPLReport,
   markDateAsNoMovements,
   updateExpenseDirect, updateIncomeDirect,
+  getFixedAssets,
 } from "./actions";
-import type { PLReportResult } from "./calculations";
+import { fixedAssetRegister, type FixedAssetInput, type PLReportResult } from "./calculations";
+import { expenseLedger, fixedAssetSheets, incomeLedger, type ExportFilters } from "./exports";
 import { ASSET_KIND_SUGGESTIONS, ASSET_USES, DEFAULT_DEPRECIATION_MONTHS, EXPENSE_CATEGORY_TYPE_MAP, type AssetUse, type ExpenseType } from "./types";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
-type TabId = "gastos" | "ingresos" | "reportes" | "auditoria";
+type TabId = "gastos" | "ingresos" | "activos" | "reportes" | "auditoria";
 
 const TABS = [
   { id: "gastos",    label: "Gastos",    Icon: ArrowDownCircle },
   { id: "ingresos",  label: "Ingresos",  Icon: ArrowUpCircle   },
+  { id: "activos",   label: "Activos Fijos", Icon: Landmark     },
   { id: "reportes",  label: "Reportes",  Icon: BarChart2       },
   { id: "auditoria", label: "Auditoría", Icon: History          },
 ] as const;
@@ -62,6 +65,26 @@ const fmt = (val: number) =>
   new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(val);
 
 const fmtPct = (val: number) => `${val.toFixed(1)}%`;
+
+/** Bogotá's today as 'YYYY-MM-DD'. */
+const todayBogota = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+const nowLabel = () => new Date().toLocaleString("es-CO", { timeZone: "America/Bogota" });
+
+/** Builds the .xlsx in the browser; xlsx is only downloaded on the first export. */
+async function exportExcel(filename: string, sheets: import("@/utils/excel/workbook").TableSheet[]) {
+  const { downloadWorkbook } = await import("@/utils/excel/workbook");
+  downloadWorkbook(filename, sheets);
+}
+const fileSuffix = (f: ExportFilters) => [f.from, f.to].filter(Boolean).join("_a_") || "completo";
+
+function ExportButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled}
+      className="flex items-center gap-2 px-4 py-2 border border-foreground/15 bg-white text-foreground/70 rounded-lg font-bold text-sm hover:bg-foreground/5 transition-colors disabled:opacity-40">
+      <FileSpreadsheet className="w-4 h-4 text-emerald-700" /> Exportar a Excel
+    </button>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // DROPZONE
@@ -974,6 +997,111 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
 }
 
 // ─────────────────────────────────────────────────────────────
+// FIXED ASSETS — register and depreciation at a cut-off date
+// ─────────────────────────────────────────────────────────────
+
+const STATUS_STYLE: Record<string, { label: string; cls: string }> = {
+  por_iniciar: { label: "Por iniciar",   cls: "bg-gray-100 text-gray-600" },
+  depreciando: { label: "Depreciando",   cls: "bg-purple-50 text-purple-700" },
+  depreciado:  { label: "Depreciado",    cls: "bg-emerald-50 text-emerald-700" },
+};
+
+export function FixedAssetsView({ formatCurrency }: { formatCurrency: (v: number) => string }) {
+  const [assets, setAssets] = useState<FixedAssetInput[] | null>(null);
+  const [asOf, setAsOf] = useState(todayBogota());
+
+  useEffect(() => {
+    let cancelled = false;
+    getFixedAssets().then((a) => { if (!cancelled) setAssets(a); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const register = assets ? fixedAssetRegister(assets, asOf || todayBogota()) : [];
+  const total = (f: (r: (typeof register)[number]) => number) => register.reduce((s, r) => s + f(r), 0);
+
+  return (
+    <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
+      <div className="p-5 border-b border-foreground/5 flex flex-wrap gap-3 justify-between items-center bg-[#f9f7f0]">
+        <div>
+          <h2 className="text-xl font-serif">Activos Fijos</h2>
+          <p className="text-xs text-foreground/50">Gastos CAPEX con su depreciación en línea recta a la fecha de corte.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label htmlFor="fa-as-of" className="field-label">Fecha de corte</label>
+            <input id="fa-as-of" type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="field-input py-2 px-3 text-xs" />
+          </div>
+          <ExportButton disabled={register.length === 0} onClick={() =>
+            exportExcel(`Activos_Fijos_${asOf}.xlsx`, fixedAssetSheets(register, asOf, nowLabel()))
+          } />
+        </div>
+      </div>
+
+      {assets === null ? (
+        <div className="p-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-foreground/30" /></div>
+      ) : register.length === 0 ? (
+        <div className="p-12 text-center text-sm text-foreground/50">
+          No hay activos fijos. Regístralos en Gastos con una categoría de activo (por ejemplo Maquinaria y Equipo).
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 border-b border-foreground/5">
+            {[
+              ["Costo", total((r) => r.cost)],
+              ["Depreciación acumulada", total((r) => r.accumulated)],
+              ["Valor en libros", total((r) => r.book_value)],
+              ["Depreciación del mes", total((r) => r.current_month_quota)],
+            ].map(([label, value]) => (
+              <div key={label as string}>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{label}</p>
+                <p className="text-lg font-serif font-bold">{formatCurrency(value as number)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#fdfbf7] text-[10px] font-bold uppercase tracking-widest text-foreground/50">
+                <tr>
+                  <th className="px-4 py-3">Activo</th>
+                  <th className="px-4 py-3">Destino</th>
+                  <th className="px-4 py-3">Puesta en uso</th>
+                  <th className="px-4 py-3 text-right">Costo</th>
+                  <th className="px-4 py-3 text-right">Cuota / mes</th>
+                  <th className="px-4 py-3 text-right">Meses</th>
+                  <th className="px-4 py-3 text-right">Acumulada</th>
+                  <th className="px-4 py-3 text-right">Valor en libros</th>
+                  <th className="px-4 py-3">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-foreground/5">
+                {register.map((r) => (
+                  <tr key={r.id}>
+                    <td className="px-4 py-3">
+                      <p className="font-bold">{r.asset_kind || r.concept}</p>
+                      <p className="text-[11px] text-foreground/50">{r.category}</p>
+                    </td>
+                    <td className="px-4 py-3 text-xs">{r.asset_use ? ASSET_USES[r.asset_use].label : <span className="text-amber-600">Sin destino</span>}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap">{r.start_date}</td>
+                    <td className="px-4 py-3 text-right font-mono">{formatCurrency(r.cost)}</td>
+                    <td className="px-4 py-3 text-right font-mono">{formatCurrency(r.monthly_quota)}</td>
+                    <td className="px-4 py-3 text-right text-xs">{r.months_elapsed} / {r.months}</td>
+                    <td className="px-4 py-3 text-right font-mono">{formatCurrency(r.accumulated)}</td>
+                    <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrency(r.book_value)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${STATUS_STYLE[r.status].cls}`}>{STATUS_STYLE[r.status].label}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // CASHFLOW REPORT VIEW (existing cash view)
 // ─────────────────────────────────────────────────────────────
 
@@ -1656,12 +1784,18 @@ export default function CashflowClient() {
               <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
                 <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
                   <h2 className="text-xl font-serif">Todos los Gastos</h2>
-                  {era === 'v2' && (
-                    <button onClick={() => { setSelectedDate(undefined); setExpenseToEdit(null); setShowExpModal(true); }}
-                      className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
-                      <Plus className="w-4 h-4" /> Nuevo Gasto
-                    </button>
-                  )}
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <ExportButton disabled={sortedExpenses.length === 0} onClick={() => {
+                      const f = { from: expStart, to: expEnd, category: expCategory, search: expSearch };
+                      exportExcel(`Libro_Gastos_${fileSuffix(f)}.xlsx`, expenseLedger(sortedExpenses, f, nowLabel()));
+                    }} />
+                    {era === 'v2' && (
+                      <button onClick={() => { setSelectedDate(undefined); setExpenseToEdit(null); setShowExpModal(true); }}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
+                        <Plus className="w-4 h-4" /> Nuevo Gasto
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Filter controls */}
@@ -1929,12 +2063,18 @@ export default function CashflowClient() {
               <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
                 <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
                   <h2 className="text-xl font-serif">Todos los Ingresos</h2>
-                  {era === 'v2' && (
-                    <button onClick={() => { setSelectedDate(undefined); setIncomeToEdit(null); setShowIncModal(true); }}
-                      className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
-                      <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
-                    </button>
-                  )}
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <ExportButton disabled={filteredIncomes.length === 0} onClick={() => {
+                      const f = { from: incStart, to: incEnd, category: incCategory, search: incSearch };
+                      exportExcel(`Libro_Ingresos_${fileSuffix(f)}.xlsx`, incomeLedger(filteredIncomes, f, nowLabel()));
+                    }} />
+                    {era === 'v2' && (
+                      <button onClick={() => { setSelectedDate(undefined); setIncomeToEdit(null); setShowIncModal(true); }}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
+                        <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Filter controls */}
@@ -2170,6 +2310,8 @@ export default function CashflowClient() {
           })()}
 
           {/* ── REPORTES ── */}
+          {activeTab === "activos" && <FixedAssetsView formatCurrency={formatCurrency} />}
+
           {activeTab === "reportes" && (
             <div className="space-y-6">
               {/* Mode toggle */}
