@@ -13,6 +13,7 @@ import {
   monthBounds,
   summarizeMonthlyPL,
   type PLReportResult,
+  type MonthlyPLInput,
 } from './calculations';
 
 
@@ -199,6 +200,13 @@ export async function getCashflows(era: 'v1' | 'v2' = 'v2') {
   return data as DailyCashflow[];
 }
 
+/** Saving an asset before its migration fails on the new columns; say which one to apply. */
+function assetColumnsHint(message: string) {
+  return /asset_kind|asset_use|in_service_date|residual_value/.test(message)
+    ? 'Falta aplicar la migración 20261015000000_expense_fixed_assets.sql para registrar activos fijos.'
+    : message;
+}
+
 export async function createExpenseDirect(
   date: string,
   expense: Partial<CashflowExpense>
@@ -223,6 +231,17 @@ export async function createExpenseDirect(
     tax_amount:          fields.tax_amount,
     net_amount:          fields.net_amount,
     depreciation_months: fields.depreciation_months,
+    // Datos de activo solo en CAPEX (las demás filas usan los valores por
+    // defecto, así un gasto normal no depende de la migración de activos).
+    ...(fields.expense_type === 'CAPEX'
+      ? {
+          asset_kind:      fields.asset_kind,
+          asset_use:       fields.asset_use,
+          // Sin fecha de puesta en uso, el activo se deprecia desde la compra
+          in_service_date: fields.in_service_date ?? date,
+          residual_value:  fields.residual_value,
+        }
+      : {}),
     // Metadatos
     cashflow_id,
     created_by:          user?.id,
@@ -235,7 +254,7 @@ export async function createExpenseDirect(
     .select()
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { error: assetColumnsHint(error.message) };
 
   // ── 4. Audit log con snapshot completo ───────────────────
   await supabase.from('cashflow_audit_logs').insert({
@@ -282,6 +301,16 @@ export async function updateExpenseDirect(
     tax_amount:          fields.tax_amount,
     net_amount:          fields.net_amount,
     depreciation_months: fields.depreciation_months,
+    // Datos de activo: se escriben en CAPEX, y se limpian si la fila ya
+    // tiene esas columnas (migración aplicada) y deja de ser CAPEX.
+    ...(fields.expense_type === 'CAPEX' || 'asset_use' in oldData
+      ? {
+          asset_kind:      fields.asset_kind,
+          asset_use:       fields.asset_use,
+          in_service_date: fields.in_service_date,
+          residual_value:  fields.residual_value,
+        }
+      : {}),
   };
 
   // ── 4. Persistir ─────────────────────────────────────────────────
@@ -292,7 +321,7 @@ export async function updateExpenseDirect(
     .select()
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { error: assetColumnsHint(error.message) };
 
   // ── 5. Audit log con diff completo old→new ───────────────────────
   await supabase.from('cashflow_audit_logs').insert({
@@ -579,12 +608,16 @@ export async function getMissingCashflowDays(): Promise<string[]> {
  * Todas las queries del período usan filtros >= period_start AND < period_end
  * para garantizar que las horas locales no introduzcan registros del mes adyacente.
  */
+type CapexRow = MonthlyPLInput['capexItems'][number] & { cashflow?: { date: string } | { date: string }[] | null };
+
 export async function getMonthlyPLReport(
   month: number,
   year: number
 ): Promise<PLReportResult> {
   const { period_start, period_end } = monthBounds(month, year);
   const supabase = await createClient();
+  const capexQuery = (columns: string) =>
+    supabase.from('cashflow_expenses').select(columns).eq('expense_type', 'CAPEX').lt('cashflow.date', period_end);
 
   // Filters on an embedded row only narrow the parent rows when the embed is
   // !inner; without it PostgREST returns every row (with cashflow = null) and
@@ -629,11 +662,7 @@ export async function getMonthlyPLReport(
       .lt('cashflow.date', period_end),
     // Every CAPEX bought before the period ends; summarizeMonthlyPL keeps the
     // ones still depreciating.
-    supabase
-      .from('cashflow_expenses')
-      .select('net_amount, depreciation_months, created_at, cashflow:cashflow_id!inner ( date )')
-      .eq('expense_type', 'CAPEX')
-      .lt('cashflow.date', period_end),
+    capexQuery('net_amount, depreciation_months, created_at, in_service_date, residual_value, asset_use, cashflow:cashflow_id!inner ( date )'),
     supabase
       .from('cashflow_expenses')
       .select('amount, cashflow:cashflow_id!inner ( date )')
@@ -642,13 +671,21 @@ export async function getMonthlyPLReport(
       .lt('cashflow.date', period_end),
   ]);
 
+  // Before the fixed-assets migration those columns do not exist yet:
+  // depreciate as before (from the purchase, without residual value).
+  let capexRows = capexItems;
+  let capexError = capexErr;
+  if (capexErr && /in_service_date|residual_value|asset_use/.test(capexErr.message)) {
+    ({ data: capexRows, error: capexError } = await capexQuery('net_amount, depreciation_months, created_at, cashflow:cashflow_id!inner ( date )'));
+  }
+
   for (const [label, err] of [
     ['manualIncomes', incErr],
     ['webOrders', ordErr],
     ['cogsExpenses', cogsErr],
     ['inventoryConsumptions', invErr],
     ['opexExpenses', opexErr],
-    ['capexItems', capexErr],
+    ['capexItems', capexError],
     ['burnRate', burnErr],
   ] as const) {
     if (err) console.error(`getMonthlyPLReport: ${label} error`, err);
@@ -662,7 +699,10 @@ export async function getMonthlyPLReport(
     cogsExpenses: cogsExpenses ?? [],
     inventoryConsumptions: inventoryConsumptions ?? [],
     opexExpenses: opexExpenses ?? [],
-    capexItems: capexItems ?? [],
+    capexItems: ((capexRows ?? []) as unknown as CapexRow[]).map(({ cashflow, ...a }) => ({
+      ...a,
+      purchase_date: (Array.isArray(cashflow) ? cashflow[0] : cashflow)?.date ?? null,
+    })),
     paidExpenses: paidExpenses ?? [],
   });
 }

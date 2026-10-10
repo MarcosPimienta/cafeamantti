@@ -17,6 +17,9 @@
  *  COGS → "Costo de Ventas (Materia prima, insumos, empaques)"
  *          "Costos de Producción (Maquila, Servicio de tostión)"
  *  CAPEX→ "Adecuación e Instalaciones"  (cuando depreciation_months > 0)
+ *          Activos fijos por clase del PUC: Maquinaria y Equipo (1520),
+ *          Muebles y Enseres (1524), Equipo de Cómputo y Comunicación (1528)
+ *  COGS → "Mercancía para Reventa" (equipos que se compran para vender, PUC 1435)
  *          "Mantenimiento y Reparaciones" (según criterio contable)
  *  OPEX → Todo lo demás
  */
@@ -81,12 +84,49 @@ export const EXPENSE_CATEGORY_TYPE_MAP: Record<string, ExpenseType> = {
   'Gastos Legales (Cámara de comercio, notarías)':        'OPEX',
   'Mantenimiento y Reparaciones':                         'OPEX',  // puede ser CAPEX si el usuario lo indica
   'Adecuación e Instalaciones':                           'CAPEX',
+  'Maquinaria y Equipo (PUC 1520)':                       'CAPEX',
+  'Muebles y Enseres (PUC 1524)':                         'CAPEX',
+  'Equipo de Cómputo y Comunicación (PUC 1528)':          'CAPEX',
+  'Mercancía para Reventa (Inventario PUC 1435)':         'COGS',
   'Gastos de Viaje y Transporte':                         'OPEX',
   'Diversos (Aseo, papelería, caja menor)':               'OPEX',
   'Gastos Financieros (Comisiones, intereses)':           'OPEX',
 } as const;
 
 export type ExpenseCategory = keyof typeof EXPENSE_CATEGORY_TYPE_MAP;
+
+/**
+ * Vida útil sugerida (meses) al elegir una clase de activo fijo: la tasa
+ * máxima fiscal (Art. 137 E.T.) — maquinaria y equipo, y muebles y
+ * enseres 10 años; cómputo 5 años. Contablemente (NIIF) la vida útil se
+ * estima según el uso real, así que el admin puede cambiarla.
+ */
+export const DEFAULT_DEPRECIATION_MONTHS: Record<string, number> = {
+  'Maquinaria y Equipo (PUC 1520)':              120,
+  'Muebles y Enseres (PUC 1524)':                120,
+  'Equipo de Cómputo y Comunicación (PUC 1528)':  60,
+};
+
+/** Qué es el activo, sugerido por clase (campo libre, para gestión). */
+export const ASSET_KIND_SUGGESTIONS: Record<string, string[]> = {
+  'Maquinaria y Equipo (PUC 1520)':              ['Máquina de espresso', 'Molino', 'Cafetera', 'Tostadora', 'Empacadora', 'Balanza'],
+  'Muebles y Enseres (PUC 1524)':                ['Mesa', 'Silla', 'Barra', 'Estantería', 'Vitrina'],
+  'Equipo de Cómputo y Comunicación (PUC 1528)': ['Computador', 'POS / datáfono', 'Impresora', 'Celular', 'Tablet'],
+};
+
+/**
+ * Destino del activo. Define dónde va su depreciación:
+ * producción → costo; punto de venta y comodato → gasto de ventas;
+ * administración → gasto de administración.
+ */
+export type AssetUse = 'produccion' | 'punto_venta' | 'comodato' | 'administracion';
+
+export const ASSET_USES: Record<AssetUse, { label: string; hint: string }> = {
+  produccion:     { label: 'Producción',     hint: 'Tostión, empaque. Depreciación al costo.' },
+  punto_venta:    { label: 'Punto de venta', hint: 'Barra, tienda. Gasto de ventas.' },
+  comodato:       { label: 'Comodato',       hint: 'Entregado a un cliente; sigue siendo de Amantti. Gasto de ventas.' },
+  administracion: { label: 'Administración', hint: 'Oficina. Gasto de administración.' },
+};
 
 export const INCOME_CATEGORIES = [
   'Ventas Físicas',
@@ -133,6 +173,12 @@ export interface CashflowExpense {
   tax_amount:          number;         // IVA discriminado (0 si exento)
   net_amount:          number;         // amount - tax_amount
   depreciation_months: number | null;  // solo para CAPEX
+
+  // ── Activo fijo (solo CAPEX) ─────────────────────────────
+  asset_kind?:         string | null;   // qué es: máquina de espresso, molino…
+  asset_use?:          AssetUse | null; // destino → costo o gasto
+  in_service_date?:    string | null;   // 'YYYY-MM-DD', inicio de la depreciación
+  residual_value?:     number;          // valor recuperable al final; se deprecia net − residual
 
   // ── Soporte documental ───────────────────────────────────
   image_url?:          string | null;

@@ -42,6 +42,39 @@ describe("resolveExpenseFields", () => {
   });
 });
 
+describe("fixed assets by PUC class", () => {
+  it.each(["Maquinaria y Equipo (PUC 1520)", "Muebles y Enseres (PUC 1524)", "Equipo de Cómputo y Comunicación (PUC 1528)"])(
+    "%s is a fixed asset that depreciates",
+    (category) => {
+      const { fields, validationError } = resolveExpenseFields({ category, amount: 12000000, depreciation_months: 120, asset_use: "comodato" });
+      expect(validationError).toBeUndefined();
+      expect(fields).toMatchObject({ expense_type: "CAPEX", net_amount: 12000000, depreciation_months: 120, asset_use: "comodato", residual_value: 0 });
+      expect(resolveExpenseFields({ category, amount: 12000000 }).validationError).toMatch(/depreciation_months/);
+    }
+  );
+
+  it("equipment bought to resell is inventory (cost of sales), not a fixed asset", () => {
+    const { fields } = resolveExpenseFields({ category: "Mercancía para Reventa (Inventario PUC 1435)", amount: 5000000, depreciation_months: 120, asset_use: "comodato", residual_value: 100 });
+    expect(fields).toMatchObject({ expense_type: "COGS", depreciation_months: null, asset_use: null, asset_kind: null, in_service_date: null, residual_value: 0 });
+  });
+
+  it("keeps what the asset is, its destination, start of use and residual value", () => {
+    const { fields } = resolveExpenseFields({
+      category: "Maquinaria y Equipo (PUC 1520)", amount: 11900000, tax_amount: 1900000, depreciation_months: 84,
+      asset_kind: "  Máquina de espresso ", asset_use: "produccion", in_service_date: "2026-11-03", residual_value: 1000000,
+    });
+    expect(fields).toMatchObject({ net_amount: 10000000, asset_kind: "Máquina de espresso", asset_use: "produccion", in_service_date: "2026-11-03", residual_value: 1000000 });
+  });
+
+  it("rejects a residual value above the net value, an unknown destination or a bad date", () => {
+    const capex = { category: "Muebles y Enseres (PUC 1524)", amount: 1000000, depreciation_months: 120 };
+    expect(resolveExpenseFields({ ...capex, residual_value: 1000001 }).validationError).toMatch(/residual/);
+    expect(resolveExpenseFields({ ...capex, residual_value: -1 }).validationError).toMatch(/residual/);
+    expect(resolveExpenseFields({ ...capex, asset_use: "bodega" as never }).validationError).toMatch(/Destino/);
+    expect(resolveExpenseFields({ ...capex, in_service_date: "03/11/2026" }).validationError).toMatch(/puesta en uso/);
+  });
+});
+
 describe("resolveIncomeFields", () => {
   it("Ventas Web derive IVA (19%) and gateway fee when not given", () => {
     const { fields } = resolveIncomeFields({ gross_amount: 100000, category: "Ventas Web" });
@@ -129,5 +162,27 @@ describe("summarizeMonthlyPL", () => {
       })
     );
     expect(r.monthly_depreciation).toBe(100000);
+  });
+
+  it("depreciates (net − residual) ÷ months from the month the asset is put in service", () => {
+    const asset = (over: object) => ({ net_amount: 12000000, residual_value: 2400000, depreciation_months: 120, created_at: "2026-01-10T00:00:00Z", purchase_date: "2026-01-10", ...over });
+    const quota = (12000000 - 2400000) / 120; // 80.000
+    // Bought in January, in service in October → nothing in September (period), then it counts
+    expect(summarizeMonthlyPL(base({ capexItems: [asset({ in_service_date: "2026-10-15" })] })).monthly_depreciation).toBe(0);
+    expect(summarizeMonthlyPL(base({ period_start: "2026-10-01", period_end: "2026-11-01", capexItems: [asset({ in_service_date: "2026-10-15" })] })).monthly_depreciation).toBe(quota);
+    // Without in-service date it starts with the purchase
+    expect(summarizeMonthlyPL(base({ capexItems: [asset({})] })).monthly_depreciation).toBe(quota);
+    // Last month of a 12-month life started in Oct 2025 is Sep 2026; Oct 2026 is over
+    const short = asset({ depreciation_months: 12, in_service_date: "2025-10-20" });
+    expect(summarizeMonthlyPL(base({ capexItems: [short] })).monthly_depreciation).toBe(800000);
+    expect(summarizeMonthlyPL(base({ period_start: "2026-10-01", period_end: "2026-11-01", capexItems: [short] })).monthly_depreciation).toBe(0);
+  });
+
+  it("splits depreciation by the asset's destination (cost vs. sales vs. admin)", () => {
+    const asset = (asset_use: string | null, net: number) => ({ net_amount: net, depreciation_months: 10, created_at: "2026-09-01T00:00:00Z", purchase_date: "2026-09-01", asset_use: asset_use as never });
+    const r = summarizeMonthlyPL(base({ capexItems: [asset("produccion", 1000000), asset("comodato", 500000), asset("comodato", 300000), asset("administracion", 200000), asset(null, 100000)] }));
+    expect(r.depreciation_by_use).toEqual({ produccion: 100000, punto_venta: 0, comodato: 80000, administracion: 20000, sin_destino: 10000 });
+    expect(r.monthly_depreciation).toBe(210000);
+    expect(r.operating_income).toBe(r.ebitda - 210000);
   });
 });

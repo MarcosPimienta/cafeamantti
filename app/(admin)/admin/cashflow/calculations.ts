@@ -2,6 +2,8 @@
 // monthly P&L. No database access here, so every rule is unit-testable.
 
 import {
+  ASSET_USES,
+  AssetUse,
   CashflowExpense,
   CashflowIncome,
   ExpenseType,
@@ -36,7 +38,14 @@ export interface ResolvedExpense {
   net_amount: number;
   depreciation_months: number | null;
   amount: number;          // total bruto (neto + IVA) que se paga
+  // Activo fijo (solo CAPEX; null / 0 en lo demás)
+  asset_kind: string | null;
+  asset_use: AssetUse | null;
+  in_service_date: string | null;
+  residual_value: number;
 }
+
+const NO_ASSET = { asset_kind: null, asset_use: null, in_service_date: null, residual_value: 0 };
 
 /**
  * Deriva y valida los campos contables de un gasto.
@@ -46,6 +55,8 @@ export interface ResolvedExpense {
  *  - expense_type se infiere de la categoría si no viene explícito
  *  - CAPEX exige depreciation_months > 0
  *  - OPEX/COGS exigen depreciation_months null
+ *  - Datos de activo (qué es, destino, puesta en uso, valor residual) solo
+ *    en CAPEX; el valor residual no puede superar el valor neto
  */
 export function resolveExpenseFields(
   raw: Partial<CashflowExpense>
@@ -66,20 +77,33 @@ export function resolveExpenseFields(
   if (expense_type === 'CAPEX') {
     if (!depreciation_months || depreciation_months <= 0) {
       return {
-        fields: { expense_type, tax_amount, net_amount, depreciation_months: null, amount },
+        fields: { expense_type, tax_amount, net_amount, depreciation_months: null, amount, ...NO_ASSET },
         validationError:
           'Un gasto CAPEX debe tener depreciation_months > 0 (vida útil del activo en meses).',
       };
     }
     depreciation_months = Math.floor(depreciation_months);
   } else {
-    // OPEX / COGS nunca tienen depreciación
-    depreciation_months = null;
+    // OPEX / COGS nunca tienen depreciación ni datos de activo
+    return { fields: { expense_type, tax_amount, net_amount, depreciation_months: null, amount, ...NO_ASSET } };
   }
 
-  return {
-    fields: { expense_type, tax_amount, net_amount, depreciation_months, amount },
-  };
+  const asset_kind = raw.asset_kind?.trim() || null;
+  const asset_use = raw.asset_use ?? null;
+  const in_service_date = raw.in_service_date || null;
+  const residual_value = round2(Number(raw.residual_value ?? 0));
+  const fields = { expense_type, tax_amount, net_amount, depreciation_months, amount, asset_kind, asset_use, in_service_date, residual_value };
+
+  if (asset_use !== null && !(asset_use in ASSET_USES)) {
+    return { fields, validationError: 'Destino del activo inválido.' };
+  }
+  if (in_service_date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(in_service_date)) {
+    return { fields, validationError: 'Fecha de puesta en uso inválida.' };
+  }
+  if (!Number.isFinite(residual_value) || residual_value < 0 || residual_value > net_amount) {
+    return { fields, validationError: 'El valor residual debe estar entre 0 y el valor neto del activo.' };
+  }
+  return { fields };
 }
 
 // ── Income helpers ───────────────────────────────────────────
@@ -197,11 +221,17 @@ export interface PLReportResult {
 
   // ── Depreciación CAPEX ─────────────────────────────
   /**
-   * Cuota mensual acumulada de todos los activos CAPEX vigentes.
-   * Vigente = creado en o antes del fin del período y cuya vida útil
-   * (depreciation_months desde created_at) aún no expiró.
+   * Cuota mensual acumulada de todos los activos CAPEX vigentes:
+   * (valor neto − valor residual) ÷ vida útil. Vigente = puesto en uso
+   * antes del fin del período y cuya vida útil aún no terminó.
    */
   monthly_depreciation: number;
+  /**
+   * La misma depreciación según el destino del activo: producción es
+   * costo; punto de venta y comodato, gasto de ventas; administración,
+   * gasto de administración. 'sin_destino' = activos sin destino indicado.
+   */
+  depreciation_by_use: Record<AssetUse | 'sin_destino', number>;
 
   // ── Utilidad Operativa y Burn Rate ───────────────────
   /** ebitda - monthly_depreciation */
@@ -235,7 +265,16 @@ export interface MonthlyPLInput {
   cogsExpenses: { net_amount?: Num }[];
   inventoryConsumptions: { total_cost?: Num }[];
   opexExpenses: { net_amount?: Num }[];
-  capexItems: { net_amount?: Num; depreciation_months?: Num; created_at: string }[];
+  capexItems: {
+    net_amount?: Num;
+    depreciation_months?: Num;
+    created_at: string;
+    /** Fecha del gasto en el flujo de caja (compra). */
+    purchase_date?: string | null;
+    in_service_date?: string | null;
+    residual_value?: Num;
+    asset_use?: AssetUse | null;
+  }[];
   /** Gross amounts actually paid out (OPEX + COGS + CAPEX) in the period. */
   paidExpenses: { amount?: Num }[];
 }
@@ -244,8 +283,9 @@ export interface MonthlyPLInput {
  * Builds the P&L from the period's rows.
  *
  * - Web orders get the same derived breakdown as a manual 'Ventas Web' income.
- * - A CAPEX asset depreciates net_amount / months each month until
- *   created_at + months; it counts while that date is after period_start.
+ * - A CAPEX asset depreciates (net_amount − residual_value) / months each
+ *   month from the month it is put in service (in_service_date, else the
+ *   purchase date, else created_at) for `months` months.
  * - Burn rate uses gross amounts (with IVA): that is what left the account.
  */
 export function summarizeMonthlyPL(input: MonthlyPLInput): PLReportResult {
@@ -288,17 +328,26 @@ export function summarizeMonthlyPL(input: MonthlyPLInput): PLReportResult {
   const ebitda_margin_pct = net_revenue !== 0 ? round2((ebitda / net_revenue) * 100) : 0;
 
   const periodStartDate = new Date(`${input.period_start}T00:00:00Z`);
-  let monthly_depreciation = 0;
+  const periodEndDate = new Date(`${input.period_end}T00:00:00Z`);
+  const depreciation_by_use: PLReportResult['depreciation_by_use'] = {
+    produccion: 0, punto_venta: 0, comodato: 0, administracion: 0, sin_destino: 0,
+  };
   for (const asset of input.capexItems) {
     const months = n(asset.depreciation_months);
     if (months <= 0) continue;
-    const expiresAt = new Date(asset.created_at);
-    expiresAt.setMonth(expiresAt.getMonth() + months);
-    if (expiresAt > periodStartDate) {
-      monthly_depreciation += round2(n(asset.net_amount) / months);
-    }
+    const startYmd = asset.in_service_date || asset.purchase_date;
+    // Depreciation runs whole months, from the first of the start month.
+    const start = startYmd ? new Date(`${startYmd.slice(0, 7)}-01T00:00:00Z`) : new Date(asset.created_at);
+    const ends = new Date(start);
+    ends.setUTCMonth(ends.getUTCMonth() + months);
+    if (start >= periodEndDate || ends <= periodStartDate) continue;
+    const quota = round2(Math.max(0, n(asset.net_amount) - n(asset.residual_value)) / months);
+    depreciation_by_use[asset.asset_use && asset.asset_use in ASSET_USES ? asset.asset_use : 'sin_destino'] += quota;
   }
-  monthly_depreciation = round2(monthly_depreciation);
+  for (const k of Object.keys(depreciation_by_use) as (keyof typeof depreciation_by_use)[]) {
+    depreciation_by_use[k] = round2(depreciation_by_use[k]);
+  }
+  const monthly_depreciation = round2(Object.values(depreciation_by_use).reduce((s, v) => s + v, 0));
 
   const operating_income = round2(ebitda - monthly_depreciation);
   const burn_rate = round2(input.paidExpenses.reduce((s, e) => s + n(e.amount), 0));
@@ -320,6 +369,7 @@ export function summarizeMonthlyPL(input: MonthlyPLInput): PLReportResult {
     ebitda,
     ebitda_margin_pct,
     monthly_depreciation,
+    depreciation_by_use,
     operating_income,
     burn_rate,
   };

@@ -21,7 +21,7 @@ import {
   updateExpenseDirect, updateIncomeDirect,
 } from "./actions";
 import type { PLReportResult } from "./calculations";
-import { EXPENSE_CATEGORY_TYPE_MAP, type ExpenseType } from "./types";
+import { ASSET_KIND_SUGGESTIONS, ASSET_USES, DEFAULT_DEPRECIATION_MONTHS, EXPENSE_CATEGORY_TYPE_MAP, type AssetUse, type ExpenseType } from "./types";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -36,22 +36,7 @@ const TABS = [
   { id: "auditoria", label: "Auditoría", Icon: History          },
 ] as const;
 
-const PREDEFINED_CATEGORIES = [
-  "Costo de Ventas (Materia prima, insumos, empaques)",
-  "Costos de Producción (Maquila, Servicio de tostión)",
-  "Gastos de Personal (Nómina, salud, pensión)",
-  "Honorarios (Servicios profesionales)",
-  "Impuestos (ICA, predial, etc.)",
-  "Arrendamientos (Local, equipos)",
-  "Servicios Públicos (Agua, luz, internet)",
-  "Software y Suscripciones (Hosting, licencias)",
-  "Gastos Legales (Cámara de comercio, notarías)",
-  "Mantenimiento y Reparaciones",
-  "Adecuación e Instalaciones",
-  "Gastos de Viaje y Transporte",
-  "Diversos (Aseo, papelería, caja menor)",
-  "Gastos Financieros (Comisiones, intereses)",
-];
+const PREDEFINED_CATEGORIES = Object.keys(EXPENSE_CATEGORY_TYPE_MAP);
 
 const INCOME_CATEGORIES = ["Ventas Físicas", "Ventas Web", "Servicios", "Otros Ingresos"];
 
@@ -174,6 +159,11 @@ function ExpenseModal({
   const [amount,   setAmount]   = useState(expenseToEdit?.amount ? String(expenseToEdit.amount) : "");
   const [taxAmt,   setTaxAmt]   = useState(expenseToEdit?.tax_amount ? String(expenseToEdit.tax_amount) : "");
   const [deprMos,  setDeprMos]  = useState(expenseToEdit?.depreciation_months ? String(expenseToEdit.depreciation_months) : "");
+  // Activo fijo (CAPEX)
+  const [assetKind,     setAssetKind]     = useState<string>(expenseToEdit?.asset_kind || "");
+  const [assetUse,      setAssetUse]      = useState<AssetUse | "">(expenseToEdit?.asset_use || "");
+  const [inServiceDate, setInServiceDate] = useState<string>(expenseToEdit?.in_service_date || "");
+  const [residual,      setResidual]      = useState<string>(expenseToEdit?.residual_value ? String(expenseToEdit.residual_value) : "");
   const [imageUrl, setImageUrl] = useState<string | null>(expenseToEdit?.image_url || null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
@@ -199,6 +189,10 @@ function ExpenseModal({
       alert("Para un activo CAPEX debes indicar los meses de vida útil (> 0).");
       return;
     }
+    if (isCapex && !assetUse) {
+      alert("Indica el destino del activo (producción, punto de venta, comodato o administración).");
+      return;
+    }
     startTransition(async () => {
       const payload = {
         concept,
@@ -208,6 +202,10 @@ function ExpenseModal({
         tax_amount:          taxAmt ? Number(taxAmt) : 0,
         net_amount:          Number(amount) - (taxAmt ? Number(taxAmt) : 0),
         depreciation_months: isCapex ? Number(deprMos) : null,
+        asset_kind:          isCapex ? assetKind || null : null,
+        asset_use:           isCapex && assetUse ? assetUse : null,
+        in_service_date:     isCapex ? inServiceDate || date : null,
+        residual_value:      isCapex && residual ? Number(residual) : 0,
         image_url:           imageUrl,
       };
 
@@ -227,6 +225,10 @@ function ExpenseModal({
           setAmount("");
           setTaxAmt("");
           setDeprMos("");
+          setAssetKind("");
+          setAssetUse("");
+          setInServiceDate("");
+          setResidual("");
           setImageUrl(null);
           setSuccessMessage("¡Gasto registrado con éxito!");
           setTimeout(() => setSuccessMessage(""), 4000);
@@ -279,7 +281,12 @@ function ExpenseModal({
           <div>
             <label className="field-label">Categoría</label>
             <input type="text" list="exp-categories" value={category}
-              onChange={(e) => setCategory(e.target.value)} required
+              onChange={(e) => {
+                setCategory(e.target.value);
+                // Activos fijos: sugerir la vida útil si aún no se escribió
+                const months = DEFAULT_DEPRECIATION_MONTHS[e.target.value];
+                if (months) setDeprMos((cur) => cur || String(months));
+              }} required
               placeholder="Seleccionar o escribir..." className="field-input" />
             <datalist id="exp-categories">
               {PREDEFINED_CATEGORIES.map((c) => <option key={c} value={c} />)}
@@ -335,19 +342,62 @@ function ExpenseModal({
             )}
           </div>
 
-          {/* Meses de depreciación (solo CAPEX) */}
+          {category === "Mercancía para Reventa (Inventario PUC 1435)" && (
+            <p className="text-[11px] text-foreground/60 bg-foreground/5 rounded-xl px-3 py-2">
+              Equipos que compras para vender: son inventario, no activo fijo. No se deprecian; su costo va al costo de ventas.
+            </p>
+          )}
+
+          {/* Activo fijo (solo CAPEX) */}
           {isCapex && (
-            <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl">
-              <label className="field-label text-purple-700">Vida útil del activo (meses)</label>
-              <input type="number" min="1" step="1" value={deprMos} onChange={(e) => setDeprMos(e.target.value)} required
-                placeholder="Ej. 36 meses = 3 años" className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
-              {deprMos && amount && (
-                <p className="text-[10px] text-purple-700 mt-1.5">
-                  Depreciación mensual: <strong>
-                    {fmt((Number(amount) - (taxAmt ? Number(taxAmt) : 0)) / Number(deprMos))}
-                  </strong> / mes durante {deprMos} meses
-                </p>
-              )}
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl space-y-3">
+              <p className="text-[11px] text-purple-700">
+                Activo fijo. ¿Lo compraste para revender? Usa la categoría <strong>Mercancía para Reventa</strong>.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label text-purple-700">Qué es</label>
+                  <input type="text" list="asset-kinds" value={assetKind} onChange={(e) => setAssetKind(e.target.value)}
+                    placeholder="Ej. Máquina de espresso" className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
+                  <datalist id="asset-kinds">
+                    {(ASSET_KIND_SUGGESTIONS[category] ?? Object.values(ASSET_KIND_SUGGESTIONS).flat()).map((k) => <option key={k} value={k} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="field-label text-purple-700">Destino *</label>
+                  <select value={assetUse} onChange={(e) => setAssetUse(e.target.value as AssetUse | "")} required
+                    className="field-input border-purple-200 focus:ring-purple-300 mt-1">
+                    <option value="">Seleccionar…</option>
+                    {(Object.keys(ASSET_USES) as AssetUse[]).map((u) => <option key={u} value={u}>{ASSET_USES[u].label}</option>)}
+                  </select>
+                  {assetUse && <p className="text-[10px] text-purple-700 mt-1">{ASSET_USES[assetUse].hint}</p>}
+                </div>
+                <div>
+                  <label className="field-label text-purple-700">Fecha de puesta en uso</label>
+                  <input type="date" value={inServiceDate || date} onChange={(e) => setInServiceDate(e.target.value)}
+                    className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
+                  <p className="text-[10px] text-purple-700 mt-1">La depreciación empieza en este mes.</p>
+                </div>
+                <div>
+                  <label className="field-label text-purple-700">Valor residual ($)</label>
+                  <input type="number" min="0" step="1" value={residual} onChange={(e) => setResidual(e.target.value)}
+                    placeholder="0" className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
+                  <p className="text-[10px] text-purple-700 mt-1">Lo que esperas recuperar al final.</p>
+                </div>
+              </div>
+              <div>
+                <label className="field-label text-purple-700">Vida útil del activo (meses)</label>
+                <input type="number" min="1" step="1" value={deprMos} onChange={(e) => setDeprMos(e.target.value)} required
+                  placeholder="Ej. 36 meses = 3 años" className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
+                {deprMos && amount && (
+                  <p className="text-[10px] text-purple-700 mt-1.5">
+                    Depreciación mensual: <strong>
+                      {fmt(Math.max(0, Number(amount) - (taxAmt ? Number(taxAmt) : 0) - (residual ? Number(residual) : 0)) / Number(deprMos))}
+                    </strong> / mes durante {deprMos} meses
+                    {DEFAULT_DEPRECIATION_MONTHS[category] ? ` · sugerido ${DEFAULT_DEPRECIATION_MONTHS[category]} (tope fiscal); ajústalo al uso real` : ""}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
@@ -873,6 +923,32 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
               )}
             </div>
           </div>
+
+          {/* Depreciación por destino del activo */}
+          {report.monthly_depreciation > 0 && (
+            <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+              <h3 className="text-lg font-serif mb-1">Depreciación del Período</h3>
+              <p className="text-xs text-foreground/50 mb-4">Activos fijos según su destino: producción va al costo; lo demás es gasto.</p>
+              <div className="space-y-2">
+                {([
+                  ["produccion", "Costo de producción"],
+                  ["punto_venta", "Gasto de ventas · punto de venta"],
+                  ["comodato", "Gasto de ventas · comodatos"],
+                  ["administracion", "Gasto de administración"],
+                  ["sin_destino", "Sin destino indicado"],
+                ] as const).filter(([k]) => (report.depreciation_by_use?.[k] ?? 0) > 0).map(([k, label]) => (
+                  <div key={k} className="flex items-center justify-between text-sm">
+                    <span className="text-foreground/60">{label}</span>
+                    <span className="font-mono font-bold text-foreground/80">{formatCurrency(report.depreciation_by_use[k])}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between text-sm border-t border-foreground/5 pt-2">
+                  <span className="font-bold">Total</span>
+                  <span className="font-mono font-bold">{formatCurrency(report.monthly_depreciation)}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Waterfall P&L — BarChart */}
           <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
