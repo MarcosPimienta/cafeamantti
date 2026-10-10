@@ -72,26 +72,22 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
        </ul>`
     : "";
 
-  const design = totals.design.fee > 0
-    ? `<h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 8px;">Diseño de empaque · pago único por proyecto</h2>
-       <p style="font-size:12px; color:#44403c; line-height:1.6; margin:0 0 8px;">Un solo proyecto de diseño del que salen ${lines.length === 1 ? "la presentación" : `las ${lines.length} presentaciones`} de esta propuesta${lines.length ? ` (${lines.map((r) => esc(r.presentation)).join(", ")})` : ""}.</p>
-       <table style="width:100%; border-collapse:collapse;">
-         <thead><tr><th style="${th}">Concepto</th><th style="${th} text-align:right;">Valor</th></tr></thead>
-         ${totals.design.items.map((i) => `<tr><td style="${td}">${esc(i.description)}</td><td style="${td} text-align:right; white-space:nowrap;">${formatCOP(i.price)}</td></tr>`).join("")}
-         ${totals.design.items.length > 1 && data.settings.apply_iva ? `<tr><td style="${td} color:#78716c;">Subtotal diseño</td><td style="${td} text-align:right;">${formatCOP(totals.design.fee)}</td></tr>` : ""}
-         ${data.settings.apply_iva ? `<tr><td style="${td} color:#78716c;">IVA (${esc(data.settings.iva_pct)} %)</td><td style="${td} text-align:right;">${formatCOP(totals.design.iva)}</td></tr>` : ""}
-         <tr><td style="padding:8px 12px; font-size:13px; font-weight:700;">Total diseño</td><td style="padding:8px 12px; text-align:right; font-size:13px; font-weight:700;">${formatCOP(totals.design.total)}</td></tr>
-       </table>`
+  // The one-time design project is one more row of the table, with its
+  // concepts underneath, so the totals are what the client pays.
+  const designRow = totals.design.fee > 0
+    ? `<tr>
+        <td style="${td}"><strong>Proyecto de diseño de empaque</strong><br/><span style="color:#78716c; font-size:11px;">Pago único, para todas las presentaciones</span>
+          <table style="width:100%; border-collapse:collapse; margin-top:4px;">${totals.design.items
+            .map((i) => `<tr><td style="padding:1px 8px 1px 0; font-size:11px; color:#78716c;">${esc(i.description)}</td><td style="padding:1px 0; font-size:11px; color:#78716c; text-align:right; white-space:nowrap;">${formatCOP(i.price)}</td></tr>`)
+            .join("")}</table></td>
+        <td style="${td} text-align:right; color:#78716c;">—</td>
+        <td style="${td} text-align:right; color:#78716c;">—</td>
+        <td style="${td} text-align:right;">1</td>
+        <td style="${td} text-align:right; white-space:nowrap;">${formatCOP(totals.design.fee)}</td>
+      </tr>`
     : "";
-
-  // With design, the client sees one figure to pay: order + design.
-  const grandTotal = totals.design.fee > 0
-    ? `<table style="width:100%; border-collapse:collapse; margin-top:28px; background:#fdfbf7; border:2px solid #C59F59;">
-         <tr><td style="padding:8px 16px 2px; font-size:12px; color:#78716c;">Pedido${data.settings.apply_iva ? " (con IVA)" : ""}</td><td style="padding:8px 16px 2px; text-align:right; font-size:12px;">${formatCOP(totals.total)}</td></tr>
-         <tr><td style="padding:2px 16px 8px; font-size:12px; color:#78716c;">Diseño de empaque${data.settings.apply_iva ? " (con IVA)" : ""}</td><td style="padding:2px 16px 8px; text-align:right; font-size:12px;">${formatCOP(totals.design.total)}</td></tr>
-         <tr><td style="padding:10px 16px; font-size:16px; font-weight:700; border-top:1px solid #C59F59;">Total a pagar</td><td style="padding:10px 16px; text-align:right; font-size:16px; font-weight:700; border-top:1px solid #C59F59;">${formatCOP(totals.total + totals.design.total)}</td></tr>
-       </table>`
-    : "";
+  const subtotal = totals.subtotal + totals.design.fee;
+  const iva = totals.iva + totals.design.iva;
 
   const opacity = Math.min(1, Math.max(0, data.backgroundOpacity ?? 0.5));
   // One copy of the background per A4 page (repeat-y), not one stretched image.
@@ -129,21 +125,19 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
         <th style="${th} text-align:right;">Unidades</th>
         <th style="${th} text-align:right;">Valor</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rows}${designRow}</tbody>
     </table>
 
     <table style="margin:16px 0 0 auto; border-collapse:collapse; min-width:300px;">
-      <tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">Subtotal</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(totals.subtotal)}</td></tr>
-      ${data.settings.apply_iva ? `<tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">IVA (${esc(data.settings.iva_pct)} %)</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(totals.iva)}</td></tr>` : ""}
-      <tr><td style="padding:8px 12px; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">Total del pedido</td><td style="padding:8px 12px; text-align:right; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">${formatCOP(totals.total)}</td></tr>
+      <tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">Subtotal</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(subtotal)}</td></tr>
+      ${data.settings.apply_iva ? `<tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">IVA (${esc(data.settings.iva_pct)} %)</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(iva)}</td></tr>` : ""}
+      <tr><td style="padding:8px 12px; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">Total a pagar</td><td style="padding:8px 12px; text-align:right; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">${formatCOP(subtotal + iva)}</td></tr>
     </table>
     <p style="font-size:11px; color:#78716c; margin:10px 0 0;">${
       data.settings.apply_iva ? `Precios por bolsa antes de IVA (${esc(data.settings.iva_pct)} %).` : "Precios por bolsa."
     } El precio de venta sugerido se basa en el de nuestro propio café en la misma presentación y empaque.</p>
     <p style="font-size:11px; color:#78716c; margin:4px 0 0;">Pedido mínimo: ${effectiveMinimum(data.minimumUnits).toLocaleString("es-CO")} unidades por presentación.</p>
 
-    ${design}
-    ${grandTotal}
     ${deliver}
 
     ${

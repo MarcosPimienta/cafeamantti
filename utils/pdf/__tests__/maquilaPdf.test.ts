@@ -35,16 +35,14 @@ const flat = (s: string) => s.replace(/\s/g, " ");
 describe("buildMaquilaHtml (client PDF)", () => {
   const html = buildMaquilaHtml(data);
 
-  it("shows what we charge per bag, the suggested resale price, units, value and the order total", () => {
+  it("shows what we charge per bag, the suggested resale price, units and value", () => {
     expect(html).toContain("Café Honey · 250 g por unidad");
     expect(html).toContain("Precio por bolsa");
     expect(html).toContain("Precio de venta sugerido");
     expect(flat(html)).toContain("$ 22.000");
     expect(flat(html)).toContain("$ 48.000"); // our Honey 250 g store price
     expect(html).toContain("antes de IVA (19 %)");
-    expect(html).toContain("Total del pedido");
     expect(flat(html)).toContain("$ 8.800.000"); // 22.000 × 400
-    expect(flat(html)).toContain("$ 10.472.000"); // with 19 % IVA
     const other = buildMaquilaHtml({ ...data, lines: [{ ...data.lines[0], grams: 340 }] });
     expect(other).toContain("—");
   });
@@ -60,32 +58,31 @@ describe("buildMaquilaHtml (client PDF)", () => {
     expect(custom).not.toMatch(/45[1-5]9/);
   });
 
-  it("with design, shows one total to pay: order + design, both with IVA", () => {
+  it("the design project is one more row of the table, and the total includes it", () => {
+    expect(html).toContain("Proyecto de diseño de empaque");
+    expect(html).toContain("Pago único, para todas las presentaciones");
+    expect(html).not.toContain("Total diseño");
+    expect(flat(html)).toContain("$ 1.500.000");
+    expect(flat(html)).toContain("$ 10.300.000"); // subtotal: 8.800.000 + 1.500.000
+    expect(flat(html)).toContain("$ 1.957.000"); // 19 % IVA
     expect(html).toContain("Total a pagar");
-    expect(flat(html)).toContain("$ 12.257.000"); // 10.472.000 + 1.785.000
-    expect(buildMaquilaHtml({ ...data, settings: { ...data.settings, design_fee: 0 } })).not.toContain("Total a pagar");
+    expect(flat(html)).toContain("$ 12.257.000");
+    const noDesign = flat(buildMaquilaHtml({ ...data, settings: { ...data.settings, design_fee: 0 } }));
+    expect(noDesign).not.toContain("Proyecto de diseño");
+    expect(noDesign).toContain("$ 10.472.000"); // 8.800.000 + IVA
   });
 
-  it("itemizes the design concepts for the client", () => {
+  it("lists the design concepts with their values under the design row", () => {
     const items = [
       { description: "Concepto gráfico de la marca", price: 700000 },
       { description: "Adaptación a las presentaciones", price: 500000 },
       { description: "Artes finales <para imprenta>", price: 300000 },
     ];
     const itemized = flat(buildMaquilaHtml({ ...data, settings: { ...data.settings, design_items: items } }));
-    expect(itemized).toContain("Concepto gráfico de la marca");
-    expect(itemized).toContain("Un solo proyecto de diseño del que salen");
-    expect(itemized).toContain("$ 700.000");
-    expect(itemized).toContain("$ 500.000");
-    expect(itemized).toContain("Artes finales &lt;para imprenta&gt;");
-    expect(itemized).toContain("Subtotal diseño");
-    expect(itemized).toContain("$ 1.785.000"); // 1.500.000 + 19 % IVA
-  });
-
-  it("charges the packaging design once, with its own IVA", () => {
-    expect(html).toContain("Diseño de empaque · pago único");
-    expect(flat(html)).toContain("$ 1.500.000");
-    expect(flat(html)).toContain("$ 1.785.000");
+    expect(itemized.replace(/<[^>]+>/g, "")).toContain("Concepto gráfico de la marca$ 700.000");
+    expect(itemized.replace(/<[^>]+>/g, "")).toContain("Adaptación a las presentaciones$ 500.000");
+    expect(itemized.replace(/<[^>]+>/g, "")).toContain("Artes finales &lt;para imprenta&gt;$ 300.000");
+    expect(itemized).toContain("$ 1.500.000");
   });
 
   it("states the minimum per presentation (never below 200)", () => {
