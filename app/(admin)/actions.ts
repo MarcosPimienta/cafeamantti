@@ -744,6 +744,7 @@ export async function createClientCRM(data: {
   address: string;
   city: string;
   department: string;
+  city_code?: string;
 }) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");

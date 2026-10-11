@@ -24,6 +24,10 @@ const RELATIONS: Record<string, Record<string, Relation>> = {
   },
   cashflow_expenses: {
     cashflow_id: { table: "daily_cashflows", localKey: "cashflow_id" },
+    supplier_id: { table: "suppliers", localKey: "supplier_id" },
+  },
+  order_items: {
+    inventory_id: { table: "inventory", localKey: "inventory_id" },
   },
   orders: {
     client_id: { table: "clients", localKey: "client_id" },

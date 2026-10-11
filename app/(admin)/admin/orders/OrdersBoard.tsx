@@ -54,6 +54,7 @@ import {
   groupOrdersByStatus,
 } from "./boardUtils";
 import OrderActions from "./OrderActions";
+import SiigoInvoiceSection from "./SiigoInvoiceSection";
 
 // ─── Types & vocabulary ───────────────────────────────────────────────────────
 
@@ -742,6 +743,8 @@ function OrderPanel({
               </>
             )}
           </dl>
+
+          <SiigoInvoiceSection key={order.id} order={order} />
 
           {/* Contact */}
           <section className="space-y-2">

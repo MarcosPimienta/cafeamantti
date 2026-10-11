@@ -3,7 +3,7 @@ import Link from "next/link";
 import { checkIsAdmin, updateStoreSettings, updateShippingSettings } from "../../actions";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { Settings as SettingsIcon, Store, Bell, Shield, Wallet, Users } from "lucide-react";
+import { Settings as SettingsIcon, Store, Bell, Shield, Wallet, Users, Receipt } from "lucide-react";
 
 export default async function AdminSettingsPage(props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -63,6 +63,13 @@ export default async function AdminSettingsPage(props: {
               {nav.label}
             </Link>
           ))}
+          <Link
+            href="/admin/settings/siigo"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm transition-all border border-transparent hover:bg-white hover:border-foreground/10 font-medium text-foreground/60 hover:text-foreground"
+          >
+            <Receipt className="w-5 h-5" />
+            Siigo (facturación y contabilidad)
+          </Link>
         </div>
 
         {/* Content Area */}

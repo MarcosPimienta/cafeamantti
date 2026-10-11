@@ -183,6 +183,11 @@ export interface CashflowExpense {
   // ── Soporte documental ───────────────────────────────────
   image_url?:          string | null;
 
+  // ── Proveedor y Siigo ────────────────────────────────────
+  supplier_id?:        string | null;   // proveedor (su NIT va a la factura de compra en Siigo)
+  siigo_purchase_id?:  string | null;
+  siigo_purchase_name?: string | null;
+
   // ── Metadatos ────────────────────────────────────────────
   created_at:          string;
   created_by?:         string;

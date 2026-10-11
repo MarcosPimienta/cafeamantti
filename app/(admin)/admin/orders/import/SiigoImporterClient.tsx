@@ -40,6 +40,7 @@ import {
   downloadCsvTemplate,
 } from "@/utils/siigo/template";
 import { executeSiigoImportAction } from "./actions";
+import { pullSiigoInvoices } from "../../siigo/actions";
 
 interface Props {
   initialInventory: InventoryLookupItem[];
@@ -148,6 +149,35 @@ export default function SiigoImporterClient({
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  // Invoices straight from the Siigo API: they become rows like a Siigo
+  // report and go to the same preview (matching, duplicates, options).
+  const monthStart = new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 8) + "01";
+  const [apiFrom, setApiFrom] = useState(monthStart);
+  const [apiTo, setApiTo] = useState(new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10));
+  const handlePullFromApi = async () => {
+    setErrorMsg("");
+    setLoading(true);
+    try {
+      const res = await pullSiigoInvoices(apiFrom, apiTo);
+      if (!res.success) {
+        setErrorMsg(res.error);
+        return;
+      }
+      if (res.rows.length === 0) {
+        setErrorMsg(`Siigo no tiene facturas de venta entre ${apiFrom} y ${apiTo}.`);
+        return;
+      }
+      setFile(null);
+      setFileHeaders(Object.keys(res.mapping));
+      setRawRows(res.rows);
+      setMapping(res.mapping);
+      setParsedOrders(processSiigoRows(res.rows, res.mapping, initialInventory, initialClients, existingInvoicesSet));
+      setStep(3);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -410,6 +440,28 @@ export default function SiigoImporterClient({
       {/* ======================================================== */}
       {step === 1 && (
         <div className="bg-white rounded-3xl border border-foreground/10 p-8 shadow-sm space-y-8">
+          {/* Straight from the Siigo API */}
+          <div className="rounded-2xl border border-[#C59F59]/30 bg-[#fdfbf7] p-5 space-y-3">
+            <div>
+              <h2 className="text-lg font-serif text-foreground">Traer facturas directamente de Siigo</h2>
+              <p className="text-xs text-foreground/60">Sin exportar archivos: elige el rango de fechas de elaboración y revisa antes de importar.</p>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label htmlFor="api-from" className="block text-xs text-foreground/60 mb-1">Desde</label>
+                <input id="api-from" type="date" value={apiFrom} onChange={(e) => setApiFrom(e.target.value)} className="px-3 py-2 rounded-xl border border-foreground/10 bg-white text-sm" />
+              </div>
+              <div>
+                <label htmlFor="api-to" className="block text-xs text-foreground/60 mb-1">Hasta</label>
+                <input id="api-to" type="date" value={apiTo} onChange={(e) => setApiTo(e.target.value)} className="px-3 py-2 rounded-xl border border-foreground/10 bg-white text-sm" />
+              </div>
+              <button type="button" onClick={handlePullFromApi} disabled={loading}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-foreground text-background text-xs font-bold uppercase tracking-widest hover:bg-[#C59F59] disabled:opacity-50">
+                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Traer de Siigo
+              </button>
+            </div>
+          </div>
+          <p className="text-center text-xs font-bold uppercase tracking-widest text-foreground/30">o sube un archivo</p>
           <div className="text-center max-w-xl mx-auto space-y-2">
             <div className="w-16 h-16 bg-[#C59F59]/10 rounded-2xl flex items-center justify-center mx-auto text-[#C59F59] mb-4">
               <UploadCloud className="w-8 h-8" />

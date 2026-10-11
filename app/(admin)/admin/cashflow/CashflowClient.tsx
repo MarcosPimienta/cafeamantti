@@ -23,6 +23,8 @@ import {
 } from "./actions";
 import { fixedAssetRegister, type FixedAssetInput, type PLReportResult } from "./calculations";
 import { expenseLedger, fixedAssetSheets, incomeLedger, type ExportFilters } from "./exports";
+import { getSuppliers } from "../suppliers/actions";
+import ExpenseSiigoPanel from "./ExpenseSiigoPanel";
 import { ASSET_KIND_SUGGESTIONS, ASSET_USES, DEFAULT_DEPRECIATION_MONTHS, EXPENSE_CATEGORY_TYPE_MAP, type AssetUse, type ExpenseType } from "./types";
 
 // ─────────────────────────────────────────────────────────────
@@ -187,6 +189,15 @@ function ExpenseModal({
   const [assetUse,      setAssetUse]      = useState<AssetUse | "">(expenseToEdit?.asset_use || "");
   const [inServiceDate, setInServiceDate] = useState<string>(expenseToEdit?.in_service_date || "");
   const [residual,      setResidual]      = useState<string>(expenseToEdit?.residual_value ? String(expenseToEdit.residual_value) : "");
+  // Proveedor (lo necesita la factura de compra en Siigo)
+  const [supplierId,    setSupplierId]    = useState<string>(expenseToEdit?.supplier_id || "");
+  const [suppliers,     setSuppliers]     = useState<{ id: string; name: string; document_number: string | null }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getSuppliers().then((list) => { if (!cancelled) setSuppliers(list); });
+    return () => { cancelled = true; };
+  }, []);
+  const [dirty, setDirty] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(expenseToEdit?.image_url || null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
@@ -230,6 +241,8 @@ function ExpenseModal({
         in_service_date:     isCapex ? inServiceDate || date : null,
         residual_value:      isCapex && residual ? Number(residual) : 0,
         image_url:           imageUrl,
+        // Only sent when there is (or was) a supplier, so expenses keep working before the Siigo migration.
+        ...(supplierId || expenseToEdit?.supplier_id ? { supplier_id: supplierId || null } : {}),
       };
 
       const res = expenseToEdit
@@ -252,6 +265,7 @@ function ExpenseModal({
           setAssetUse("");
           setInServiceDate("");
           setResidual("");
+          setSupplierId("");
           setImageUrl(null);
           setSuccessMessage("¡Gasto registrado con éxito!");
           setTimeout(() => setSuccessMessage(""), 4000);
@@ -279,7 +293,7 @@ function ExpenseModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-5 overflow-y-auto">
+        <form onSubmit={handleSubmit} onChange={() => setDirty(true)} className="p-8 space-y-5 overflow-y-auto">
           {/* Fecha + Monto */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -298,6 +312,15 @@ function ExpenseModal({
             <label className="field-label">Concepto</label>
             <input type="text" value={concept} onChange={(e) => setConcept(e.target.value)} required
               placeholder="Ej. Compra de insumos" className="field-input" />
+          </div>
+
+          {/* Proveedor */}
+          <div>
+            <label htmlFor="exp-supplier" className="field-label">Proveedor (opcional)</label>
+            <select id="exp-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="field-input">
+              <option value="">— Sin proveedor —</option>
+              {suppliers.map((sp) => <option key={sp.id} value={sp.id}>{sp.name}{sp.document_number ? ` · ${sp.document_number}` : ""}</option>)}
+            </select>
           </div>
 
           {/* Categoría */}
@@ -422,6 +445,10 @@ function ExpenseModal({
                 )}
               </div>
             </div>
+          )}
+
+          {expenseToEdit?.id && (
+            <ExpenseSiigoPanel expenseId={expenseToEdit.id} sentName={expenseToEdit.siigo_purchase_name ?? (expenseToEdit.siigo_purchase_id ? "creada" : null)} dirty={dirty} />
           )}
 
           {/* Soporte */}

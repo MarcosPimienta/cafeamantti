@@ -226,6 +226,8 @@ export async function createExpenseDirect(
     concept:             expense.concept,
     category:            expense.category,
     image_url:           expense.image_url ?? null,
+    // Proveedor: solo si viene (la columna llega con la migración de Siigo)
+    ...(expense.supplier_id ? { supplier_id: expense.supplier_id } : {}),
     // Campos derivados P&L
     amount:              fields.amount,
     expense_type:        fields.expense_type,
@@ -297,6 +299,7 @@ export async function updateExpenseDirect(
     concept:             merged.concept,
     category:            merged.category,
     image_url:           merged.image_url ?? null,
+    ...('supplier_id' in expense || 'supplier_id' in oldData ? { supplier_id: merged.supplier_id || null } : {}),
     amount:              fields.amount,
     expense_type:        fields.expense_type,
     tax_amount:          fields.tax_amount,

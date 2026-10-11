@@ -80,8 +80,9 @@ export default async function AdminCRMCustomersPage() {
                         <div className="w-10 h-10 rounded-full flex items-center justify-center font-serif text-lg bg-[#C59F59]/10 text-[#C59F59]">
                           {(client.name?.[0] || "?").toUpperCase()}
                         </div>
-                        <div>
+                        <div className="flex items-center gap-1">
                           <p className="font-bold text-foreground">{client.name}</p>
+                          <CreateCRMClientModal client={client} />
                         </div>
                       </div>
                     </td>
