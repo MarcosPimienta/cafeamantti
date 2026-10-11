@@ -276,7 +276,14 @@ async function prepareOrderInvoice(supabase: Supabase, orderId: string, paymentM
   const client: AppClient | null = Array.isArray(o.client) ? o.client[0] ?? null : o.client;
   const items = (orderItems ?? []).map((it: any) => {
     const inv = Array.isArray(it.inventory) ? it.inventory[0] : it.inventory;
-    return { product_code: inv ? siigoCodeOf(inv) : null, name: inv?.product_name ?? it.product_id ?? 'Producto', quantity: Number(it.quantity), unit_price: Number(it.price_at_time) };
+    return {
+      product_code: inv ? siigoCodeOf(inv) : null,
+      name: inv?.product_name ?? it.product_id ?? 'Producto',
+      quantity: Number(it.quantity),
+      unit_price: Number(it.price_at_time),
+      // Linked when "Comparar con Siigo" found it, it was linked by hand or created from the app.
+      linked: inv ? !!(inv.siigo_product_id || inv.siigo_code) : undefined,
+    };
   });
   /* eslint-enable @typescript-eslint/no-explicit-any */
   const hasClientId = !!cleanIdentification(client?.document_number).identification;

@@ -122,7 +122,14 @@ export function buildCustomerPayload(c: AppClient) {
 
 // ── Sales invoices (app → Siigo) ────────────────────────────
 
-export type AppOrderItem = { product_code: string | null; name: string; quantity: number; unit_price: number };
+export type AppOrderItem = {
+  product_code: string | null;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  /** Linked to a Siigo product (Ajustes → Siigo → Productos); false = Siigo would not know the code. */
+  linked?: boolean;
+};
 export type AppOrder = {
   id: string;
   total_amount: number;
@@ -149,6 +156,7 @@ export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], cust
   if (items.length === 0) problems.push("El pedido no tiene productos.");
   for (const it of items) {
     if (!it.product_code) problems.push(`"${it.name}" no está vinculado a un producto del inventario (se necesita su código en Siigo).`);
+    else if (it.linked === false) problems.push(`"${it.name}" (${it.product_code}) no está vinculado a un producto de Siigo: vincúlalo o créalo en Ajustes → Siigo → Productos.`);
     if (!(it.quantity > 0)) problems.push(`"${it.name}": cantidad inválida.`);
   }
   const shipping = num(order.shipping_cost);

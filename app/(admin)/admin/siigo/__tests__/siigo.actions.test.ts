@@ -46,7 +46,7 @@ beforeEach(() => {
   h.configured = true;
   db = seedDB({
     siigo_settings: [{ id: 1, config: SETTINGS }],
-    inventory: [{ id: "inv1", product_code: "CAFT-250", product_name: "Premium 250 g", is_sellable: true }, { id: "inv2", product_code: "HON-250", product_name: "Honey 250 g", is_sellable: true }],
+    inventory: [{ id: "inv1", product_code: "CAFT-250", product_name: "Premium 250 g", is_sellable: true, siigo_product_id: "sp-caft" }, { id: "inv2", product_code: "HON-250", product_name: "Honey 250 g", is_sellable: true }],
     clients: [{ id: "cl1", name: "Ana Gómez", document_type: "CC", document_number: "1036123456", address: "Cra 43A #1-50", city_code: "05001", email: "ana@x.co" }],
     orders: [{ id: ORDER_ID, status: "paid", total_amount: 78000, client_id: "cl1", shipping_info: { shipping_cost: 8000 }, siigo_invoice_id: null }],
     order_items: [{ id: "oi1", order_id: ORDER_ID, product_id: "Premium 250 g", inventory_id: "inv1", quantity: 2, price_at_time: 35000 }],
@@ -91,6 +91,12 @@ describe("sales invoice from an order", () => {
     const res = await createSiigoInvoice(ORDER_ID, "web");
     expect(res).toMatchObject({ success: false, problems: [expect.stringMatching(/Premium 250 g.*inventario/)] });
     expect(h.calls).toHaveLength(0);
+  });
+
+  it("a product never linked to Siigo stops the invoice before calling Siigo", async () => {
+    db.byId("inventory", "inv1")!.siigo_product_id = null;
+    const res = await previewSiigoInvoice(ORDER_ID, "web");
+    expect(res).toMatchObject({ success: true, problems: [expect.stringMatching(/no está vinculado a un producto de Siigo/)] });
   });
 
   it("an order without client is invoiced to the final consumer", async () => {

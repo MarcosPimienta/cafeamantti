@@ -99,6 +99,11 @@ describe("sales invoice payload", () => {
     expect(all).toMatch(/no coincide con el total/);
   });
 
+  it("warns about products not linked to Siigo before sending", () => {
+    const { problems } = buildInvoicePayload({ ...order, shipping_cost: 0, total_amount: 70000 }, [{ ...items[0], linked: false }], "1", settings, "2026-10-10");
+    expect(problems).toEqual([expect.stringMatching(/Premium 250 g.*CAFT-250.*no está vinculado a un producto de Siigo/)]);
+  });
+
   it("DIAN and email only when turned on", () => {
     const { payload } = buildInvoicePayload(order, items, "1", { ...settings, stamp_dian: true, send_mail: true }, "2026-10-10");
     expect(payload).toMatchObject({ stamp: { send: true }, mail: { send: true } });
