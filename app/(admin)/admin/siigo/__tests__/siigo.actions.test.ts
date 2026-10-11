@@ -141,7 +141,11 @@ describe("products", () => {
     expect(db.byId("inventory", "inv1")!.siigo_product_id).toBe("sp1");
 
     h.responses["POST /v1/products"] = { id: "sp2", code: "HON-250" };
-    const res = await createSiigoProducts(["inv2"]);
+    // The group chosen on screen is used and remembered, even if not saved before.
+    db.byId("siigo_settings", 1 as never)!.config = { ...SETTINGS, product_account_group_id: null };
+    const res = await createSiigoProducts(["inv2"], 929);
+    expect(calls("POST /v1/products")[0].opts?.body).toMatchObject({ account_group: 929 });
+    expect(db.byId("siigo_settings", 1 as never)!.config.product_account_group_id).toBe(929);
     expect(res).toMatchObject({ success: true, created: ["HON-250"], failed: [] });
     expect(db.byId("inventory", "inv2")!.siigo_product_id).toBe("sp2");
   });

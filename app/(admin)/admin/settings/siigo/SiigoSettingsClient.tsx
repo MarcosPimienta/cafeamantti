@@ -119,7 +119,7 @@ export default function SiigoSettingsClient({
     if (again.success) showComparison(again);
   });
   const createProducts = () => run("create", async () => {
-    const res = await createSiigoProducts(selected);
+    const res = await createSiigoProducts(selected, settings.product_account_group_id ?? null);
     if (!res.success) return setError(res.error);
     setNotice(`✓ ${res.created.length} producto(s) creados en Siigo`);
     if (res.failed.length) setError(res.failed.join(" · "));
@@ -284,10 +284,16 @@ export default function SiigoSettingsClient({
                   <button type="button" onClick={saveLinks} disabled={changedLinks.length === 0 || !!busy} className={`${btn} bg-[#C59F59] text-white hover:bg-[#b08d4f]`}>
                     <Spinner k="links" icon={<Save className="w-4 h-4" />} /> Guardar {changedLinks.length || ""} vínculo(s)
                   </button>
-                  <button type="button" onClick={createProducts} disabled={selected.length === 0 || !!busy} className={`${btn} bg-foreground text-background hover:bg-[#C59F59]`}>
+                  <button type="button" onClick={createProducts} disabled={selected.length === 0 || !settings.product_account_group_id || !!busy} className={`${btn} bg-foreground text-background hover:bg-[#C59F59]`}>
                     <Spinner k="create" icon={<Upload className="w-4 h-4" />} /> Crear {selected.length || ""} en Siigo
                   </button>
                 </div>
+                {selected.length > 0 && !settings.product_account_group_id && (
+                  <p className="text-[11px] text-amber-700 mt-2">Elige arriba el grupo de inventario para crear productos en Siigo.</p>
+                )}
+                {changedLinks.length > 0 && (
+                  <p className="text-[11px] text-amber-700 mt-2">Tienes {changedLinks.length} vínculo(s) sin guardar.</p>
+                )}
               </div>
               {comparison.missingInApp.length > 0 && (
                 <details>

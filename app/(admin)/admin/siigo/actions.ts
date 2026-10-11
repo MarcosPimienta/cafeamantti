@@ -200,10 +200,21 @@ export async function linkSiigoProducts(links: { inventoryId: string; siigoCode:
   });
 }
 
-export async function createSiigoProducts(inventoryIds: string[]) {
+/**
+ * Creates app products in Siigo. `accountGroupId` is the inventory group
+ * chosen on screen: it is used and remembered, so it does not have to be
+ * saved first.
+ */
+export async function createSiigoProducts(inventoryIds: string[], accountGroupId?: number | null) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
     const settings = await loadSettings(supabase);
+    if (accountGroupId && accountGroupId !== settings.product_account_group_id) {
+      if (!Number.isInteger(accountGroupId) || accountGroupId <= 0) throw new Error('Grupo de inventario inválido.');
+      settings.product_account_group_id = accountGroupId;
+      const { error } = await supabase.from('siigo_settings').upsert({ id: 1, config: settings, updated_at: new Date().toISOString(), updated_by: userId });
+      if (error) throw error;
+    }
     const { data: items, error } = await supabase.from('inventory').select('*').in('id', inventoryIds);
     if (error) throw error;
     const created: string[] = [];
