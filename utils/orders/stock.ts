@@ -1,3 +1,5 @@
+import { tracksStock } from "@/utils/inventory/categories";
+
 // Stock follows payment: an order deducts its products when it is paid and
 // gives them back if it returns to pending or is cancelled. Shared by the
 // admin actions (session client) and the ePayco webhook (service role).
@@ -81,11 +83,15 @@ export async function syncOrderStock(supabase: DB, opts: SyncOptions): Promise<"
 
   const { data: items, error: itemsErr } = await supabase
     .from("order_items")
-    .select("inventory_id, quantity")
+    .select("inventory_id, quantity, inventory:inventory_id ( category )")
     .eq("order_id", orderId)
     .not("inventory_id", "is", null);
   if (itemsErr) throw new Error(itemsErr.message);
-  const linked = (items ?? []) as { inventory_id: string; quantity: number }[];
+  // Services (labor) are sold without stock: they never move inventory.
+  const linked = ((items ?? []) as { inventory_id: string; quantity: number; inventory?: { category?: string } | { category?: string }[] | null }[]).filter((it) => {
+    const inv = Array.isArray(it.inventory) ? it.inventory[0] : it.inventory;
+    return tracksStock(inv?.category);
+  });
 
   if (!shouldDeduct) {
     if (!linked.length) return "unchanged"; // legacy order: could not re-apply later

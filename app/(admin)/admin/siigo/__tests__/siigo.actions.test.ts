@@ -29,7 +29,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => (h.configured ? { username: "u", accessKey: "k", partnerId: "CafeAmantti" } : null) };
 });
 
-import { createSiigoInvoice, previewSiigoInvoice, refreshSiigoInvoice, saveSiigoSettings, compareSiigoProducts, createSiigoProducts, createSiigoPurchase, pullSiigoInvoices, linkSiigoProducts } from "../actions";
+import { createSiigoInvoice, previewSiigoInvoice, refreshSiigoInvoice, saveSiigoSettings, compareSiigoProducts, createSiigoProducts, createSiigoPurchase, pullSiigoInvoices, linkSiigoProducts, importSiigoItems, markSiigoItemsAsService, saveProductTaxes } from "../actions";
 import { SiigoError } from "@/utils/siigo/api";
 
 const SETTINGS = {
@@ -168,6 +168,48 @@ describe("products with Siigo's own codes", () => {
     // Unlinking goes back to the app code.
     await linkSiigoProducts([{ inventoryId: "inv1", siigoCode: null }]);
     expect(db.byId("inventory", "inv1")).toMatchObject({ siigo_code: null, siigo_product_id: null });
+  });
+});
+
+describe("services and parts from Siigo", () => {
+  it("brings them in linked to their code, services without stock, and skips what is already there", async () => {
+    h.responses["LIST /v1/products"] = [{ id: "s34", code: "0034", name: "Mantenimiento general" }, { id: "s27", code: "0027", name: "Empaques y duchetas" }];
+    const res = await importSiigoItems([
+      { siigoCode: "0034", kind: "servicio", taxId: 9754 },
+      { siigoCode: "0027", kind: "repuesto", taxId: null },
+      { siigoCode: "9999", kind: "repuesto", taxId: null },
+    ]);
+    expect(res).toMatchObject({ success: true, imported: ["SRV-0034", "REP-0027"], skipped: ["9999: no existe en Siigo"] });
+    expect(db.rows("inventory").find((r) => r.product_code === "SRV-0034")).toMatchObject({ category: "servicio", siigo_code: "0034", sales_tax_id: 9754, current_stock: 0 });
+    const again = await importSiigoItems([{ siigoCode: "0034", kind: "servicio", taxId: null }]);
+    expect(again).toMatchObject({ success: true, imported: [], skipped: [expect.stringMatching(/ya está en la app/)] });
+  });
+
+  it("an invoice with a service uses the service's own IVA", async () => {
+    db.rows("inventory").push({ id: "srv", product_code: "SRV-0034", product_name: "Mantenimiento general", category: "servicio", siigo_code: "0034", siigo_product_id: "s34", sales_tax_id: 9754 });
+    db.rows("order_items").push({ id: "oi2", order_id: ORDER_ID, product_id: "Mantenimiento general", inventory_id: "srv", quantity: 1, price_at_time: 250000 });
+    db.byId("orders", ORDER_ID)!.total_amount = 328000;
+    const res = await previewSiigoInvoice(ORDER_ID, "transfer");
+    expect(res).toMatchObject({ success: true, problems: [], total: 328000, lines: expect.arrayContaining([expect.objectContaining({ code: "0034", price: 250000 })]) });
+
+    h.responses["GET /v1/customers"] = { results: [{ id: "cust-1" }] };
+    h.responses["POST /v1/invoices"] = { id: "inv-uuid", name: "FV-1-56" };
+    await createSiigoInvoice(ORDER_ID, "transfer");
+    const items = (calls("POST /v1/invoices")[0].opts?.body as { items: { code: string; taxes: { id: number }[] }[] }).items;
+    expect(items.find((i) => i.code === "0034")?.taxes).toEqual([{ id: 9754 }]); // service's own IVA
+    expect(items.find((i) => i.code === "CAFT-250")?.taxes).toEqual([{ id: 13156 }]); // general IVA
+  });
+
+  it("saves IVA per product and marks items as Service in Siigo keeping their data", async () => {
+    expect(await saveProductTaxes([{ inventoryId: "inv2", taxId: 0 }])).toMatchObject({ success: true, saved: 1 });
+    expect(db.byId("inventory", "inv2")!.sales_tax_id).toBe(0);
+    expect(await saveProductTaxes([{ inventoryId: "inv2", taxId: -3 }])).toMatchObject({ success: false });
+
+    h.responses["GET /v1/products"] = { results: [{ id: "s34", code: "0034", name: "Mantenimiento general", type: "Product", account_group: { id: 929 }, taxes: [{ id: 9754 }] }] };
+    h.responses["PUT /v1/products/s34"] = { id: "s34" };
+    const res = await markSiigoItemsAsService(["0034"]);
+    expect(res).toMatchObject({ success: true, updated: ["0034"], failed: [] });
+    expect(calls("PUT /v1/products/s34")[0].opts?.body).toMatchObject({ code: "0034", type: "Service", account_group: 929, taxes: [{ id: 9754 }] });
   });
 });
 

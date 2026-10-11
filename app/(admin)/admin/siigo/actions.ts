@@ -18,7 +18,10 @@ import {
   compareProducts,
   normalizeSiigoSettings,
   siigoCodeOf,
+  inventoryRowFromSiigo,
+  serviceTypeUpdate,
   siigoInvoicesToRows,
+  suggestItemKind,
   suggestSiigoMatch,
   type AppClient,
   type AppOrder,
@@ -168,9 +171,9 @@ export async function compareSiigoProducts() {
       if (app.siigo_product_id !== siigo.id) await supabase.from('inventory').update({ siigo_product_id: siigo.id }).eq('id', app.id);
     }
     return {
-      linked: cmp.linked.map(({ app, siigo }) => ({ id: app.id, code: app.product_code, siigoCode: siigo.code, appName: app.product_name, siigoName: siigo.name })),
-      missingInSiigo: cmp.missingInSiigo.map((p) => ({ id: p.id, code: p.product_code, name: p.product_name, suggestion: suggestSiigoMatch(p, siigoProducts)?.code ?? null })),
-      missingInApp: cmp.missingInApp.map((p) => ({ code: p.code, name: p.name })),
+      linked: cmp.linked.map(({ app, siigo }) => ({ id: app.id, code: app.product_code, siigoCode: siigo.code, appName: app.product_name, siigoName: siigo.name, category: app.category ?? null, taxId: app.sales_tax_id ?? null })),
+      missingInSiigo: cmp.missingInSiigo.map((p) => ({ id: p.id, code: p.product_code, name: p.product_name, suggestion: suggestSiigoMatch(p, siigoProducts)?.code ?? null, category: p.category ?? null, taxId: p.sales_tax_id ?? null })),
+      missingInApp: cmp.missingInApp.map((p) => ({ code: p.code, name: p.name.trim(), type: p.type ?? null, kind: suggestItemKind(p) })),
       siigoProducts: siigoProducts.filter((p) => p.active !== false).map((p) => ({ code: p.code, name: p.name })).sort((a, b) => a.name.localeCompare(b.name)),
     };
   });
@@ -205,6 +208,86 @@ export async function linkSiigoProducts(links: { inventoryId: string; siigoCode:
  * chosen on screen: it is used and remembered, so it does not have to be
  * saved first.
  */
+/** IVA per product (null = the general one, 0 = without IVA). */
+export async function saveProductTaxes(taxes: { inventoryId: string; taxId: number | null }[]) {
+  const { supabase } = await requireAdmin();
+  return guard(async () => {
+    for (const t of taxes) {
+      if (t.taxId !== null && !(Number.isInteger(t.taxId) && t.taxId >= 0)) throw new Error('IVA inválido.');
+      const { error } = await supabase.from('inventory').update({ sales_tax_id: t.taxId }).eq('id', t.inventoryId);
+      if (error) throw error;
+    }
+    return { saved: taxes.length };
+  });
+}
+
+/**
+ * Brings Siigo services and parts into the app: services without stock,
+ * parts with stock (starting at 0), both linked to their Siigo code.
+ */
+export async function importSiigoItems(items: { siigoCode: string; kind: 'servicio' | 'repuesto'; taxId: number | null }[]) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    if (items.some((i) => i.kind !== 'servicio' && i.kind !== 'repuesto')) throw new Error('Tipo inválido: debe ser servicio o repuesto.');
+    const siigoProducts = await getSiigoClient().listAll<SiigoProduct>('/v1/products');
+    const byCode = new Map(siigoProducts.map((p) => [p.code.trim().toUpperCase(), p]));
+    const { data: existing, error: exErr } = await supabase.from('inventory').select('product_code, siigo_code');
+    if (exErr) throw exErr;
+    const taken = new Set((existing ?? []).flatMap((r: { product_code: string; siigo_code: string | null }) => [r.product_code.toUpperCase(), (r.siigo_code ?? '').toUpperCase()]));
+    const imported: string[] = [];
+    const skipped: string[] = [];
+    for (const item of items) {
+      const p = byCode.get(item.siigoCode.trim().toUpperCase());
+      if (!p) {
+        skipped.push(`${item.siigoCode}: no existe en Siigo`);
+        continue;
+      }
+      const row = inventoryRowFromSiigo(p, item.kind, item.taxId);
+      if (taken.has(row.product_code.toUpperCase()) || taken.has(p.code.toUpperCase())) {
+        skipped.push(`${p.code} ${row.product_name}: ya está en la app`);
+        continue;
+      }
+      const { error } = await supabase.from('inventory').insert(row);
+      if (error) throw error;
+      taken.add(row.product_code.toUpperCase());
+      taken.add(p.code.toUpperCase());
+      await log(supabase, userId, { entity: 'product', local_id: row.product_code, siigo_id: p.id, siigo_name: `${p.code} ${row.product_name}`, status: 'ok', message: `Traído de Siigo como ${item.kind}` });
+      imported.push(row.product_code);
+    }
+    revalidatePath('/admin/inventory');
+    return { imported, skipped };
+  });
+}
+
+/** Marks Siigo items as type Service (they were created as Product). */
+export async function markSiigoItemsAsService(siigoCodes: string[]) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    const siigo = getSiigoClient();
+    const updated: string[] = [];
+    const failed: string[] = [];
+    for (const code of siigoCodes) {
+      try {
+        const found = await siigo.request<{ results?: SiigoProduct[] }>('GET', '/v1/products', { query: { code } });
+        const p = found?.results?.find((x) => x.code.trim().toUpperCase() === code.trim().toUpperCase());
+        if (!p) throw new Error('no existe en Siigo');
+        if (p.type === 'Service') {
+          updated.push(code);
+          continue;
+        }
+        // Siigo's PUT replaces the product: send back what it has, with type Service.
+        await siigo.request('PUT', `/v1/products/${p.id}`, { body: serviceTypeUpdate(p) });
+        await log(supabase, userId, { entity: 'product', local_id: null, siigo_id: p.id, siigo_name: `${p.code} ${p.name}`, status: 'ok', message: 'Tipo cambiado a Servicio en Siigo' });
+        updated.push(code);
+      } catch (err) {
+        await log(supabase, userId, { entity: 'product', local_id: null, siigo_name: code, status: 'error', message: message(err) });
+        failed.push(`${code}: ${message(err)}`);
+      }
+    }
+    return { updated, failed };
+  });
+}
+
 export async function createSiigoProducts(inventoryIds: string[], accountGroupId?: number | null) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
@@ -294,6 +377,7 @@ async function prepareOrderInvoice(supabase: Supabase, orderId: string, paymentM
       unit_price: Number(it.price_at_time),
       // Linked when "Comparar con Siigo" found it, it was linked by hand or created from the app.
       linked: inv ? !!(inv.siigo_product_id || inv.siigo_code) : undefined,
+      tax_id: inv?.sales_tax_id ?? null,
     };
   });
   /* eslint-enable @typescript-eslint/no-explicit-any */

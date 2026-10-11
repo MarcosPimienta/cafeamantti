@@ -11,6 +11,7 @@ interface InventoryItem {
   product_name: string;
   current_stock: number;
   is_sellable?: boolean | null;
+  category?: string | null;
 }
 
 interface ManualOrderModalProps {
@@ -374,7 +375,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
                           <option value="">Seleccione producto...</option>
                           {sellable.map(inv => (
                             <option key={inv.id} value={inv.id}>
-                              {inv.product_name} (Stock: {Number(inv.current_stock)})
+                              {inv.product_name} {inv.category === "servicio" ? "(servicio)" : `(Stock: ${Number(inv.current_stock)})`}
                             </option>
                           ))}
                         </select>

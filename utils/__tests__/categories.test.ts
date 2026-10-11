@@ -1,13 +1,22 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { CATEGORY_IDS, CATEGORY_LABELS, ENTRY_TYPES, entryTypeFor, isInventoryCategory, categoryInfo } from "../inventory/categories";
+import { CATEGORY_IDS, CATEGORY_LABELS, ENTRY_TYPES, entryTypeFor, isInventoryCategory, categoryInfo, tracksStock } from "../inventory/categories";
 
 describe("inventory categories", () => {
   it("includes enseres for furniture and coffee makers", () => {
-    expect(CATEGORY_IDS).toEqual(["cafe", "empaque", "accesorio", "equipo", "enseres"]);
+    expect(CATEGORY_IDS).toEqual(["cafe", "empaque", "accesorio", "equipo", "enseres", "repuesto", "servicio"]);
     expect(CATEGORY_LABELS.enseres).toBe("Enseres");
     expect(categoryInfo("enseres")).toMatchObject({ prefix: "ENS-", sellable: false });
+  });
+
+  it("services are sold without stock; parts are stocked and sold", () => {
+    expect(categoryInfo("servicio")).toMatchObject({ prefix: "SRV-", sellable: true });
+    expect(categoryInfo("repuesto")).toMatchObject({ prefix: "REP-", sellable: true });
+    expect(tracksStock("servicio")).toBe(false);
+    expect(tracksStock("repuesto")).toBe(true);
+    expect(tracksStock("cafe")).toBe(true);
+    expect(tracksStock(null)).toBe(true);
   });
 
   it("maps each category to its Entradas entry type", () => {

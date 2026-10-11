@@ -104,6 +104,10 @@ export async function executeSiigoImportAction(
   const { data: { user } } = await supabase.auth.getUser();
 
   const PAID_STATUSES = ['paid', 'processing', 'shipped', 'delivered'];
+
+  // Services (labor) are invoiced but never deducted from stock.
+  const { data: serviceRows } = await supabase.from('inventory').select('id').eq('category', 'servicio');
+  const serviceIds = new Set((serviceRows ?? []).map((r: { id: string }) => r.id));
   const shouldDeductStock = options.syncInventory && PAID_STATUSES.includes(options.defaultStatus);
 
   let importedCount = 0;
@@ -249,6 +253,7 @@ export async function executeSiigoImportAction(
 
         for (const item of parsedOrder.items) {
           if (!item.matched_inventory_id || !(item.quantity > 0)) continue;
+          if (serviceIds.has(item.matched_inventory_id)) continue; // services have no stock
 
           // Insert movement
           const { data: movData, error: movErr } = await supabase

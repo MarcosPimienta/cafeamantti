@@ -2,7 +2,16 @@
 
 import React, { useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, PlugZap, RefreshCw, Save, Upload } from "lucide-react";
-import { compareSiigoProducts, createSiigoProducts, linkSiigoProducts, saveSiigoSettings, testSiigoConnection } from "../../siigo/actions";
+import {
+  compareSiigoProducts,
+  createSiigoProducts,
+  importSiigoItems,
+  linkSiigoProducts,
+  markSiigoItemsAsService,
+  saveProductTaxes,
+  saveSiigoSettings,
+  testSiigoConnection,
+} from "../../siigo/actions";
 import type { SiigoSettings } from "@/utils/siigo/mapping";
 
 type Option = { id: number; name: string };
@@ -15,12 +24,14 @@ type Catalogs = {
   taxes: (Option & { percentage: number | null })[];
   accountGroups: Option[];
 };
+type Kind = "servicio" | "repuesto";
 type Comparison = {
-  linked: { id: string; code: string; siigoCode: string; appName: string; siigoName: string }[];
-  missingInSiigo: { id: string; code: string; name: string; suggestion: string | null }[];
-  missingInApp: { code: string; name: string }[];
+  linked: { id: string; code: string; siigoCode: string; appName: string; siigoName: string; category: string | null; taxId: number | null }[];
+  missingInSiigo: { id: string; code: string; name: string; suggestion: string | null; category: string | null; taxId: number | null }[];
+  missingInApp: { code: string; name: string; type: string | null; kind: Kind }[];
   siigoProducts: { code: string; name: string }[];
 };
+const taxValue = (id: number | null) => (id === null ? "" : String(id));
 type LogRow = { id: string; entity: string; status: string; siigo_name: string | null; message: string | null; created_at: string };
 
 const labelCls = "block text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5";
@@ -69,11 +80,24 @@ export default function SiigoSettingsClient({
   const changedLinks = comparison
     ? [...comparison.linked.map((l) => l.id), ...comparison.missingInSiigo.map((p) => p.id)].filter((id) => (links[id] ?? "") !== currentLink(id))
     : [];
+  // inventory id → IVA ("" = general, "0" = without IVA, else tax id)
+  const [taxes, setTaxes] = useState<Record<string, string>>({});
+  const currentTax = (id: string) => taxValue([...(comparison?.linked ?? []), ...(comparison?.missingInSiigo ?? [])].find((r) => r.id === id)?.taxId ?? null);
+  const changedTaxes = Object.keys(taxes).filter((id) => taxes[id] !== currentTax(id));
+  // Siigo-only items: what each one is, its IVA, and which are picked
+  const [kinds, setKinds] = useState<Record<string, Kind>>({});
+  const [itemTaxes, setItemTaxes] = useState<Record<string, string>>({});
+  const [picked, setPicked] = useState<string[]>([]);
   const showComparison = (c: Comparison) => {
     setComparison(c);
     setSelected([]);
+    setPicked([]);
     setLinks(Object.fromEntries([...c.linked.map((l) => [l.id, l.siigoCode]), ...c.missingInSiigo.map((p) => [p.id, p.suggestion ?? ""])]));
+    setTaxes(Object.fromEntries([...c.linked, ...c.missingInSiigo].map((r) => [r.id, taxValue(r.taxId)])));
+    setKinds(Object.fromEntries(c.missingInApp.map((p) => [p.code, p.kind])));
+    setItemTaxes({});
   };
+  const parseTax = (v: string | undefined) => (v === undefined || v === "" ? null : Number(v));
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -112,12 +136,48 @@ export default function SiigoSettingsClient({
     showComparison(res);
   });
   const saveLinks = () => run("links", async () => {
-    const res = await linkSiigoProducts(changedLinks.map((id) => ({ inventoryId: id, siigoCode: links[id] || null })));
-    if (!res.success) return setError(res.error);
-    setNotice(`✓ ${res.linked} vínculo(s) guardados`);
+    if (changedLinks.length) {
+      const res = await linkSiigoProducts(changedLinks.map((id) => ({ inventoryId: id, siigoCode: links[id] || null })));
+      if (!res.success) return setError(res.error);
+    }
+    if (changedTaxes.length) {
+      const res = await saveProductTaxes(changedTaxes.map((id) => ({ inventoryId: id, taxId: parseTax(taxes[id]) })));
+      if (!res.success) return setError(res.error);
+    }
+    setNotice(`✓ ${changedLinks.length + changedTaxes.length} cambio(s) guardados`);
     const again = await compareSiigoProducts();
     if (again.success) showComparison(again);
   });
+  const bringItems = () => run("bring", async () => {
+    const res = await importSiigoItems(picked.map((code) => ({ siigoCode: code, kind: kinds[code] ?? "repuesto", taxId: parseTax(itemTaxes[code]) })));
+    if (!res.success) return setError(res.error);
+    setNotice(`✓ ${res.imported.length} traído(s) a la app`);
+    if (res.skipped.length) setError(res.skipped.join(" · "));
+    const again = await compareSiigoProducts();
+    if (again.success) showComparison(again);
+  });
+  const toServiceCodes = comparison ? picked.filter((code) => kinds[code] === "servicio" && comparison.missingInApp.find((p) => p.code === code)?.type !== "Service") : [];
+  const markAsService = () => run("service", async () => {
+    if (!window.confirm(`Se cambiará a tipo "Servicio" en Siigo: ${toServiceCodes.join(", ")}. ¿Continuar?`)) return;
+    const res = await markSiigoItemsAsService(toServiceCodes);
+    if (!res.success) return setError(res.error);
+    setNotice(`✓ ${res.updated.length} marcado(s) como Servicio en Siigo`);
+    if (res.failed.length) setError(res.failed.join(" · "));
+    const again = await compareSiigoProducts();
+    if (again.success) showComparison(again);
+  });
+  const taxOptions = catalogs?.taxes ?? null;
+  const taxSelect = (value: string, onChange: (v: string) => void, label: string) =>
+    taxOptions ? (
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} className={inputCls}>
+        <option value="">IVA general</option>
+        <option value="0">Sin IVA</option>
+        {taxOptions.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        {value && value !== "0" && !taxOptions.some((t) => String(t.id) === value) && <option value={value}>IVA ID {value}</option>}
+      </select>
+    ) : (
+      <p className={`${inputCls} text-foreground/40 text-xs`}>{value === "" ? "IVA general" : value === "0" ? "Sin IVA" : `IVA ID ${value}`}</p>
+    );
   const createProducts = () => run("create", async () => {
     const res = await createSiigoProducts(selected, settings.product_account_group_id ?? null);
     if (!res.success) return setError(res.error);
@@ -256,15 +316,17 @@ export default function SiigoSettingsClient({
               <p className="text-sm"><strong>{comparison.linked.length}</strong> vinculados · <strong>{comparison.missingInSiigo.length}</strong> sin vincular · <strong>{comparison.missingInApp.length}</strong> solo en Siigo</p>
               <div>
                 <p className={labelCls}>Producto de la app → producto en Siigo</p>
-                <p className="text-[11px] text-foreground/50 mb-2">Las sugerencias salen del perfil y el tamaño; revísalas antes de guardar. Sin producto en Siigo, márcalo para crearlo.</p>
+                <p className="text-[11px] text-foreground/50 mb-2">Las sugerencias salen del perfil y el tamaño; revísalas antes de guardar. Sin producto en Siigo, márcalo para crearlo. El IVA de cada producto reemplaza al general (por ejemplo café 5 %, servicios y repuestos 19 %){taxOptions ? "" : " · prueba la conexión para elegirlo"}.</p>
                 <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
-                  {[...comparison.linked.map((l) => ({ id: l.id, code: l.code, name: l.appName, linked: true })), ...comparison.missingInSiigo.map((p) => ({ ...p, linked: false }))].map((row) => {
+                  {[...comparison.linked.map((l) => ({ id: l.id, code: l.code, name: l.appName, category: l.category, linked: true })), ...comparison.missingInSiigo.map((p) => ({ ...p, linked: false }))].map((row) => {
                     const value = links[row.id] ?? "";
                     const suggested = !row.linked && value && value === comparison.missingInSiigo.find((p) => p.id === row.id)?.suggestion;
                     return (
-                      <div key={row.id} className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_auto] gap-2 items-center">
+                      <div key={row.id} className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_130px_auto] gap-2 items-center">
                         <div className="text-sm min-w-0">
                           <span className="font-mono text-[11px] text-foreground/50">{row.code}</span> {row.name}
+                          {row.category === "servicio" && <span className="ml-2 text-[10px] font-bold text-emerald-700">servicio</span>}
+                          {row.category === "repuesto" && <span className="ml-2 text-[10px] font-bold text-orange-700">repuesto</span>}
                           {row.linked && value === currentLink(row.id) && <span className="ml-2 text-[10px] font-bold text-emerald-700">vinculado</span>}
                           {suggested && <span className="ml-2 text-[10px] font-bold text-amber-700">sugerido</span>}
                         </div>
@@ -272,6 +334,7 @@ export default function SiigoSettingsClient({
                           <option value="">— Sin vincular —</option>
                           {comparison.siigoProducts.map((p) => <option key={p.code} value={p.code}>{p.code} · {p.name}</option>)}
                         </select>
+                        {taxSelect(taxes[row.id] ?? "", (v) => setTaxes((m) => ({ ...m, [row.id]: v })), `IVA de ${row.name}`)}
                         <label className={`flex items-center gap-1.5 text-xs ${value || row.linked ? "invisible" : ""}`}>
                           <input type="checkbox" checked={selected.includes(row.id)} onChange={(e) => setSelected((s) => (e.target.checked ? [...s, row.id] : s.filter((x) => x !== row.id)))} className="w-4 h-4 accent-[#C59F59]" />
                           Crear
@@ -281,8 +344,8 @@ export default function SiigoSettingsClient({
                   })}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <button type="button" onClick={saveLinks} disabled={changedLinks.length === 0 || !!busy} className={`${btn} bg-[#C59F59] text-white hover:bg-[#b08d4f]`}>
-                    <Spinner k="links" icon={<Save className="w-4 h-4" />} /> Guardar {changedLinks.length || ""} vínculo(s)
+                  <button type="button" onClick={saveLinks} disabled={changedLinks.length + changedTaxes.length === 0 || !!busy} className={`${btn} bg-[#C59F59] text-white hover:bg-[#b08d4f]`}>
+                    <Spinner k="links" icon={<Save className="w-4 h-4" />} /> Guardar {changedLinks.length + changedTaxes.length || ""} cambio(s)
                   </button>
                   <button type="button" onClick={createProducts} disabled={selected.length === 0 || !settings.product_account_group_id || !!busy} className={`${btn} bg-foreground text-background hover:bg-[#C59F59]`}>
                     <Spinner k="create" icon={<Upload className="w-4 h-4" />} /> Crear {selected.length || ""} en Siigo
@@ -291,17 +354,45 @@ export default function SiigoSettingsClient({
                 {selected.length > 0 && !settings.product_account_group_id && (
                   <p className="text-[11px] text-amber-700 mt-2">Elige arriba el grupo de inventario para crear productos en Siigo.</p>
                 )}
-                {changedLinks.length > 0 && (
-                  <p className="text-[11px] text-amber-700 mt-2">Tienes {changedLinks.length} vínculo(s) sin guardar.</p>
+                {changedLinks.length + changedTaxes.length > 0 && (
+                  <p className="text-[11px] text-amber-700 mt-2">Tienes {changedLinks.length + changedTaxes.length} cambio(s) sin guardar.</p>
                 )}
               </div>
               {comparison.missingInApp.length > 0 && (
-                <details>
-                  <summary className="cursor-pointer text-sm text-foreground/60">Productos que solo están en Siigo ({comparison.missingInApp.length})</summary>
-                  <ul className="mt-2 space-y-1 text-sm max-h-64 overflow-y-auto">
-                    {comparison.missingInApp.map((p) => <li key={p.code}><span className="font-mono text-xs">{p.code}</span> {p.name}</li>)}
-                  </ul>
-                </details>
+                <div className="rounded-2xl bg-[#fdfbf7] border border-foreground/5 p-4 space-y-3">
+                  <div>
+                    <p className={labelCls}>Solo en Siigo ({comparison.missingInApp.length}): servicios y repuestos</p>
+                    <p className="text-[11px] text-foreground/50">
+                      Tráelos a la app para venderlos y facturarlos. <strong>Servicio</strong> = mano de obra, sin stock (mantenimientos, reparaciones, domicilio, alquiler).
+                      <strong> Repuesto</strong> = pieza o insumo, con stock (empaques, filtros, mangueras…). La sugerencia sale del nombre; revísala.
+                    </p>
+                  </div>
+                  <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+                    {comparison.missingInApp.map((p) => (
+                      <div key={p.code} className="grid grid-cols-1 md:grid-cols-[auto_1fr_130px_130px] gap-2 items-center">
+                        <input type="checkbox" checked={picked.includes(p.code)} onChange={(e) => setPicked((s) => (e.target.checked ? [...s, p.code] : s.filter((x) => x !== p.code)))} aria-label={`Elegir ${p.name}`} className="w-4 h-4 accent-[#C59F59]" />
+                        <div className="text-sm min-w-0">
+                          <span className="font-mono text-[11px] text-foreground/50">{p.code}</span> {p.name}
+                          <span className="ml-2 text-[10px] text-foreground/40">en Siigo: {p.type === "Service" ? "Servicio" : "Producto"}</span>
+                        </div>
+                        <select value={kinds[p.code] ?? p.kind} onChange={(e) => setKinds((m) => ({ ...m, [p.code]: e.target.value as Kind }))} aria-label={`Tipo de ${p.name}`} className={inputCls}>
+                          <option value="servicio">Servicio</option>
+                          <option value="repuesto">Repuesto</option>
+                        </select>
+                        {taxSelect(itemTaxes[p.code] ?? "", (v) => setItemTaxes((m) => ({ ...m, [p.code]: v })), `IVA de ${p.name}`)}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={bringItems} disabled={picked.length === 0 || !!busy} className={`${btn} bg-foreground text-background hover:bg-[#C59F59]`}>
+                      <Spinner k="bring" icon={<Upload className="w-4 h-4 rotate-180" />} /> Traer {picked.length || ""} a la app
+                    </button>
+                    <button type="button" onClick={markAsService} disabled={toServiceCodes.length === 0 || !!busy} className={`${btn} border border-foreground/15 text-foreground/70 hover:bg-foreground/5`}>
+                      <Spinner k="service" icon={<RefreshCw className="w-4 h-4" />} /> Marcar {toServiceCodes.length || ""} como Servicio en Siigo
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-foreground/40">«Marcar como Servicio» cambia el tipo en Siigo de los elegidos como servicio que allá están como Producto; el resto de sus datos se conserva.</p>
+                </div>
               )}
             </div>
           )}

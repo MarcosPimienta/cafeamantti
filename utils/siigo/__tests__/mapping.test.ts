@@ -11,6 +11,10 @@ import {
   siigoCodeOf,
   suggestSiigoMatch,
   gramsInName,
+  itemTaxId,
+  suggestItemKind,
+  inventoryRowFromSiigo,
+  serviceTypeUpdate,
   API_ROW_MAPPING,
   type SiigoSettings,
 } from "../mapping";
@@ -234,5 +238,68 @@ describe("linking app products to Siigo's own codes", () => {
       { id: "trap", product_code: "X-0040", product_name: "Otra cosa", category: "cafe", unit: "unidad", current_stock: 5 },
     ], [], new Set());
     expect(order.items[0].matched_inventory_id).toBe("hon");
+  });
+});
+
+describe("services, parts and IVA per product", () => {
+  it("each item uses its own IVA, else the general one; 0 means without IVA", () => {
+    expect(itemTaxId(undefined, settings)).toBe(13156);
+    expect(itemTaxId(null, settings)).toBe(13156);
+    expect(itemTaxId(9754, settings)).toBe(9754);
+    expect(itemTaxId(0, settings)).toBeNull();
+    const { payload } = buildInvoicePayload(
+      { id: "o", total_amount: 335000, payment_method: "transfer" },
+      [
+        { product_code: "0040", name: "Honey 250", quantity: 1, unit_price: 48000 },
+        { product_code: "0034", name: "Mantenimiento general", quantity: 1, unit_price: 250000, tax_id: 9754 },
+        { product_code: "0027", name: "Empaques y duchetas", quantity: 1, unit_price: 37000, tax_id: 0 },
+      ],
+      "1",
+      settings,
+      "2026-10-11"
+    );
+    expect(payload.items).toEqual([
+      expect.objectContaining({ code: "0040", taxed_price: 48000, taxes: [{ id: 13156 }] }),
+      expect.objectContaining({ code: "0034", taxed_price: 250000, taxes: [{ id: 9754 }] }),
+      expect.objectContaining({ code: "0027", price: 37000, taxes: [] }),
+    ]);
+  });
+
+  it("a service is created in Siigo as type Service, with its own IVA", () => {
+    const { payload } = buildProductPayload({ id: "s", product_code: "SRV-REV", product_name: "Revisión", category: "servicio", sales_tax_id: 9754 }, settings);
+    expect(payload).toMatchObject({ type: "Service", stock_control: false, tax_classification: "Taxed", taxes: [{ id: 9754 }] });
+    expect(buildProductPayload({ id: "p", product_code: "REP-X", product_name: "Filtro", category: "repuesto", sales_tax_id: 0 }, settings).payload).toMatchObject({ type: "Product", tax_classification: "Excluded" });
+  });
+
+  it("tells labor from parts by Siigo type or name", () => {
+    expect(suggestItemKind({ name: "Mantenimiento general" })).toBe("servicio");
+    expect(suggestItemKind({ name: "Reparación vávulas" })).toBe("servicio");
+    expect(suggestItemKind({ name: "Cambio de empaques grupos" })).toBe("servicio");
+    expect(suggestItemKind({ name: "Domicilio llanogrande", type: "Service" })).toBe("servicio");
+    expect(suggestItemKind({ name: "Alquiler Termo 1.9LT" })).toBe("servicio");
+    expect(suggestItemKind({ name: "Empaques y duchetas" })).toBe("repuesto");
+    expect(suggestItemKind({ name: "Cepillo para limpieza de grupo" })).toBe("repuesto");
+    expect(suggestItemKind({ name: "Manguera" })).toBe("repuesto");
+  });
+
+  it("an item brought from Siigo keeps its code as the link", () => {
+    expect(inventoryRowFromSiigo({ id: "sid", code: "0034", name: "Mantenimiento  general " }, "servicio", 9754)).toEqual({
+      product_code: "SRV-0034", product_name: "Mantenimiento general", category: "servicio", unit: "servicio", current_stock: 0, min_stock: 0,
+      is_sellable: true, siigo_code: "0034", siigo_product_id: "sid", sales_tax_id: 9754,
+    });
+    expect(inventoryRowFromSiigo({ id: "x", code: "022", name: "Manguera" }, "repuesto", null)).toMatchObject({ product_code: "REP-022", category: "repuesto", unit: "unidad", sales_tax_id: null });
+  });
+
+  it("changing the type to Service sends back everything Siigo already has", () => {
+    const body = serviceTypeUpdate({
+      id: "sid", code: "0034", name: "Mantenimiento general", type: "Product", active: true, stock_control: true,
+      account_group: { id: 929, name: "Productos" }, tax_classification: "Taxed", tax_included: false, taxes: [{ id: 9754 }],
+      prices: [{ currency_code: "COP", price_list: [{ position: 1, value: 250000 }] }], unit: { code: "94" }, reference: "MT-1",
+    });
+    expect(body).toEqual({
+      code: "0034", name: "Mantenimiento general", account_group: 929, type: "Service", stock_control: false, active: true,
+      tax_classification: "Taxed", tax_included: false, taxes: [{ id: 9754 }],
+      prices: [{ currency_code: "COP", price_list: [{ position: 1, value: 250000 }] }], unit: "94", reference: "MT-1",
+    });
   });
 });

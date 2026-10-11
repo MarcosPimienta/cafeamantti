@@ -11,6 +11,7 @@ interface InventoryItem {
   product_name: string;
   current_stock: number;
   is_sellable?: boolean | null;
+  category?: string | null;
 }
 
 type ItemRow = {
@@ -400,7 +401,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                             .filter(inv => isSellable(inv) || inv.id === item.inventory_id)
                             .map(inv => (
                               <option key={inv.id} value={inv.id}>
-                                {inv.product_name} (Stock: {Number(inv.current_stock)}){isSellable(inv) ? "" : " · insumo"}
+                                {inv.product_name} {inv.category === "servicio" ? "(servicio)" : `(Stock: ${Number(inv.current_stock)})`}{isSellable(inv) ? "" : " · insumo"}
                               </option>
                             ))}
                         </select>

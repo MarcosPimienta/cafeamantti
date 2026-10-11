@@ -1,6 +1,7 @@
 // The one list of inventory categories. Labels, new-product defaults, the
 // Entradas entry type and the tag color all come from here; the database
-// CHECK (inventory_category_check) must list the same ids.
+// CHECK (inventory_category_check) must list the same ids. "servicio" is
+// the only category without stock (see tracksStock).
 
 export type EntryType = "MP" | "MAT" | "EQP" | "ENS";
 
@@ -27,6 +28,10 @@ export const INVENTORY_CATEGORIES = [
   { id: "accesorio", label: "Accesorio", prefix: "ACC-", unit: "unidad", sellable: false, entryType: "MAT", badge: "bg-purple-50 text-purple-600" },
   { id: "equipo", label: "Equipo", prefix: "EQP-", unit: "unidad", sellable: false, entryType: "EQP", badge: "bg-slate-100 text-slate-700" },
   { id: "enseres", label: "Enseres", prefix: "ENS-", unit: "unidad", sellable: false, entryType: "ENS", badge: "bg-teal-50 text-teal-700" },
+  // Parts and supplies for repairs: stocked and sold.
+  { id: "repuesto", label: "Repuesto", prefix: "REP-", unit: "unidad", sellable: true, entryType: "MAT", badge: "bg-orange-50 text-orange-700" },
+  // Labor (maintenance, repairs, delivery, rentals): sold, never stocked.
+  { id: "servicio", label: "Servicio", prefix: "SRV-", unit: "servicio", sellable: true, entryType: "MAT", badge: "bg-emerald-50 text-emerald-700" },
 ] as const satisfies readonly {
   id: string;
   label: string;
@@ -49,6 +54,11 @@ export function isInventoryCategory(v: unknown): v is InventoryCategory {
 
 export function categoryInfo(id: string) {
   return INVENTORY_CATEGORIES.find((c) => c.id === id);
+}
+
+/** Services have no stock: orders never deduct them and there are no entradas. */
+export function tracksStock(category: string | null | undefined): boolean {
+  return category !== "servicio";
 }
 
 /** Entradas entry type for a product's category (coffee = MP, equipo = EQP, enseres = ENS, rest = MAT). */

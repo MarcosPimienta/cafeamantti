@@ -129,7 +129,13 @@ export type AppOrderItem = {
   unit_price: number;
   /** Linked to a Siigo product (Ajustes → Siigo → Productos); false = Siigo would not know the code. */
   linked?: boolean;
+  /** The product's own IVA (inventory.sales_tax_id): undefined/null = general one, 0 = none. */
+  tax_id?: number | null;
 };
+
+/** IVA tax id for an item: its own, else the general one; 0 means none. */
+export const itemTaxId = (own: number | null | undefined, settings: SiigoSettings): number | null =>
+  own === 0 ? null : own ?? settings.sales_tax_id ?? null;
 export type AppOrder = {
   id: string;
   total_amount: number;
@@ -162,10 +168,12 @@ export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], cust
   const shipping = num(order.shipping_cost);
   if (shipping > 0 && !settings.shipping_product_code) problems.push("El pedido tiene envío: configura el código del servicio de envío en Ajustes → Siigo.");
 
-  const priceField = settings.sales_tax_id ? "taxed_price" : "price";
-  const taxes = settings.sales_tax_id ? [{ id: settings.sales_tax_id }] : [];
   const lines = [
-    ...items.map((it) => ({ code: it.product_code ?? "", description: it.name.slice(0, 200), quantity: round2(it.quantity), [priceField]: round2(it.unit_price), taxes })),
+    // Prices are final: an item with IVA goes as taxed_price (IVA included).
+    ...items.map((it) => {
+      const tax = itemTaxId(it.tax_id, settings);
+      return { code: it.product_code ?? "", description: it.name.slice(0, 200), quantity: round2(it.quantity), [tax ? "taxed_price" : "price"]: round2(it.unit_price), taxes: tax ? [{ id: tax }] : [] };
+    }),
     ...(shipping > 0 && settings.shipping_product_code
       ? [{ code: settings.shipping_product_code, description: "Envío", quantity: 1, price: round2(shipping), taxes: [] }]
       : []),
@@ -270,6 +278,8 @@ export type AppProduct = {
   id: string;
   product_code: string;
   product_name: string;
+  category?: string | null;
+  sales_tax_id?: number | null;
   is_sellable?: boolean | null;
   siigo_product_id?: string | null;
   /** Code of the linked Siigo product; null = same as product_code. */
@@ -278,7 +288,23 @@ export type AppProduct = {
 
 /** Code this product has in Siigo. */
 export const siigoCodeOf = (p: { product_code: string; siigo_code?: string | null }) => (p.siigo_code?.trim() || p.product_code).trim();
-export type SiigoProduct = { id: string; code: string; name: string; active?: boolean; prices?: { price_list?: { position?: number; value?: number }[] }[] };
+export type SiigoProduct = {
+  id: string;
+  code: string;
+  name: string;
+  type?: string;
+  active?: boolean;
+  stock_control?: boolean;
+  tax_classification?: string;
+  tax_included?: boolean;
+  account_group?: { id?: number; name?: string } | number;
+  taxes?: { id?: number }[];
+  prices?: { currency_code?: string; price_list?: { position?: number; value?: number }[] }[];
+  unit?: { code?: string } | string;
+  unit_label?: string;
+  reference?: string;
+  description?: string;
+};
 
 export type ProductComparison = {
   linked: { app: AppProduct; siigo: SiigoProduct }[];
@@ -314,16 +340,18 @@ export function buildProductPayload(p: AppProduct, settings: SiigoSettings, pric
   if (!settings.product_account_group_id) problems.push("Elige el grupo de inventario para productos nuevos en Ajustes → Siigo.");
   const code = p.product_code.replace(/\s+/g, "");
   if (!code || code.length > 30) problems.push(`${p.product_name}: el código debe tener entre 1 y 30 caracteres sin espacios.`);
+  const tax = itemTaxId(p.sales_tax_id, settings);
   const payload = {
     code,
     name: p.product_name.slice(0, 100),
     account_group: settings.product_account_group_id ?? 0,
-    type: "Product",
+    // Labor is a Service in Siigo; stock is kept in the app, not in Siigo.
+    type: p.category === "servicio" ? "Service" : "Product",
     stock_control: false,
     active: true,
-    tax_classification: settings.sales_tax_id ? "Taxed" : "Excluded",
-    tax_included: !!settings.sales_tax_id,
-    ...(settings.sales_tax_id ? { taxes: [{ id: settings.sales_tax_id }] } : {}),
+    tax_classification: tax ? "Taxed" : "Excluded",
+    tax_included: !!tax,
+    ...(tax ? { taxes: [{ id: tax }] } : {}),
     ...(price ? { prices: [{ currency_code: "COP", price_list: [{ position: 1, value: round2(price) }] }] } : {}),
   };
   return { payload, problems };
@@ -418,4 +446,55 @@ export function suggestSiigoMatch(app: { product_name: string }, siigo: SiigoPro
   );
   candidates.sort((a, b) => Number(/premium/i.test(b.name)) - Number(/premium/i.test(a.name)));
   return candidates[0] ?? null;
+}
+
+// ── Services and parts from Siigo ───────────────────────────
+
+const SERVICE_WORDS = /mantenimiento|reparaci|cambio de|instalaci|domicilio|alquiler|servicio|revisi|limpieza general|diagn/;
+
+/** Whether a Siigo item is labor (servicio) or a part/supply (repuesto). */
+export function suggestItemKind(p: { name: string; type?: string }): "servicio" | "repuesto" {
+  if (p.type === "Service") return "servicio";
+  return SERVICE_WORDS.test(plain(p.name)) ? "servicio" : "repuesto";
+}
+
+/** Inventory row for a Siigo service or part brought into the app. */
+export function inventoryRowFromSiigo(p: SiigoProduct, kind: "servicio" | "repuesto", taxId: number | null | undefined) {
+  return {
+    product_code: `${kind === "servicio" ? "SRV-" : "REP-"}${p.code}`.slice(0, 40),
+    product_name: p.name.replace(/\s+/g, " ").trim(),
+    category: kind,
+    unit: kind === "servicio" ? "servicio" : "unidad",
+    current_stock: 0,
+    min_stock: 0,
+    is_sellable: true,
+    siigo_code: p.code,
+    siigo_product_id: p.id,
+    sales_tax_id: taxId ?? null,
+  };
+}
+
+/**
+ * PUT /v1/products/{id} body that changes only the type to Service: Siigo's
+ * PUT replaces the product, so everything it already has is sent back.
+ */
+export function serviceTypeUpdate(p: SiigoProduct) {
+  const group = typeof p.account_group === "object" ? p.account_group?.id : p.account_group;
+  const unit = typeof p.unit === "object" ? p.unit?.code : p.unit;
+  return {
+    code: p.code,
+    name: p.name,
+    account_group: group ?? 0,
+    type: "Service",
+    stock_control: false,
+    active: p.active !== false,
+    ...(p.tax_classification ? { tax_classification: p.tax_classification } : {}),
+    ...(p.tax_included !== undefined ? { tax_included: p.tax_included } : {}),
+    ...(p.taxes?.length ? { taxes: p.taxes.filter((t) => t.id).map((t) => ({ id: t.id })) } : {}),
+    ...(p.prices?.length ? { prices: p.prices } : {}),
+    ...(unit ? { unit } : {}),
+    ...(p.unit_label ? { unit_label: p.unit_label } : {}),
+    ...(p.reference ? { reference: p.reference } : {}),
+    ...(p.description ? { description: p.description } : {}),
+  };
 }
