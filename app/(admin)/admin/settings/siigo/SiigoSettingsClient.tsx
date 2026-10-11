@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, PlugZap, RefreshCw, Save, Upload } from "lucide-react";
-import { compareSiigoProducts, createSiigoProducts, saveSiigoSettings, testSiigoConnection } from "../../siigo/actions";
+import { compareSiigoProducts, createSiigoProducts, linkSiigoProducts, saveSiigoSettings, testSiigoConnection } from "../../siigo/actions";
 import type { SiigoSettings } from "@/utils/siigo/mapping";
 
 type Option = { id: number; name: string };
@@ -16,9 +16,10 @@ type Catalogs = {
   accountGroups: Option[];
 };
 type Comparison = {
-  linked: { code: string; appName: string; siigoName: string }[];
-  missingInSiigo: { id: string; code: string; name: string }[];
+  linked: { id: string; code: string; siigoCode: string; appName: string; siigoName: string }[];
+  missingInSiigo: { id: string; code: string; name: string; suggestion: string | null }[];
   missingInApp: { code: string; name: string }[];
+  siigoProducts: { code: string; name: string }[];
 };
 type LogRow = { id: string; entity: string; status: string; siigo_name: string | null; message: string | null; created_at: string };
 
@@ -62,6 +63,17 @@ export default function SiigoSettingsClient({
   const [catalogs, setCatalogs] = useState<Catalogs | null>(null);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  // inventory id → chosen Siigo code ("" = not linked)
+  const [links, setLinks] = useState<Record<string, string>>({});
+  const currentLink = (id: string) => comparison?.linked.find((l) => l.id === id)?.siigoCode ?? "";
+  const changedLinks = comparison
+    ? [...comparison.linked.map((l) => l.id), ...comparison.missingInSiigo.map((p) => p.id)].filter((id) => (links[id] ?? "") !== currentLink(id))
+    : [];
+  const showComparison = (c: Comparison) => {
+    setComparison(c);
+    setSelected([]);
+    setLinks(Object.fromEntries([...c.linked.map((l) => [l.id, l.siigoCode]), ...c.missingInSiigo.map((p) => [p.id, p.suggestion ?? ""])]));
+  };
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -97,8 +109,14 @@ export default function SiigoSettingsClient({
   const compare = () => run("compare", async () => {
     const res = await compareSiigoProducts();
     if (!res.success) return setError(res.error);
-    setComparison(res);
-    setSelected([]);
+    showComparison(res);
+  });
+  const saveLinks = () => run("links", async () => {
+    const res = await linkSiigoProducts(changedLinks.map((id) => ({ inventoryId: id, siigoCode: links[id] || null })));
+    if (!res.success) return setError(res.error);
+    setNotice(`✓ ${res.linked} vínculo(s) guardados`);
+    const again = await compareSiigoProducts();
+    if (again.success) showComparison(again);
   });
   const createProducts = () => run("create", async () => {
     const res = await createSiigoProducts(selected);
@@ -106,8 +124,7 @@ export default function SiigoSettingsClient({
     setNotice(`✓ ${res.created.length} producto(s) creados en Siigo`);
     if (res.failed.length) setError(res.failed.join(" · "));
     const again = await compareSiigoProducts();
-    if (again.success) setComparison(again);
-    setSelected([]);
+    if (again.success) showComparison(again);
   });
 
   const Spinner = ({ k, icon }: { k: string; icon: React.ReactNode }) => (busy === k ? <Loader2 className="w-4 h-4 animate-spin" /> : <>{icon}</>);
@@ -227,7 +244,7 @@ export default function SiigoSettingsClient({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-serif">Productos</h2>
-              <p className="text-xs text-foreground/50">Se emparejan por código: el código del inventario debe ser el mismo en Siigo.</p>
+              <p className="text-xs text-foreground/50">Siigo numera sus productos (0040, 004…): vincula cada producto de la app con el suyo. Facturas y descargas usan ese vínculo.</p>
             </div>
             <button type="button" onClick={compare} disabled={!configured || !!busy} className={`${btn} border border-foreground/15 text-foreground/70 hover:bg-foreground/5`}>
               <Spinner k="compare" icon={<RefreshCw className="w-4 h-4" />} /> Comparar con Siigo
@@ -236,23 +253,42 @@ export default function SiigoSettingsClient({
           <IdSelect id="sg-group" label="Grupo de inventario para productos nuevos" value={settings.product_account_group_id} options={catalogs?.accountGroups ?? null} onChange={(v) => set("product_account_group_id", v)} />
           {comparison && (
             <div className="space-y-4">
-              <p className="text-sm"><strong>{comparison.linked.length}</strong> vinculados · <strong>{comparison.missingInSiigo.length}</strong> faltan en Siigo · <strong>{comparison.missingInApp.length}</strong> solo en Siigo</p>
-              {comparison.missingInSiigo.length > 0 && (
-                <div>
-                  <p className={labelCls}>Vendibles en la app que no existen en Siigo (sus facturas fallarían)</p>
-                  <div className="space-y-1 max-h-64 overflow-y-auto">
-                    {comparison.missingInSiigo.map((p) => (
-                      <label key={p.id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={selected.includes(p.id)} onChange={(e) => setSelected((s) => (e.target.checked ? [...s, p.id] : s.filter((x) => x !== p.id)))} className="w-4 h-4 accent-[#C59F59]" />
-                        <span className="font-mono text-xs">{p.code}</span> {p.name}
-                      </label>
-                    ))}
-                  </div>
-                  <button type="button" onClick={createProducts} disabled={selected.length === 0 || !!busy} className={`${btn} mt-3 bg-foreground text-background hover:bg-[#C59F59]`}>
+              <p className="text-sm"><strong>{comparison.linked.length}</strong> vinculados · <strong>{comparison.missingInSiigo.length}</strong> sin vincular · <strong>{comparison.missingInApp.length}</strong> solo en Siigo</p>
+              <div>
+                <p className={labelCls}>Producto de la app → producto en Siigo</p>
+                <p className="text-[11px] text-foreground/50 mb-2">Las sugerencias salen del perfil y el tamaño; revísalas antes de guardar. Sin producto en Siigo, márcalo para crearlo.</p>
+                <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+                  {[...comparison.linked.map((l) => ({ id: l.id, code: l.code, name: l.appName, linked: true })), ...comparison.missingInSiigo.map((p) => ({ ...p, linked: false }))].map((row) => {
+                    const value = links[row.id] ?? "";
+                    const suggested = !row.linked && value && value === comparison.missingInSiigo.find((p) => p.id === row.id)?.suggestion;
+                    return (
+                      <div key={row.id} className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_auto] gap-2 items-center">
+                        <div className="text-sm min-w-0">
+                          <span className="font-mono text-[11px] text-foreground/50">{row.code}</span> {row.name}
+                          {row.linked && value === currentLink(row.id) && <span className="ml-2 text-[10px] font-bold text-emerald-700">vinculado</span>}
+                          {suggested && <span className="ml-2 text-[10px] font-bold text-amber-700">sugerido</span>}
+                        </div>
+                        <select value={value} onChange={(e) => setLinks((m) => ({ ...m, [row.id]: e.target.value }))} aria-label={`Producto en Siigo para ${row.name}`} className={inputCls}>
+                          <option value="">— Sin vincular —</option>
+                          {comparison.siigoProducts.map((p) => <option key={p.code} value={p.code}>{p.code} · {p.name}</option>)}
+                        </select>
+                        <label className={`flex items-center gap-1.5 text-xs ${value || row.linked ? "invisible" : ""}`}>
+                          <input type="checkbox" checked={selected.includes(row.id)} onChange={(e) => setSelected((s) => (e.target.checked ? [...s, row.id] : s.filter((x) => x !== row.id)))} className="w-4 h-4 accent-[#C59F59]" />
+                          Crear
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button type="button" onClick={saveLinks} disabled={changedLinks.length === 0 || !!busy} className={`${btn} bg-[#C59F59] text-white hover:bg-[#b08d4f]`}>
+                    <Spinner k="links" icon={<Save className="w-4 h-4" />} /> Guardar {changedLinks.length || ""} vínculo(s)
+                  </button>
+                  <button type="button" onClick={createProducts} disabled={selected.length === 0 || !!busy} className={`${btn} bg-foreground text-background hover:bg-[#C59F59]`}>
                     <Spinner k="create" icon={<Upload className="w-4 h-4" />} /> Crear {selected.length || ""} en Siigo
                   </button>
                 </div>
-              )}
+              </div>
               {comparison.missingInApp.length > 0 && (
                 <details>
                   <summary className="cursor-pointer text-sm text-foreground/60">Productos que solo están en Siigo ({comparison.missingInApp.length})</summary>

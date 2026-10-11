@@ -87,16 +87,22 @@ describe("SiigoClient", () => {
 });
 
 describe("helpers", () => {
-  it("credentials come from the environment; Partner-Id is cleaned", () => {
+  it("credentials come from the environment; Partner-Id is used as assigned (spaces removed)", () => {
     expect(siigoConfigFromEnv({})).toBeNull();
     expect(siigoConfigFromEnv({ SIIGO_USERNAME: "u", SIIGO_ACCESS_KEY: "k" })).toEqual({ username: "u", accessKey: "k", partnerId: "CafeAmantti" });
-    expect(siigoConfigFromEnv({ SIIGO_USERNAME: "u", SIIGO_ACCESS_KEY: "k", SIIGO_PARTNER_ID: "Café Amantti App" })?.partnerId).toBe("CafAmanttiApp");
+    expect(siigoConfigFromEnv({ SIIGO_USERNAME: "u", SIIGO_ACCESS_KEY: "k", SIIGO_PARTNER_ID: " CafeAmantti-01 " })?.partnerId).toBe("CafeAmantti-01");
   });
 
   it("Idempotency-Key is ≤ 30 alphanumerics and stable per record", () => {
     const k = idempotencyKey("FV", "3f2504e0-4f89-11d3-9a0c-0305e82c3301");
     expect(k).toMatch(/^[A-Za-z0-9]{1,30}$/);
     expect(k).toBe(idempotencyKey("FV", "3f2504e0-4f89-11d3-9a0c-0305e82c3301"));
+  });
+
+  it("reads lowercase error bodies too (as /auth answers)", () => {
+    const r = describeSiigoErrors(400, { status: 400, errors: [{ code: "invalid_value", message: "Invalid value: access_key", params: [] }] });
+    expect(r.message).toMatch(/^Invalid value: access_key Revisa SIIGO_ACCESS_KEY/);
+    expect(r.errors[0].Code).toBe("invalid_value");
   });
 
   it("generic messages for statuses without body", () => {

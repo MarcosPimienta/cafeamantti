@@ -8,6 +8,9 @@ import {
   compareProducts,
   normalizeSiigoSettings,
   siigoInvoicesToRows,
+  siigoCodeOf,
+  suggestSiigoMatch,
+  gramsInName,
   API_ROW_MAPPING,
   type SiigoSettings,
 } from "../mapping";
@@ -177,5 +180,54 @@ describe("DANE codes", () => {
     expect(daneCodeFor("Bogotá D.C.")).toBe("11001");
     expect(daneCodeFor("ITAGÜÍ")).toBe("05360");
     expect(daneCodeFor("Pueblo Rico")).toBeNull();
+  });
+});
+
+describe("linking app products to Siigo's own codes", () => {
+  const siigo = [
+    { id: "s004", code: "004", name: "C.T - PREMIUM 250gr" },
+    { id: "s0015", code: "0015", name: "C.T - TRADICIONAL  250 gr" },
+    { id: "s0040", code: "0040", name: "HONEY 250gr" },
+    { id: "s0039", code: "0039", name: "CHIROSO 250gr" },
+    { id: "s0010", code: "0010", name: "C.T - PREMIUM 2500gr" },
+    { id: "s0041", code: "0041", name: "CT - CAFE PREMIUM 1 KG" },
+    { id: "s006", code: "006", name: "CAFE VERDE " },
+    { id: "s0037", code: "0037", name: "Honey 50gr" },
+  ];
+
+  it("reads sizes in grams from both naming styles", () => {
+    expect(gramsInName("Café Tostado 250g (Grano/Molido)")).toBe(250);
+    expect(gramsInName("C.T - PREMIUM 2500gr")).toBe(2500);
+    expect(gramsInName("Café Tostado 2.5kg")).toBe(2500);
+    expect(gramsInName("Café Tostado Honey KG")).toBe(1000);
+    expect(gramsInName("CT - CAFE PREMIUM 1 KG")).toBe(1000);
+    expect(gramsInName("Cold Brew 340ml")).toBeNull();
+  });
+
+  it("suggests the Siigo product with the same profile and size, preferring 'premium'", () => {
+    const s = (name: string) => suggestSiigoMatch({ product_name: name }, siigo)?.code ?? null;
+    expect(s("Café Tostado 250g (Grano/Molido)")).toBe("004");
+    expect(s("Café Tostado Honey 250g")).toBe("0040");
+    expect(s("Café Tostado Chiroso 250g")).toBe("0039");
+    expect(s("Café Tostado 2.5kg (Grano/Molido)")).toBe("0010");
+    expect(s("Café Tostado KG")).toBe("0041");
+    expect(s("Café Tostado Honey 500g")).toBeNull();
+    expect(s("Cold Brew 340ml")).toBeNull();
+  });
+
+  it("the linked code is what invoices and comparisons use", () => {
+    expect(siigoCodeOf({ product_code: "CAFT-HON-250G", siigo_code: "0040" })).toBe("0040");
+    expect(siigoCodeOf({ product_code: "CAFT-HON-250G", siigo_code: null })).toBe("CAFT-HON-250G");
+    const cmp = compareProducts([{ id: "a", product_code: "CAFT-HON-250G", product_name: "Honey 250", siigo_code: "0040" }], siigo);
+    expect(cmp.linked.map((l) => l.siigo.code)).toEqual(["0040"]);
+  });
+
+  it("invoices pulled from Siigo match the app product by its linked code", () => {
+    const rows = siigoInvoicesToRows([{ id: "i", name: "FV-2-9", customer: { identification: "1" }, items: [{ code: "0040", description: "HONEY 250gr", quantity: 1, total: 48000 }] }], new Map());
+    const [order] = processSiigoRows(rows, API_ROW_MAPPING, [
+      { id: "hon", product_code: "CAFT-HON-250G", siigo_code: "0040", product_name: "Café Tostado Honey 250g", category: "cafe", unit: "unidad", current_stock: 5 },
+      { id: "trap", product_code: "X-0040", product_name: "Otra cosa", category: "cafe", unit: "unidad", current_stock: 5 },
+    ], [], new Set());
+    expect(order.items[0].matched_inventory_id).toBe("hon");
   });
 });

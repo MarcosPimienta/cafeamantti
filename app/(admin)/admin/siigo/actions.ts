@@ -17,7 +17,9 @@ import {
   cleanIdentification,
   compareProducts,
   normalizeSiigoSettings,
+  siigoCodeOf,
   siigoInvoicesToRows,
+  suggestSiigoMatch,
   type AppClient,
   type AppOrder,
   type SiigoCustomer,
@@ -156,7 +158,7 @@ export async function compareSiigoProducts() {
   const { supabase } = await requireAdmin();
   return guard(async () => {
     const [{ data: inventory, error }, siigoProducts] = await Promise.all([
-      supabase.from('inventory').select('id, product_code, product_name, is_sellable, siigo_product_id').order('product_name'),
+      supabase.from('inventory').select('*').order('product_name'),
       getSiigoClient().listAll<SiigoProduct>('/v1/products'),
     ]);
     if (error) throw error;
@@ -166,10 +168,35 @@ export async function compareSiigoProducts() {
       if (app.siigo_product_id !== siigo.id) await supabase.from('inventory').update({ siigo_product_id: siigo.id }).eq('id', app.id);
     }
     return {
-      linked: cmp.linked.map(({ app, siigo }) => ({ code: app.product_code, appName: app.product_name, siigoName: siigo.name })),
-      missingInSiigo: cmp.missingInSiigo.map((p) => ({ id: p.id, code: p.product_code, name: p.product_name })),
+      linked: cmp.linked.map(({ app, siigo }) => ({ id: app.id, code: app.product_code, siigoCode: siigo.code, appName: app.product_name, siigoName: siigo.name })),
+      missingInSiigo: cmp.missingInSiigo.map((p) => ({ id: p.id, code: p.product_code, name: p.product_name, suggestion: suggestSiigoMatch(p, siigoProducts)?.code ?? null })),
       missingInApp: cmp.missingInApp.map((p) => ({ code: p.code, name: p.name })),
+      siigoProducts: siigoProducts.filter((p) => p.active !== false).map((p) => ({ code: p.code, name: p.name })).sort((a, b) => a.name.localeCompare(b.name)),
     };
+  });
+}
+
+/** Links app products to existing Siigo products (by Siigo code; null unlinks). */
+export async function linkSiigoProducts(links: { inventoryId: string; siigoCode: string | null }[]) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    const siigoProducts = await getSiigoClient().listAll<SiigoProduct>('/v1/products');
+    const byCode = new Map(siigoProducts.map((p) => [p.code.trim().toUpperCase(), p]));
+    const seen = new Set<string>();
+    for (const l of links) {
+      const code = l.siigoCode?.trim() || null;
+      const product = code ? byCode.get(code.toUpperCase()) : null;
+      if (code && !product) throw new Error(`El código ${code} no existe en Siigo.`);
+      if (code && seen.has(code.toUpperCase())) throw new Error(`El producto ${code} de Siigo quedó vinculado a dos productos de la app.`);
+      if (code) seen.add(code.toUpperCase());
+    }
+    for (const l of links) {
+      const product = l.siigoCode ? byCode.get(l.siigoCode.trim().toUpperCase()) : null;
+      const { error } = await supabase.from('inventory').update({ siigo_code: product?.code ?? null, siigo_product_id: product?.id ?? null }).eq('id', l.inventoryId);
+      if (error) throw error;
+      await log(supabase, userId, { entity: 'product', local_id: l.inventoryId, siigo_id: product?.id ?? null, siigo_name: product ? `${product.code} ${product.name}` : null, status: 'ok', message: product ? 'Vinculado' : 'Desvinculado' });
+    }
+    return { linked: links.length };
   });
 }
 
@@ -177,7 +204,7 @@ export async function createSiigoProducts(inventoryIds: string[]) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
     const settings = await loadSettings(supabase);
-    const { data: items, error } = await supabase.from('inventory').select('id, product_code, product_name, is_sellable, siigo_product_id').in('id', inventoryIds);
+    const { data: items, error } = await supabase.from('inventory').select('*').in('id', inventoryIds);
     if (error) throw error;
     const created: string[] = [];
     const failed: string[] = [];
@@ -189,7 +216,7 @@ export async function createSiigoProducts(inventoryIds: string[]) {
       }
       try {
         const res = await getSiigoClient().request<{ id: string; code: string }>('POST', '/v1/products', { body: payload });
-        await supabase.from('inventory').update({ siigo_product_id: res.id }).eq('id', item.id);
+        await supabase.from('inventory').update({ siigo_product_id: res.id, siigo_code: res.code ?? payload.code }).eq('id', item.id);
         await log(supabase, userId, { entity: 'product', local_id: item.id, siigo_id: res.id, siigo_name: res.code, status: 'ok' });
         created.push(item.product_code);
       } catch (err) {
@@ -240,7 +267,7 @@ async function prepareOrderInvoice(supabase: Supabase, orderId: string, paymentM
       .select('id, total_amount, source, notes, shipping_info, siigo_invoice_id, siigo_invoice, client:client_id ( id, name, document_type, document_number, email, phone, address, city_code, siigo_customer_id )')
       .eq('id', orderId)
       .single(),
-    supabase.from('order_items').select('product_id, quantity, price_at_time, inventory:inventory_id ( product_code, product_name )').eq('order_id', orderId),
+    supabase.from('order_items').select('product_id, quantity, price_at_time, inventory:inventory_id ( * )').eq('order_id', orderId),
   ]);
   if (error || !order) throw error ?? new Error('Pedido no encontrado.');
   if (itemsError) throw itemsError;
@@ -249,7 +276,7 @@ async function prepareOrderInvoice(supabase: Supabase, orderId: string, paymentM
   const client: AppClient | null = Array.isArray(o.client) ? o.client[0] ?? null : o.client;
   const items = (orderItems ?? []).map((it: any) => {
     const inv = Array.isArray(it.inventory) ? it.inventory[0] : it.inventory;
-    return { product_code: inv?.product_code ?? null, name: inv?.product_name ?? it.product_id ?? 'Producto', quantity: Number(it.quantity), unit_price: Number(it.price_at_time) };
+    return { product_code: inv ? siigoCodeOf(inv) : null, name: inv?.product_name ?? it.product_id ?? 'Producto', quantity: Number(it.quantity), unit_price: Number(it.price_at_time) };
   });
   /* eslint-enable @typescript-eslint/no-explicit-any */
   const hasClientId = !!cleanIdentification(client?.document_number).identification;

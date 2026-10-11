@@ -3,8 +3,9 @@
 //
 //   SIIGO_USERNAME    API user (email) from Siigo Nube → Mi credencial API
 //   SIIGO_ACCESS_KEY  access key of that user
-//   SIIGO_PARTNER_ID  name of this integration, sent on every request
-//                     (3–100 letters/numbers, no spaces); default CafeAmantti
+//   SIIGO_PARTNER_ID  Partner-Id Siigo assigns to the linked application
+//                     (Credenciales de Siigo API → Aplicaciones vinculadas),
+//                     sent on every request; default CafeAmantti
 //
 // Rules from Siigo's docs that shape this client:
 // - POST /auth returns a token valid 24 h → cached and renewed before expiry
@@ -44,16 +45,35 @@ export function siigoConfigFromEnv(env: Record<string, string | undefined> = pro
   const username = env.SIIGO_USERNAME?.trim();
   const accessKey = env.SIIGO_ACCESS_KEY?.trim();
   if (!username || !accessKey) return null;
-  const partnerId = (env.SIIGO_PARTNER_ID?.trim() || "CafeAmantti").replace(/[^A-Za-z0-9]/g, "");
+  // Siigo assigns the Partner-Id per linked application: use it exactly as given.
+  const partnerId = (env.SIIGO_PARTNER_ID?.trim() || "CafeAmantti").replace(/\s+/g, "");
   return { username, accessKey, partnerId };
 }
 
-/** Siigo's error body → one readable message. */
+type RawErrorItem = SiigoErrorItem & { code?: string; message?: string; params?: string[]; detail?: string };
+
+/**
+ * Siigo's error body → one readable message. The docs show
+ * { Errors: [{ Code, Message, Params }] }, but some endpoints (e.g. /auth)
+ * answer in lowercase ({ errors: [{ code, message, params }] }): both work.
+ */
 export function describeSiigoErrors(status: number, body: unknown): { message: string; errors: SiigoErrorItem[] } {
-  const b = (body ?? {}) as { Errors?: SiigoErrorItem[]; errors?: SiigoErrorItem[]; message?: string };
-  const errors = b.Errors ?? b.errors ?? [];
-  if (errors.length) {
-    return { message: errors.map((e) => [e.Message, e.Params?.length ? `(${e.Params.join(", ")})` : ""].filter(Boolean).join(" ")).join(" · "), errors };
+  const b = (body ?? {}) as { Errors?: RawErrorItem[]; errors?: RawErrorItem[]; message?: string };
+  const errors: SiigoErrorItem[] = (b.Errors ?? b.errors ?? []).map((e) => ({
+    Code: e.Code ?? e.code,
+    Message: e.Message ?? e.message,
+    Params: e.Params ?? e.params,
+    Detail: e.Detail ?? e.detail,
+  }));
+  const text = errors
+    .map((e) => [e.Message || e.Code, e.Params?.length ? `(${e.Params.join(", ")})` : ""].filter(Boolean).join(" "))
+    .filter(Boolean)
+    .join(" · ");
+  if (text) {
+    const hint = errors.some((e) => e.Code === "invalid_value" && e.Message?.includes("access_key"))
+      ? " Revisa SIIGO_ACCESS_KEY: debe ser la access key completa del usuario API (Siigo Nube → Mi credencial API)."
+      : "";
+    return { message: text + hint, errors };
   }
   const generic: Record<number, string> = {
     401: "Siigo rechazó las credenciales (usuario o access key inválidos, o usuario API bloqueado).",

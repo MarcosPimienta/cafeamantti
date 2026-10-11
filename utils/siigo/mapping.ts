@@ -258,7 +258,18 @@ export function siigoInvoicesToRows(invoices: SiigoInvoice[], customers: Map<str
 
 // ── Products ────────────────────────────────────────────────
 
-export type AppProduct = { id: string; product_code: string; product_name: string; is_sellable?: boolean | null; siigo_product_id?: string | null };
+export type AppProduct = {
+  id: string;
+  product_code: string;
+  product_name: string;
+  is_sellable?: boolean | null;
+  siigo_product_id?: string | null;
+  /** Code of the linked Siigo product; null = same as product_code. */
+  siigo_code?: string | null;
+};
+
+/** Code this product has in Siigo. */
+export const siigoCodeOf = (p: { product_code: string; siigo_code?: string | null }) => (p.siigo_code?.trim() || p.product_code).trim();
 export type SiigoProduct = { id: string; code: string; name: string; active?: boolean; prices?: { price_list?: { position?: number; value?: number }[] }[] };
 
 export type ProductComparison = {
@@ -271,14 +282,14 @@ export type ProductComparison = {
 
 const codeKey = (c: string) => c.trim().toUpperCase();
 
-/** Matches products by code (Siigo's unique key). */
+/** Matches products by their Siigo code (the linked one, else the app code). */
 export function compareProducts(app: AppProduct[], siigo: SiigoProduct[]): ProductComparison {
   const byCode = new Map(siigo.map((p) => [codeKey(p.code), p]));
   const used = new Set<string>();
   const linked: ProductComparison["linked"] = [];
   const missingInSiigo: AppProduct[] = [];
   for (const a of app) {
-    const s = byCode.get(codeKey(a.product_code));
+    const s = byCode.get(codeKey(siigoCodeOf(a)));
     if (s) {
       linked.push({ app: a, siigo: s });
       used.add(s.id);
@@ -358,4 +369,45 @@ export function buildPurchasePayload(e: AppExpense, supplier: AppSupplier | null
     payments: [{ id: settings.purchase_payment_id ?? 0, value: round2(num(e.amount)), due_date: e.date }],
   };
   return { payload, problems };
+}
+
+// ── Suggested links (app product → Siigo product) ───────────
+
+/** Grams in a product name: "250g", "250 gr", "2.5kg", "2500gr", "KG", "1 Kg". */
+export function gramsInName(name: string): number | null {
+  const n = name.toLowerCase().replace(",", ".");
+  const kg = /(\d+(?:\.\d+)?)\s*kg\b/.exec(n);
+  if (kg) return Math.round(Number(kg[1]) * 1000);
+  const g = /(\d+(?:\.\d+)?)\s*(?:g|gr|grs|gramos)\b/.exec(n);
+  if (g) return Math.round(Number(g[1]));
+  if (/\bkg\b/.test(n)) return 1000;
+  return null;
+}
+
+const plain = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/** Coffee profile in a name; the store's premium line is also sold as "tradicional". */
+function profileInName(name: string): "honey" | "chiroso" | "gesha" | "premium" | null {
+  const n = plain(name);
+  if (/honey|miel/.test(n)) return "honey";
+  if (/chiroso|microlote/.test(n)) return "chiroso";
+  if (/gesha|geisha/.test(n)) return "gesha";
+  if (/premium|tradicional|tostado|\bc\.?\s?t\b/.test(n)) return "premium";
+  return null;
+}
+
+/**
+ * The Siigo product an app coffee most likely is: same size and profile.
+ * Among equals, a name that says "premium" wins, then the active one.
+ * Only a suggestion: the admin confirms it in Ajustes → Siigo.
+ */
+export function suggestSiigoMatch(app: { product_name: string }, siigo: SiigoProduct[]): SiigoProduct | null {
+  const grams = gramsInName(app.product_name);
+  const profile = profileInName(app.product_name);
+  if (!grams || !profile) return null;
+  const candidates = siigo.filter(
+    (s) => s.active !== false && gramsInName(s.name) === grams && profileInName(s.name) === profile && !/verde|soluble|instant|infusion/.test(plain(s.name))
+  );
+  candidates.sort((a, b) => Number(/premium/i.test(b.name)) - Number(/premium/i.test(a.name)));
+  return candidates[0] ?? null;
 }

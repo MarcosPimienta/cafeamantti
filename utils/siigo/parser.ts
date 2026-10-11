@@ -422,6 +422,12 @@ export function matchInventoryItem(
   const cleanCode = normalizeKey(rawCode);
   const cleanName = normalizeKey(rawName);
 
+  // 0. The Siigo product linked to an app product (Ajustes → Siigo)
+  if (cleanCode) {
+    const bySiigo = inventory.find(i => i.siigo_code && normalizeKey(i.siigo_code) === cleanCode);
+    if (bySiigo) return bySiigo;
+  }
+
   // 1. Try matching by exact product_code
   if (cleanCode) {
     const byCode = inventory.find(i => normalizeKey(i.product_code) === cleanCode);

@@ -27,7 +27,8 @@ export async function getImportContextAction(): Promise<{
   const [invRes, clientsRes, ordersRes] = await Promise.all([
     supabase
       .from('inventory')
-      .select('id, product_code, product_name, category, unit, current_stock')
+      // '*' so siigo_code (the linked Siigo product) comes along once its migration runs
+      .select('*')
       .order('product_name', { ascending: true }),
     supabase
       .from('clients')

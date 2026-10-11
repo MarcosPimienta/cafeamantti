@@ -29,7 +29,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => (h.configured ? { username: "u", accessKey: "k", partnerId: "CafeAmantti" } : null) };
 });
 
-import { createSiigoInvoice, previewSiigoInvoice, refreshSiigoInvoice, saveSiigoSettings, compareSiigoProducts, createSiigoProducts, createSiigoPurchase, pullSiigoInvoices } from "../actions";
+import { createSiigoInvoice, previewSiigoInvoice, refreshSiigoInvoice, saveSiigoSettings, compareSiigoProducts, createSiigoProducts, createSiigoPurchase, pullSiigoInvoices, linkSiigoProducts } from "../actions";
 import { SiigoError } from "@/utils/siigo/api";
 
 const SETTINGS = {
@@ -138,6 +138,26 @@ describe("products", () => {
     const res = await createSiigoProducts(["inv2"]);
     expect(res).toMatchObject({ success: true, created: ["HON-250"], failed: [] });
     expect(db.byId("inventory", "inv2")!.siigo_product_id).toBe("sp2");
+  });
+});
+
+describe("products with Siigo's own codes", () => {
+  it("suggests links, saves them, and invoices use the linked code", async () => {
+    h.responses["LIST /v1/products"] = [{ id: "sp4", code: "004", name: "C.T - PREMIUM 250gr" }, { id: "sp40", code: "0040", name: "HONEY 250gr" }];
+    const cmp = await compareSiigoProducts();
+    expect(cmp).toMatchObject({ success: true, missingInSiigo: expect.arrayContaining([expect.objectContaining({ id: "inv1", suggestion: "004" }), expect.objectContaining({ id: "inv2", suggestion: "0040" })]) });
+
+    expect(await linkSiigoProducts([{ inventoryId: "inv1", siigoCode: "999" }])).toMatchObject({ success: false, error: expect.stringMatching(/999 no existe/) });
+    expect(await linkSiigoProducts([{ inventoryId: "inv1", siigoCode: "004" }, { inventoryId: "inv2", siigoCode: "004" }])).toMatchObject({ success: false, error: expect.stringMatching(/dos productos/) });
+    expect(await linkSiigoProducts([{ inventoryId: "inv1", siigoCode: "004" }])).toMatchObject({ success: true, linked: 1 });
+    expect(db.byId("inventory", "inv1")).toMatchObject({ siigo_code: "004", siigo_product_id: "sp4" });
+
+    const preview = await previewSiigoInvoice(ORDER_ID, "web");
+    expect(preview).toMatchObject({ success: true, lines: [{ code: "004" }, { code: "ENVIO" }] });
+
+    // Unlinking goes back to the app code.
+    await linkSiigoProducts([{ inventoryId: "inv1", siigoCode: null }]);
+    expect(db.byId("inventory", "inv1")).toMatchObject({ siigo_code: null, siigo_product_id: null });
   });
 });
 

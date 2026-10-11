@@ -76,6 +76,8 @@ export interface SiigoImportOptions {
 export interface InventoryLookupItem {
   id: string;
   product_code: string;
+  /** Code of the linked Siigo product (Siigo numbers its own products). */
+  siigo_code?: string | null;
   product_name: string;
   category: string;
   unit: string;
