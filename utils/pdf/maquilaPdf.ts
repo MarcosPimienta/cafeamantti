@@ -155,6 +155,19 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
   </div>`;
 }
 
+/** A4 page at 96 dpi, in CSS px (the PDF page size below). */
+export const PAGE_HEIGHT = 1123;
+
+/**
+ * Height to give the document so it fills whole pages: a little under N
+ * pages, because html2pdf rounds the canvas up and a document exactly one
+ * page tall would otherwise spill a few pixels onto an empty second page.
+ */
+export function pageFitHeight(contentHeight: number, pageHeight = PAGE_HEIGHT): number {
+  const pages = Math.max(1, Math.ceil((contentHeight - 4) / pageHeight));
+  return pages * pageHeight - 4;
+}
+
 /** Renders the client PDF in the browser and returns it as a Blob. */
 export async function generateMaquilaPDF(data: MaquilaPdfData): Promise<Blob> {
   const html2pdf = (await import("html2pdf.js")).default;
@@ -167,6 +180,16 @@ export async function generateMaquilaPDF(data: MaquilaPdfData): Promise<Blob> {
   ]);
   const element = document.createElement("div");
   element.innerHTML = buildMaquilaHtml({ ...data, backgroundImage: background, allyLogo }, logo);
+  // Measure the content off-screen, then size the page to whole pages.
+  const root = element.firstElementChild as HTMLElement;
+  element.style.cssText = "position:fixed; left:-10000px; top:0;";
+  document.body.appendChild(element);
+  root.style.minHeight = "0";
+  const height = pageFitHeight(root.scrollHeight);
+  root.style.height = `${height}px`;
+  root.style.overflow = "hidden";
+  document.body.removeChild(element);
+  element.style.cssText = "";
   return await html2pdf()
     .set({
       margin: 0,
