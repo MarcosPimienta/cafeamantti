@@ -19,6 +19,30 @@ export function pageCount(contentHeight: number, pageHeight = PAGE_HEIGHT, toler
   return Math.max(1, Math.ceil((contentHeight - tolerance) / pageHeight));
 }
 
+/**
+ * Where the visible content ends, in px from the top of `root`: the lowest
+ * bottom of its leaf elements. Unlike scrollHeight it ignores the empty
+ * bottom padding and full-size backgrounds (absolutely positioned), which
+ * must never add a page on their own.
+ */
+export function contentBottom(root: HTMLElement): number {
+  const top = root.getBoundingClientRect().top;
+  let bottom = 0;
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>("*"))) {
+    if (el.children.length > 0) continue;
+    const pos = getComputedStyle(el).position;
+    if (pos === "absolute" || pos === "fixed") continue;
+    const r = el.getBoundingClientRect();
+    if (r.height > 0) bottom = Math.max(bottom, r.bottom - top);
+  }
+  return bottom || root.scrollHeight;
+}
+
+/** Space kept under the last line when deciding the page count. */
+const BOTTOM_MARGIN = 8;
+/** Content this close over a page boundary tries the compact layout first. */
+const COMPACT_RANGE = 120;
+
 async function imagesReady(el: HTMLElement) {
   await Promise.all(
     Array.from(el.querySelectorAll("img")).map((img) =>
@@ -28,7 +52,19 @@ async function imagesReady(el: HTMLElement) {
 }
 
 /** Renders `html` (whose first element is the page root) to an A4 PDF Blob. */
-export async function renderHtmlToPdf(html: string, opts: { scale?: number; quality?: number } = {}): Promise<Blob> {
+export async function renderHtmlToPdf(
+  html: string,
+  opts: {
+    scale?: number;
+    quality?: number;
+    /**
+     * Tightens the document's spacing. Called when the content goes just
+     * over a page (by less than COMPACT_RANGE px), so a document that
+     * almost fits keeps its page count instead of spilling onto a new page.
+     */
+    compact?: (root: HTMLElement) => void;
+  } = {}
+): Promise<Blob> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
   const scale = opts.scale ?? 2;
 
@@ -41,7 +77,14 @@ export async function renderHtmlToPdf(html: string, opts: { scale?: number; qual
     const root = host.firstElementChild as HTMLElement;
     await imagesReady(root);
     root.style.minHeight = "0";
-    const pages = pageCount(root.scrollHeight);
+    // By the last visible line, not the padding under it.
+    let needed = contentBottom(root) + BOTTOM_MARGIN;
+    const over = needed - Math.floor(needed / PAGE_HEIGHT) * PAGE_HEIGHT;
+    if (opts.compact && needed > PAGE_HEIGHT && over > 0 && over <= COMPACT_RANGE) {
+      opts.compact(root);
+      needed = contentBottom(root) + BOTTOM_MARGIN;
+    }
+    const pages = pageCount(needed, PAGE_HEIGHT, 0);
     const height = pages * PAGE_HEIGHT;
     root.style.height = `${height}px`;
     root.style.overflow = "hidden";

@@ -103,7 +103,7 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
   return `
   <div style="position:relative; width:794px; min-height:1123px; font-family:Helvetica,Arial,sans-serif; color:#292524; background:#fff; box-sizing:border-box;">
   ${background}
-  <div style="position:relative; z-index:1; padding:56px 64px;">
+  <div data-pdf-body style="position:relative; z-index:1; padding:56px 64px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:36px;">
       ${brand}
       <div style="text-align:right; font-size:11px; color:#78716c;">
@@ -148,7 +148,7 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
         : ""
     }
 
-    <div style="margin-top:48px; border-top:1px solid #e7e5e4; padding-top:20px; font-size:11px; color:#57534e;">
+    <div data-pdf-footer style="margin-top:48px; border-top:1px solid #e7e5e4; padding-top:20px; font-size:11px; color:#57534e;">
       <strong style="color:#292524;">${esc(data.sellerName || "Asesor Amantti")}</strong><br/>
       Alma Trading Group SAS · Nit: 901752308-8 · cafeamantti@gmail.com
     </div>
@@ -167,5 +167,16 @@ export async function generateMaquilaPDF(data: MaquilaPdfData): Promise<Blob> {
   ]);
   // Page count is decided by renderHtmlToPdf, not html2pdf, so a one-page
   // proposal never gets an extra blank page.
-  return renderHtmlToPdf(buildMaquilaHtml({ ...data, backgroundImage: background, allyLogo }, logo));
+  return renderHtmlToPdf(buildMaquilaHtml({ ...data, backgroundImage: background, allyLogo }, logo), {
+    // Just over a page: tighten the outer spacing instead of adding a page.
+    compact: (root) => {
+      const body = root.querySelector<HTMLElement>("[data-pdf-body]");
+      const footer = root.querySelector<HTMLElement>("[data-pdf-footer]");
+      if (body) body.style.padding = "28px 64px 16px";
+      if (footer) footer.style.marginTop = "16px";
+      root.querySelectorAll<HTMLElement>("h2").forEach((h) => (h.style.marginTop = "16px"));
+      const header = body?.firstElementChild as HTMLElement | null | undefined;
+      if (header) header.style.marginBottom = "20px";
+    },
+  });
 }
