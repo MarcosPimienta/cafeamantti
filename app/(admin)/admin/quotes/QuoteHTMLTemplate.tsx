@@ -1,6 +1,7 @@
 import React from 'react';
 import { QuoteData } from '@/utils/pdf/quoteGenerator';
 
+import { translator } from "@/utils/i18n/translate";
 // NOTE: Uses ONLY inline styles with hex/rgb colors.
 // Tailwind v4 uses oklch() which html2canvas cannot parse.
 
@@ -34,6 +35,7 @@ const ROW_MIN = 40; // px — never shorter than this
 const ROW_MAX = 80; // px — never taller than this
 
 export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
+  const tr = translator(data.lang ?? "es");
   const fmt = (v: number) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(v);
 
@@ -163,11 +165,11 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
       <div style={{ textAlign: 'left' }}>
         <p style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#292524' }}>{data.sellerName || 'Asesor Amantti'}</p>
         <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#57534e', lineHeight: '1.4' }}>
-          Alma Trading Group SAS<br/>
-          Nit: 901752308-8<br/>
-          cafeamantti@gmail.com<br/>
-          CEL: +57 (333)284-3078<br/>
-          www.cafeamantti.com
+          {tr("Alma Trading Group SAS")}<br/>
+          {tr("Nit: 901752308-8")}<br/>
+          {tr("cafeamantti@gmail.com")}<br/>
+          {tr("CEL: +57 (333)284-3078")}<br/>
+          {tr("www.cafeamantti.com")}
         </p>
       </div>
       <div style={{ backgroundColor: '#292524', color: '#ffffff', borderRadius: '12px', padding: '18px 28px', minWidth: '260px', position: 'relative', overflow: 'hidden' }}>
@@ -175,12 +177,12 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
         {(data.discountAmount || data.taxAmount) ? (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: '#d6d3d1' }}>
-              <span>Subtotal:</span>
+              <span>{tr("Subtotal:")}</span>
               <span style={{ fontFamily: 'monospace' }}>{fmt(data.subtotal || 0)}</span>
             </div>
             {data.discountAmount ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: '#d6d3d1' }}>
-                <span>Descuento:</span>
+                <span>{tr("Descuento:")}</span>
                 <span style={{ fontFamily: 'monospace', color: '#fca5a5' }}>-{fmt(data.discountAmount)}</span>
               </div>
             ) : null}
@@ -188,27 +190,27 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
               <>
                 {data.tax5 ? (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: '#d6d3d1' }}>
-                    <span>IVA (5%):</span>
+                    <span>{tr("IVA (5%):")}</span>
                     <span style={{ fontFamily: 'monospace' }}>{fmt(data.tax5)}</span>
                   </div>
                 ) : null}
                 {data.tax19 ? (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px', color: '#d6d3d1' }}>
-                    <span>IVA (19%):</span>
+                    <span>{tr("IVA (19%):")}</span>
                     <span style={{ fontFamily: 'monospace' }}>{fmt(data.tax19)}</span>
                   </div>
                 ) : null}
               </>
             ) : data.taxAmount ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '12px', color: '#d6d3d1' }}>
-                <span>IVA ({data.ivaRate || 5}%):</span>
+                <span>{tr("IVA ({v}%):", { v: data.ivaRate || 5 })}</span>
                 <span style={{ fontFamily: 'monospace' }}>{fmt(data.taxAmount)}</span>
               </div>
             ) : null}
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: '12px' }} />
           </>
         ) : null}
-        <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: 700, color: '#C59F59', textTransform: 'uppercase', letterSpacing: '2px' }}>Total Cotizado</p>
+        <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: 700, color: '#C59F59', textTransform: 'uppercase', letterSpacing: '2px' }}>{tr("Total Cotizado")}</p>
         <p style={{ margin: 0, fontSize: '26px', fontWeight: 900, color: '#ffffff' }}>{fmt(data.totalAmount)}</p>
       </div>
     </div>
@@ -218,7 +220,7 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
   const Footer = ({ page, total }: { page: number; total: number }) => (
     <div style={{ marginTop: 'auto', paddingTop: '12px', textAlign: 'center', borderTop: '1px solid rgba(197,159,89,0.25)' }}>
       <p style={{ margin: 0, fontSize: '10px', color: '#a8a29e' }}>
-        Café Amantti — Pasión por el origen &nbsp;·&nbsp; Página {page + 1} de {total}
+        {tr("Café Amantti — Pasión por el origen · Página {v} de {total}", { v: page + 1, total: total })}
       </p>
     </div>
   );
@@ -246,26 +248,26 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
               {isFirst && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: `${H_HEADER_MARGIN}px` }}>
-                    <img src="/images/logo-amantti.png" alt="Amantti" style={{ width: '200px', height: 'auto', objectFit: 'contain' }} />
+                    <img src="/images/logo-amantti.png" alt={tr("Amantti")} style={{ width: '200px', height: 'auto', objectFit: 'contain' }} />
                     <div style={{ textAlign: 'right' }}>
                       <h1 style={{ fontSize: '34px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '4px', color: '#292524', margin: '0 0 6px 0', paddingBottom: '6px', borderBottom: '2px solid #C59F59' }}>
-                        Cotización
+                        {tr("Cotización")}
                       </h1>
-                      <p style={{ margin: '3px 0', fontSize: '12px', color: '#57534e' }}><strong>Fecha:</strong> {data.date}</p>
-                      <p style={{ margin: '3px 0', fontSize: '12px', color: '#57534e' }}><strong>Válida hasta:</strong> {data.validUntil}</p>
-                      {data.quoteId && <p style={{ margin: '6px 0 0', fontSize: '10px', color: '#a8a29e', fontFamily: 'monospace' }}>Ref: {data.quoteId.substring(0, 8)}</p>}
+                      <p style={{ margin: '3px 0', fontSize: '12px', color: '#57534e' }}><strong>{tr("Fecha:")}</strong> {data.date}</p>
+                      <p style={{ margin: '3px 0', fontSize: '12px', color: '#57534e' }}><strong>{tr("Válida hasta:")}</strong> {data.validUntil}</p>
+                      {data.quoteId && <p style={{ margin: '6px 0 0', fontSize: '10px', color: '#a8a29e', fontFamily: 'monospace' }}>{tr("Ref: {substring}", { substring: data.quoteId.substring(0, 8) })}</p>}
                     </div>
                   </div>
 
                   {/* Client Info */}
                   <div style={{ backgroundColor: 'rgba(245,245,244,0.92)', border: '1px solid #d6d3d1', borderRadius: '10px', padding: '18px 20px 18px 26px', marginBottom: `${H_CLIENT_MARGIN}px`, position: 'relative', overflow: 'hidden' }}>
                     <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', backgroundColor: '#C59F59' }} />
-                    <p style={{ fontSize: '10px', fontWeight: 700, color: '#78716c', textTransform: 'uppercase', letterSpacing: '2px', margin: '0 0 12px 0' }}>Información del Cliente</p>
+                    <p style={{ fontSize: '10px', fontWeight: 700, color: '#78716c', textTransform: 'uppercase', letterSpacing: '2px', margin: '0 0 12px 0' }}>{tr("Información del Cliente")}</p>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <tbody>
                         <tr>
                           <td style={{ width: '50%', paddingRight: '16px', paddingBottom: '8px', verticalAlign: 'top' }}>
-                            <p style={{ margin: 0, fontSize: '10px', color: '#78716c', textTransform: 'uppercase' }}>Nombre</p>
+                            <p style={{ margin: 0, fontSize: '10px', color: '#78716c', textTransform: 'uppercase' }}>{tr("Nombre")}</p>
                             <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600, color: '#292524' }}>{data.clientName}</p>
                           </td>
                           <td style={{ width: '50%', paddingBottom: '8px', verticalAlign: 'top' }}>
@@ -275,11 +277,11 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
                         </tr>
                         <tr>
                           <td style={{ paddingRight: '16px', verticalAlign: 'top' }}>
-                            <p style={{ margin: 0, fontSize: '10px', color: '#78716c', textTransform: 'uppercase' }}>Email</p>
+                            <p style={{ margin: 0, fontSize: '10px', color: '#78716c', textTransform: 'uppercase' }}>{tr("Email")}</p>
                             <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600, color: '#292524' }}>{data.clientEmail || 'N/A'}</p>
                           </td>
                           <td style={{ verticalAlign: 'top' }}>
-                            <p style={{ margin: 0, fontSize: '10px', color: '#78716c', textTransform: 'uppercase' }}>Teléfono</p>
+                            <p style={{ margin: 0, fontSize: '10px', color: '#78716c', textTransform: 'uppercase' }}>{tr("Teléfono")}</p>
                             <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 600, color: '#292524' }}>{data.clientPhone || 'N/A'}</p>
                           </td>
                         </tr>
@@ -292,9 +294,9 @@ export function QuoteHTMLTemplate({ data }: { data: QuoteData }) {
               {/* ── CONTINUATION HEADER ── */}
               {!isFirst && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: `${H_COMPACT_MARGIN}px`, paddingBottom: '12px', borderBottom: '2px solid #C59F59' }}>
-                  <img src="/images/logo-amantti.png" alt="Amantti" style={{ width: '120px', height: 'auto', objectFit: 'contain' }} />
+                  <img src="/images/logo-amantti.png" alt={tr("Amantti")} style={{ width: '120px', height: 'auto', objectFit: 'contain' }} />
                   <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#292524' }}>COTIZACIÓN — continuación</p>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#292524' }}>{tr("COTIZACIÓN — continuación")}</p>
                     <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#78716c' }}>{data.clientName}</p>
                   </div>
                 </div>

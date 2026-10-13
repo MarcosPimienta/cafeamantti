@@ -78,3 +78,20 @@ export function buildWorkbook(sheets: TableSheet[]): XLSX.WorkBook {
 export function downloadWorkbook(filename: string, sheets: TableSheet[]) {
   XLSX.writeFile(buildWorkbook(sheets), filename);
 }
+
+/**
+ * The sheets in another language: names, titles, headers and every text cell
+ * that the admin dictionary knows (categories, types, states…). Free text
+ * such as descriptions stays as written.
+ */
+export function localizeSheets(sheets: TableSheet[], tr: (text: string) => string): TableSheet[] {
+  const cell = (c: Cell): Cell => (typeof c === "string" && c ? tr(c) : c);
+  return sheets.map((s) => ({
+    ...s,
+    name: tr(s.name),
+    title: s.title?.map((row) => row.map(cell)),
+    columns: s.columns.map((c) => ({ ...c, header: tr(c.header) })),
+    rows: s.rows.map((row) => row.map(cell)),
+    totals: s.totals?.map(cell),
+  }));
+}

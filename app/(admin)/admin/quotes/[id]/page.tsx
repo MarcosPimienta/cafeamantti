@@ -5,8 +5,10 @@ import { redirect } from "next/navigation";
 import NewQuoteForm from "../new/NewQuoteForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { getTr } from "@/utils/i18n/server";
 
 export default async function EditQuotePage(props: { params: Promise<{ id: string }> }) {
+  const tr = await getTr();
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
 
@@ -35,8 +37,8 @@ export default async function EditQuotePage(props: { params: Promise<{ id: strin
           <ArrowLeft className="w-5 h-5 text-foreground/60" />
         </Link>
         <div>
-          <h1 className="text-3xl font-serif text-foreground mb-2">Editar Cotización</h1>
-          <p className="text-foreground/60">Actualiza los datos de esta cotización y vuelve a generar el PDF si lo necesitas.</p>
+          <h1 className="text-3xl font-serif text-foreground mb-2">{tr("Editar Cotización")}</h1>
+          <p className="text-foreground/60">{tr("Actualiza los datos de esta cotización y vuelve a generar el PDF si lo necesitas.")}</p>
         </div>
       </div>
 

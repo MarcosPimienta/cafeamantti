@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 import ProposalForm from "./ProposalForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { getTr } from "@/utils/i18n/server";
 
 export default async function NewProposalPage() {
+  const tr = await getTr();
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
 
@@ -26,8 +28,8 @@ export default async function NewProposalPage() {
           <ArrowLeft className="w-5 h-5 text-foreground/60" />
         </Link>
         <div>
-          <h1 className="text-2xl font-serif text-foreground">Nueva Propuesta Comercial</h1>
-          <p className="text-sm text-foreground/50">Editor de bloques con previsualización en tiempo real</p>
+          <h1 className="text-2xl font-serif text-foreground">{tr("Nueva Propuesta Comercial")}</h1>
+          <p className="text-sm text-foreground/50">{tr("Editor de bloques con previsualización en tiempo real")}</p>
         </div>
       </div>
 

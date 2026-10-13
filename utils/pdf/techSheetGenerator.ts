@@ -1,9 +1,11 @@
 import { CoffeeTechSheetData } from '@/app/(admin)/admin/quotes/actions';
+import { translate, type Locale } from '@/utils/i18n/translate';
 
 export async function generateTechSheetPDF(
-  data: CoffeeTechSheetData,
+  data: CoffeeTechSheetData & { lang?: Locale },
   filename?: string
 ): Promise<Blob> {
+  const tr = (text: string) => translate(data.lang ?? "es", text);
   const html2pdf = (await import('html2pdf.js')).default;
   const pdfFilename = filename || `ficha-tecnica-${(data.title || 'cafe').toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`;
 
@@ -33,7 +35,7 @@ export async function generateTechSheetPDF(
           </div>
 
           <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 700; color: #ffffff; text-align: center;">
-            ${data.history_title || 'Historia'}
+            ${data.history_title || tr('Historia')}
           </h2>
 
           <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(255, 255, 255, 0.95); text-align: center; font-weight: 400; white-space: pre-line;">
@@ -46,7 +48,7 @@ export async function generateTechSheetPDF(
           <!-- FICHA TÉCNICA Subheader -->
           <div style="background-color: ${cardBgColor}; border-radius: 12px; padding: 10px 16px; text-align: center;">
             <h2 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;">
-              ${data.subtitle || 'FICHA TÉCNICA'}
+              ${data.subtitle || tr('FICHA TÉCNICA')}
             </h2>
           </div>
 
@@ -62,30 +64,30 @@ export async function generateTechSheetPDF(
               
               <!-- Card 1: Origen -->
               <div style="background-color: ${cardBgColor}; border-radius: 10px; padding: 10px 14px; font-size: 13.5px;">
-                <span style="font-weight: 800;">Origen:</span> <span style="font-weight: 500;">${data.origin || ''}</span>
+                <span style="font-weight: 800;">${tr("Origen:")}</span> <span style="font-weight: 500;">${data.origin || ''}</span>
               </div>
 
               <!-- Card 2: Cultivo -->
               <div style="background-color: ${cardBgColor}; border-radius: 10px; padding: 10px 14px; font-size: 13px; display: flex; flex-direction: column; gap: 2px;">
-                ${data.farm_name ? `<div><span style="font-weight: 800;">Finca:</span> <span style="font-weight: 500;">${data.farm_name}</span></div>` : ''}
-                ${data.location ? `<div><span style="font-weight: 800;">Ubicación:</span> <span style="font-weight: 500;">${data.location}</span></div>` : ''}
-                ${data.altitude ? `<div><span style="font-weight: 800;">Altura:</span> <span style="font-weight: 500;">${data.altitude}</span></div>` : ''}
-                ${data.variety ? `<div><span style="font-weight: 800;">Variedad:</span> <span style="font-weight: 500;">${data.variety}</span></div>` : ''}
-                ${data.process ? `<div><span style="font-weight: 800;">Proceso:</span> <span style="font-weight: 500;">${data.process}</span></div>` : ''}
+                ${data.farm_name ? `<div><span style="font-weight: 800;">${tr("Finca:")}</span> <span style="font-weight: 500;">${data.farm_name}</span></div>` : ''}
+                ${data.location ? `<div><span style="font-weight: 800;">${tr("Ubicación:")}</span> <span style="font-weight: 500;">${data.location}</span></div>` : ''}
+                ${data.altitude ? `<div><span style="font-weight: 800;">${tr("Altura:")}</span> <span style="font-weight: 500;">${data.altitude}</span></div>` : ''}
+                ${data.variety ? `<div><span style="font-weight: 800;">${tr("Variedad:")}</span> <span style="font-weight: 500;">${data.variety}</span></div>` : ''}
+                ${data.process ? `<div><span style="font-weight: 800;">${tr("Proceso:")}</span> <span style="font-weight: 500;">${data.process}</span></div>` : ''}
               </div>
 
               <!-- Card 3: Tostión & SCA -->
               <div style="background-color: ${cardBgColor}; border-radius: 10px; padding: 10px 14px; font-size: 13px;">
-                ${data.roast_level ? `<div><span style="font-weight: 800;">Tostión:</span> <span style="font-weight: 500;">${data.roast_level}</span></div>` : ''}
-                ${data.sca_score !== undefined && data.sca_score !== null ? `<div><span style="font-weight: 800;">Puntaje SCA:</span> <span style="font-weight: 700;">${data.sca_score}</span></div>` : ''}
+                ${data.roast_level ? `<div><span style="font-weight: 800;">${tr("Tostión:")}</span> <span style="font-weight: 500;">${data.roast_level}</span></div>` : ''}
+                ${data.sca_score !== undefined && data.sca_score !== null ? `<div><span style="font-weight: 800;">${tr("Puntaje SCA:")}</span> <span style="font-weight: 700;">${data.sca_score}</span></div>` : ''}
               </div>
 
               <!-- Card 4: Perfil Sensorial -->
               <div style="background-color: ${cardBgColor}; border-radius: 10px; padding: 10px 14px; font-size: 13px; display: flex; flex-direction: column; gap: 3px;">
-                ${data.sensory_profile ? `<div><span style="font-weight: 800;">Perfil sensorial:</span> <span style="font-weight: 500;">${data.sensory_profile}</span></div>` : ''}
-                ${data.acidity ? `<div><span style="font-weight: 800;">Acidez:</span> <span style="font-weight: 500;">${data.acidity}</span></div>` : ''}
-                ${data.body ? `<div><span style="font-weight: 800;">Cuerpo:</span> <span style="font-weight: 500;">${data.body}</span></div>` : ''}
-                ${data.sweetness ? `<div><span style="font-weight: 800;">Dulzor:</span> <span style="font-weight: 500;">${data.sweetness}</span></div>` : ''}
+                ${data.sensory_profile ? `<div><span style="font-weight: 800;">${tr("Perfil sensorial:")}</span> <span style="font-weight: 500;">${data.sensory_profile}</span></div>` : ''}
+                ${data.acidity ? `<div><span style="font-weight: 800;">${tr("Acidez:")}</span> <span style="font-weight: 500;">${data.acidity}</span></div>` : ''}
+                ${data.body ? `<div><span style="font-weight: 800;">${tr("Cuerpo:")}</span> <span style="font-weight: 500;">${data.body}</span></div>` : ''}
+                ${data.sweetness ? `<div><span style="font-weight: 800;">${tr("Dulzor:")}</span> <span style="font-weight: 500;">${data.sweetness}</span></div>` : ''}
               </div>
 
             </div>

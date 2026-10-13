@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { convertWeight, describeIn, formatQty, parseQtyInput, weightUnitOf, type WeightUnit } from "@/utils/units";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 /**
  * Quantity field. For items stocked by weight (kg or g) it adds a kg / g
@@ -33,6 +34,7 @@ export default function QuantityInput({
   className?: string;
   ariaLabel?: string;
 }) {
+  const tr = useTr();
   const base = weightUnitOf(baseUnit);
   const [unit, setUnit] = useState<WeightUnit | null>(base);
   const [text, setText] = useState(value);
@@ -97,7 +99,7 @@ export default function QuantityInput({
     <div>
       <div className="flex gap-2">
         <div className="flex-1 min-w-0">{input}</div>
-        <div className="flex shrink-0 rounded-xl border border-foreground/10 bg-white p-1" role="group" aria-label="Unidad de peso">
+        <div className="flex shrink-0 rounded-xl border border-foreground/10 bg-white p-1" role="group" aria-label={tr("Unidad de peso")}>
           {(["kg", "g"] as const).map((u) => (
             <button
               key={u}
@@ -114,7 +116,7 @@ export default function QuantityInput({
         </div>
       </div>
       {shown !== base && n !== null && (
-        <p className="text-[11px] text-foreground/50 mt-1">= {describeIn(convertWeight(n, shown, base), base)} en inventario</p>
+        <p className="text-[11px] text-foreground/50 mt-1">{tr("= {describeIn} en inventario", { describeIn: describeIn(convertWeight(n, shown, base), base) })}</p>
       )}
     </div>
   );

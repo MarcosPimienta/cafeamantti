@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Users, Phone, MapPin, Search, Mail, CreditCard, Calendar, Building2, Handshake } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import CreateCRMClientModal from "./CreateCRMClientModal";
+import { getTr } from "@/utils/i18n/server";
 
 export default async function AdminCRMCustomersPage() {
+  const tr = await getTr();
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
 
@@ -28,8 +30,8 @@ export default async function AdminCRMCustomersPage() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-serif text-foreground mb-2">Directorio de Clientes</h1>
-          <p className="text-foreground/60">Gestión de clientes manuales (B2B, Mayoristas, Tienda Física) sin cuenta online.</p>
+          <h1 className="text-3xl font-serif text-foreground mb-2">{tr("Directorio de Clientes")}</h1>
+          <p className="text-foreground/60">{tr("Gestión de clientes manuales (B2B, Mayoristas, Tienda Física) sin cuenta online.")}</p>
         </div>
       </div>
 
@@ -40,7 +42,7 @@ export default async function AdminCRMCustomersPage() {
             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
             <input 
               type="text" 
-              placeholder="Buscar por nombre, NIT o teléfono..." 
+              placeholder={tr("Buscar por nombre, NIT o teléfono...")} 
               className="w-full pl-11 pr-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             />
           </div>
@@ -54,13 +56,13 @@ export default async function AdminCRMCustomersPage() {
           <table className="w-full text-left text-sm text-foreground/80">
             <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
               <tr>
-                <th className="px-6 py-4 font-medium">Cliente / Empresa</th>
-                <th className="px-6 py-4 font-medium">Documento</th>
-                <th className="px-6 py-4 font-medium">Contacto</th>
-                <th className="px-6 py-4 font-medium">Ubicación</th>
-                <th className="px-6 py-4 font-medium text-center">Órdenes</th>
-                <th className="px-6 py-4 font-medium text-center">Comodato</th>
-                <th className="px-6 py-4 font-medium">Registro</th>
+                <th className="px-6 py-4 font-medium">{tr("Cliente / Empresa")}</th>
+                <th className="px-6 py-4 font-medium">{tr("Documento")}</th>
+                <th className="px-6 py-4 font-medium">{tr("Contacto")}</th>
+                <th className="px-6 py-4 font-medium">{tr("Ubicación")}</th>
+                <th className="px-6 py-4 font-medium text-center">{tr("Órdenes")}</th>
+                <th className="px-6 py-4 font-medium text-center">{tr("Comodato")}</th>
+                <th className="px-6 py-4 font-medium">{tr("Registro")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-foreground/5">
@@ -68,8 +70,8 @@ export default async function AdminCRMCustomersPage() {
                 <tr>
                   <td colSpan={7} className="px-6 py-20 text-center">
                     <Building2 className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-                    <p className="text-lg font-serif text-foreground">Aún no hay clientes registrados</p>
-                    <p className="text-sm text-foreground/50">Crea tu primer cliente manual para empezar.</p>
+                    <p className="text-lg font-serif text-foreground">{tr("Aún no hay clientes registrados")}</p>
+                    <p className="text-sm text-foreground/50">{tr("Crea tu primer cliente manual para empezar.")}</p>
                   </td>
                 </tr>
               ) : (
@@ -104,14 +106,14 @@ export default async function AdminCRMCustomersPage() {
                         {client.phone && (
                           <span className="flex items-center gap-2"><Phone className="w-3 h-3 text-foreground/40" /> {client.phone}</span>
                         )}
-                        {!client.email && !client.phone && <span className="text-foreground/40 italic">Sin contacto</span>}
+                        {!client.email && !client.phone && <span className="text-foreground/40 italic">{tr("Sin contacto")}</span>}
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-start gap-2 max-w-[200px]">
                         <MapPin className="w-4 h-4 text-foreground/40 shrink-0 mt-0.5" />
                         <span className="truncate" title={`${client.address}, ${client.city}, ${client.department}`}>
-                          {client.address ? `${client.address}, ${client.city}` : "No registrada"}
+                          {client.address ? `${client.address}, ${client.city}` : tr("No registrada")}
                         </span>
                       </div>
                     </td>
@@ -125,7 +127,7 @@ export default async function AdminCRMCustomersPage() {
                         <Link
                           href="/admin/comodatos"
                           className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#C59F59]/15 text-[#9a7a3c] rounded-full text-xs font-bold hover:bg-[#C59F59]/25"
-                          title="Máquinas en comodato"
+                          title={tr("Máquinas en comodato")}
                         >
                           <Handshake className="w-3.5 h-3.5" />
                           {machinesByClient.get(client.id)}

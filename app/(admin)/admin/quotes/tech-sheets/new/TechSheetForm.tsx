@@ -8,6 +8,8 @@ import { TechSheetHTMLTemplate } from '../TechSheetHTMLTemplate';
 import { createTechSheet, updateTechSheet, CoffeeTechSheetData } from '../../actions';
 import { uploadTechSheetAsset, getTechSheetAssetSignedUrl } from '@/utils/supabase/storage';
 import { generateTechSheetPDF } from '@/utils/pdf/techSheetGenerator';
+import { DocLanguagePicker, useTr } from "@/app/(admin)/AdminI18n";
+import { type Locale } from "@/utils/i18n/translate";
 
 const COLOR_PRESETS = [
   { name: 'Verde Oliva (Finca)', hex: '#717861' },
@@ -46,6 +48,8 @@ interface TechSheetFormProps {
 }
 
 export default function TechSheetForm({ initialData }: TechSheetFormProps) {
+  const tr = useTr();
+  const [docLang, setDocLang] = useState<Locale>(tr.locale);
   const router = useRouter();
   const isEditing = Boolean(initialData?.id);
 
@@ -107,7 +111,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
       handleChange(field, signedUrl || res.path);
     } catch (err: any) {
       console.error(err);
-      alert(err.message || 'Error al subir archivo');
+      alert(tr.msg(err.message || tr("Error al subir archivo")));
     } finally {
       if (field === 'image_url') setIsUploadingImage(false);
       else setIsUploadingLogo(false);
@@ -117,7 +121,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) {
-      alert('Por favor ingresa un título para la ficha técnica.');
+      alert(tr("Por favor ingresa un título para la ficha técnica."));
       return;
     }
 
@@ -126,17 +130,17 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
       if (isEditing) {
         const res = await updateTechSheet(initialData.id, formData);
         if (!res.success) throw new Error(res.error);
-        alert('¡Ficha técnica actualizada con éxito!');
+        alert(tr("¡Ficha técnica actualizada con éxito!"));
       } else {
         const res = await createTechSheet(formData);
         if (!res.success) throw new Error(res.error);
-        alert('¡Ficha técnica creada con éxito!');
+        alert(tr("¡Ficha técnica creada con éxito!"));
       }
       router.push('/admin/quotes');
       router.refresh();
     } catch (err: any) {
       console.error(err);
-      alert('Error al guardar la ficha técnica: ' + err.message);
+      alert(tr.msg('Error al guardar la ficha técnica: ' + err.message));
     } finally {
       setIsSubmitting(false);
     }
@@ -145,7 +149,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
   const handleDownloadPdf = async () => {
     setIsGeneratingPdf(true);
     try {
-      const blob = await generateTechSheetPDF(formData);
+      const blob = await generateTechSheetPDF({ ...formData, lang: docLang });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -156,7 +160,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
-      alert('Error al descargar el archivo PDF');
+      alert(tr("Error al descargar el archivo PDF"));
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -175,10 +179,10 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
           </Link>
           <div>
             <h1 className="text-2xl font-serif text-foreground">
-              {isEditing ? 'Editar Ficha Técnica' : 'Nueva Ficha Técnica de Café'}
+              {isEditing ? tr("Editar Ficha Técnica") : tr("Nueva Ficha Técnica de Café")}
             </h1>
             <p className="text-sm text-foreground/60">
-              Personaliza el perfil sensorial, origen y diseño visual para la ficha del café.
+              {tr("Personaliza el perfil sensorial, origen y diseño visual para la ficha del café.")}
             </p>
           </div>
         </div>
@@ -190,7 +194,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
             className="px-4 py-2.5 bg-[#f5f2e9] text-[#717861] border border-[#717861]/30 rounded-xl text-xs font-bold hover:bg-[#e8e3d5] transition-colors flex items-center gap-2"
           >
             <Sparkles className="w-4 h-4 text-[#717861]" />
-            Cargar Ejemplo Betulia
+            {tr("Cargar Ejemplo Betulia")}
           </button>
 
           <button
@@ -200,7 +204,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
             className="px-4 py-2.5 bg-white border border-[#C59F59] text-[#C59F59] rounded-xl text-xs font-bold hover:bg-[#C59F59]/5 transition-colors flex items-center gap-2 disabled:opacity-50"
           >
             {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-            Descargar PDF
+            {tr("Descargar PDF")}
           </button>
 
           <button
@@ -210,7 +214,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
             className="px-6 py-2.5 bg-[#C59F59] text-white rounded-xl text-xs font-bold hover:bg-[#B38E4D] transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {isEditing ? 'Guardar Cambios' : 'Crear Ficha Técnica'}
+            {isEditing ? tr("Guardar Cambios") : tr("Crear Ficha Técnica")}
           </button>
         </div>
       </div>
@@ -221,20 +225,20 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
         {/* Form Controls Column */}
         <div className="lg:col-span-5 bg-white p-6 rounded-3xl border border-foreground/5 shadow-sm space-y-6">
           <h2 className="text-lg font-bold text-foreground border-b border-foreground/10 pb-3 flex items-center gap-2">
-            <span>Parámetros y Especificaciones</span>
+            <span>{tr("Parámetros y Especificaciones")}</span>
           </h2>
 
           {/* Title & Subtitle */}
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-1.5">
-                Nombre del Café / Encabezado *
+                {tr("Nombre del Café / Encabezado *")}
               </label>
               <input
                 type="text"
                 value={formData.title}
                 onChange={(e) => handleChange('title', e.target.value)}
-                placeholder="Ej: CAFÉ DE BETULIA"
+                placeholder={tr("Ej: CAFÉ DE BETULIA")}
                 className="w-full px-4 py-2.5 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
                 required
               />
@@ -243,26 +247,26 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-1.5">
-                  Subtítulo Banner
+                  {tr("Subtítulo Banner")}
                 </label>
                 <input
                   type="text"
                   value={formData.subtitle}
                   onChange={(e) => handleChange('subtitle', e.target.value)}
-                  placeholder="FICHA TÉCNICA"
+                  placeholder={tr("FICHA TÉCNICA")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-1.5">
-                  Título Historia
+                  {tr("Título Historia")}
                 </label>
                 <input
                   type="text"
                   value={formData.history_title}
                   onChange={(e) => handleChange('history_title', e.target.value)}
-                  placeholder="Historia"
+                  placeholder={tr("Historia")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
                 />
               </div>
@@ -270,13 +274,13 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-1.5">
-                Texto Narrativo / Historia del Café
+                {tr("Texto Narrativo / Historia del Café")}
               </label>
               <textarea
                 rows={3}
                 value={formData.history_text}
                 onChange={(e) => handleChange('history_text', e.target.value)}
-                placeholder="Descripción del origen, finca o características únicas..."
+                placeholder={tr("Descripción del origen, finca o características únicas...")}
                 className="w-full px-3.5 py-2.5 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 resize-y"
               />
             </div>
@@ -285,7 +289,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
           {/* Color Palette Customizer */}
           <div className="space-y-3 pt-2 border-t border-foreground/5">
             <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70">
-              Color Principal de Diseño
+              {tr("Color Principal de Diseño")}
             </label>
             <div className="flex flex-wrap gap-2">
               {COLOR_PRESETS.map((preset) => (
@@ -305,7 +309,7 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
               ))}
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs text-foreground/60">Personalizado:</span>
+              <span className="text-xs text-foreground/60">{tr("Personalizado:")}</span>
               <input
                 type="color"
                 value={formData.primary_color}
@@ -323,26 +327,26 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
 
           {/* Coffee & Origin Fields */}
           <div className="space-y-4 pt-2 border-t border-foreground/5">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-[#C59F59]">Origen y Cultivo</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-[#C59F59]">{tr("Origen y Cultivo")}</h3>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Origen</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Origen")}</label>
                 <input
                   type="text"
                   value={formData.origin}
                   onChange={(e) => handleChange('origin', e.target.value)}
-                  placeholder="Betulia Antioquia"
+                  placeholder={tr("Betulia Antioquia")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Finca</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Finca")}</label>
                 <input
                   type="text"
                   value={formData.farm_name}
                   onChange={(e) => handleChange('farm_name', e.target.value)}
-                  placeholder="El Mirador"
+                  placeholder={tr("El Mirador")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm"
                 />
               </div>
@@ -350,22 +354,22 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Ubicación</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Ubicación")}</label>
                 <input
                   type="text"
                   value={formData.location}
                   onChange={(e) => handleChange('location', e.target.value)}
-                  placeholder="Vereda la Cibeles"
+                  placeholder={tr("Vereda la Cibeles")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Altura</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Altura")}</label>
                 <input
                   type="text"
                   value={formData.altitude}
                   onChange={(e) => handleChange('altitude', e.target.value)}
-                  placeholder="1600-1800 msnm."
+                  placeholder={tr("1600-1800 msnm.")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm"
                 />
               </div>
@@ -373,22 +377,22 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Variedad</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Variedad")}</label>
                 <input
                   type="text"
                   value={formData.variety}
                   onChange={(e) => handleChange('variety', e.target.value)}
-                  placeholder="Castillo"
+                  placeholder={tr("Castillo")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Proceso</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Proceso")}</label>
                 <input
                   type="text"
                   value={formData.process}
                   onChange={(e) => handleChange('process', e.target.value)}
-                  placeholder="Lavado con fermentación."
+                  placeholder={tr("Lavado con fermentación.")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm"
                 />
               </div>
@@ -397,21 +401,21 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
 
           {/* Roast & Sensory Profile */}
           <div className="space-y-4 pt-2 border-t border-foreground/5">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-[#C59F59]">Perfil en Taza & Catación</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-[#C59F59]">{tr("Perfil en Taza & Catación")}</h3>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Tostión</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Tostión")}</label>
                 <input
                   type="text"
                   value={formData.roast_level}
                   onChange={(e) => handleChange('roast_level', e.target.value)}
-                  placeholder="Media"
+                  placeholder={tr("Media")}
                   className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Puntaje SCA</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Puntaje SCA")}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -426,44 +430,44 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-foreground/70 mb-1">Perfil Sensorial / Notas</label>
+              <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Perfil Sensorial / Notas")}</label>
               <input
                 type="text"
                 value={formData.sensory_profile}
                 onChange={(e) => handleChange('sensory_profile', e.target.value)}
-                placeholder="Dulce, miel, mango, caramelo, panela..."
+                placeholder={tr("Dulce, miel, mango, caramelo, panela...")}
                 className="w-full px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-sm"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Acidez</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Acidez")}</label>
                 <input
                   type="text"
                   value={formData.acidity}
                   onChange={(e) => handleChange('acidity', e.target.value)}
-                  placeholder="Cítrica"
+                  placeholder={tr("Cítrica")}
                   className="w-full px-2.5 py-1.5 bg-[#faf9f6] border border-foreground/10 rounded-xl text-xs"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Cuerpo</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Cuerpo")}</label>
                 <input
                   type="text"
                   value={formData.body}
                   onChange={(e) => handleChange('body', e.target.value)}
-                  placeholder="Medio"
+                  placeholder={tr("Medio")}
                   className="w-full px-2.5 py-1.5 bg-[#faf9f6] border border-foreground/10 rounded-xl text-xs"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-foreground/70 mb-1">Dulzor</label>
+                <label className="block text-xs font-semibold text-foreground/70 mb-1">{tr("Dulzor")}</label>
                 <input
                   type="text"
                   value={formData.sweetness}
                   onChange={(e) => handleChange('sweetness', e.target.value)}
-                  placeholder="Alto"
+                  placeholder={tr("Alto")}
                   className="w-full px-2.5 py-1.5 bg-[#faf9f6] border border-foreground/10 rounded-xl text-xs"
                 />
               </div>
@@ -472,22 +476,22 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
 
           {/* Image Uploaders */}
           <div className="space-y-4 pt-2 border-t border-foreground/5">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-[#C59F59]">Imágenes y Recursos</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-[#C59F59]">{tr("Imágenes y Recursos")}</h3>
 
             {/* Coffee Image Upload */}
             <div>
-              <label className="block text-xs font-semibold text-foreground/70 mb-1.5">Fotografía del Café</label>
+              <label className="block text-xs font-semibold text-foreground/70 mb-1.5">{tr("Fotografía del Café")}</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={formData.image_url}
                   onChange={(e) => handleChange('image_url', e.target.value)}
-                  placeholder="https://... o sube una imagen"
+                  placeholder={tr("https://... o sube una imagen")}
                   className="flex-1 px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-xs"
                 />
                 <label className="px-3 py-2 bg-[#faf9f6] border border-foreground/20 rounded-xl text-xs font-bold hover:bg-foreground/5 cursor-pointer flex items-center gap-1.5">
                   {isUploadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-foreground/60" />}
-                  Subir
+                  {tr("Subir")}
                   <input
                     type="file"
                     accept="image/*"
@@ -501,18 +505,18 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
 
             {/* Logo Image Upload */}
             <div>
-              <label className="block text-xs font-semibold text-foreground/70 mb-1.5">Logo de Marca / Finca</label>
+              <label className="block text-xs font-semibold text-foreground/70 mb-1.5">{tr("Logo de Marca / Finca")}</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={formData.logo_url}
                   onChange={(e) => handleChange('logo_url', e.target.value)}
-                  placeholder="/images/logo-amantti.png o sube un logo"
+                  placeholder={tr("/images/logo-amantti.png o sube un logo")}
                   className="flex-1 px-3 py-2 bg-[#faf9f6] border border-foreground/10 rounded-xl text-xs"
                 />
                 <label className="px-3 py-2 bg-[#faf9f6] border border-foreground/20 rounded-xl text-xs font-bold hover:bg-foreground/5 cursor-pointer flex items-center gap-1.5">
                   {isUploadingLogo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-foreground/60" />}
-                  Subir
+                  {tr("Subir")}
                   <input
                     type="file"
                     accept="image/*"
@@ -533,14 +537,14 @@ export default function TechSheetForm({ initialData }: TechSheetFormProps) {
             <div className="flex items-center justify-between border-b border-foreground/10 pb-3 mb-4">
               <div className="flex items-center gap-2">
                 <ImageIcon className="w-4 h-4 text-[#C59F59]" />
-                <h3 className="text-sm font-bold text-foreground">Vista Previa en Tiempo Real</h3>
+                <h3 className="text-sm font-bold text-foreground">{tr("Vista Previa en Tiempo Real")}</h3>
               </div>
-              <span className="text-xs text-foreground/40 font-mono">Diseño idéntico al PDF</span>
+              <DocLanguagePicker value={docLang} onChange={setDocLang} />
             </div>
 
             {/* Render HTML Template inside scaled wrapper for preview */}
             <div className="origin-top-left transform scale-[0.72] sm:scale-[0.8] md:scale-[0.88] lg:scale-[0.75] xl:scale-[0.85] transition-all">
-              <TechSheetHTMLTemplate data={formData} />
+              <TechSheetHTMLTemplate data={{ ...formData, lang: docLang }} />
             </div>
           </div>
         </div>

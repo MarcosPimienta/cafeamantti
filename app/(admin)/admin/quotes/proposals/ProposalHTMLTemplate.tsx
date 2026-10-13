@@ -1,6 +1,8 @@
 import React from 'react';
 import type { ProposalBlock, PriceTableItem } from './new/blocks/BlockCard';
 
+import { DocLangProvider, useDocTr } from "@/app/(admin)/admin/quotes/DocLang";
+import { translator, type Locale } from "@/utils/i18n/translate";
 // Reusing layout constants from quoteGenerator but adapted for proposals
 const PORTRAIT_W  = 816;
 const PORTRAIT_H  = 1056;
@@ -17,6 +19,8 @@ export interface ProposalData {
   allyLogoUrl?: string;
   backgroundImageUrl?: string;
   backgroundOpacity?: number;
+  /** Language of the document (default Spanish). */
+  lang?: Locale;
 }
 
 function formatCurrency(val: number): string {
@@ -24,6 +28,7 @@ function formatCurrency(val: number): string {
 }
 
 function RenderBlock({ block, index }: { block: ProposalBlock; index: number }) {
+  const tr = useDocTr();
   const titleStyle: React.CSSProperties = {
     fontSize: '16px',
     fontWeight: 800,
@@ -46,13 +51,13 @@ function RenderBlock({ block, index }: { block: ProposalBlock; index: number }) 
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
             <tr style={{ backgroundColor: '#292524' }}>
-              <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'left', fontWeight: 700, fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase' }}>Producto</th>
-              <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>Costo</th>
+              <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'left', fontWeight: 700, fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase' }}>{tr("Producto")}</th>
+              <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>{tr("Costo")}</th>
               {displayPvp && (
-                <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>PVP Sugerido</th>
+                <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>{tr("PVP Sugerido")}</th>
               )}
               {displayMargin && (
-                <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>Margen</th>
+                <th style={{ padding: '10px 14px', color: '#fff', textAlign: 'right', fontWeight: 700, fontSize: '11px', letterSpacing: '1px' }}>{tr("Margen")}</th>
               )}
             </tr>
           </thead>
@@ -147,12 +152,14 @@ function paginateBlocks(blocks: ProposalBlock[]): ProposalBlock[][] {
 }
 
 export function ProposalHTMLTemplate({ data }: { data: ProposalData }) {
+  const tr = translator(data.lang ?? "es");
   const opacity = data.backgroundOpacity ?? 0.5;
   const bgUrl = data.backgroundImageUrl || '/images/Main_Background.jpg';
   const blockPages = paginateBlocks(data.content);
   const totalPages = blockPages.length;
 
   return (
+    <DocLangProvider lang={data.lang}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', backgroundColor: '#f0f0f0', padding: '40px' }}>
       {blockPages.map((pageBlocks, pageIdx) => {
         const isFirst = pageIdx === 0;
@@ -186,12 +193,12 @@ export function ProposalHTMLTemplate({ data }: { data: ProposalData }) {
             <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column' }}>
               {/* Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-                <img src="/images/logo-amantti.png" alt="Amantti" style={{ width: '160px', height: 'auto' }} />
+                <img src="/images/logo-amantti.png" alt={tr("Amantti")} style={{ width: '160px', height: 'auto' }} />
                 
                 {data.allyLogoUrl ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{ width: '1px', height: '40px', backgroundColor: '#C59F59', opacity: 0.4 }} />
-                    <img src={data.allyLogoUrl} alt="Aliado" style={{ maxWidth: '140px', maxHeight: '60px', objectFit: 'contain' }} />
+                    <img src={data.allyLogoUrl} alt={tr("Aliado")} style={{ maxWidth: '140px', maxHeight: '60px', objectFit: 'contain' }} />
                   </div>
                 ) : (
                   <div style={{ textAlign: 'right' }}>
@@ -239,25 +246,25 @@ export function ProposalHTMLTemplate({ data }: { data: ProposalData }) {
               {isLast ? (
                 <div style={{ marginTop: '60px', borderTop: '1px solid #e7e5e4', paddingTop: '40px' }}>
                   <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#44403c', marginBottom: '40px', fontStyle: 'italic' }}>
-                    Estamos convencidos de que esta alianza beneficiará a ambas partes y proporcionará una experiencia única para los clientes de {data.clientName}.<br/>
-                    ¡Quedamos atentos para avanzar con los siguientes pasos y formalizar la alianza!
+                    {tr("Estamos convencidos de que esta alianza beneficiará a ambas partes y proporcionará una experiencia única para los clientes de")}{" "}{data.clientName}.<br/>
+                    {tr("¡Quedamos atentos para avanzar con los siguientes pasos y formalizar la alianza!")}
                   </p>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                     <div>
                       <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#292524' }}>{data.sellerName || 'Asesor Amantti'}</p>
                       <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#57534e' }}>
-                        Alma Trading Group SAS<br/>
-                        Nit: 901752308-8<br/>
-                        cafeamantti@gmail.com
+                        {tr("Alma Trading Group SAS")}<br/>
+                        {tr("Nit: 901752308-8")}<br/>
+                        {tr("cafeamantti@gmail.com")}
                       </p>
                     </div>
-                    <img src="/images/logo-amantti.png" alt="Logo" style={{ width: '80px', opacity: 0.3 }} />
+                    <img src="/images/logo-amantti.png" alt={tr("Logo")} style={{ width: '80px', opacity: 0.3 }} />
                   </div>
                 </div>
               ) : (
                 <div style={{ marginTop: 'auto', paddingTop: '20px', textAlign: 'center', opacity: 0.3 }}>
                   <p style={{ margin: 0, fontSize: '10px', color: '#a8a29e', letterSpacing: '1px' }}>
-                    Página {pageIdx + 1} de {totalPages}
+                    {tr("Página {v} de {totalPages}", { v: pageIdx + 1, totalPages: totalPages })}
                   </p>
                 </div>
               )}
@@ -266,5 +273,6 @@ export function ProposalHTMLTemplate({ data }: { data: ProposalData }) {
         );
       })}
     </div>
+    </DocLangProvider>
   );
 }

@@ -95,6 +95,7 @@ function validate(p: MaquilaProposalInput) {
     if (path != null && path !== '' && !/^proposals\/[\w.-]+$/.test(path)) throw new Error('Imagen inválida: súbela de nuevo.');
   }
   if (p.settings?.option_prices != null) validateOptionPrices(p.settings.option_prices);
+  if (p.settings?.doc_lang != null && p.settings.doc_lang !== 'es' && p.settings.doc_lang !== 'en') throw new Error('Idioma del documento inválido.');
   if (!Array.isArray(p.lines) || p.lines.length === 0) throw new Error('Agrega al menos una presentación.');
   for (const l of p.lines) {
     const name = l.presentation?.trim() || 'una presentación';

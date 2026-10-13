@@ -3,8 +3,10 @@
 import React, { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { createManualCustomer } from "../../actions";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 export default function CreateCustomerModal() {
+  const tr = useTr();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -28,7 +30,7 @@ export default function CreateCustomerModal() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.email) {
-      setError("El correo es obligatorio.");
+      setError(tr("El correo es obligatorio."));
       return;
     }
 
@@ -49,7 +51,7 @@ export default function CreateCustomerModal() {
       });
 
       if (res.success) {
-        setSuccess("Cliente creado exitosamente con contraseña genérica.");
+        setSuccess(tr("Cliente creado exitosamente con contraseña genérica."));
         setTimeout(() => {
           setIsOpen(false);
           setSuccess("");
@@ -73,14 +75,14 @@ export default function CreateCustomerModal() {
         className="flex items-center gap-2 px-6 py-3 bg-foreground text-background rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#C59F59] hover:text-white transition-all shadow-md shrink-0"
       >
         <Plus className="w-4 h-4" />
-        Nuevo Cliente Manual
+        {tr("Nuevo Cliente Manual")}
       </button>
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/20 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden border border-foreground/10 flex flex-col">
             <div className="p-6 border-b border-foreground/5 flex justify-between items-center bg-[#fdfbf7]">
-              <h2 className="text-xl font-serif text-foreground">Registrar Nuevo Cliente</h2>
+              <h2 className="text-xl font-serif text-foreground">{tr("Registrar Nuevo Cliente")}</h2>
               <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-foreground/5 rounded-full transition-colors">
                 <X className="w-5 h-5 text-foreground/40" />
               </button>
@@ -89,56 +91,56 @@ export default function CreateCustomerModal() {
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {error && (
                 <div className="p-4 bg-red-50 text-red-800 rounded-xl text-sm border border-red-100">
-                  {error}
+                  {tr.msg(error)}
                 </div>
               )}
               {success && (
                 <div className="p-4 bg-green-50 text-green-800 rounded-xl text-sm border border-green-100">
-                  {success}
+                  {tr.msg(success)}
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-foreground/60 mb-1">Nombre</label>
+                  <label className="block text-xs font-medium text-foreground/60 mb-1">{tr("Nombre")}</label>
                   <input required name="firstName" value={formData.firstName} onChange={handleChange} className="w-full px-4 py-2 bg-[#f9f7f0] border border-foreground/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-foreground/60 mb-1">Apellidos</label>
+                  <label className="block text-xs font-medium text-foreground/60 mb-1">{tr("Apellidos")}</label>
                   <input required name="lastName" value={formData.lastName} onChange={handleChange} className="w-full px-4 py-2 bg-[#f9f7f0] border border-foreground/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-foreground/60 mb-1">Correo Electrónico (Requerido)</label>
+                <label className="block text-xs font-medium text-foreground/60 mb-1">{tr("Correo Electrónico (Requerido)")}</label>
                 <input required type="email" name="email" value={formData.email} onChange={handleChange} className="w-full px-4 py-2 bg-[#f9f7f0] border border-foreground/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-foreground/60 mb-1">Cédula</label>
+                  <label className="block text-xs font-medium text-foreground/60 mb-1">{tr("Cédula")}</label>
                   <input name="cedula" value={formData.cedula} onChange={handleChange} className="w-full px-4 py-2 bg-[#f9f7f0] border border-foreground/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-foreground/60 mb-1">Teléfono</label>
+                  <label className="block text-xs font-medium text-foreground/60 mb-1">{tr("Teléfono")}</label>
                   <input name="phone" value={formData.phone} onChange={handleChange} className="w-full px-4 py-2 bg-[#f9f7f0] border border-foreground/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
                 </div>
               </div>
 
               <div className="pt-4 border-t border-foreground/5">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#C59F59] mb-4">Ubicación</h3>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#C59F59] mb-4">{tr("Ubicación")}</h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-foreground/60 mb-1">Dirección Completa</label>
+                    <label className="block text-xs font-medium text-foreground/60 mb-1">{tr("Dirección Completa")}</label>
                     <input name="address" value={formData.address} onChange={handleChange} className="w-full px-4 py-2 bg-[#f9f7f0] border border-foreground/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-foreground/60 mb-1">Ciudad</label>
+                      <label className="block text-xs font-medium text-foreground/60 mb-1">{tr("Ciudad")}</label>
                       <input name="city" value={formData.city} onChange={handleChange} className="w-full px-4 py-2 bg-[#f9f7f0] border border-foreground/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-foreground/60 mb-1">Departamento</label>
+                      <label className="block text-xs font-medium text-foreground/60 mb-1">{tr("Departamento")}</label>
                       <input name="department" value={formData.department} onChange={handleChange} className="w-full px-4 py-2 bg-[#f9f7f0] border border-foreground/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20" />
                     </div>
                   </div>
@@ -151,7 +153,7 @@ export default function CreateCustomerModal() {
                   disabled={loading}
                   className="w-full py-4 bg-foreground text-background text-sm font-bold uppercase tracking-widest rounded-xl hover:bg-[#C59F59] hover:text-white transition-all shadow-lg disabled:opacity-50"
                 >
-                  {loading ? "Registrando..." : "Registrar Cliente"}
+                  {loading ? tr("Registrando...") : tr("Registrar Cliente")}
                 </button>
               </div>
             </form>

@@ -4,6 +4,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2, Type, Table, CheckSquare } from 'lucide-react';
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 export type BlockType = 'rich-text' | 'price-table' | 'checklist';
 
@@ -38,6 +39,7 @@ interface BlockCardProps {
 }
 
 export default function BlockCard({ block, onUpdate, onDelete, children }: BlockCardProps) {
+  const tr = useTr();
   const {
     attributes,
     listeners,
@@ -84,7 +86,7 @@ export default function BlockCard({ block, onUpdate, onDelete, children }: Block
           {...attributes}
           {...listeners}
           className="cursor-grab active:cursor-grabbing p-1.5 hover:bg-foreground/5 rounded-lg text-foreground/30 hover:text-foreground/50 transition-colors"
-          title="Arrastrar"
+          title={tr("Arrastrar")}
         >
           <GripVertical className="w-4 h-4" />
         </button>
@@ -100,10 +102,10 @@ export default function BlockCard({ block, onUpdate, onDelete, children }: Block
                   ? 'bg-white shadow-sm text-[#C59F59]'
                   : 'text-foreground/40 hover:text-foreground/60'
               }`}
-              title={opt.label}
+              title={tr(opt.label)}
             >
               {opt.icon}
-              <span className="hidden sm:inline">{opt.label}</span>
+              <span className="hidden sm:inline">{tr(opt.label)}</span>
             </button>
           ))}
         </div>
@@ -114,7 +116,7 @@ export default function BlockCard({ block, onUpdate, onDelete, children }: Block
           type="button"
           onClick={onDelete}
           className="p-2 hover:bg-red-50 rounded-lg text-foreground/20 hover:text-red-500 transition-colors"
-          title="Eliminar bloque"
+          title={tr("Eliminar bloque")}
         >
           <Trash2 className="w-4 h-4" />
         </button>

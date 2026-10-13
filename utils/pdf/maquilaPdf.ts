@@ -3,8 +3,9 @@
 // resells at; the one-time design fee, what the client must deliver, IVA
 // and conditions. Never includes costs, margins or internal notes.
 
-import { calculateProposal, effectiveMinimum, type MaquilaLine, type MaquilaSettings } from "@/utils/maquila";
-import { formatCOP, formatDateSpanish, imageUrlToBase64 } from "./cuentasCobroHelpers";
+import { REFERENCE_OPTIONS, calculateProposal, describeOptions, effectiveMinimum, type MaquilaLine, type MaquilaSettings } from "@/utils/maquila";
+import { formatCOP, formatDocDate, imageUrlToBase64 } from "./cuentasCobroHelpers";
+import { translate, type Locale, type Vars } from "@/utils/i18n/translate";
 import { renderHtmlToPdf } from "./renderPages";
 
 export type MaquilaPdfData = {
@@ -24,6 +25,8 @@ export type MaquilaPdfData = {
   backgroundOpacity?: number;
   /** Client logo URL (or data URI), shown next to Amantti's. */
   allyLogo?: string | null;
+  /** Language of the document (default Spanish). */
+  lang?: Locale;
 };
 
 const esc = (s: unknown) =>
@@ -42,6 +45,8 @@ const paragraphs = (text: string | null) =>
 
 /** The proposal as an HTML string (A4 width), ready for renderHtmlToPdf. */
 export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
+  const lang = data.lang ?? "es";
+  const tr = (text: string, vars?: Vars) => translate(lang, text, vars);
   const { lines, totals } = calculateProposal(data.lines, data.settings, data.minimumUnits);
   const th = "padding:10px 12px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#78716c; text-align:left; border-bottom:2px solid #C59F59;";
   const td = "padding:10px 12px; font-size:12px; color:#292524; border-bottom:1px solid #e7e5e4;";
@@ -49,7 +54,7 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
   const rows = lines
     .map(
       (r) => `<tr>
-        <td style="${td}"><strong>${esc(r.presentation)}</strong><br/><span style="color:#78716c; font-size:11px;">Café ${esc(r.profileLabel)} · ${esc(r.grams)} g por unidad<br/>${esc(r.optionsSummary)}</span></td>
+        <td style="${td}"><strong>${esc(r.presentation)}</strong><br/><span style="color:#78716c; font-size:11px;">${esc(tr("Café {profile} · {grams} g por unidad", { profile: r.profileLabel, grams: r.grams }))}<br/>${esc(describeOptions(data.lines.find((l) => l.id === r.id)?.options ?? REFERENCE_OPTIONS, lang))}</span></td>
         <td style="${td} text-align:right; white-space:nowrap; font-weight:700;">${formatCOP(r.price)}</td>
         <td style="${td} text-align:right; white-space:nowrap;">${r.resale != null ? formatCOP(r.resale) : "—"}</td>
         <td style="${td} text-align:right;">${r.units.toLocaleString("es-CO")}</td>
@@ -64,10 +69,10 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
     const key = m.name.trim();
     supplyTotals.set(key, (supplyTotals.get(key) ?? 0) + m.qty);
   }
-  const clientSupplies = [...supplyTotals].map(([name, qty]) => `${esc(name)} (${qty.toLocaleString("es-CO")} und.)`);
+  const clientSupplies = [...supplyTotals].map(([name, qty]) => `${esc(name)} (${esc(tr("{qty} und.", { qty: qty.toLocaleString("es-CO") }))})`);
 
   const deliver = clientSupplies.length
-    ? `<h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 4px;">Lo que entrega el cliente</h2>
+    ? `<h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 4px;">${tr("Lo que entrega el cliente")}</h2>
        <ul style="list-style:disc; margin:8px 0 0; padding-left:18px; font-size:12px; color:#44403c; line-height:1.7;">
          ${clientSupplies.map((s) => `<li>${s}</li>`).join("")}
        </ul>`
@@ -77,7 +82,7 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
   // concepts underneath, so the totals are what the client pays.
   const designRow = totals.design.fee > 0
     ? `<tr>
-        <td style="${td}"><strong>Proyecto de diseño de empaque</strong><br/><span style="color:#78716c; font-size:11px;">Pago único, para todas las presentaciones</span>
+        <td style="${td}"><strong>${tr("Proyecto de diseño de empaque")}</strong><br/><span style="color:#78716c; font-size:11px;">${tr("Pago único, para todas las presentaciones")}</span>
           <table style="width:100%; border-collapse:collapse; margin-top:4px;">${totals.design.items
             .map((i) => `<tr><td style="padding:1px 8px 1px 0; font-size:11px; color:#78716c;">${esc(i.description)}</td><td style="padding:1px 0; font-size:11px; color:#78716c; text-align:right; white-space:nowrap;">${formatCOP(i.price)}</td></tr>`)
             .join("")}</table></td>
@@ -107,49 +112,49 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:36px;">
       ${brand}
       <div style="text-align:right; font-size:11px; color:#78716c;">
-        <div>${esc(formatDateSpanish(data.proposalDate))}</div>
-        ${data.validUntil ? `<div>Válida hasta: ${esc(formatDateSpanish(data.validUntil))}</div>` : ""}
+        <div>${esc(formatDocDate(data.proposalDate, lang))}</div>
+        ${data.validUntil ? `<div>${esc(tr("Válida hasta: {date}", { date: formatDocDate(data.validUntil, lang) }))}</div>` : ""}
       </div>
     </div>
 
     <h1 style="font-size:22px; letter-spacing:2px; text-transform:uppercase; margin:0 0 6px;">${esc(data.title)}</h1>
-    <p style="margin:0 0 24px; color:#C59F59; font-weight:700;">Para: ${esc(data.clientName)}</p>
+    <p style="margin:0 0 24px; color:#C59F59; font-weight:700;">${esc(tr("Para: {name}", { name: data.clientName }))}</p>
 
     ${paragraphs(data.intro).map((p) => `<p style="font-size:12px; line-height:1.7; color:#44403c; margin:0 0 10px;">${esc(p)}</p>`).join("")}
 
-    <h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 8px;">Café empacado con su marca</h2>
+    <h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 8px;">${tr("Café empacado con su marca")}</h2>
     <table style="width:100%; border-collapse:collapse;">
       <thead><tr>
-        <th style="${th}">Presentación</th>
-        <th style="${th} text-align:right;">Precio por bolsa</th>
-        <th style="${th} text-align:right;">Precio de venta sugerido</th>
-        <th style="${th} text-align:right;">Unidades</th>
-        <th style="${th} text-align:right;">Valor</th>
+        <th style="${th}">${tr("Presentación")}</th>
+        <th style="${th} text-align:right;">${tr("Precio por bolsa")}</th>
+        <th style="${th} text-align:right;">${tr("Precio de venta sugerido")}</th>
+        <th style="${th} text-align:right;">${tr("Unidades")}</th>
+        <th style="${th} text-align:right;">${tr("Valor")}</th>
       </tr></thead>
       <tbody>${rows}${designRow}</tbody>
     </table>
 
     <table style="margin:16px 0 0 auto; border-collapse:collapse; min-width:300px;">
-      <tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">Subtotal</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(subtotal)}</td></tr>
-      ${data.settings.apply_iva ? `<tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">IVA (${esc(data.settings.iva_pct)} %)</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(iva)}</td></tr>` : ""}
-      <tr><td style="padding:8px 12px; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">Total a pagar</td><td style="padding:8px 12px; text-align:right; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">${formatCOP(subtotal + iva)}</td></tr>
+      <tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">${tr("Subtotal")}</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(subtotal)}</td></tr>
+      ${data.settings.apply_iva ? `<tr><td style="padding:4px 12px; font-size:12px; color:#78716c;">${esc(tr("IVA ({pct} %)", { pct: data.settings.iva_pct }))}</td><td style="padding:4px 12px; text-align:right; font-size:12px;">${formatCOP(iva)}</td></tr>` : ""}
+      <tr><td style="padding:8px 12px; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">${tr("Total a pagar")}</td><td style="padding:8px 12px; text-align:right; font-size:14px; font-weight:700; border-top:2px solid #C59F59;">${formatCOP(subtotal + iva)}</td></tr>
     </table>
     <p style="font-size:11px; color:#78716c; margin:10px 0 0;">${
-      data.settings.apply_iva ? `Precios por bolsa antes de IVA (${esc(data.settings.iva_pct)} %).` : "Precios por bolsa."
-    } El precio de venta sugerido se basa en el de nuestro propio café en la misma presentación y empaque.</p>
-    <p style="font-size:11px; color:#78716c; margin:4px 0 0;">Pedido mínimo: ${effectiveMinimum(data.minimumUnits).toLocaleString("es-CO")} unidades por presentación.</p>
+      data.settings.apply_iva ? esc(tr("Precios por bolsa antes de IVA ({pct} %).", { pct: data.settings.iva_pct })) : tr("Precios por bolsa.")
+    } ${tr("El precio de venta sugerido se basa en el de nuestro propio café en la misma presentación y empaque.")}</p>
+    <p style="font-size:11px; color:#78716c; margin:4px 0 0;">${esc(tr("Pedido mínimo: {n} unidades por presentación.", { n: effectiveMinimum(data.minimumUnits).toLocaleString("es-CO") }))}</p>
 
     ${deliver}
 
     ${
       paragraphs(data.conditions).length
-        ? `<h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 4px;">Condiciones</h2>
+        ? `<h2 style="font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:#C59F59; margin:28px 0 4px;">${tr("Condiciones")}</h2>
            <ul style="list-style:disc; margin:8px 0 0; padding-left:18px; font-size:12px; color:#44403c; line-height:1.7;">${paragraphs(data.conditions).map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`
         : ""
     }
 
     <div data-pdf-footer style="margin-top:48px; border-top:1px solid #e7e5e4; padding-top:20px; font-size:11px; color:#57534e;">
-      <strong style="color:#292524;">${esc(data.sellerName || "Asesor Amantti")}</strong><br/>
+      <strong style="color:#292524;">${esc(data.sellerName || tr("Asesor Amantti"))}</strong><br/>
       Alma Trading Group SAS · Nit: 901752308-8 · cafeamantti@gmail.com
     </div>
   </div>

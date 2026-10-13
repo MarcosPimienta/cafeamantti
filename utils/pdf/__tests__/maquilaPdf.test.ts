@@ -151,3 +151,21 @@ describe("pageCount", () => {
     expect(pageCount(0)).toBe(1);
   });
 });
+
+describe("document language", () => {
+  it("the proposal comes out in English when asked, with English dates", () => {
+    const en = flat(buildMaquilaHtml({ ...data, lang: "en" }));
+    expect(en).toContain("Coffee packed under your brand");
+    expect(en).toContain("Price per bag");
+    expect(en).toContain("Suggested resale price");
+    expect(en).toContain("Total due");
+    expect(en).toContain("Minimum order: 200 units per presentation.");
+    expect(en).toContain("Valve · Front and back, 1 ink");
+    expect(en).toMatch(/October \d+, 2026/);
+    expect(en).not.toContain("Precio por bolsa");
+  });
+
+  it("Spanish stays the default", () => {
+    expect(flat(buildMaquilaHtml(data))).toContain("Precio por bolsa");
+  });
+});

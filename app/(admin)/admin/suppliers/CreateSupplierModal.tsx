@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Plus, X, Building2, Edit2 } from 'lucide-react';
 import { createSupplier, updateSupplier } from './actions';
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 interface SupplierModalProps {
   supplierToEdit?: any;
@@ -11,6 +12,7 @@ interface SupplierModalProps {
 }
 
 export default function CreateSupplierModal({ supplierToEdit, onSuccess, triggerButton }: SupplierModalProps) {
+  const tr = useTr();
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState(supplierToEdit?.name || '');
   const [documentType, setDocumentType] = useState(supplierToEdit?.document_type || 'NIT');
@@ -54,7 +56,7 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      alert('Por favor ingresa el nombre o razón social del proveedor.');
+      alert(tr("Por favor ingresa el nombre o razón social del proveedor."));
       return;
     }
 
@@ -83,7 +85,7 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
       setIsOpen(false);
       if (onSuccess) onSuccess();
     } else {
-      alert(res.error || 'Ocurrió un error al guardar el proveedor.');
+      alert(tr.msg(res.error || tr("Ocurrió un error al guardar el proveedor.")));
     }
     setIsSubmitting(false);
   };
@@ -98,7 +100,7 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
         <button
           onClick={openModal}
           className="p-2 hover:bg-stone-100 text-foreground/60 hover:text-[#C59F59] rounded-lg transition-colors border border-transparent hover:border-foreground/5 inline-flex"
-          title="Editar proveedor"
+          title={tr("Editar proveedor")}
         >
           <Edit2 className="w-4 h-4" />
         </button>
@@ -108,7 +110,7 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
           className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#C59F59] text-white rounded-xl font-bold hover:bg-[#B38E4D] transition-colors shadow-sm"
         >
           <Plus className="w-5 h-5" />
-          Nuevo Proveedor
+          {tr("Nuevo Proveedor")}
         </button>
       )}
 
@@ -122,10 +124,10 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold text-foreground">
-                    {supplierToEdit ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+                    {supplierToEdit ? tr("Editar Proveedor") : tr("Nuevo Proveedor")}
                   </h2>
                   <p className="text-xs text-foreground/50">
-                    {supplierToEdit ? 'Modifica los datos del proveedor registrado.' : 'Ingresa la información básica y bancaria del proveedor.'}
+                    {supplierToEdit ? tr("Modifica los datos del proveedor registrado.") : tr("Ingresa la información básica y bancaria del proveedor.")}
                   </p>
                 </div>
               </div>
@@ -137,41 +139,41 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Información Básica */}
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">Información Básica</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">{tr("Información Básica")}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2 space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Nombre o Razón Social *</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Nombre o Razón Social *")}</label>
                     <input
                       type="text"
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="Ej. Distribuidora de Café S.A.S. o Juan Pérez"
+                      placeholder={tr("Ej. Distribuidora de Café S.A.S. o Juan Pérez")}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Tipo de Documento</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Tipo de Documento")}</label>
                     <select
                       value={documentType}
                       onChange={(e) => setDocumentType(e.target.value)}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     >
-                      <option value="NIT">NIT</option>
-                      <option value="CC">Cédula de Ciudadanía (CC)</option>
-                      <option value="CE">Cédula de Extranjería (CE)</option>
-                      <option value="PASAPORTE">Pasaporte</option>
+                      <option value="NIT">{tr("NIT")}</option>
+                      <option value="CC">{tr("Cédula de Ciudadanía (CC)")}</option>
+                      <option value="CE">{tr("Cédula de Extranjería (CE)")}</option>
+                      <option value="PASAPORTE">{tr("Pasaporte")}</option>
                     </select>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Número de Documento / NIT</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Número de Documento / NIT")}</label>
                     <input
                       type="text"
                       value={documentNumber}
                       onChange={(e) => setDocumentNumber(e.target.value)}
-                      placeholder="Ej. 901234567-8"
+                      placeholder={tr("Ej. 901234567-8")}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
@@ -180,48 +182,48 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
 
               {/* Contacto & Ubicación */}
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">Contacto & Ubicación</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">{tr("Contacto & Ubicación")}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Correo Electrónico</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Correo Electrónico")}</label>
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="proveedor@ejemplo.com"
+                      placeholder={tr("proveedor@ejemplo.com")}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Teléfono</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Teléfono")}</label>
                     <input
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Ej. 3001234567"
+                      placeholder={tr("Ej. 3001234567")}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Dirección</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Dirección")}</label>
                     <input
                       type="text"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Ej. Calle 10 # 40-20"
+                      placeholder={tr("Ej. Calle 10 # 40-20")}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Ciudad</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Ciudad")}</label>
                     <input
                       type="text"
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
-                      placeholder="Ej. Medellín"
+                      placeholder={tr("Ej. Medellín")}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
@@ -230,38 +232,38 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
 
               {/* Información Bancaria */}
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">Datos Bancarios para Pagos (Opcional)</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">{tr("Datos Bancarios para Pagos (Opcional)")}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Banco</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Banco")}</label>
                     <input
                       type="text"
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
-                      placeholder="Ej. Bancolombia"
+                      placeholder={tr("Ej. Bancolombia")}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Tipo de Cuenta</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Tipo de Cuenta")}</label>
                     <select
                       value={bankAccountType}
                       onChange={(e) => setBankAccountType(e.target.value)}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     >
-                      <option value="Ahorros">Ahorros</option>
-                      <option value="Corriente">Corriente</option>
+                      <option value="Ahorros">{tr("Ahorros")}</option>
+                      <option value="Corriente">{tr("Corriente")}</option>
                     </select>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground/60">Número de Cuenta</label>
+                    <label className="text-xs font-bold text-foreground/60">{tr("Número de Cuenta")}</label>
                     <input
                       type="text"
                       value={bankAccountNumber}
                       onChange={(e) => setBankAccountNumber(e.target.value)}
-                      placeholder="Ej. 123456789"
+                      placeholder={tr("Ej. 123456789")}
                       className="w-full px-4 py-2.5 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     />
                   </div>
@@ -274,14 +276,14 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
                   onClick={() => setIsOpen(false)}
                   className="px-5 py-3 border border-foreground/10 rounded-xl text-sm font-bold text-foreground/70 hover:bg-stone-100 transition-colors"
                 >
-                  Cancelar
+                  {tr("Cancelar")}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className="px-6 py-3 bg-[#C59F59] hover:bg-[#B38E4D] text-white font-bold rounded-xl shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Guardando...' : supplierToEdit ? 'Guardar Cambios' : 'Crear Proveedor'}
+                  {isSubmitting ? tr("Guardando...") : supplierToEdit ? tr("Guardar Cambios") : tr("Crear Proveedor")}
                 </button>
               </div>
             </form>

@@ -3,11 +3,13 @@
 import React, { useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, Send } from "lucide-react";
 import { createSiigoPurchase, previewSiigoPurchase } from "../siigo/actions";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 
 /** In the expense form (editing): send the saved expense to Siigo as a purchase invoice. */
 export default function ExpenseSiigoPanel({ expenseId, sentName, dirty }: { expenseId: string; sentName?: string | null; dirty: boolean }) {
+  const tr = useTr();
   const [sent, setSent] = useState<string | null>(sentName ?? null);
   const [check, setCheck] = useState<{ problems: string[]; supplier: string | null; total: number } | null>(null);
   const [error, setError] = useState("");
@@ -35,31 +37,31 @@ export default function ExpenseSiigoPanel({ expenseId, sentName, dirty }: { expe
 
   return (
     <div className="p-4 rounded-xl border border-foreground/10 space-y-2">
-      <p className="field-label">Siigo</p>
+      <p className="field-label">{tr("Siigo")}</p>
       {sent ? (
-        <p className="flex items-center gap-2 text-sm text-emerald-700"><CheckCircle2 className="w-4 h-4" /> En Siigo como factura de compra {sent}</p>
+        <p className="flex items-center gap-2 text-sm text-emerald-700"><CheckCircle2 className="w-4 h-4" />{" "}{tr("En Siigo como factura de compra")}{" "}{sent}</p>
       ) : dirty ? (
-        <p className="text-xs text-foreground/50">Guarda los cambios antes de enviarlo a Siigo.</p>
+        <p className="text-xs text-foreground/50">{tr("Guarda los cambios antes de enviarlo a Siigo.")}</p>
       ) : !check ? (
         <button type="button" onClick={review} disabled={isPending} className="flex items-center gap-2 text-xs font-bold text-[#C59F59] hover:underline disabled:opacity-50">
-          {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Revisar envío a Siigo como factura de compra
+          {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}{" "}{tr("Revisar envío a Siigo como factura de compra")}
         </button>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-foreground/60">Proveedor: <strong>{check.supplier ?? "—"}</strong> · Total {cop(check.total)}</p>
+          <p className="text-xs text-foreground/60">{tr("Proveedor:")}{" "}<strong>{check.supplier ?? "—"}</strong>{" "}{tr("· Total")}{" "}{cop(check.total)}</p>
           {check.problems.length > 0 ? (
             <ul className="text-xs text-red-700 bg-red-50 rounded-xl p-3 space-y-1">
-              {check.problems.map((p) => <li key={p} className="flex gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />{p}</li>)}
+              {check.problems.map((p) => <li key={p} className="flex gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />{tr.msg(p)}</li>)}
             </ul>
           ) : (
             <button type="button" onClick={send} disabled={isPending}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-foreground text-background text-xs font-bold hover:bg-[#C59F59] disabled:opacity-50">
-              {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Enviar a Siigo
+              {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}{" "}{tr("Enviar a Siigo")}
             </button>
           )}
         </div>
       )}
-      {error && <p className="text-xs text-red-600 break-words">{error}</p>}
+      {error && <p className="text-xs text-red-600 break-words">{tr.msg(error)}</p>}
     </div>
   );
 }

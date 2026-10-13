@@ -14,6 +14,7 @@ import {
   UploadCloud,
   Handshake,
 } from "lucide-react";
+import { useTr } from "./AdminI18n";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", Icon: LayoutDashboard, exact: true },
@@ -43,6 +44,7 @@ export function activeHref(pathname: string): string | null {
 }
 
 export default function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
+  const tr = useTr();
   const pathname = usePathname();
   const current = activeHref(pathname);
 
@@ -67,7 +69,7 @@ export default function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
                 active ? "text-white/80" : "text-foreground/40 group-hover:text-white/80"
               }`}
             />
-            {label}
+            {tr(label)}
           </Link>
         );
       })}

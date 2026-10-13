@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { numeroALetras, formatCOP, formatDateSpanish } from "../cuentasCobroHelpers";
+import { numeroALetras, formatCOP, formatDateSpanish, amountInWordsEn, amountInWords, formatDocDate } from "../cuentasCobroHelpers";
 
 // Amounts in words are printed on legal cuentas de cobro: they must read
 // exactly as Colombian Spanish writes them.
@@ -65,5 +65,30 @@ describe("formatDateSpanish", () => {
   it("returns an empty string for missing dates", () => {
     expect(formatDateSpanish(null)).toBe("");
     expect(formatDateSpanish("")).toBe("");
+  });
+});
+
+describe("amount in English words", () => {
+  it.each([
+    [0, "ZERO COLOMBIAN PESOS"],
+    [1, "ONE COLOMBIAN PESO"],
+    [21, "TWENTY-ONE COLOMBIAN PESOS"],
+    [115, "ONE HUNDRED FIFTEEN COLOMBIAN PESOS"],
+    [1500, "ONE THOUSAND FIVE HUNDRED COLOMBIAN PESOS"],
+    [1_500_000, "ONE MILLION FIVE HUNDRED THOUSAND COLOMBIAN PESOS"],
+    [2_001_090, "TWO MILLION ONE THOUSAND NINETY COLOMBIAN PESOS"],
+    [13_328_000, "THIRTEEN MILLION THREE HUNDRED TWENTY-EIGHT THOUSAND COLOMBIAN PESOS"],
+  ])("%d → %s", (n, words) => {
+    expect(amountInWordsEn(n)).toBe(words);
+  });
+
+  it("follows the document language", () => {
+    expect(amountInWords(1500, "es")).toBe("UN MIL QUINIENTOS PESOS M/CTE");
+    expect(amountInWords(1500, "en")).toBe("ONE THOUSAND FIVE HUNDRED COLOMBIAN PESOS");
+  });
+
+  it("dates in English", () => {
+    expect(formatDocDate("2026-10-13", "en")).toBe("October 13, 2026");
+    expect(formatDocDate("2026-10-13", "es")).toBe(formatDateSpanish("2026-10-13"));
   });
 });

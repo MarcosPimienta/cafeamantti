@@ -3,6 +3,7 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { ProposalBlock, PriceTableItem } from './BlockCard';
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 interface PriceTableBlockProps {
   block: ProposalBlock;
@@ -16,6 +17,7 @@ function calculateMargin(cost: number, pvp: number): string {
 }
 
 export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProps) {
+  const tr = useTr();
   const items = block.items || [{ item: '', cost: 0, pvp: 0 }];
   const displayPvp = block.showPvp !== false;
   const displayMargin = displayPvp && block.showMargin !== false;
@@ -42,7 +44,7 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
           type="text"
           value={block.title}
           onChange={(e) => onUpdate({ ...block, title: e.target.value })}
-          placeholder="Título de la tabla..."
+          placeholder={tr("Título de la tabla...")}
           className="text-base font-bold bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-foreground placeholder:text-foreground/25 flex-1"
         />
         <div className="flex flex-wrap gap-4 items-center">
@@ -53,7 +55,7 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
               onChange={(e) => onUpdate({ ...block, showPvp: e.target.checked })}
               className="w-3.5 h-3.5 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]/20 cursor-pointer"
             />
-            <span>PVP Sugerido</span>
+            <span>{tr("PVP Sugerido")}</span>
           </label>
           {block.showPvp !== false && (
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground/50 select-none cursor-pointer hover:text-[#C59F59] transition-colors">
@@ -63,7 +65,7 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
                 onChange={(e) => onUpdate({ ...block, showMargin: e.target.checked })}
                 className="w-3.5 h-3.5 rounded border-foreground/20 text-[#C59F59] focus:ring-[#C59F59]/20 cursor-pointer"
               />
-              <span>Margen</span>
+              <span>{tr("Margen")}</span>
             </label>
           )}
         </div>
@@ -73,13 +75,13 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
         <table className="w-full text-sm min-w-[520px]">
           <thead>
             <tr className="bg-[#292524] text-white text-xs">
-              <th className="px-4 py-2.5 text-left font-semibold">Producto / Item</th>
-              <th className="px-4 py-2.5 text-right font-semibold w-28">Costo</th>
+              <th className="px-4 py-2.5 text-left font-semibold">{tr("Producto / Item")}</th>
+              <th className="px-4 py-2.5 text-right font-semibold w-28">{tr("Costo")}</th>
               {displayPvp && (
-                <th className="px-4 py-2.5 text-right font-semibold w-28">PVP Sugerido</th>
+                <th className="px-4 py-2.5 text-right font-semibold w-28">{tr("PVP Sugerido")}</th>
               )}
               {displayMargin && (
-                <th className="px-4 py-2.5 text-right font-semibold w-20">Margen</th>
+                <th className="px-4 py-2.5 text-right font-semibold w-20">{tr("Margen")}</th>
               )}
               <th className="px-2 py-2.5 w-10"></th>
             </tr>
@@ -92,7 +94,7 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
                     type="text"
                     value={row.item}
                     onChange={(e) => updateItem(i, 'item', e.target.value)}
-                    placeholder="Ej: Café 250g"
+                    placeholder={tr("Ej: Café 250g")}
                     className="w-full bg-transparent border-none focus:outline-none text-sm p-0"
                   />
                 </td>
@@ -132,7 +134,7 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
                     type="button"
                     onClick={() => removeRow(i)}
                     className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-50 rounded text-red-400 hover:text-red-600 transition-all"
-                    title="Eliminar fila"
+                    title={tr("Eliminar fila")}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -149,7 +151,7 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C59F59] hover:text-[#B38E4D] transition-colors"
       >
         <Plus className="w-3.5 h-3.5" />
-        Agregar Fila
+        {tr("Agregar Fila")}
       </button>
     </div>
   );

@@ -1,12 +1,16 @@
 import React from 'react';
 import { CoffeeTechSheetData } from '../actions';
 
+import { translator, type Locale } from "@/utils/i18n/translate";
 export interface TechSheetData extends CoffeeTechSheetData {
+  /** Language of the document (default Spanish). */
+  lang?: Locale;
   signedImageUrl?: string;
   signedLogoUrl?: string;
 }
 
 export function TechSheetHTMLTemplate({ data }: { data: TechSheetData }) {
+  const tr = translator(data.lang ?? "es");
   const primaryColor = data.primary_color || '#717861';
   const bgColor = data.bg_color || '#f2f0eb';
   
@@ -77,7 +81,7 @@ export function TechSheetHTMLTemplate({ data }: { data: TechSheetData }) {
           <div style={{ minHeight: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
             <img 
               src={logoSrc} 
-              alt="Logo Marca" 
+              alt={tr("Logo Marca")} 
               style={{ maxHeight: '75px', maxWidth: '180px', objectFit: 'contain', filter: logoSrc.includes('logo-amantti') ? 'brightness(0) invert(1)' : 'none' }} 
               onError={(e) => {
                 // Fallback to text if image fails to load
@@ -180,7 +184,7 @@ export function TechSheetHTMLTemplate({ data }: { data: TechSheetData }) {
                   lineHeight: '1.4',
                 }}
               >
-                <span style={{ fontWeight: 800 }}>Origen:</span>{' '}
+                <span style={{ fontWeight: 800 }}>{tr("Origen:")}</span>{' '}
                 <span style={{ fontWeight: 500, color: 'rgba(255, 255, 255, 0.95)' }}>{data.origin || 'Betulia Antioquia'}</span>
               </div>
 
@@ -199,31 +203,31 @@ export function TechSheetHTMLTemplate({ data }: { data: TechSheetData }) {
               >
                 {data.farm_name && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Finca:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Finca:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.farm_name}</span>
                   </div>
                 )}
                 {data.location && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Ubicación:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Ubicación:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.location}</span>
                   </div>
                 )}
                 {data.altitude && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Altura:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Altura:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.altitude}</span>
                   </div>
                 )}
                 {data.variety && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Variedad:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Variedad:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.variety}</span>
                   </div>
                 )}
                 {data.process && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Proceso:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Proceso:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.process}</span>
                   </div>
                 )}
@@ -241,13 +245,13 @@ export function TechSheetHTMLTemplate({ data }: { data: TechSheetData }) {
               >
                 {data.roast_level && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Tostión:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Tostión:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.roast_level}</span>
                   </div>
                 )}
                 {data.sca_score !== undefined && data.sca_score !== null && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Puntaje SCA:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Puntaje SCA:")}</span>{' '}
                     <span style={{ fontWeight: 700 }}>{data.sca_score}</span>
                   </div>
                 )}
@@ -268,25 +272,25 @@ export function TechSheetHTMLTemplate({ data }: { data: TechSheetData }) {
               >
                 {data.sensory_profile && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Perfil sensorial:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Perfil sensorial:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.sensory_profile}</span>
                   </div>
                 )}
                 {data.acidity && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Acidez:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Acidez:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.acidity}</span>
                   </div>
                 )}
                 {data.body && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Cuerpo:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Cuerpo:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.body}</span>
                   </div>
                 )}
                 {data.sweetness && (
                   <div>
-                    <span style={{ fontWeight: 800 }}>Dulzor:</span>{' '}
+                    <span style={{ fontWeight: 800 }}>{tr("Dulzor:")}</span>{' '}
                     <span style={{ fontWeight: 500 }}>{data.sweetness}</span>
                   </div>
                 )}

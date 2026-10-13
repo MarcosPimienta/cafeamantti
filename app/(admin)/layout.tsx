@@ -5,12 +5,17 @@ import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import AdminNav from "./AdminNav";
 import AdminMobileNav from "./AdminMobileNav";
+import { getLocale } from "@/utils/i18n/server";
+import { translator } from "@/utils/i18n/translate";
+import { AdminI18nProvider, LanguageSwitch } from "./AdminI18n";
 
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLocale();
+  const tr = translator(locale);
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -29,6 +34,7 @@ export default async function AdminLayout({
   }
 
   return (
+    <AdminI18nProvider locale={locale}>
     <div className="min-h-screen bg-[#f9f7f0] flex font-sans">
       {/* Sidebar */}
       {/* Sticky so the menu stays in reach while long pages scroll. */}
@@ -42,14 +48,15 @@ export default async function AdminLayout({
         <AdminNav />
 
         <div className="p-4 lg:p-6 border-t border-foreground/5">
+          <LanguageSwitch className="px-4 pb-3" />
           <Link href="/admin/settings" className="flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl text-foreground/60 hover:bg-foreground/5 transition-all mb-2">
             <Settings className="w-4 h-4 text-foreground/40" />
-            Ajustes
+            {tr("Ajustes")}
           </Link>
           <form action="/auth/signout" method="post">
             <button suppressHydrationWarning className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl text-red-500 hover:bg-red-50 transition-all">
               <LogOut className="w-4 h-4 text-red-400" />
-              Salir
+              {tr("Salir")}
             </button>
           </form>
         </div>
@@ -67,5 +74,6 @@ export default async function AdminLayout({
         </div>
       </main>
     </div>
+    </AdminI18nProvider>
   );
 }

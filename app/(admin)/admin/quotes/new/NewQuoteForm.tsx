@@ -6,8 +6,12 @@ import { generateQuotePDF } from '@/utils/pdf/quoteGenerator';
 import { Plus, Trash2, FileDown, Save, Eye, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { QuoteHTMLTemplate } from '../QuoteHTMLTemplate';
+import { DocLanguagePicker, useTr } from "@/app/(admin)/AdminI18n";
+import { translate, type Locale } from "@/utils/i18n/translate";
 
 export default function NewQuoteForm({ clients, inventory, initialQuote, sellerName }: { clients: any[], inventory: any[], initialQuote?: any, sellerName?: string }) {
+  const tr = useTr();
+  const [docLang, setDocLang] = useState<Locale>(tr.locale);
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -88,10 +92,10 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       clientDocumentType,
       clientEmail,
       clientPhone,
-      sellerName: sellerName || 'Asesor Amantti',
+      sellerName: sellerName || translate(docLang, 'Asesor Amantti'),
       orientation,
       items: items.map(i => ({
-        description: i.description || 'Sin descripción',
+        description: i.description || translate(docLang, 'Sin descripción'),
         quantity: Number(i.quantity) || 1,
         unit_price: Number(i.unit_price) || 0,
         iva_rate: Number(i.iva_rate) || 0,
@@ -104,8 +108,9 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       tax5,
       tax19,
       totalAmount,
-      validUntil: validUntil || '15 días',
-      date: new Date().toLocaleDateString('es-CO'),
+      validUntil: validUntil || translate(docLang, '15 días'),
+      date: new Date().toLocaleDateString(docLang === 'en' ? 'en-US' : 'es-CO'),
+      lang: docLang,
     };
   };
 
@@ -117,15 +122,15 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
   };
 
   const handlePreview = () => {
-    if (items.length === 0) return alert('Agrega al menos un item para previsualizar');
-    if (!clientId) return alert('Selecciona un cliente para previsualizar');
+    if (items.length === 0) return alert(tr("Agrega al menos un item para previsualizar"));
+    if (!clientId) return alert(tr("Selecciona un cliente para previsualizar"));
     setShowPreview(true);
   };
 
   const handleSubmit = async (e: React.FormEvent, generatePdf: boolean) => {
     e.preventDefault();
-    if (!clientId) return alert('Selecciona un cliente');
-    if (items.length === 0) return alert('Agrega al menos un item');
+    if (!clientId) return alert(tr("Selecciona un cliente"));
+    if (items.length === 0) return alert(tr("Agrega al menos un item"));
 
     setIsSubmitting(true);
     
@@ -173,7 +178,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       router.refresh();
     } catch (error) {
       console.error(error);
-      alert('Error al guardar la cotización');
+      alert(tr("Error al guardar la cotización"));
     } finally {
       setIsSubmitting(false);
     }
@@ -184,10 +189,10 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       {/* Client & Settings */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <h3 className="font-bold text-foreground">Datos del Cliente</h3>
+          <h3 className="font-bold text-foreground">{tr("Datos del Cliente")}</h3>
           
           <div>
-            <label className="block text-sm font-medium text-foreground/70 mb-1">Cliente *</label>
+            <label className="block text-sm font-medium text-foreground/70 mb-1">{tr("Cliente *")}</label>
             <select 
               required
               value={clientId}
@@ -195,8 +200,8 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
               suppressHydrationWarning
               className="w-full p-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
             >
-              <option value="">Selecciona un cliente del CRM</option>
-              <option value="custom" className="font-bold text-[#C59F59]">+ Cliente Personalizado (No en CRM)</option>
+              <option value="">{tr("Selecciona un cliente del CRM")}</option>
+              <option value="custom" className="font-bold text-[#C59F59]">{tr("+ Cliente Personalizado (No en CRM)")}</option>
               {clients.map(c => (
                 <option key={c.id} value={c.id}>{c.name} {c.document_number ? `(${c.document_number})` : ''}</option>
               ))}
@@ -206,7 +211,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
           {clientId === 'custom' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-[#f9f7f0] p-4 rounded-xl border border-foreground/5">
               <div className="col-span-full md:col-span-2">
-                <label className="block text-sm font-medium text-foreground/70 mb-1">Nombre Completo *</label>
+                <label className="block text-sm font-medium text-foreground/70 mb-1">{tr("Nombre Completo *")}</label>
                 <input 
                   required 
                   type="text" 
@@ -216,7 +221,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground/70 mb-1">Documento (Opcional)</label>
+                <label className="block text-sm font-medium text-foreground/70 mb-1">{tr("Documento (Opcional)")}</label>
                 <input 
                   type="text" 
                   value={customClientDocument} 
@@ -225,7 +230,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground/70 mb-1">Email (Opcional)</label>
+                <label className="block text-sm font-medium text-foreground/70 mb-1">{tr("Email (Opcional)")}</label>
                 <input 
                   type="email" 
                   value={customClientEmail} 
@@ -234,7 +239,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground/70 mb-1">Teléfono (Opcional)</label>
+                <label className="block text-sm font-medium text-foreground/70 mb-1">{tr("Teléfono (Opcional)")}</label>
                 <input 
                   type="text" 
                   value={customClientPhone} 
@@ -247,38 +252,38 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-bold text-foreground">Opciones de la Cotización</h3>
+          <h3 className="font-bold text-foreground">{tr("Opciones de la Cotización")}</h3>
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-foreground/70 mb-1">Estado</label>
+              <label className="block text-sm font-medium text-foreground/70 mb-1">{tr("Estado")}</label>
               <select 
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 suppressHydrationWarning
                 className="w-full p-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
               >
-                <option value="Borrador">Borrador</option>
-                <option value="Enviada">Enviada</option>
-                <option value="Aprobada">Aprobada</option>
-                <option value="Rechazada">Rechazada</option>
+                <option value="Borrador">{tr("Borrador")}</option>
+                <option value="Enviada">{tr("Enviada")}</option>
+                <option value="Aprobada">{tr("Aprobada")}</option>
+                <option value="Rechazada">{tr("Rechazada")}</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground/70 mb-1">Orientación PDF</label>
+              <label className="block text-sm font-medium text-foreground/70 mb-1">{tr("Orientación PDF")}</label>
               <select 
                 value={orientation}
                 onChange={(e) => setOrientation(e.target.value as any)}
                 suppressHydrationWarning
                 className="w-full p-3 bg-[#fdfbf7] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
               >
-                <option value="portrait">Vertical (Carta)</option>
-                <option value="landscape">Horizontal (Carta)</option>
+                <option value="portrait">{tr("Vertical (Carta)")}</option>
+                <option value="landscape">{tr("Horizontal (Carta)")}</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground/70 mb-1">Válida hasta (Opcional)</label>
+            <label className="block text-sm font-medium text-foreground/70 mb-1">{tr("Válida hasta (Opcional)")}</label>
             <input 
               type="date" 
               value={validUntil}
@@ -295,14 +300,14 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
       {/* Items */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-foreground">Productos a Cotizar</h3>
+          <h3 className="font-bold text-foreground">{tr("Productos a Cotizar")}</h3>
           <button 
             type="button" 
             onClick={addItem}
             suppressHydrationWarning
             className="flex items-center gap-2 text-sm text-[#C59F59] font-bold hover:text-[#B38E4D]"
           >
-            <Plus className="w-4 h-4" /> Agregar Item
+            <Plus className="w-4 h-4" />{" "}{tr("Agregar Item")}
           </button>
         </div>
 
@@ -310,34 +315,34 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
           {items.map((item, index) => (
             <div key={index} className="flex flex-col md:flex-row gap-3 p-4 bg-[#f9f7f0] border border-foreground/5 rounded-xl items-start md:items-center">
               <div className="w-full md:w-1/4">
-                <label className="block text-xs font-medium text-foreground/50 mb-1">Producto</label>
+                <label className="block text-xs font-medium text-foreground/50 mb-1">{tr("Producto")}</label>
                 <select 
                   value={item.product_id}
                   onChange={(e) => handleItemChange(index, 'product_id', e.target.value)}
                   suppressHydrationWarning
                   className="w-full p-2 bg-white border border-foreground/10 rounded-lg text-sm"
                 >
-                  <option value="">Seleccionar...</option>
-                  <option value="otro">Otro (Escribir manual)</option>
+                  <option value="">{tr("Seleccionar...")}</option>
+                  <option value="otro">{tr("Otro (Escribir manual)")}</option>
                   {inventory.map(p => (
                     <option key={p.id} value={p.id}>{p.product_name}</option>
                   ))}
                 </select>
               </div>
               <div className="w-full md:w-1/3">
-                <label className="block text-xs font-medium text-foreground/50 mb-1">Descripción</label>
+                <label className="block text-xs font-medium text-foreground/50 mb-1">{tr("Descripción")}</label>
                 <input 
                   type="text" 
                   value={item.description}
                   onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                  placeholder="Descripción del item"
+                  placeholder={tr("Descripción del item")}
                   required
                   suppressHydrationWarning
                   className="w-full p-2 bg-white border border-foreground/10 rounded-lg text-sm"
                 />
               </div>
               <div className="w-full md:w-24">
-                <label className="block text-xs font-medium text-foreground/50 mb-1">Cantidad</label>
+                <label className="block text-xs font-medium text-foreground/50 mb-1">{tr("Cantidad")}</label>
                 <input 
                   type="number" 
                   min="1"
@@ -349,7 +354,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 />
               </div>
               <div className="w-full md:w-32">
-                <label className="block text-xs font-medium text-foreground/50 mb-1">Precio Unit.</label>
+                <label className="block text-xs font-medium text-foreground/50 mb-1">{tr("Precio Unit.")}</label>
                 <input 
                   type="number" 
                   min="0"
@@ -361,7 +366,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 />
               </div>
               <div className="w-full md:w-24">
-                <label className="block text-xs font-medium text-foreground/50 mb-1">IVA</label>
+                <label className="block text-xs font-medium text-foreground/50 mb-1">{tr("IVA")}</label>
                 <select 
                   value={item.iva_rate ?? 0}
                   onChange={(e) => handleItemChange(index, 'iva_rate', Number(e.target.value))}
@@ -374,7 +379,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
                 </select>
               </div>
               <div className="w-full md:w-32">
-                <label className="block text-xs font-bold text-foreground/70 mb-1">Total</label>
+                <label className="block text-xs font-bold text-foreground/70 mb-1">{tr("Total")}</label>
                 <div 
                   suppressHydrationWarning
                   className="p-2 text-sm text-right font-mono font-bold bg-white/50 rounded-lg border border-transparent"
@@ -399,11 +404,11 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
         <div className="flex justify-end pt-4">
           <div className="bg-[#fdfbf7] p-6 rounded-2xl border border-[#C59F59]/20 w-full md:w-1/3 space-y-3">
             <div className="flex justify-between items-center text-sm text-foreground/70">
-              <span>Subtotal:</span>
+              <span>{tr("Subtotal:")}</span>
               <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(subtotal)}</span>
             </div>
             <div className="flex justify-between items-center text-sm text-foreground/70">
-              <span>Descuento:</span>
+              <span>{tr("Descuento:")}</span>
               <input 
                 type="number"
                 min="0"
@@ -414,18 +419,18 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
             </div>
             {tax5 > 0 && (
               <div className="flex justify-between items-center text-sm text-foreground/70">
-                <span>IVA (5%):</span>
+                <span>{tr("IVA (5%):")}</span>
                 <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(tax5)}</span>
               </div>
             )}
             {tax19 > 0 && (
               <div className="flex justify-between items-center text-sm text-foreground/70">
-                <span>IVA (19%):</span>
+                <span>{tr("IVA (19%):")}</span>
                 <span className="font-mono">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(tax19)}</span>
               </div>
             )}
             <div className="pt-3 border-t border-foreground/10 flex justify-between items-center text-xl font-bold text-foreground">
-              <span>Gran Total:</span>
+              <span>{tr("Gran Total:")}</span>
               <span 
                 suppressHydrationWarning
                 className="font-mono text-[#C59F59]"
@@ -437,14 +442,15 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-4 pt-6 border-t border-foreground/5">
+      <div className="flex flex-wrap items-center justify-end gap-4 pt-6 border-t border-foreground/5">
+        <DocLanguagePicker value={docLang} onChange={setDocLang} className="mr-auto" />
         <button 
           type="button"
           onClick={handlePreview}
           suppressHydrationWarning
           className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 text-foreground font-bold rounded-xl hover:bg-foreground/5 transition-colors"
         >
-          <Eye className="w-5 h-5" /> Previsualizar
+          <Eye className="w-5 h-5" />{" "}{tr("Previsualizar")}
         </button>
         <button 
           type="button"
@@ -453,7 +459,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
           suppressHydrationWarning
           className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 text-foreground font-bold rounded-xl hover:bg-foreground/5 transition-colors disabled:opacity-50"
         >
-          <Save className="w-5 h-5" /> Solo Guardar
+          <Save className="w-5 h-5" />{" "}{tr("Solo Guardar")}
         </button>
         <button 
           type="button"
@@ -462,7 +468,7 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
           suppressHydrationWarning
           className="flex items-center gap-2 px-6 py-3 bg-[#2a221f] text-white font-bold rounded-xl hover:bg-[#3d322d] transition-colors disabled:opacity-50"
         >
-          <FileDown className="w-5 h-5" /> Guardar y Generar PDF
+          <FileDown className="w-5 h-5" />{" "}{tr("Guardar y Generar PDF")}
         </button>
       </div>
 
@@ -474,8 +480,8 @@ export default function NewQuoteForm({ clients, inventory, initialQuote, sellerN
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-[#f0ece2] flex-shrink-0 rounded-t-3xl">
               <div>
-                <h3 className="font-bold text-lg" style={{ fontFamily: 'serif' }}>Vista Previa de Cotización</h3>
-                <p className="text-xs text-stone-400 mt-0.5">El PDF final se generará exactamente así al guardar</p>
+                <h3 className="font-bold text-lg" style={{ fontFamily: 'serif' }}>{tr("Vista Previa de Cotización")}</h3>
+                <p className="text-xs text-stone-400 mt-0.5">{tr("El PDF final se generará exactamente así al guardar")}</p>
               </div>
               <button 
                 type="button" 

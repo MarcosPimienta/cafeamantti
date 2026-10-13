@@ -6,6 +6,7 @@ import { getCostingData, savePackagingRecipe, updateCostSettings, updateStandard
 import type { PackagingLine } from "@/utils/costing/packaging";
 import { PROFILE_LABELS, type CoffeeProfileId } from "../../coffeeProfiles";
 import type { CostLine, CostSettings } from "@/utils/costing/costPerKg";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 type CostingData = Awaited<ReturnType<typeof getCostingData>>;
 
@@ -45,6 +46,7 @@ function SaveField({
   step?: string;
   ariaLabel: string;
 }) {
+  const tr = useTr();
   const [draft, setDraft] = useState(value === null ? "" : String(value));
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [snapshot, setSnapshot] = useState(value);
@@ -63,7 +65,7 @@ function SaveField({
       setTimeout(() => setState("idle"), 1500);
     } catch (err) {
       setState("error");
-      alert(err instanceof Error ? err.message : "No se pudo guardar");
+      alert(tr.msg(err instanceof Error ? err.message : tr("No se pudo guardar")));
     }
   }
 
@@ -106,6 +108,7 @@ function RecipeEditor({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const tr = useTr();
   const [rows, setRows] = useState<{ code: string; qty: string }[]>(
     line.packaging.map((p) => ({ code: p.code, qty: String(p.qty) }))
   );
@@ -120,7 +123,7 @@ function RecipeEditor({
         onSaved();
         onClose();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudo guardar");
+        setError(err instanceof Error ? err.message : tr("No se pudo guardar"));
       }
     });
   }
@@ -131,35 +134,34 @@ function RecipeEditor({
         className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label={`Empaque de ${line.product_name}`}
+        aria-label={tr("Empaque de {product_name}", { product_name: line.product_name })}
       >
         <div className="px-6 py-5 border-b border-foreground/5 flex items-start justify-between gap-4">
           <div>
-            <p className={labelCls}>Receta de empaque</p>
+            <p className={labelCls}>{tr("Receta de empaque")}</p>
             <h3 className="font-serif text-lg">{line.product_name}</h3>
             <p className="text-xs text-foreground/50 mt-1">
-              Lo que consume empacar <strong>una unidad</strong>. Se usa en el costo y en el consumo sugerido de
-              Empaque/Altas y Reempaque.
+              {tr("Lo que consume empacar")}{" "}<strong>{tr("una unidad")}</strong>{tr(". Se usa en el costo y en el consumo sugerido de Empaque/Altas y Reempaque.")}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5" aria-label="Cerrar">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5" aria-label={tr("Cerrar")}>
             <X className="w-5 h-5 text-foreground/40" />
           </button>
         </div>
 
         <div className="p-6 space-y-3">
           {rows.length === 0 && (
-            <p className="text-sm text-foreground/50 bg-[#fdfbf7] rounded-xl px-4 py-3">Sin empaque: esta referencia no consume insumos.</p>
+            <p className="text-sm text-foreground/50 bg-[#fdfbf7] rounded-xl px-4 py-3">{tr("Sin empaque: esta referencia no consume insumos.")}</p>
           )}
           {rows.map((r, i) => (
             <div key={i} className="grid grid-cols-[1fr_80px_auto] gap-2 items-center">
               <select
                 value={r.code}
                 onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, code: e.target.value } : x)))}
-                aria-label="Insumo"
+                aria-label={tr("Insumo")}
                 className={inputCls}
               >
-                <option value="">Seleccionar…</option>
+                <option value="">{tr("Seleccionar…")}</option>
                 {r.code && !options.some((o) => o.code === r.code) && <option value={r.code}>{r.code}</option>}
                 {options.map((o) => (
                   <option key={o.code} value={o.code}>
@@ -173,14 +175,14 @@ function RecipeEditor({
                 step="any"
                 value={r.qty}
                 onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
-                aria-label={`Cantidad de ${nameOf(r.code)}`}
+                aria-label={tr("Cantidad de {nameOf}", { nameOf: nameOf(r.code) })}
                 className={inputCls}
               />
               <button
                 type="button"
                 onClick={() => setRows(rows.filter((_, j) => j !== i))}
                 className="p-2 rounded-lg text-foreground/30 hover:text-red-500 hover:bg-red-50"
-                aria-label={`Quitar ${nameOf(r.code)}`}
+                aria-label={tr("Quitar {nameOf}", { nameOf: nameOf(r.code) })}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -191,9 +193,9 @@ function RecipeEditor({
             onClick={() => setRows([...rows, { code: "", qty: "1" }])}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-foreground/20 text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5"
           >
-            <Plus className="w-3.5 h-3.5" /> Agregar insumo
+            <Plus className="w-3.5 h-3.5" />{" "}{tr("Agregar insumo")}
           </button>
-          {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
+          {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{tr.msg(error)}</p>}
         </div>
 
         <div className="px-6 pb-6 flex flex-col-reverse sm:flex-row gap-2 sm:justify-between">
@@ -202,9 +204,9 @@ function RecipeEditor({
             disabled={isPending || !line.customPackaging}
             onClick={() => save(null)}
             className="px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5 disabled:opacity-40"
-            title="Volver a bolsa + sticker del perfil"
+            title={tr("Volver a bolsa + sticker del perfil")}
           >
-            Predeterminado
+            {tr("Predeterminado")}
           </button>
           <button
             type="button"
@@ -213,7 +215,7 @@ function RecipeEditor({
             className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#C59F59] hover:bg-[#b08d4f] text-white text-xs font-bold uppercase tracking-widest disabled:opacity-60"
           >
             {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-            Guardar receta
+            {tr("Guardar receta")}
           </button>
         </div>
       </div>
@@ -227,6 +229,7 @@ function RecipeEditor({
  * the prices and parameters it is built from.
  */
 export default function CostosTab() {
+  const tr = useTr();
   const [data, setData] = useState<CostingData | null>(null);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -238,7 +241,7 @@ export default function CostosTab() {
         setData(await getCostingData());
         setError("");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error al cargar los costos");
+        setError(err instanceof Error ? err.message : tr("Error al cargar los costos"));
       }
     });
   }
@@ -256,7 +259,7 @@ export default function CostosTab() {
     load();
   };
 
-  if (error) return <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>;
+  if (error) return <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{tr.msg(error)}</p>;
   if (!data) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -277,17 +280,15 @@ export default function CostosTab() {
       <div className={`${cardCls} p-6 sm:p-8`}>
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-serif">Costo directo por kg</h2>
+            <h2 className="text-xl font-serif">{tr("Costo directo por kg")}</h2>
             <p className="text-sm text-foreground/50 mt-1 max-w-3xl">
-              Cuánto cuesta cada kilo de café tostado, empacado y despachado: café (verde o pergamino según cómo
-              llegó, ajustado por los rendimientos reales), maquila de tostión, empaque y despacho. Solo costos
-              directos. El margen usa el precio promedio de venta de los últimos {salesWindowDays} días.
+              {tr("Cuánto cuesta cada kilo de café tostado, empacado y despachado: café (verde o pergamino según cómo llegó, ajustado por los rendimientos reales), maquila de tostión, empaque y despacho. Solo costos directos. El margen usa el precio promedio de venta de los últimos {salesWindowDays} días.", { salesWindowDays: salesWindowDays })}
             </p>
           </div>
           <button
             onClick={load}
             className="self-start p-2 rounded-xl hover:bg-foreground/5 text-foreground/40"
-            aria-label="Recalcular"
+            aria-label={tr("Recalcular")}
           >
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           </button>
@@ -295,8 +296,7 @@ export default function CostosTab() {
         {!migrated && (
           <div className="mt-4 flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-            Falta aplicar la migración <code className="font-mono">20261009000000_costing.sql</code>: hasta entonces no se
-            pueden guardar precios ni parámetros.
+            {tr("Falta aplicar la migración")}{" "}<code className="font-mono">20261009000000_costing.sql</code>{tr(": hasta entonces no se pueden guardar precios ni parámetros.")}
           </div>
         )}
       </div>
@@ -304,22 +304,22 @@ export default function CostosTab() {
       {/* Cost sheet */}
       <div className={`${cardCls} overflow-hidden`}>
         <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7]">
-          <h3 className="font-serif text-lg">Costo por referencia</h3>
-          <p className="text-xs text-foreground/50 mt-0.5">Valores por kg de café tostado; la última columna de costo es por bolsa.</p>
+          <h3 className="font-serif text-lg">{tr("Costo por referencia")}</h3>
+          <p className="text-xs text-foreground/50 mt-0.5">{tr("Valores por kg de café tostado; la última columna de costo es por bolsa.")}</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-foreground/5">
-                <th className={thCls}>Referencia</th>
-                <th className={`${thCls} text-right`}>Café</th>
-                <th className={`${thCls} text-right`}>Tostión</th>
-                <th className={`${thCls} text-right`}>Empaque</th>
-                <th className={`${thCls} text-right`}>Despacho</th>
-                <th className={`${thCls} text-right`}>Costo / kg</th>
-                <th className={`${thCls} text-right`}>Costo / unidad</th>
-                <th className={`${thCls} text-right`}>Venta / kg</th>
-                <th className={`${thCls} text-right`}>Margen</th>
+                <th className={thCls}>{tr("Referencia")}</th>
+                <th className={`${thCls} text-right`}>{tr("Café")}</th>
+                <th className={`${thCls} text-right`}>{tr("Tostión")}</th>
+                <th className={`${thCls} text-right`}>{tr("Empaque")}</th>
+                <th className={`${thCls} text-right`}>{tr("Despacho")}</th>
+                <th className={`${thCls} text-right`}>{tr("Costo / kg")}</th>
+                <th className={`${thCls} text-right`}>{tr("Costo / unidad")}</th>
+                <th className={`${thCls} text-right`}>{tr("Venta / kg")}</th>
+                <th className={`${thCls} text-right`}>{tr("Margen")}</th>
               </tr>
             </thead>
             <tbody>
@@ -327,7 +327,7 @@ export default function CostosTab() {
                 <React.Fragment key={profile}>
                   <tr className="bg-[#fdfbf7]">
                     <td colSpan={9} className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#C59F59]">
-                      {PROFILE_LABELS[profile]}
+                      {tr.msg(PROFILE_LABELS[profile])}
                     </td>
                   </tr>
                   {lines.map((l: CostLine) => (
@@ -335,7 +335,7 @@ export default function CostosTab() {
                       <td className={tdCls}>
                         <div className="font-bold">{l.product_name}</div>
                         <div className="font-mono text-[10px] text-foreground/40">
-                          {l.product_code} · {l.kgPerUnit} kg
+                          {tr("{product_code} · {kgPerUnit} kg", { product_code: l.product_code, kgPerUnit: l.kgPerUnit })}
                         </div>
                       </td>
                       <td className={`${tdCls} text-right`}>{cop(l.cafe)}</td>
@@ -346,29 +346,29 @@ export default function CostosTab() {
                           type="button"
                           onClick={() => setEditing(l)}
                           className="inline-flex items-center gap-1 text-[10px] text-foreground/40 hover:text-[#C59F59] max-w-[180px] truncate"
-                          title="Editar receta de empaque"
+                          title={tr("Editar receta de empaque")}
                         >
                           <Pencil className="w-3 h-3 shrink-0" />
                           <span className="truncate">
                             {l.packaging.length
                               ? l.packaging.map((p) => `${p.qty !== 1 ? `${p.qty}× ` : ""}${optionName(p.code)}`).join(" + ")
-                              : "Sin empaque"}
+                              : tr("Sin empaque")}
                           </span>
-                          {!l.customPackaging && <span className="shrink-0">· predet.</span>}
+                          {!l.customPackaging && <span className="shrink-0">{tr("· predet.")}</span>}
                         </button>
                       </td>
                       <td className={`${tdCls} text-right`}>{cop(l.despacho)}</td>
                       <td className={`${tdCls} text-right font-bold`}>
                         {l.costPerKg === null ? (
                           <span className="inline-flex items-center gap-1 text-amber-600 text-xs" title={l.missing.join("\n")}>
-                            <AlertTriangle className="w-3.5 h-3.5" /> Falta precio
+                            <AlertTriangle className="w-3.5 h-3.5" />{" "}{tr("Falta precio")}
                           </span>
                         ) : (
                           cop(l.costPerKg)
                         )}
                       </td>
                       <td className={`${tdCls} text-right`}>{cop(l.costPerUnit)}</td>
-                      <td className={`${tdCls} text-right text-foreground/60`}>{l.salePerKg === null ? "Sin ventas" : cop(l.salePerKg)}</td>
+                      <td className={`${tdCls} text-right text-foreground/60`}>{l.salePerKg === null ? tr("Sin ventas") : cop(l.salePerKg)}</td>
                       <td className={`${tdCls} text-right font-bold ${marginTone(l.marginPct)}`}>
                         {l.marginPct === null ? "—" : `${l.marginPct.toLocaleString("es-CO", { maximumFractionDigits: 1 })} %`}
                       </td>
@@ -381,7 +381,7 @@ export default function CostosTab() {
         </div>
         {sheet.lines.some((l) => l.missing.length) && (
           <div className="px-6 py-4 border-t border-foreground/5 text-xs text-amber-800 bg-amber-50/60">
-            <p className="font-bold mb-1">Para completar los costos falta:</p>
+            <p className="font-bold mb-1">{tr("Para completar los costos falta:")}</p>
             <ul className="list-disc pl-5 space-y-0.5">
               {[...new Set(sheet.lines.flatMap((l) => l.missing))].map((m) => (
                 <li key={m}>{m}</li>
@@ -398,12 +398,12 @@ export default function CostosTab() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Purchase prices */}
         <div className={`${cardCls} p-6`}>
-          <h3 className="font-serif text-lg">Precios de compra</h3>
-          <p className="text-xs text-foreground/50 mt-0.5 mb-5">Lo que pagas hoy por cada insumo. Se guarda al salir del campo.</p>
+          <h3 className="font-serif text-lg">{tr("Precios de compra")}</h3>
+          <p className="text-xs text-foreground/50 mt-0.5 mb-5">{tr("Lo que pagas hoy por cada insumo. Se guarda al salir del campo.")}</p>
 
-          <p className={labelCls}>Café (por kg)</p>
+          <p className={labelCls}>{tr("Café (por kg)")}</p>
           <div className="space-y-3 mb-6">
-            {coffeeItems.length === 0 && <p className="text-sm text-foreground/40">No hay café verde ni pergamino en el inventario.</p>}
+            {coffeeItems.length === 0 && <p className="text-sm text-foreground/40">{tr("No hay café verde ni pergamino en el inventario.")}</p>}
             {coffeeItems.map((i) => (
               <div key={i.id} className="grid grid-cols-[1fr_170px] gap-3 items-center">
                 <div>
@@ -413,7 +413,7 @@ export default function CostosTab() {
                 <SaveField
                   value={i.standard_cost}
                   onSave={(v) => saveCost(i.id, v)}
-                  placeholder="$ / kg"
+                  placeholder={tr("$ / kg")}
                   ariaLabel={`Precio por kg de ${i.product_name}`}
                   step="100"
                 />
@@ -421,9 +421,9 @@ export default function CostosTab() {
             ))}
           </div>
 
-          <p className={labelCls}>Empaque (por unidad)</p>
+          <p className={labelCls}>{tr("Empaque (por unidad)")}</p>
           <div className="space-y-3">
-            {packagingItems.length === 0 && <p className="text-sm text-foreground/40">No hay empaques asociados a las referencias.</p>}
+            {packagingItems.length === 0 && <p className="text-sm text-foreground/40">{tr("No hay empaques asociados a las referencias.")}</p>}
             {packagingItems.map((i) => (
               <div key={i.id} className="grid grid-cols-[1fr_170px] gap-3 items-center">
                 <div>
@@ -433,7 +433,7 @@ export default function CostosTab() {
                 <SaveField
                   value={i.standard_cost}
                   onSave={(v) => saveCost(i.id, v)}
-                  placeholder="$ / unidad"
+                  placeholder={tr("$ / unidad")}
                   ariaLabel={`Costo por unidad de ${i.product_name}`}
                   step="10"
                 />
@@ -445,10 +445,10 @@ export default function CostosTab() {
         <div className="space-y-6">
           {/* Roasting & dispatch */}
           <div className={`${cardCls} p-6`}>
-            <h3 className="font-serif text-lg mb-5">Maquila y despacho</h3>
+            <h3 className="font-serif text-lg mb-5">{tr("Maquila y despacho")}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Maquila de tostión ($ / kg)</label>
+                <label className={labelCls}>{tr("Maquila de tostión ($ / kg)")}</label>
                 <SaveField
                   value={settings.roasting_fee_per_kg}
                   onSave={(v) => saveSetting({ roasting_fee_per_kg: v ?? 0 })}
@@ -457,19 +457,19 @@ export default function CostosTab() {
                 />
               </div>
               <div>
-                <label htmlFor="cost-basis" className={labelCls}>La maquila se cobra sobre</label>
+                <label htmlFor="cost-basis" className={labelCls}>{tr("La maquila se cobra sobre")}</label>
                 <select
                   id="cost-basis"
                   value={settings.roasting_fee_basis}
                   onChange={(e) => saveSetting({ roasting_fee_basis: e.target.value as "verde" | "tostado" })}
                   className={inputCls}
                 >
-                  <option value="verde">Kg de verde entregado</option>
-                  <option value="tostado">Kg de tostado recibido</option>
+                  <option value="verde">{tr("Kg de verde entregado")}</option>
+                  <option value="tostado">{tr("Kg de tostado recibido")}</option>
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Costo promedio por despacho</label>
+                <label className={labelCls}>{tr("Costo promedio por despacho")}</label>
                 <SaveField
                   value={settings.dispatch_cost_per_order}
                   onSave={(v) => saveSetting({ dispatch_cost_per_order: v ?? 0 })}
@@ -478,21 +478,21 @@ export default function CostosTab() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Kg por despacho</label>
+                <label className={labelCls}>{tr("Kg por despacho")}</label>
                 <SaveField
                   value={settings.dispatch_kg_per_order}
                   onSave={(v) => saveSetting({ dispatch_kg_per_order: v })}
-                  placeholder={sheet.dispatch.source === "real" ? `Medido: ${sheet.dispatch.kgPerOrder?.toFixed(2)} kg` : "Ej. 2"}
+                  placeholder={sheet.dispatch.source === "real" ? tr("Medido: {kgPerOrder} kg", { kgPerOrder: sheet.dispatch.kgPerOrder?.toFixed(2) }) : tr("Ej. 2")}
                   ariaLabel="Kg promedio por despacho"
                   suffix="kg"
                 />
                 <p className="text-[11px] text-foreground/40 mt-1">
                   {sheet.dispatch.source === "manual"
-                    ? "Valor fijado a mano. Déjalo vacío para medirlo de las órdenes."
+                    ? tr("Valor fijado a mano. Déjalo vacío para medirlo de las órdenes.")
                     : sheet.dispatch.source === "real"
-                    ? `Medido de las órdenes pagadas de los últimos ${salesWindowDays} días.`
-                    : "Sin órdenes para medirlo: escribe un valor."}
-                  {sheet.dispatch.costPerKg ? ` → ${cop(sheet.dispatch.costPerKg)} por kg.` : ""}
+                    ? tr("Medido de las órdenes pagadas de los últimos {salesWindowDays} días.", { salesWindowDays: salesWindowDays })
+                    : tr("Sin órdenes para medirlo: escribe un valor.")}
+                  {sheet.dispatch.costPerKg ? tr(" → {cop} por kg.", { cop: cop(sheet.dispatch.costPerKg) }) : ""}
                 </p>
               </div>
             </div>
@@ -500,18 +500,18 @@ export default function CostosTab() {
 
           {/* Yields */}
           <div className={`${cardCls} p-6`}>
-            <h3 className="font-serif text-lg">Rendimientos y origen del verde</h3>
+            <h3 className="font-serif text-lg">{tr("Rendimientos y origen del verde")}</h3>
             <p className="text-xs text-foreground/50 mt-0.5 mb-4">
-              Medidos de tus lotes de Trilla y Tostión. Sin lotes se usa el valor por defecto.
+              {tr("Medidos de tus lotes de Trilla y Tostión. Sin lotes se usa el valor por defecto.")}
             </p>
             <div className="overflow-x-auto -mx-6 px-6">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-foreground/5">
-                    <th className={`${thCls} px-2`}>Perfil</th>
-                    <th className={`${thCls} px-2 text-right`}>Tostión</th>
-                    <th className={`${thCls} px-2 text-right`}>Trilla</th>
-                    <th className={`${thCls} px-2 text-right`}>Verde desde pergamino</th>
+                    <th className={`${thCls} px-2`}>{tr("Perfil")}</th>
+                    <th className={`${thCls} px-2 text-right`}>{tr("Tostión")}</th>
+                    <th className={`${thCls} px-2 text-right`}>{tr("Trilla")}</th>
+                    <th className={`${thCls} px-2 text-right`}>{tr("Verde desde pergamino")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -521,7 +521,7 @@ export default function CostosTab() {
                       m.source === "real" ? `${m.batches} lote${m.batches === 1 ? "" : "s"}` : "por defecto";
                     return (
                       <tr key={p} className="border-b border-foreground/5">
-                        <td className="px-2 py-3 text-sm font-bold">{PROFILE_LABELS[p]}</td>
+                        <td className="px-2 py-3 text-sm font-bold">{tr.msg(PROFILE_LABELS[p])}</td>
                         <td className="px-2 py-3 text-sm text-right">
                           {pct(y.tostion.value)} <span className="block text-[10px] text-foreground/40">{src(y.tostion)}</span>
                         </td>
@@ -530,8 +530,8 @@ export default function CostosTab() {
                         </td>
                         <td className="px-2 py-3 text-sm text-right">
                           {y.pergaminoShare === null ? (
-                            <span className="text-foreground/40" title="Sin entradas de verde ni trillas: se promedian ambos precios">
-                              sin datos
+                            <span className="text-foreground/40" title={tr("Sin entradas de verde ni trillas: se promedian ambos precios")}>
+                              {tr("sin datos")}
                             </span>
                           ) : (
                             pct(y.pergaminoShare)
@@ -545,7 +545,7 @@ export default function CostosTab() {
             </div>
             <div className="grid grid-cols-2 gap-4 mt-5">
               <div>
-                <label className={labelCls}>Tostión por defecto</label>
+                <label className={labelCls}>{tr("Tostión por defecto")}</label>
                 <SaveField
                   value={Math.round(settings.default_roast_yield * 1000) / 10}
                   onSave={(v) => saveSetting({ default_roast_yield: (v ?? 0) / 100 })}
@@ -555,7 +555,7 @@ export default function CostosTab() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Trilla por defecto</label>
+                <label className={labelCls}>{tr("Trilla por defecto")}</label>
                 <SaveField
                   value={Math.round(settings.default_trilla_yield * 1000) / 10}
                   onSave={(v) => saveSetting({ default_trilla_yield: (v ?? 0) / 100 })}

@@ -3,6 +3,7 @@
 import React from 'react';
 import { Plus, Trash2, Square, CheckSquare as CheckSquareIcon } from 'lucide-react';
 import type { ProposalBlock } from './BlockCard';
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 interface ChecklistBlockProps {
   block: ProposalBlock;
@@ -10,6 +11,7 @@ interface ChecklistBlockProps {
 }
 
 export default function ChecklistBlock({ block, onUpdate }: ChecklistBlockProps) {
+  const tr = useTr();
   const items = block.checklistItems || [''];
 
   const updateItem = (index: number, value: string) => {
@@ -33,7 +35,7 @@ export default function ChecklistBlock({ block, onUpdate }: ChecklistBlockProps)
         type="text"
         value={block.title}
         onChange={(e) => onUpdate({ ...block, title: e.target.value })}
-        placeholder="Título del checklist..."
+        placeholder={tr("Título del checklist...")}
         className="w-full text-base font-bold bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-foreground placeholder:text-foreground/25"
       />
 
@@ -45,14 +47,14 @@ export default function ChecklistBlock({ block, onUpdate }: ChecklistBlockProps)
               type="text"
               value={item}
               onChange={(e) => updateItem(i, e.target.value)}
-              placeholder="Escribe un punto..."
+              placeholder={tr("Escribe un punto...")}
               className="flex-1 bg-foreground/[0.02] border border-foreground/5 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/10 transition-all"
             />
             <button
               type="button"
               onClick={() => removeItem(i)}
               className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 transition-all"
-              title="Eliminar"
+              title={tr("Eliminar")}
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -66,7 +68,7 @@ export default function ChecklistBlock({ block, onUpdate }: ChecklistBlockProps)
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C59F59] hover:text-[#B38E4D] transition-colors"
       >
         <Plus className="w-3.5 h-3.5" />
-        Agregar Item
+        {tr("Agregar Item")}
       </button>
     </div>
   );

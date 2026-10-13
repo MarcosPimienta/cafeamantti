@@ -6,6 +6,7 @@
 
 import { COFFEE_PROFILES, PROFILE_LABELS, type CoffeeProfileId } from "@/app/(admin)/coffeeProfiles";
 import { STORE_PRICES, type StoreWeight } from "@/utils/pricing";
+import { translate, type Locale, type Vars } from "@/utils/i18n/translate";
 
 // ── Packaging options ─────────────────────────────────────────
 //
@@ -124,6 +125,8 @@ export type MaquilaSettings = {
    * null = use the general table.
    */
   option_prices: OptionPrices | null;
+  /** Language of the client document; absent = the admin's language when created. */
+  doc_lang?: Locale;
 };
 
 export const DEFAULT_SETTINGS: MaquilaSettings = {
@@ -230,13 +233,12 @@ export function resalePrice(line: MaquilaLine, settings: MaquilaSettings = DEFAU
 }
 
 /** "Válvula · Peel stick · 2 tintas · Frente y respaldo" for the client document. */
-export function describeOptions(o: PackagingOptions): string {
+export function describeOptions(o: PackagingOptions, lang: Locale = "es"): string {
+  const tr = (text: string, vars?: Vars) => translate(lang, text, vars);
   const { faces, inks } = printSpec(o);
-  const print =
-    faces === 0
-      ? "Sin impresión"
-      : `${faces === 2 ? "Frente y respaldo" : o.cara_frontal ? "Solo frente" : "Solo respaldo"} a ${inks} ${inks === 1 ? "tinta" : "tintas"}`;
-  return [o.valvula ? "Válvula" : "Sin válvula", o.peel_stick && "Peel stick", o.sticker && "Sticker", print].filter(Boolean).join(" · ");
+  const side = faces === 2 ? tr("Frente y respaldo") : o.cara_frontal ? tr("Solo frente") : tr("Solo respaldo");
+  const print = faces === 0 ? tr("Sin impresión") : inks === 1 ? tr("{side} a 1 tinta", { side }) : tr("{side} a {inks} tintas", { side, inks });
+  return [o.valvula ? tr("Válvula") : tr("Sin válvula"), o.peel_stick && tr("Peel stick"), o.sticker && tr("Sticker"), print].filter(Boolean).join(" · ");
 }
 
 export function normalizeSettings(s: Partial<MaquilaSettings> | null | undefined): MaquilaSettings {
@@ -417,3 +419,29 @@ export const DEFAULT_CONDITIONS = [
   "Forma de pago: 50 % al aprobar el pedido y 50 % contra entrega.",
   "Los precios no incluyen transporte del producto terminado.",
 ].join("\n");
+
+/** Default document texts per language; switching language swaps them while untouched. */
+export const DOCUMENT_DEFAULTS: Record<Locale, { title: string; intro: string; conditions: string }> = {
+  es: {
+    title: "Propuesta de maquila de empaque",
+    intro: "Gracias por considerar a Café Amantti. Le proponemos nuestro café de especialidad, tostado y empacado con su marca, en los perfiles y presentaciones que se detallan a continuación.",
+    conditions: DEFAULT_CONDITIONS,
+  },
+  en: {
+    title: "Private-label packing proposal",
+    intro: "Thank you for considering Café Amantti. We propose our specialty coffee, roasted and packed under your brand, in the profiles and presentations detailed below.",
+    conditions: [
+      "Amantti specialty coffee, roasted to order in the profile chosen for each presentation.",
+      "The packaging design is paid once when the proposal is approved and includes up to two rounds of changes.",
+      "Supplies provided by the customer (listed under \"What the customer provides\") must arrive before production starts.",
+      "Lead time: 8 business days from approval of the final artwork and the down payment.",
+      "Payment: 50% when the order is approved and 50% on delivery.",
+      "Prices do not include transport of the finished product.",
+    ].join("\n"),
+  },
+};
+
+/** The other language's default when `text` is still this language's default; else `text`. */
+export function swapDefault(field: "title" | "intro" | "conditions", text: string, from: Locale, to: Locale): string {
+  return text.trim() === DOCUMENT_DEFAULTS[from][field].trim() ? DOCUMENT_DEFAULTS[to][field] : text;
+}

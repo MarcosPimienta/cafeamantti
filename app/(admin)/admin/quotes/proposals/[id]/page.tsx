@@ -5,8 +5,10 @@ import { redirect } from "next/navigation";
 import ProposalForm from "../new/ProposalForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { getTr } from "@/utils/i18n/server";
 
 export default async function EditProposalPage(props: { params: Promise<{ id: string }> }) {
+  const tr = await getTr();
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
 
@@ -34,8 +36,8 @@ export default async function EditProposalPage(props: { params: Promise<{ id: st
           <ArrowLeft className="w-5 h-5 text-foreground/60" />
         </Link>
         <div>
-          <h1 className="text-3xl font-serif text-foreground mb-2">Editar Propuesta</h1>
-          <p className="text-foreground/60">Actualiza los términos de la alianza y vuelve a generar el documento.</p>
+          <h1 className="text-3xl font-serif text-foreground mb-2">{tr("Editar Propuesta")}</h1>
+          <p className="text-foreground/60">{tr("Actualiza los términos de la alianza y vuelve a generar el documento.")}</p>
         </div>
       </div>
 

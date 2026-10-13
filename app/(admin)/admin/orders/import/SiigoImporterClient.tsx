@@ -41,6 +41,7 @@ import {
 } from "@/utils/siigo/template";
 import { executeSiigoImportAction } from "./actions";
 import { pullSiigoInvoices } from "../../siigo/actions";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 interface Props {
   initialInventory: InventoryLookupItem[];
@@ -53,6 +54,7 @@ export default function SiigoImporterClient({
   initialClients,
   initialExistingInvoices,
 }: Props) {
+  const tr = useTr();
   // Stepper state: 1 = File Upload, 2 = Column Mapping, 3 = Preview & Options, 4 = Success
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
@@ -127,7 +129,7 @@ export default function SiigoImporterClient({
       const { headers, rows } = parseUploadedFileBuffer(buffer, selectedFile.name);
 
       if (headers.length === 0 || rows.length === 0) {
-        setErrorMsg("El archivo no contiene filas o no se pudo leer correctamente.");
+        setErrorMsg(tr("El archivo no contiene filas o no se pudo leer correctamente."));
         return;
       }
 
@@ -167,7 +169,7 @@ export default function SiigoImporterClient({
         return;
       }
       if (res.rows.length === 0) {
-        setErrorMsg(`Siigo no tiene facturas de venta entre ${apiFrom} y ${apiTo}.`);
+        setErrorMsg(tr("Siigo no tiene facturas de venta entre {apiFrom} y {apiTo}.", { apiFrom: apiFrom, apiTo: apiTo }));
         return;
       }
       setFile(null);
@@ -184,7 +186,7 @@ export default function SiigoImporterClient({
   // Move from Mapping to Preview
   const handleProceedToPreview = () => {
     if (!mapping.product_name && !mapping.product_code) {
-      setErrorMsg("Debes mapear al menos la columna de 'Producto' o 'Código de Producto'.");
+      setErrorMsg(tr("Debes mapear al menos la columna de 'Producto' o 'Código de Producto'."));
       return;
     }
     setErrorMsg("");
@@ -238,12 +240,12 @@ export default function SiigoImporterClient({
         setErrorMsg(
           res.errors.length > 0
             ? res.errors.join("\n")
-            : "No se pudo importar ninguna factura. Verifica los datos."
+            : tr("No se pudo importar ninguna factura. Verifica los datos.")
         );
       }
     } catch (err: any) {
       console.error("Import error:", err);
-      setErrorMsg(err.message || "Error al ejecutar la importación.");
+      setErrorMsg(err.message || tr("Error al ejecutar la importación."));
     } finally {
       setLoading(false);
     }
@@ -300,14 +302,14 @@ export default function SiigoImporterClient({
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#C59F59] mb-1">
             <Link href="/admin/orders" className="hover:underline">
-              Órdenes
+              {tr("Órdenes")}
             </Link>
             <span>/</span>
-            <span>Importador Siigo</span>
+            <span>{tr("Importador Siigo")}</span>
           </div>
-          <h1 className="text-3xl font-serif text-foreground">Importar Ventas desde Siigo</h1>
+          <h1 className="text-3xl font-serif text-foreground">{tr("Importar Ventas desde Siigo")}</h1>
           <p className="text-sm text-foreground/60">
-            Carga de ventas por archivo plano (Excel o CSV) con sincronización de inventario, CRM y Flujo de Caja.
+            {tr("Carga de ventas por archivo plano (Excel o CSV) con sincronización de inventario, CRM y Flujo de Caja.")}
           </p>
         </div>
 
@@ -316,18 +318,18 @@ export default function SiigoImporterClient({
           <button
             onClick={() => downloadExcelTemplate(initialInventory)}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#C59F59]/30 text-[#C59F59] hover:bg-[#C59F59]/5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm"
-            title="Descargar plantilla lista en formato Excel (.xlsx)"
+            title={tr("Descargar plantilla lista en formato Excel (.xlsx)")}
           >
             <FileSpreadsheet className="w-4 h-4" />
-            Plantilla Excel (.xlsx)
+            {tr("Plantilla Excel (.xlsx)")}
           </button>
           <button
             onClick={() => downloadCsvTemplate(initialInventory)}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-foreground/15 text-foreground/70 hover:bg-foreground/5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm"
-            title="Descargar plantilla lista en formato CSV delimitado por punto y coma"
+            title={tr("Descargar plantilla lista en formato CSV delimitado por punto y coma")}
           >
             <Download className="w-4 h-4" />
-            Plantilla CSV
+            {tr("Plantilla CSV")}
           </button>
         </div>
       </div>
@@ -357,9 +359,9 @@ export default function SiigoImporterClient({
               {step > 1 ? "✓" : "1"}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wider truncate">1. Carga de Archivo</p>
+              <p className="text-xs font-bold uppercase tracking-wider truncate">{tr("1. Carga de Archivo")}</p>
               <p className="text-[11px] text-foreground/50 truncate">
-                {file ? file.name : "Subir Excel o CSV"}
+                {file ? file.name : tr("Subir Excel o CSV")}
               </p>
             </div>
           </div>
@@ -386,9 +388,9 @@ export default function SiigoImporterClient({
               {step > 2 ? "✓" : "2"}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wider truncate">2. Mapeo de Columnas</p>
+              <p className="text-xs font-bold uppercase tracking-wider truncate">{tr("2. Mapeo de Columnas")}</p>
               <p className="text-[11px] text-foreground/50 truncate">
-                {step >= 2 ? "Detectado automáticamente" : "Correspondencia de campos"}
+                {step >= 2 ? tr("Detectado automáticamente") : tr("Correspondencia de campos")}
               </p>
             </div>
           </div>
@@ -415,9 +417,9 @@ export default function SiigoImporterClient({
               {step === 4 ? "✓" : "3"}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wider truncate">3. Vista Previa & Carga</p>
+              <p className="text-xs font-bold uppercase tracking-wider truncate">{tr("3. Vista Previa & Carga")}</p>
               <p className="text-[11px] text-foreground/50 truncate">
-                {parsedOrders.length > 0 ? `${parsedOrders.length} facturas listas` : "Validar e importar"}
+                {parsedOrders.length > 0 ? tr("{length} facturas listas", { length: parsedOrders.length }) : tr("Validar e importar")}
               </p>
             </div>
           </div>
@@ -428,7 +430,7 @@ export default function SiigoImporterClient({
       {errorMsg && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-700 text-sm">
           <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" />
-          <div className="flex-1 whitespace-pre-line">{errorMsg}</div>
+          <div className="flex-1 whitespace-pre-line">{tr.msg(errorMsg)}</div>
           <button onClick={() => setErrorMsg("")} className="text-red-400 hover:text-red-600">
             <X className="w-4 h-4" />
           </button>
@@ -443,33 +445,32 @@ export default function SiigoImporterClient({
           {/* Straight from the Siigo API */}
           <div className="rounded-2xl border border-[#C59F59]/30 bg-[#fdfbf7] p-5 space-y-3">
             <div>
-              <h2 className="text-lg font-serif text-foreground">Traer facturas directamente de Siigo</h2>
-              <p className="text-xs text-foreground/60">Sin exportar archivos: elige el rango de fechas de elaboración y revisa antes de importar.</p>
+              <h2 className="text-lg font-serif text-foreground">{tr("Traer facturas directamente de Siigo")}</h2>
+              <p className="text-xs text-foreground/60">{tr("Sin exportar archivos: elige el rango de fechas de elaboración y revisa antes de importar.")}</p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <div>
-                <label htmlFor="api-from" className="block text-xs text-foreground/60 mb-1">Desde</label>
+                <label htmlFor="api-from" className="block text-xs text-foreground/60 mb-1">{tr("Desde")}</label>
                 <input id="api-from" type="date" value={apiFrom} onChange={(e) => setApiFrom(e.target.value)} className="px-3 py-2 rounded-xl border border-foreground/10 bg-white text-sm" />
               </div>
               <div>
-                <label htmlFor="api-to" className="block text-xs text-foreground/60 mb-1">Hasta</label>
+                <label htmlFor="api-to" className="block text-xs text-foreground/60 mb-1">{tr("Hasta")}</label>
                 <input id="api-to" type="date" value={apiTo} onChange={(e) => setApiTo(e.target.value)} className="px-3 py-2 rounded-xl border border-foreground/10 bg-white text-sm" />
               </div>
               <button type="button" onClick={handlePullFromApi} disabled={loading}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-foreground text-background text-xs font-bold uppercase tracking-widest hover:bg-[#C59F59] disabled:opacity-50">
-                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Traer de Siigo
+                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}{" "}{tr("Traer de Siigo")}
               </button>
             </div>
           </div>
-          <p className="text-center text-xs font-bold uppercase tracking-widest text-foreground/30">o sube un archivo</p>
+          <p className="text-center text-xs font-bold uppercase tracking-widest text-foreground/30">{tr("o sube un archivo")}</p>
           <div className="text-center max-w-xl mx-auto space-y-2">
             <div className="w-16 h-16 bg-[#C59F59]/10 rounded-2xl flex items-center justify-center mx-auto text-[#C59F59] mb-4">
               <UploadCloud className="w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-serif text-foreground">Sube el archivo de ventas de Siigo</h2>
+            <h2 className="text-2xl font-serif text-foreground">{tr("Sube el archivo de ventas de Siigo")}</h2>
             <p className="text-sm text-foreground/60">
-              Arrastra aquí tu archivo exportado de Siigo Nube o haz clic para seleccionarlo de tu equipo.
-              Acepta formatos <strong>Excel (.xlsx, .xls)</strong> y <strong>archivos planos CSV (.csv, .txt)</strong>.
+              {tr("Arrastra aquí tu archivo exportado de Siigo Nube o haz clic para seleccionarlo de tu equipo. Acepta formatos")}{" "}<strong>{tr("Excel (.xlsx, .xls)")}</strong> y <strong>{tr("archivos planos CSV (.csv, .txt)")}</strong>.
             </p>
           </div>
 
@@ -503,17 +504,17 @@ export default function SiigoImporterClient({
               <FileSpreadsheet className="w-12 h-12 text-foreground/40" />
               <div>
                 <p className="text-base font-semibold text-foreground">
-                  Selecciona o arrastra tu archivo exportado
+                  {tr("Selecciona o arrastra tu archivo exportado")}
                 </p>
                 <p className="text-xs text-foreground/50 mt-1">
-                  Formatos soportados: .xlsx, .xls, .csv delimitado por coma o punto y coma
+                  {tr("Formatos soportados: .xlsx, .xls, .csv delimitado por coma o punto y coma")}
                 </p>
               </div>
               <button
                 type="button"
                 className="mt-2 px-6 py-2.5 bg-[#C59F59] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm hover:bg-[#b08d4b] transition-all"
               >
-                Examinar Archivo
+                {tr("Examinar Archivo")}
               </button>
             </div>
           </div>
@@ -522,20 +523,20 @@ export default function SiigoImporterClient({
           <div className="bg-[#fcfaf5] border border-[#C59F59]/20 rounded-2xl p-6">
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2 mb-3">
               <Info className="w-4 h-4 text-[#C59F59]" />
-              ¿Cómo exportar desde Siigo Nube para mejores resultados?
+              {tr("¿Cómo exportar desde Siigo Nube para mejores resultados?")}
             </h3>
             <ul className="text-xs text-foreground/70 space-y-2 list-disc list-inside">
               <li>
-                En Siigo Nube, ve a <strong>Ventas &gt; Facturas de venta</strong> o <strong>Reportes de Ventas por Producto</strong>.
+                {tr("En Siigo Nube, ve a")}{" "}<strong>{tr("Ventas > Facturas de venta")}</strong> o <strong>{tr("Reportes de Ventas por Producto")}</strong>.
               </li>
               <li>
-                Asegúrate de incluir las columnas de <strong>Comprobante/Factura</strong>, <strong>Fecha</strong>, <strong>Cliente / NIT</strong>, <strong>Producto / Código</strong>, <strong>Cantidad</strong> y <strong>Valor Total</strong>.
+                {tr("Asegúrate de incluir las columnas de")}{" "}<strong>{tr("Comprobante/Factura")}</strong>, <strong>{tr("Fecha")}</strong>, <strong>{tr("Cliente / NIT")}</strong>, <strong>{tr("Producto / Código")}</strong>, <strong>{tr("Cantidad")}</strong> y <strong>{tr("Valor Total")}</strong>.
               </li>
               <li>
-                Si una factura contiene múltiples productos, Siigo los exporta en filas continuas con el mismo número de comprobante. El importador agrupará automáticamente esos renglones en una sola orden.
+                {tr("Si una factura contiene múltiples productos, Siigo los exporta en filas continuas con el mismo número de comprobante. El importador agrupará automáticamente esos renglones en una sola orden.")}
               </li>
               <li>
-                ¿No estás seguro del formato? Descarga la <strong>Plantilla Modelo</strong> arriba y compárala con tu archivo.
+                {tr("¿No estás seguro del formato? Descarga la")}{" "}<strong>{tr("Plantilla Modelo")}</strong>{" "}{tr("arriba y compárala con tu archivo.")}
               </li>
             </ul>
           </div>
@@ -549,10 +550,10 @@ export default function SiigoImporterClient({
         <div className="bg-white rounded-3xl border border-foreground/10 p-8 shadow-sm space-y-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-foreground/5 pb-6">
             <div>
-              <h2 className="text-2xl font-serif text-foreground">Asistente de Mapeo de Columnas</h2>
+              <h2 className="text-2xl font-serif text-foreground">{tr("Asistente de Mapeo de Columnas")}</h2>
               <p className="text-sm text-foreground/60">
-                Se detectaron <strong>{fileHeaders.length}</strong> columnas y <strong>{rawRows.length}</strong> filas en{" "}
-                <span className="font-semibold text-foreground">{file?.name}</span>. Verifica la correspondencia de campos.
+                {tr("Se detectaron")}{" "}<strong>{fileHeaders.length}</strong>{" "}{tr("columnas y")}{" "}<strong>{rawRows.length}</strong>{" "}{tr("filas en")}{" "}
+                <span className="font-semibold text-foreground">{file?.name}</span>{tr(". Verifica la correspondencia de campos.")}
               </p>
             </div>
 
@@ -562,13 +563,13 @@ export default function SiigoImporterClient({
                 className="flex items-center gap-2 px-4 py-2.5 border border-foreground/15 text-foreground/70 hover:bg-foreground/5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
               >
                 <ArrowLeft className="w-4 h-4" />
-                Cambiar Archivo
+                {tr("Cambiar Archivo")}
               </button>
               <button
                 onClick={handleProceedToPreview}
                 className="flex items-center gap-2 px-6 py-2.5 bg-[#C59F59] text-white hover:bg-[#b08d4b] rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm"
               >
-                Continuar a Vista Previa
+                {tr("Continuar a Vista Previa")}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -579,87 +580,87 @@ export default function SiigoImporterClient({
             {[
               {
                 key: "invoice_number",
-                label: "Número de Factura / Comprobante",
+                label: tr("Número de Factura / Comprobante"),
                 required: true,
-                desc: "Ej: FV-1-1024, Consecutivo",
+                desc: tr("Ej: FV-1-1024, Consecutivo"),
               },
               {
                 key: "date",
-                label: "Fecha de Elaboración / Venta",
+                label: tr("Fecha de Elaboración / Venta"),
                 required: true,
-                desc: "Impacta la fecha en Flujo de Caja",
+                desc: tr("Impacta la fecha en Flujo de Caja"),
               },
               {
                 key: "client_doc",
-                label: "NIT / Cédula del Cliente",
+                label: tr("NIT / Cédula del Cliente"),
                 required: false,
-                desc: "Para vincular o crear en CRM",
+                desc: tr("Para vincular o crear en CRM"),
               },
               {
                 key: "client_name",
-                label: "Nombre / Razón Social",
+                label: tr("Nombre / Razón Social"),
                 required: true,
-                desc: "Nombre del cliente o empresa",
+                desc: tr("Nombre del cliente o empresa"),
               },
               {
                 key: "product_code",
-                label: "Código Producto / SKU",
+                label: tr("Código Producto / SKU"),
                 required: false,
-                desc: "Para match automático con Inventario",
+                desc: tr("Para match automático con Inventario"),
               },
               {
                 key: "product_name",
-                label: "Descripción / Nombre Producto",
+                label: tr("Descripción / Nombre Producto"),
                 required: true,
-                desc: "Nombre del ítem vendido",
+                desc: tr("Nombre del ítem vendido"),
               },
               {
                 key: "quantity",
-                label: "Cantidad Vendida",
+                label: tr("Cantidad Vendida"),
                 required: true,
-                desc: "Unidades vendidas de este ítem",
+                desc: tr("Unidades vendidas de este ítem"),
               },
               {
                 key: "unit_price",
-                label: "Valor Unitario",
+                label: tr("Valor Unitario"),
                 required: false,
-                desc: "Precio por unidad en COP",
+                desc: tr("Precio por unidad en COP"),
               },
               {
                 key: "total_price",
-                label: "Valor Total / Neto",
+                label: tr("Valor Total / Neto"),
                 required: true,
-                desc: "Total del renglón o factura",
+                desc: tr("Total del renglón o factura"),
               },
               {
                 key: "client_email",
-                label: "Correo Electrónico",
+                label: tr("Correo Electrónico"),
                 required: false,
-                desc: "Email de contacto del cliente",
+                desc: tr("Email de contacto del cliente"),
               },
               {
                 key: "client_phone",
-                label: "Teléfono / Celular",
+                label: tr("Teléfono / Celular"),
                 required: false,
-                desc: "Teléfono de contacto",
+                desc: tr("Teléfono de contacto"),
               },
               {
                 key: "client_city",
-                label: "Ciudad / Municipio",
+                label: tr("Ciudad / Municipio"),
                 required: false,
-                desc: "Ciudad de facturación/entrega",
+                desc: tr("Ciudad de facturación/entrega"),
               },
               {
                 key: "client_address",
-                label: "Dirección",
+                label: tr("Dirección"),
                 required: false,
-                desc: "Dirección del cliente",
+                desc: tr("Dirección del cliente"),
               },
               {
                 key: "notes",
-                label: "Observaciones / Medio de Pago",
+                label: tr("Observaciones / Medio de Pago"),
                 required: false,
-                desc: "Notas o comentarios adicionales",
+                desc: tr("Notas o comentarios adicionales"),
               },
             ].map(({ key, label, required, desc }) => {
               const currentVal = (mapping as any)[key] || "";
@@ -678,16 +679,16 @@ export default function SiigoImporterClient({
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <label className="text-xs font-bold text-foreground flex items-center gap-1">
-                      {label}
+                      {tr(label)}
                       {required && <span className="text-red-500">*</span>}
                     </label>
                     {isMapped && (
                       <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> Mapeado
+                        <CheckCircle2 className="w-3 h-3" />{" "}{tr("Mapeado")}
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-foreground/50 mb-3">{desc}</p>
+                  <p className="text-[11px] text-foreground/50 mb-3">{tr(desc)}</p>
 
                   <select
                     value={currentVal}
@@ -696,7 +697,7 @@ export default function SiigoImporterClient({
                     }
                     className="w-full px-3 py-2 bg-white border border-foreground/15 rounded-xl text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#C59F59]/30"
                   >
-                    <option value="">-- No mapear / Omitir --</option>
+                    <option value="">{tr("-- No mapear / Omitir --")}</option>
                     {fileHeaders.map((header) => (
                       <option key={header} value={header}>
                         {header}
@@ -714,13 +715,13 @@ export default function SiigoImporterClient({
               className="flex items-center gap-2 px-6 py-2.5 border border-foreground/15 text-foreground/70 hover:bg-foreground/5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
             >
               <ArrowLeft className="w-4 h-4" />
-              Atrás
+              {tr("Atrás")}
             </button>
             <button
               onClick={handleProceedToPreview}
               className="flex items-center gap-2 px-8 py-3 bg-[#C59F59] text-white hover:bg-[#b08d4b] rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm"
             >
-              Procesar y Ver Vista Previa
+              {tr("Procesar y Ver Vista Previa")}
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -740,7 +741,7 @@ export default function SiigoImporterClient({
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">Facturas Detectadas</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">{tr("Facturas Detectadas")}</p>
                   <p className="text-2xl font-serif text-foreground">{totalOrdersCount}</p>
                 </div>
               </div>
@@ -752,7 +753,7 @@ export default function SiigoImporterClient({
                   <DollarSign className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">Ventas Totales</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">{tr("Ventas Totales")}</p>
                   <p className="text-xl font-serif text-foreground truncate">{formatCOP(totalGrossRevenue)}</p>
                 </div>
               </div>
@@ -764,7 +765,7 @@ export default function SiigoImporterClient({
                   <Package className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">Match con Inventario</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">{tr("Match con Inventario")}</p>
                   <p className="text-2xl font-serif text-foreground">
                     {matchPercentage}%{" "}
                     <span className="text-xs font-sans text-foreground/50">
@@ -781,10 +782,10 @@ export default function SiigoImporterClient({
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">Clientes CRM</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">{tr("Clientes CRM")}</p>
                   <p className="text-2xl font-serif text-foreground">
                     {newClientsCount}{" "}
-                    <span className="text-xs font-sans text-foreground/50">nuevos a registrar</span>
+                    <span className="text-xs font-sans text-foreground/50">{tr("nuevos a registrar")}</span>
                   </p>
                 </div>
               </div>
@@ -795,13 +796,13 @@ export default function SiigoImporterClient({
           <div className="bg-[#fcfaf5] rounded-3xl border border-[#C59F59]/30 p-6 shadow-sm space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
               <Layers className="w-4 h-4 text-[#C59F59]" />
-              Opciones de Carga e Integración
+              {tr("Opciones de Carga e Integración")}
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
               {/* Default Order Status */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-foreground">Estado inicial de las órdenes:</label>
+                <label className="text-xs font-bold text-foreground">{tr("Estado inicial de las órdenes:")}</label>
                 <select
                   value={options.defaultStatus}
                   onChange={(e) =>
@@ -809,13 +810,13 @@ export default function SiigoImporterClient({
                   }
                   className="w-full px-3 py-2 bg-white border border-foreground/15 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#C59F59]/30"
                 >
-                  <option value="paid">Pagado (Recomendado - Aplica a Flujo de Caja)</option>
-                  <option value="delivered">Entregado</option>
-                  <option value="processing">En preparación</option>
-                  <option value="pending">Pendiente de pago</option>
+                  <option value="paid">{tr("Pagado (Recomendado - Aplica a Flujo de Caja)")}</option>
+                  <option value="delivered">{tr("Entregado")}</option>
+                  <option value="processing">{tr("En preparación")}</option>
+                  <option value="pending">{tr("Pendiente de pago")}</option>
                 </select>
                 <p className="text-[11px] text-foreground/50">
-                  Al marcarse como 'Pagado', se suma automáticamente a los ingresos de Flujo de Caja.
+                  {tr("Al marcarse como 'Pagado', se suma automáticamente a los ingresos de Flujo de Caja.")}
                 </p>
               </div>
 
@@ -831,9 +832,9 @@ export default function SiigoImporterClient({
                   className="mt-1 w-4 h-4 text-[#C59F59] rounded border-foreground/30 focus:ring-[#C59F59]"
                 />
                 <label htmlFor="syncInventory" className="cursor-pointer select-none">
-                  <p className="text-xs font-bold text-foreground">Descontar Inventario automáticamente</p>
+                  <p className="text-xs font-bold text-foreground">{tr("Descontar Inventario automáticamente")}</p>
                   <p className="text-[11px] text-foreground/50">
-                    Crea salidas en el Kardex asociadas a la factura de Siigo para los ítems vinculados.
+                    {tr("Crea salidas en el Kardex asociadas a la factura de Siigo para los ítems vinculados.")}
                   </p>
                 </label>
               </div>
@@ -850,9 +851,9 @@ export default function SiigoImporterClient({
                   className="mt-1 w-4 h-4 text-[#C59F59] rounded border-foreground/30 focus:ring-[#C59F59]"
                 />
                 <label htmlFor="syncClients" className="cursor-pointer select-none">
-                  <p className="text-xs font-bold text-foreground">Registrar Clientes Nuevos en CRM</p>
+                  <p className="text-xs font-bold text-foreground">{tr("Registrar Clientes Nuevos en CRM")}</p>
                   <p className="text-[11px] text-foreground/50">
-                    Crea automáticamente en el CRM los clientes no registrados previamente en la base de datos.
+                    {tr("Crea automáticamente en el CRM los clientes no registrados previamente en la base de datos.")}
                   </p>
                 </label>
               </div>
@@ -869,9 +870,9 @@ export default function SiigoImporterClient({
                   className="mt-1 w-4 h-4 text-[#C59F59] rounded border-foreground/30 focus:ring-[#C59F59]"
                 />
                 <label htmlFor="useSaleDate" className="cursor-pointer select-none">
-                  <p className="text-xs font-bold text-foreground">Usar Fecha Original de la Factura</p>
+                  <p className="text-xs font-bold text-foreground">{tr("Usar Fecha Original de la Factura")}</p>
                   <p className="text-[11px] text-foreground/50">
-                    Asegura que los reportes de ventas y Flujo de Caja queden registrados en su fecha contable.
+                    {tr("Asegura que los reportes de ventas y Flujo de Caja queden registrados en su fecha contable.")}
                   </p>
                 </label>
               </div>
@@ -888,9 +889,9 @@ export default function SiigoImporterClient({
                   className="mt-1 w-4 h-4 text-[#C59F59] rounded border-foreground/30 focus:ring-[#C59F59]"
                 />
                 <label htmlFor="skipExisting" className="cursor-pointer select-none">
-                  <p className="text-xs font-bold text-foreground">Omitir Facturas ya Importadas</p>
+                  <p className="text-xs font-bold text-foreground">{tr("Omitir Facturas ya Importadas")}</p>
                   <p className="text-[11px] text-foreground/50">
-                    Detecta facturas previamente cargadas ({duplicateOrdersCount} detectadas) para evitar duplicación.
+                    {tr("Detecta facturas previamente cargadas ({duplicateOrdersCount} detectadas) para evitar duplicación.", { duplicateOrdersCount: duplicateOrdersCount })}
                   </p>
                 </label>
               </div>
@@ -904,7 +905,7 @@ export default function SiigoImporterClient({
               <div className="relative w-full md:w-80">
                 <input
                   type="text"
-                  placeholder="Buscar por factura, cliente, NIT o producto..."
+                  placeholder={tr("Buscar por factura, cliente, NIT o producto...")}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-foreground/15 rounded-xl text-xs focus:ring-2 focus:ring-[#C59F59]/30"
@@ -921,7 +922,7 @@ export default function SiigoImporterClient({
                         : "text-foreground/60 hover:text-foreground"
                     }`}
                   >
-                    Todas ({totalOrdersCount})
+                    {tr("Todas ({totalOrdersCount})", { totalOrdersCount: totalOrdersCount })}
                   </button>
                   <button
                     onClick={() => setFilterType("ready")}
@@ -931,7 +932,7 @@ export default function SiigoImporterClient({
                         : "text-foreground/60 hover:text-foreground"
                     }`}
                   >
-                    Nuevas ({totalOrdersCount - duplicateOrdersCount})
+                    {tr("Nuevas ({v})", { v: totalOrdersCount - duplicateOrdersCount })}
                   </button>
                   {duplicateOrdersCount > 0 && (
                     <button
@@ -942,7 +943,7 @@ export default function SiigoImporterClient({
                           : "text-amber-700 hover:text-amber-900"
                       }`}
                     >
-                      Duplicadas ({duplicateOrdersCount})
+                      {tr("Duplicadas ({duplicateOrdersCount})", { duplicateOrdersCount: duplicateOrdersCount })}
                     </button>
                   )}
                 </div>
@@ -953,7 +954,7 @@ export default function SiigoImporterClient({
             <div className="divide-y divide-foreground/5">
               {filteredOrders.length === 0 ? (
                 <div className="text-center py-12 text-foreground/50 text-sm">
-                  No se encontraron facturas con el filtro seleccionado.
+                  {tr("No se encontraron facturas con el filtro seleccionado.")}
                 </div>
               ) : (
                 filteredOrders.map((order) => {
@@ -980,7 +981,7 @@ export default function SiigoImporterClient({
                             </span>
                             {hasDuplicates && (
                               <span className="text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" /> Ya registrada previamente
+                                <AlertTriangle className="w-3 h-3" />{" "}{tr("Ya registrada previamente")}
                               </span>
                             )}
                           </div>
@@ -991,16 +992,16 @@ export default function SiigoImporterClient({
                             </span>
                             {order.client_doc && (
                               <span className="text-xs text-foreground/50">
-                                (NIT/CC: {order.client_doc})
+                                {tr("(NIT/CC: {client_doc})", { client_doc: order.client_doc })}
                               </span>
                             )}
                             {order.is_new_client ? (
                               <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full">
-                                Nuevo en CRM
+                                {tr("Nuevo en CRM")}
                               </span>
                             ) : (
                               <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">
-                                Cliente CRM existente
+                                {tr("Cliente CRM existente")}
                               </span>
                             )}
                           </div>
@@ -1009,7 +1010,7 @@ export default function SiigoImporterClient({
                         {/* Amount & Actions */}
                         <div className="flex items-center justify-between lg:justify-end gap-6">
                           <div className="text-right">
-                            <p className="text-[11px] uppercase tracking-wider text-foreground/40 font-bold">Total Factura</p>
+                            <p className="text-[11px] uppercase tracking-wider text-foreground/40 font-bold">{tr("Total Factura")}</p>
                             <p className="text-base font-serif font-bold text-foreground">
                               {formatCOP(order.total_amount)}
                             </p>
@@ -1019,7 +1020,7 @@ export default function SiigoImporterClient({
                             onClick={() => toggleInvoiceExpand(order.invoice_number)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-foreground/5 hover:bg-foreground/10 text-foreground/70 rounded-xl text-xs font-semibold transition-all"
                           >
-                            <span>{order.items.length} {order.items.length === 1 ? "ítem" : "ítems"}</span>
+                            <span>{order.items.length} {order.items.length === 1 ? tr("ítem") : tr("ítems")}</span>
                             {isExpanded ? (
                               <ChevronUp className="w-4 h-4" />
                             ) : (
@@ -1033,7 +1034,7 @@ export default function SiigoImporterClient({
                       {isExpanded && (
                         <div className="mt-4 pt-4 border-t border-foreground/10 space-y-3">
                           <p className="text-[11px] font-bold uppercase tracking-wider text-foreground/50">
-                            Productos en esta factura:
+                            {tr("Productos en esta factura:")}
                           </p>
 
                           <div className="space-y-2">
@@ -1048,18 +1049,18 @@ export default function SiigoImporterClient({
                                   </p>
                                   {item.raw_code && (
                                     <p className="text-[11px] text-foreground/50">
-                                      SKU Original: {item.raw_code}
+                                      {tr("SKU Original: {raw_code}", { raw_code: item.raw_code })}
                                     </p>
                                   )}
                                 </div>
 
                                 <div className="flex items-center gap-6">
                                   <div className="text-center">
-                                    <span className="text-[10px] uppercase text-foreground/40 block">Cant</span>
+                                    <span className="text-[10px] uppercase text-foreground/40 block">{tr("Cant")}</span>
                                     <span className="font-bold text-foreground">{item.quantity}</span>
                                   </div>
                                   <div className="text-right min-w-[90px]">
-                                    <span className="text-[10px] uppercase text-foreground/40 block">Subtotal</span>
+                                    <span className="text-[10px] uppercase text-foreground/40 block">{tr("Subtotal")}</span>
                                     <span className="font-semibold text-foreground">
                                       {formatCOP(item.total_price)}
                                     </span>
@@ -1069,7 +1070,7 @@ export default function SiigoImporterClient({
                                 {/* Inventory Matching Selector */}
                                 <div className="min-w-[260px]">
                                   <span className="text-[10px] uppercase text-foreground/40 block mb-1">
-                                    Vincular con Inventario Amantti:
+                                    {tr("Vincular con Inventario Amantti:")}
                                   </span>
                                   <select
                                     value={item.matched_inventory_id || ""}
@@ -1086,10 +1087,10 @@ export default function SiigoImporterClient({
                                         : "border-amber-300 bg-amber-50/40 text-amber-900"
                                     }`}
                                   >
-                                    <option value="">-- No descontar de inventario --</option>
+                                    <option value="">{tr("-- No descontar de inventario --")}</option>
                                     {initialInventory.map((inv) => (
                                       <option key={inv.id} value={inv.id}>
-                                        {inv.product_code} — {inv.product_name} ({inv.current_stock} {inv.unit} stock)
+                                        {tr("{product_code} — {product_name} ({current_stock} {unit} stock)", { product_code: inv.product_code, product_name: inv.product_name, current_stock: inv.current_stock, unit: inv.unit })}
                                       </option>
                                     ))}
                                   </select>
@@ -1113,7 +1114,7 @@ export default function SiigoImporterClient({
               className="flex items-center gap-2 px-6 py-3 border border-foreground/15 text-foreground/70 hover:bg-foreground/5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
             >
               <ArrowLeft className="w-4 h-4" />
-              Volver a Mapeo
+              {tr("Volver a Mapeo")}
             </button>
 
             <button
@@ -1124,12 +1125,12 @@ export default function SiigoImporterClient({
               {loading ? (
                 <>
                   <RefreshCw className="w-5 h-5 animate-spin" />
-                  Importando Ventas a la Plataforma...
+                  {tr("Importando Ventas a la Plataforma...")}
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="w-5 h-5" />
-                  Importar {totalOrdersCount} Facturas a Café Amantti
+                  {tr("Importar")}{" "}{totalOrdersCount}{" "}{tr("Facturas a Café Amantti")}
                 </>
               )}
             </button>
@@ -1148,31 +1149,31 @@ export default function SiigoImporterClient({
 
           <div className="space-y-2">
             <h2 className="text-3xl font-serif text-foreground">
-              ¡Importación Completada con Éxito!
+              {tr("¡Importación Completada con Éxito!")}
             </h2>
             <p className="text-sm text-foreground/60">
-              Las ventas de Siigo han sido registradas y procesadas en la plataforma de Café Amantti.
+              {tr("Las ventas de Siigo han sido registradas y procesadas en la plataforma de Café Amantti.")}
             </p>
           </div>
 
           {/* Summary Stats Grid */}
           <div className="grid grid-cols-2 gap-4 text-left p-6 bg-[#fcfaf5] rounded-2xl border border-foreground/5">
             <div>
-              <p className="text-xs uppercase tracking-wider text-foreground/50 font-bold">Facturas Creadas</p>
+              <p className="text-xs uppercase tracking-wider text-foreground/50 font-bold">{tr("Facturas Creadas")}</p>
               <p className="text-2xl font-serif text-foreground">{resultSummary.importedCount}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wider text-foreground/50 font-bold">Total Facturado</p>
+              <p className="text-xs uppercase tracking-wider text-foreground/50 font-bold">{tr("Total Facturado")}</p>
               <p className="text-xl font-serif text-green-700 font-bold truncate">
                 {formatCOP(resultSummary.totalRevenue)}
               </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wider text-foreground/50 font-bold">Clientes CRM Creados</p>
+              <p className="text-xs uppercase tracking-wider text-foreground/50 font-bold">{tr("Clientes CRM Creados")}</p>
               <p className="text-lg font-serif text-foreground">{resultSummary.clientsCreatedCount}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wider text-foreground/50 font-bold">Facturas Omitidas (Duplicadas)</p>
+              <p className="text-xs uppercase tracking-wider text-foreground/50 font-bold">{tr("Facturas Omitidas (Duplicadas)")}</p>
               <p className="text-lg font-serif text-foreground">{resultSummary.skippedCount}</p>
             </div>
           </div>
@@ -1180,10 +1181,10 @@ export default function SiigoImporterClient({
           {/* Warnings or partial errors if any */}
           {resultSummary.errors.length > 0 && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-left text-xs text-amber-800 space-y-1">
-              <p className="font-bold">Advertencias durante la importación:</p>
+              <p className="font-bold">{tr("Advertencias durante la importación:")}</p>
               <ul className="list-disc list-inside">
                 {resultSummary.errors.map((err, i) => (
-                  <li key={i}>{err}</li>
+                  <li key={i}>{tr.msg(err)}</li>
                 ))}
               </ul>
             </div>
@@ -1195,19 +1196,19 @@ export default function SiigoImporterClient({
               href="/admin/orders"
               className="w-full sm:w-auto px-6 py-3 bg-[#C59F59] hover:bg-[#b08d4b] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-sm"
             >
-              Ver Todas las Órdenes
+              {tr("Ver Todas las Órdenes")}
             </Link>
             <Link
               href="/admin/cashflow"
               className="w-full sm:w-auto px-6 py-3 bg-white border border-foreground/15 hover:bg-foreground/5 text-foreground/80 text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-sm"
             >
-              Ver Flujo de Caja
+              {tr("Ver Flujo de Caja")}
             </Link>
             <button
               onClick={handleReset}
               className="w-full sm:w-auto px-6 py-3 border border-foreground/15 hover:bg-foreground/5 text-foreground/60 text-xs font-bold uppercase tracking-wider rounded-xl transition-all"
             >
-              Importar Otro Archivo
+              {tr("Importar Otro Archivo")}
             </button>
           </div>
         </div>

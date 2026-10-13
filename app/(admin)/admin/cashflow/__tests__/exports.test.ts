@@ -65,3 +65,18 @@ describe("registro de activos fijos", () => {
     expect(summary.rows).toEqual([["Maquinaria y Equipo (PUC 1520)", 1, 1340000, 44666.66, 1295333.34, 22333.33]]);
   });
 });
+
+describe("exports in English", () => {
+  it("translates names, titles, headers and known values; free text stays", () => {
+    const [ledger, summary] = expenseLedger(expenses, {}, "10/10/2026", "en");
+    expect(ledger.name).toBe("Expenses");
+    expect(ledger.title).toContainEqual(["Period", "Start to today"]);
+    expect(ledger.columns.map((c) => c.header)).toContain("Net amount");
+    const machine = ledger.rows.find((r) => r[13] === "e2")!;
+    expect(machine.slice(1, 4)).toEqual(["Compra máquina de espresso", "Machinery and equipment (PUC 1520)", "CAPEX · fixed asset"]);
+    expect(machine[7]).toBe("Espresso machine");
+    expect(machine[8]).toBe("Equipment loan");
+    expect(ledger.totals?.[1]).toBe("3 expenses");
+    expect(summary.name).toBe("Summary by category");
+  });
+});

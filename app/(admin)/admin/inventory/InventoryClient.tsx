@@ -103,6 +103,7 @@ import {
   profileForCode,
   PROFILE_LABELS,
 } from "../../coffeeProfiles";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -244,24 +245,25 @@ function usePackagingRecipes(): PackagingRecipes {
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
 function StockBadge({ stock, min }: { stock: number; min: number }) {
+  const tr = useTr();
   if (stock === 0)
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700">
         <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-        Sin stock
+        {tr("Sin stock")}
       </span>
     );
   if (stock <= min)
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700">
         <AlertTriangle className="w-3 h-3" />
-        Bajo mín.
+        {tr("Bajo mín.")}
       </span>
     );
   return (
     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700">
       <Check className="w-3 h-3" />
-      OK
+      {tr("OK")}
     </span>
   );
 }
@@ -283,6 +285,7 @@ function ProductSelect({
   placeholder?: string;
   searchable?: boolean;
 }) {
+  const tr = useTr();
   const items = filter ? inventory.filter(filter) : inventory;
   const [search, setSearch] = useState("");
 
@@ -302,7 +305,7 @@ function ProductSelect({
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar producto..."
+          placeholder={tr("Buscar producto...")}
           className={`${inputCls} w-full`}
         />
       )}
@@ -341,11 +344,12 @@ function MoliendaField({
   onChange: (v: Molienda | "") => void;
   productCode: string | null | undefined;
 }) {
+  const tr = useTr();
   const applies = isGrindTracked(productCode);
   return (
     <div>
       <label className={labelCls}>
-        Molienda {applies && <span className="text-red-400">*</span>}
+        {tr("Molienda")}{" "}{applies && <span className="text-red-400">*</span>}
       </label>
       {applies ? (
         <div className="flex flex-wrap gap-2 pt-1">
@@ -364,14 +368,14 @@ function MoliendaField({
                     : "bg-white text-foreground/60 border-foreground/10 hover:border-[#C59F59]/40 hover:text-foreground"
                 }`}
               >
-                {MOLIENDA_LABELS[opt]}
+                {tr.msg(MOLIENDA_LABELS[opt])}
               </button>
             );
           })}
         </div>
       ) : (
         <p className="text-sm text-foreground/30 pt-3">
-          {productCode ? "No aplica a este producto" : "Selecciona un producto"}
+          {productCode ? tr("No aplica a este producto") : tr("Selecciona un producto")}
         </p>
       )}
     </div>
@@ -379,6 +383,7 @@ function MoliendaField({
 }
 
 function MoliendaBadge({ value }: { value: string | null | undefined }) {
+  const tr = useTr();
   if (!isMolienda(value)) return <span className="text-foreground/30">—</span>;
   return (
     <span
@@ -388,7 +393,7 @@ function MoliendaBadge({ value }: { value: string | null | undefined }) {
           : "bg-purple-50 text-purple-600"
       }`}
     >
-      {MOLIENDA_LABELS[value]}
+      {tr.msg(MOLIENDA_LABELS[value])}
     </span>
   );
 }
@@ -398,6 +403,7 @@ function FeedbackBanner({
 }: {
   feedback: { type: "success" | "error"; msg: string } | null;
 }) {
+  const tr = useTr();
   if (!feedback) return null;
   return (
     <p
@@ -407,7 +413,7 @@ function FeedbackBanner({
           : "bg-red-50 text-red-600"
       }`}
     >
-      {feedback.msg}
+      {tr.msg(feedback.msg)}
     </p>
   );
 }
@@ -419,6 +425,7 @@ function HistoryLoadingOrEmpty({
   loading: boolean;
   empty: boolean;
 }) {
+  const tr = useTr();
   if (loading)
     return (
       <div className="flex items-center justify-center py-16">
@@ -429,9 +436,9 @@ function HistoryLoadingOrEmpty({
     return (
       <div className="text-center py-16">
         <History className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-        <p className="font-serif text-foreground/60">Sin registros aún</p>
+        <p className="font-serif text-foreground/60">{tr("Sin registros aún")}</p>
         <p className="text-sm text-foreground/40 mt-1">
-          Los registros aparecerán aquí.
+          {tr("Los registros aparecerán aquí.")}
         </p>
       </div>
     );
@@ -449,6 +456,7 @@ function AdjustModal({
   onClose: () => void;
   onSuccess: (id: string, newStock: number) => void;
 }) {
+  const tr = useTr();
   const [type, setType] = useState<"entrada" | "salida" | "ajuste">("ajuste");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
@@ -460,7 +468,7 @@ function AdjustModal({
     setError("");
     const qty = parseFloat(quantity);
     if (isNaN(qty) || (type !== "ajuste" && qty <= 0)) {
-      setError("Ingresa una cantidad válida");
+      setError(tr("Ingresa una cantidad válida"));
       return;
     }
     startTransition(async () => {
@@ -475,7 +483,7 @@ function AdjustModal({
         onClose();
       } catch (err: unknown) {
         setError(
-          err instanceof Error ? err.message : "Error al ajustar el inventario"
+          err instanceof Error ? err.message : tr("Error al ajustar el inventario")
         );
       }
     });
@@ -495,7 +503,7 @@ function AdjustModal({
             <p className={labelCls}>{item.product_code}</p>
             <h3 className="text-xl font-serif">{item.product_name}</h3>
             <p className="text-sm text-foreground/50 mt-1">
-              Stock:{" "}
+              {tr("Stock:")}{" "}
               <span className="font-bold text-foreground">
                 {item.current_stock} {item.unit}
               </span>
@@ -511,7 +519,7 @@ function AdjustModal({
 
         <form onSubmit={handleSubmit} className="p-8 space-y-5">
           <div>
-            <label className={labelCls}>Tipo de ajuste</label>
+            <label className={labelCls}>{tr("Tipo de ajuste")}</label>
             <div className="grid grid-cols-3 gap-2">
               {(["entrada", "salida", "ajuste"] as const).map((t) => (
                 <button
@@ -539,7 +547,7 @@ function AdjustModal({
 
           <div>
             <label htmlFor="adj-qty" className={labelCls}>
-              Cantidad ({item.unit})
+              {tr("Cantidad ({unit})", { unit: item.unit })}
             </label>
             <QuantityInput
               id="adj-qty"
@@ -547,28 +555,28 @@ function AdjustModal({
               onChange={setQuantity}
               baseUnit={item.unit}
               allowNegative={type === "ajuste"}
-              placeholder={type === "ajuste" ? "ej. -5 o +10" : "ej. 20"}
+              placeholder={type === "ajuste" ? tr("ej. -5 o +10") : tr("ej. 20")}
               required
             />
           </div>
 
           <div>
             <label htmlFor="adj-reason" className={labelCls}>
-              Motivo (opcional)
+              {tr("Motivo (opcional)")}
             </label>
             <input
               id="adj-reason"
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="ej. Conteo físico, Corrección..."
+              placeholder={tr("ej. Conteo físico, Corrección...")}
               className={inputCls}
             />
           </div>
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">
-              {error}
+              {tr.msg(error)}
             </p>
           )}
 
@@ -582,7 +590,7 @@ function AdjustModal({
             ) : (
               <Package className="w-4 h-4" />
             )}
-            {isPending ? "Guardando..." : "Confirmar ajuste"}
+            {isPending ? tr("Guardando...") : tr("Confirmar ajuste")}
           </button>
         </form>
       </div>
@@ -609,6 +617,7 @@ function NewProductModal({
   onClose: () => void;
   onCreated: (item: InventoryItem) => void;
 }) {
+  const tr = useTr();
   const [category, setCategory] = useState("equipo");
   const [code, setCode] = useState("EQP-");
   const [name, setName] = useState("");
@@ -635,7 +644,7 @@ function NewProductModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (duplicate) return setError(`Ya existe un producto con el código ${normalized}.`);
+    if (duplicate) return setError(tr("Ya existe un producto con el código {normalized}.", { normalized: normalized }));
     startTransition(async () => {
       try {
         const res = await createInventoryProduct({
@@ -650,7 +659,7 @@ function NewProductModal({
         });
         onCreated(res.item as InventoryItem);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "No se pudo crear el producto");
+        setError(err instanceof Error ? err.message : tr("No se pudo crear el producto"));
       }
     });
   }
@@ -661,20 +670,20 @@ function NewProductModal({
         className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg max-h-[95vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="Nuevo producto"
+        aria-label={tr("Nuevo producto")}
       >
         <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-5 border-b border-foreground/5 flex items-start justify-between gap-4">
           <div>
-            <p className={labelCls}>Inventario</p>
-            <h3 className="text-xl font-serif">Nuevo producto</h3>
+            <p className={labelCls}>{tr("Inventario")}</p>
+            <h3 className="text-xl font-serif">{tr("Nuevo producto")}</h3>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5" aria-label="Cerrar">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5" aria-label={tr("Cerrar")}>
             <X className="w-5 h-5 text-foreground/40" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4">
           <div>
-            <label className={labelCls}>Categoría</label>
+            <label className={labelCls}>{tr("Categoría")}</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {Object.keys(NEW_PRODUCT_DEFAULTS).map((c) => (
                 <button
@@ -686,31 +695,31 @@ function NewProductModal({
                     category === c ? "bg-[#C59F59] text-white border-[#C59F59]" : "bg-white text-foreground/60 border-foreground/10"
                   }`}
                 >
-                  {CATEGORY_LABELS[c]}
+                  {tr.msg(CATEGORY_LABELS[c])}
                 </button>
               ))}
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr] gap-4">
             <div>
-              <label htmlFor="np-code" className={labelCls}>Código <span className="text-red-400">*</span></label>
+              <label htmlFor="np-code" className={labelCls}>{tr("Código")}{" "}<span className="text-red-400">*</span></label>
               <input
                 id="np-code"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="EQP-ESP-001"
+                placeholder={tr("EQP-ESP-001")}
                 className={`${inputCls} font-mono uppercase ${duplicate ? "border-red-300" : ""}`}
                 required
               />
-              {duplicate && <p className="text-[11px] text-red-600 mt-1">Ese código ya existe.</p>}
+              {duplicate && <p className="text-[11px] text-red-600 mt-1">{tr("Ese código ya existe.")}</p>}
             </div>
             <div>
-              <label htmlFor="np-name" className={labelCls}>Nombre <span className="text-red-400">*</span></label>
+              <label htmlFor="np-name" className={labelCls}>{tr("Nombre")}{" "}<span className="text-red-400">*</span></label>
               <input
                 id="np-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={category === "equipo" ? "Máquina espresso 2 grupos (comodato)" : "Nombre del producto"}
+                placeholder={category === "equipo" ? tr("Máquina espresso 2 grupos (comodato)") : tr("Nombre del producto")}
                 className={inputCls}
                 required
               />
@@ -718,7 +727,7 @@ function NewProductModal({
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label htmlFor="np-unit" className={labelCls}>Unidad</label>
+              <label htmlFor="np-unit" className={labelCls}>{tr("Unidad")}</label>
               <select id="np-unit" value={unit} onChange={(e) => setUnit(e.target.value)} className={inputCls}>
                 {["unidad", "kg", "g", "litro", "ml", "caja", "paquete"].map((u) => (
                   <option key={u} value={u}>{u}</option>
@@ -726,41 +735,41 @@ function NewProductModal({
               </select>
             </div>
             <div>
-              <label htmlFor="np-stock" className={labelCls}>Stock inicial</label>
+              <label htmlFor="np-stock" className={labelCls}>{tr("Stock inicial")}</label>
               <input id="np-stock" type="number" min="0" step="any" inputMode="decimal" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" className={inputCls} />
             </div>
             <div>
-              <label htmlFor="np-min" className={labelCls}>Stock mínimo</label>
+              <label htmlFor="np-min" className={labelCls}>{tr("Stock mínimo")}</label>
               <input id="np-min" type="number" min="0" step="any" inputMode="decimal" value={minStock} onChange={(e) => setMinStock(e.target.value)} className={inputCls} />
             </div>
           </div>
           <div>
-            <label htmlFor="np-notes" className={labelCls}>Notas</label>
+            <label htmlFor="np-notes" className={labelCls}>{tr("Notas")}</label>
             <textarea
               id="np-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              placeholder={category === "equipo" ? "Marca, modelo, serial, cliente que la tiene en comodato…" : "Opcional"}
+              placeholder={category === "equipo" ? tr("Marca, modelo, serial, cliente que la tiene en comodato…") : tr("Opcional")}
               className={`${inputCls} resize-y`}
             />
           </div>
           <label className="flex items-start gap-3 p-3 rounded-xl bg-[#fdfbf7] border border-foreground/5 cursor-pointer">
             <input type="checkbox" checked={sellable} onChange={(e) => setSellable(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#C59F59]" />
             <span className="text-sm">
-              <span className="font-bold">Se vende</span>
-              <span className="block text-xs text-foreground/50">Aparece al crear órdenes. Déjalo apagado para equipos en comodato e insumos.</span>
+              <span className="font-bold">{tr("Se vende")}</span>
+              <span className="block text-xs text-foreground/50">{tr("Aparece al crear órdenes. Déjalo apagado para equipos en comodato e insumos.")}</span>
             </span>
           </label>
           {Number(stock) > 0 && (
             <p className="text-[11px] text-foreground/50">
-              El stock inicial queda registrado como una entrada "Saldo inicial", así el Kardex cuadra desde el primer día.
+              {tr("El stock inicial queda registrado como una entrada \"Saldo inicial\", así el Kardex cuadra desde el primer día.")}
             </p>
           )}
-          {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
+          {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{tr.msg(error)}</p>}
           <div className="flex gap-3 pt-2 pb-[env(safe-area-inset-bottom)]">
             <button type="button" onClick={onClose} className="flex-1 py-3 border border-foreground/10 rounded-2xl text-sm font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5">
-              Cancelar
+              {tr("Cancelar")}
             </button>
             <button
               type="submit"
@@ -768,7 +777,7 @@ function NewProductModal({
               className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white rounded-2xl text-sm font-bold uppercase tracking-widest disabled:opacity-60"
             >
               {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              Crear producto
+              {tr("Crear producto")}
             </button>
           </div>
         </form>
@@ -788,6 +797,7 @@ function HistoryDrawer({
   onClose: () => void;
   era?: 'v1' | 'v2';
 }) {
+  const tr = useTr();
   const [movements, setMovements] = useState<MovementRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -809,7 +819,7 @@ function HistoryDrawer({
       >
         <div className="sticky top-0 bg-white px-8 pt-8 pb-6 border-b border-foreground/5 flex items-start justify-between gap-4">
           <div>
-            <p className={labelCls}>Historial de movimientos</p>
+            <p className={labelCls}>{tr("Historial de movimientos")}</p>
             <h3 className="text-xl font-serif">{item.product_name}</h3>
             <p className="text-xs text-foreground/50 font-mono">
               {item.product_code}
@@ -831,7 +841,7 @@ function HistoryDrawer({
           ) : movements.length === 0 ? (
             <div className="text-center py-20">
               <History className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-              <p className="font-serif text-foreground/50">Sin movimientos</p>
+              <p className="font-serif text-foreground/50">{tr("Sin movimientos")}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -869,7 +879,7 @@ function HistoryDrawer({
                       </div>
                       {mov.reason && (
                         <p className="text-xs text-foreground/60 mt-0.5 truncate">
-                          {mov.reason}
+                          {tr.msg(mov.reason)}
                         </p>
                       )}
                       <p className="text-[10px] text-foreground/40 mt-1">
@@ -922,6 +932,7 @@ function SortableTh({
   onSort: (f: string) => void;
   className?: string;
 }) {
+  const tr = useTr();
   const isRight = className.includes("text-right");
   return (
     <th
@@ -929,7 +940,7 @@ function SortableTh({
       onClick={() => onSort(field)}
     >
       <span className={`flex items-center gap-1 ${isRight ? "justify-end" : ""}`}>
-        {label} <SortingIcon field={field} sortField={sortField} sortAsc={sortAsc} />
+        {tr(label)} <SortingIcon field={field} sortField={sortField} sortAsc={sortAsc} />
       </span>
     </th>
   );
@@ -988,13 +999,14 @@ function MoliendaGroupTable({
   group: MoliendaGroup;
   unit: string;
 }) {
+  const tr = useTr();
   const showUndefined = group.totals.sin_definir !== 0;
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 
   if (group.totals.total === 0 && group.rows.every((r) => r.total === 0)) {
     return (
       <p className="text-sm text-foreground/40 px-6 py-8">
-        Sin movimientos registrados.
+        {tr("Sin movimientos registrados.")}
       </p>
     );
   }
@@ -1004,17 +1016,17 @@ function MoliendaGroupTable({
       <table className="w-full text-left">
         <thead>
           <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-            <th className={thCls}>Perfil</th>
-            <th className={`${thCls} text-right`}>Grano ({unit})</th>
-            <th className={`${thCls} text-right`}>Molido ({unit})</th>
-            {showUndefined && <th className={`${thCls} text-right`}>Sin definir</th>}
-            <th className={`${thCls} text-right`}>Total ({unit})</th>
+            <th className={thCls}>{tr("Perfil")}</th>
+            <th className={`${thCls} text-right`}>{tr("Grano ({unit})", { unit: unit })}</th>
+            <th className={`${thCls} text-right`}>{tr("Molido ({unit})", { unit: unit })}</th>
+            {showUndefined && <th className={`${thCls} text-right`}>{tr("Sin definir")}</th>}
+            <th className={`${thCls} text-right`}>{tr("Total ({unit})", { unit: unit })}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-foreground/5">
           {group.rows.map((r) => (
             <tr key={r.id} className="hover:bg-[#fdfbf7]">
-              <td className={`${tdCls} font-bold`}>{r.label}</td>
+              <td className={`${tdCls} font-bold`}>{tr(r.label)}</td>
               <td className={`${tdCls} text-right`}>{fmt(r.grano)}</td>
               <td className={`${tdCls} text-right`}>{fmt(r.molido)}</td>
               {showUndefined && (
@@ -1026,7 +1038,7 @@ function MoliendaGroupTable({
             </tr>
           ))}
           <tr className="bg-[#fdfbf7]">
-            <td className={`${tdCls} font-bold`}>Total</td>
+            <td className={`${tdCls} font-bold`}>{tr("Total")}</td>
             <td className={`${tdCls} text-right font-bold`}>{fmt(group.totals.grano)}</td>
             <td className={`${tdCls} text-right font-bold`}>{fmt(group.totals.molido)}</td>
             {showUndefined && (
@@ -1043,6 +1055,7 @@ function MoliendaGroupTable({
 }
 
 function MoliendaBreakdown({ era }: { era: "v1" | "v2" }) {
+  const tr = useTr();
   type Balances = { packaged: MoliendaGroup; bulk: MoliendaGroup };
   // Tag the result with the era it belongs to, so switching eras reads as
   // loading without a synchronous setState in the effect body.
@@ -1069,10 +1082,9 @@ function MoliendaBreakdown({ era }: { era: "v1" | "v2" }) {
   return (
     <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
       <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7]">
-        <h3 className="font-serif text-lg">Café tostado por perfil y molienda</h3>
+        <h3 className="font-serif text-lg">{tr("Café tostado por perfil y molienda")}</h3>
         <p className="text-sm text-foreground/50 mt-1">
-          La molienda se define al registrar la entrada, el alta de producción
-          o la salida. El café a granel sale del tostador en grano.
+          {tr("La molienda se define al registrar la entrada, el alta de producción o la salida. El café a granel sale del tostador en grano.")}
         </p>
       </div>
       {loading ? (
@@ -1081,16 +1093,16 @@ function MoliendaBreakdown({ era }: { era: "v1" | "v2" }) {
         </div>
       ) : !data ? (
         <p className="text-sm text-foreground/40 text-center py-12">
-          No se pudo cargar el desglose por molienda.
+          {tr("No se pudo cargar el desglose por molienda.")}
         </p>
       ) : (
         <>
           <div className="px-6 pt-5 pb-1">
-            <p className={labelCls}>Empacado — unidades</p>
+            <p className={labelCls}>{tr("Empacado — unidades")}</p>
           </div>
           <MoliendaGroupTable group={data.packaged} unit="ud" />
           <div className="px-6 pt-6 pb-1 border-t border-foreground/5">
-            <p className={labelCls}>A granel — kilogramos</p>
+            <p className={labelCls}>{tr("A granel — kilogramos")}</p>
           </div>
           <MoliendaGroupTable group={data.bulk} unit="kg" />
         </>
@@ -1112,6 +1124,7 @@ function InventarioTab({
   onItemCreated: (item: InventoryItem) => void;
   era: 'v1' | 'v2';
 }) {
+  const tr = useTr();
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -1185,7 +1198,7 @@ function InventarioTab({
             <Package className="w-7 h-7 text-[#C59F59]" />
           </div>
           <div>
-            <p className={labelCls}>Total SKUs</p>
+            <p className={labelCls}>{tr("Total SKUs")}</p>
             <p className="text-3xl font-serif">{totalSKUs}</p>
           </div>
         </div>
@@ -1205,7 +1218,7 @@ function InventarioTab({
             />
           </div>
           <div>
-            <p className={labelCls}>Stock Bajo</p>
+            <p className={labelCls}>{tr("Stock Bajo")}</p>
             <p className="text-3xl font-serif">
               {lowStockCount}
               <span className="text-base font-sans text-foreground/40 ml-1">
@@ -1230,7 +1243,7 @@ function InventarioTab({
             />
           </div>
           <div>
-            <p className={labelCls}>Sin Stock</p>
+            <p className={labelCls}>{tr("Sin Stock")}</p>
             <p className="text-3xl font-serif">
               {zeroStockCount}
               <span className="text-base font-sans text-foreground/40 ml-1">
@@ -1252,7 +1265,7 @@ function InventarioTab({
             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
             <input
               type="text"
-              placeholder="Buscar por nombre o código..."
+              placeholder={tr("Buscar por nombre o código...")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               suppressHydrationWarning={true}
@@ -1268,9 +1281,9 @@ function InventarioTab({
                 suppressHydrationWarning={true}
                 className="pl-9 pr-4 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none appearance-none cursor-pointer"
               >
-                <option value="all">Todas las categorías</option>
+                <option value="all">{tr("Todas las categorías")}</option>
                 {INVENTORY_CATEGORIES.map((c) => (
-                  <option key={c.id} value={c.id}>{c.label}</option>
+                  <option key={c.id} value={c.id}>{tr(c.label)}</option>
                 ))}
               </select>
             </div>
@@ -1284,7 +1297,7 @@ function InventarioTab({
               }`}
             >
               <AlertTriangle className="w-4 h-4" />
-              Stock bajo
+              {tr("Stock bajo")}
             </button>
             {era === "v2" && (
               <button
@@ -1292,7 +1305,7 @@ function InventarioTab({
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest bg-foreground text-background hover:bg-[#C59F59] hover:text-white transition-all whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
-                Nuevo producto
+                {tr("Nuevo producto")}
               </button>
             )}
           </div>
@@ -1319,32 +1332,32 @@ function InventarioTab({
             <thead>
               <tr className="bg-[#fdfbf7] border-b border-foreground/5">
                 <SortableTh 
-                  label="Código" 
+                  label={tr("Código")} 
                   field="product_code" 
                   sortField={sortField} 
                   sortAsc={sortAsc} 
                   onSort={(f) => toggleSort(f as keyof InventoryItem)} 
                 />
                 <SortableTh 
-                  label="Producto" 
+                  label={tr("Producto")} 
                   field="product_name" 
                   sortField={sortField} 
                   sortAsc={sortAsc} 
                   onSort={(f) => toggleSort(f as keyof InventoryItem)} 
                 />
-                <th className={thCls}>Categoría</th>
-                <th className={`${thCls} text-center`} title="Se ofrece al crear órdenes de venta">Venta</th>
+                <th className={thCls}>{tr("Categoría")}</th>
+                <th className={`${thCls} text-center`} title={tr("Se ofrece al crear órdenes de venta")}>{tr("Venta")}</th>
                 <SortableTh 
-                  label="Stock" 
+                  label={tr("Stock")} 
                   field="current_stock" 
                   className="text-right"
                   sortField={sortField} 
                   sortAsc={sortAsc} 
                   onSort={(f) => toggleSort(f as keyof InventoryItem)} 
                 />
-                <th className={`${thCls} text-right`}>Mín.</th>
-                <th className={`${thCls} text-center`}>Estado</th>
-                <th className={`${thCls} text-center`}>Acciones</th>
+                <th className={`${thCls} text-right`}>{tr("Mín.")}</th>
+                <th className={`${thCls} text-center`}>{tr("Estado")}</th>
+                <th className={`${thCls} text-center`}>{tr("Acciones")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-foreground/5">
@@ -1353,7 +1366,7 @@ function InventarioTab({
                   <td colSpan={8} className="py-16 text-center">
                     <Package className="w-10 h-10 text-foreground/20 mx-auto mb-3" />
                     <p className="font-serif text-foreground/60">
-                      No se encontraron productos
+                      {tr("No se encontraron productos")}
                     </p>
                   </td>
                 </tr>
@@ -1380,7 +1393,7 @@ function InventarioTab({
                           categoryInfo(item.category)?.badge ?? "bg-foreground/5 text-foreground/60"
                         }`}
                       >
-                        {CATEGORY_LABELS[item.category] ?? item.category}
+                        {tr.msg(CATEGORY_LABELS[item.category] ?? item.category)}
                       </span>
                     </td>
                     <td className={`${tdCls} text-center`}>
@@ -1394,7 +1407,7 @@ function InventarioTab({
                             aria-label={`${item.product_name}: ${on ? "se vende" : "insumo, no se vende"}`}
                             onClick={() => toggleSellable(item)}
                             disabled={era !== "v2"}
-                            title={on ? "Se vende — aparece al crear órdenes" : "Insumo — no aparece en órdenes"}
+                            title={on ? tr("Se vende — aparece al crear órdenes") : tr("Insumo — no aparece en órdenes")}
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all disabled:opacity-60 ${
                               on
                                 ? "bg-[#C59F59] text-white border-[#C59F59]"
@@ -1402,7 +1415,7 @@ function InventarioTab({
                             }`}
                           >
                             <ShoppingBag className="w-3 h-3" />
-                            {on ? "Se vende" : "Insumo"}
+                            {on ? tr("Se vende") : tr("Insumo")}
                           </button>
                         );
                       })()}
@@ -1435,7 +1448,7 @@ function InventarioTab({
                           <button
                             id={`adjust-${item.product_code}`}
                             onClick={() => setAdjustItem(item)}
-                            title="Ajuste manual"
+                            title={tr("Ajuste manual")}
                             className="p-2 rounded-xl bg-[#C59F59]/10 text-[#C59F59] hover:bg-[#C59F59] hover:text-white transition-all"
                           >
                             <ArrowLeftRight className="w-3.5 h-3.5" />
@@ -1444,7 +1457,7 @@ function InventarioTab({
                         <button
                           id={`history-${item.product_code}`}
                           onClick={() => setHistoryItem(item)}
-                          title="Ver historial"
+                          title={tr("Ver historial")}
                           className="p-2 rounded-xl bg-foreground/5 text-foreground/50 hover:bg-foreground/10 transition-all"
                         >
                           <History className="w-3.5 h-3.5" />
@@ -1460,7 +1473,7 @@ function InventarioTab({
 
         {filtered.length > 0 && (
           <div className="px-5 py-3 bg-[#fdfbf7] border-t border-foreground/5 text-xs text-foreground/40">
-            {filtered.length} de {totalSKUs} productos
+            {tr("{length} de {totalSKUs} productos", { length: filtered.length, totalSKUs: totalSKUs })}
           </div>
         )}
       </div>
@@ -1494,6 +1507,7 @@ function EditMovementModal({
   onClose: () => void;
   onSuccess: (inventoryId: string, newStock: number) => void;
 }) {
+  const tr = useTr();
   const origSign = record.quantity < 0 ? -1 : 1;
   const [date, setDate] = useState(record.movement_date ?? today());
   const [qty, setQty] = useState(String(Math.abs(record.quantity)));
@@ -1513,10 +1527,10 @@ function EditMovementModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsedQty = parseFloat(qty);
-    if (isNaN(parsedQty) || parsedQty <= 0) { setError("Cantidad inválida"); return; }
-    if (needsMolienda && !molienda) { setError("Selecciona la molienda (Grano o Molido)"); return; }
+    if (isNaN(parsedQty) || parsedQty <= 0) { setError(tr("Cantidad inválida")); return; }
+    if (needsMolienda && !molienda) { setError(tr("Selecciona la molienda (Grano o Molido)")); return; }
     const parsedSale = parseFloat(saleAmount);
-    if (initialSale !== null && !(parsedSale > 0)) { setError("Valor cobrado inválido"); return; }
+    if (initialSale !== null && !(parsedSale > 0)) { setError(tr("Valor cobrado inválido")); return; }
     const signedQty = origSign * parsedQty;
     startTransition(async () => {
       try {
@@ -1524,7 +1538,7 @@ function EditMovementModal({
         onSuccess(res.inventoryId, res.newStock);
         onClose();
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Error al guardar");
+        setError(err instanceof Error ? err.message : tr("Error al guardar"));
       }
     });
   }
@@ -1534,16 +1548,16 @@ function EditMovementModal({
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="px-8 pt-8 pb-5 border-b border-foreground/5 flex items-center justify-between">
           <div>
-            <p className={labelCls}>Editar movimiento</p>
+            <p className={labelCls}>{tr("Editar movimiento")}</p>
             <h3 className="text-xl font-serif">{record.quantity > 0 ? "+" : ""}{record.quantity}</h3>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5"><X className="w-5 h-5 text-foreground/40" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-8 space-y-4">
-          <div><label className={labelCls}>Fecha</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required /></div>
-          <div><label className={labelCls}>Cantidad (valor absoluto)</label><QuantityInput value={qty} onChange={setQty} baseUnit={getRelation(record.inventory)?.unit} ariaLabel="Cantidad" required /></div>
-          <div><label className={labelCls}>Motivo / Notas</label><input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo..." className={inputCls} /></div>
-          <div><label className={labelCls}>Responsable</label><input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder="Nombre..." className={inputCls} /></div>
+          <div><label className={labelCls}>{tr("Fecha")}</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required /></div>
+          <div><label className={labelCls}>{tr("Cantidad (valor absoluto)")}</label><QuantityInput value={qty} onChange={setQty} baseUnit={getRelation(record.inventory)?.unit} ariaLabel="Cantidad" required /></div>
+          <div><label className={labelCls}>{tr("Motivo / Notas")}</label><input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={tr("Motivo...")} className={inputCls} /></div>
+          <div><label className={labelCls}>{tr("Responsable")}</label><input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder={tr("Nombre...")} className={inputCls} /></div>
           {needsMolienda && (
             <MoliendaField
               idPrefix={`edit-${record.id}`}
@@ -1554,15 +1568,15 @@ function EditMovementModal({
           )}
           {initialSale !== null && (
             <div>
-              <label className={labelCls}>Valor cobrado (COP)</label>
+              <label className={labelCls}>{tr("Valor cobrado (COP)")}</label>
               <input type="number" min="1" step="any" value={saleAmount} onChange={(e) => setSaleAmount(e.target.value)} className={inputCls} required />
-              <p className="text-[11px] text-foreground/40 mt-1">Venta pagada: fecha, cantidad y valor se actualizan también en el Flujo de Caja.</p>
+              <p className="text-[11px] text-foreground/40 mt-1">{tr("Venta pagada: fecha, cantidad y valor se actualizan también en el Flujo de Caja.")}</p>
             </div>
           )}
-          {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
+          {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{tr.msg(error)}</p>}
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-3 border border-foreground/10 rounded-2xl text-sm font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5">Cancelar</button>
-            <button type="submit" disabled={isPending} className="flex-1 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white rounded-2xl text-sm font-bold uppercase tracking-widest disabled:opacity-60">{isPending ? "Guardando..." : "Guardar"}</button>
+            <button type="button" onClick={onClose} className="flex-1 py-3 border border-foreground/10 rounded-2xl text-sm font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5">{tr("Cancelar")}</button>
+            <button type="submit" disabled={isPending} className="flex-1 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white rounded-2xl text-sm font-bold uppercase tracking-widest disabled:opacity-60">{isPending ? tr("Guardando...") : tr("Guardar")}</button>
           </div>
         </form>
       </div>
@@ -1583,13 +1597,14 @@ function PaginationControls({
   totalItems: number;
   onPageChange: (page: number) => void;
 }) {
+  const tr = useTr();
   const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
   if (totalPages <= 1) return null;
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between border-t border-foreground/5 px-6 py-4 bg-[#fdfbf7] gap-4">
       <span className="text-[11px] font-bold uppercase tracking-widest text-foreground/50">
-        Página <span className="text-[#C59F59] text-sm">{currentPage}</span> de {totalPages}
+        {tr("Página")}{" "}<span className="text-[#C59F59] text-sm">{currentPage}</span>{" "}{tr("de")}{" "}{totalPages}
       </span>
       <div className="flex gap-2">
         <button
@@ -1597,14 +1612,14 @@ function PaginationControls({
           disabled={currentPage === 1}
           className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl disabled:opacity-30 disabled:pointer-events-none hover:bg-foreground/5 transition-colors"
         >
-          Anterior
+          {tr("Anterior")}
         </button>
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl disabled:opacity-30 disabled:pointer-events-none hover:bg-foreground/5 transition-colors"
         >
-          Siguiente
+          {tr("Siguiente")}
         </button>
       </div>
     </div>
@@ -1628,19 +1643,20 @@ function AccionesCell({
   onCancelDelete: () => void;
   onDelete: () => void;
 }) {
+  const tr = useTr();
   if (deletingId === id) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-bold text-red-600">¿Eliminar?</span>
-        <button onClick={onConfirmDelete} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">Sí</button>
-        <button onClick={onCancelDelete} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">No</button>
+        <span className="text-[10px] font-bold text-red-600">{tr("¿Eliminar?")}</span>
+        <button onClick={onConfirmDelete} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">{tr("Sí")}</button>
+        <button onClick={onCancelDelete} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">{tr("No")}</button>
       </div>
     );
   }
   return (
     <div className="flex items-center gap-1.5">
-      <button onClick={onEdit} title="Editar" className="p-1.5 rounded-lg hover:bg-foreground/5 text-foreground/40 hover:text-[#C59F59]"><Pencil className="w-3.5 h-3.5" /></button>
-      <button onClick={onDelete} title="Eliminar" className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+      <button onClick={onEdit} title={tr("Editar")} className="p-1.5 rounded-lg hover:bg-foreground/5 text-foreground/40 hover:text-[#C59F59]"><Pencil className="w-3.5 h-3.5" /></button>
+      <button onClick={onDelete} title={tr("Eliminar")} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
     </div>
   );
 }
@@ -1656,6 +1672,7 @@ function EntradasTab({
   onStockUpdate: (id: string, newStock: number) => void;
   era: 'v1' | 'v2';
 }) {
+  const tr = useTr();
   const initForm = {
     inventoryId: "",
     qty: "",
@@ -1755,11 +1772,11 @@ function EntradasTab({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.inventoryId || !form.qty || !form.date) {
-      setFeedback({ type: "error", msg: "Completa los campos obligatorios" });
+      setFeedback({ type: "error", msg: tr("Completa los campos obligatorios") });
       return;
     }
     if (isGrindTracked(selectedItem?.product_code) && !form.molienda) {
-      setFeedback({ type: "error", msg: "Selecciona la molienda (Grano o Molido)" });
+      setFeedback({ type: "error", msg: tr("Selecciona la molienda (Grano o Molido)") });
       return;
     }
     startTransition(async () => {
@@ -1775,18 +1792,18 @@ function EntradasTab({
         );
         
         if (!res.success) {
-          setFeedback({ type: "error", msg: res.error || "Error al registrar" });
+          setFeedback({ type: "error", msg: res.error || tr("Error al registrar") });
           return;
         }
 
         onStockUpdate(form.inventoryId, res.newStock ?? 0);
-        setFeedback({ type: "success", msg: "✓ Entrada registrada exitosamente" });
+        setFeedback({ type: "success", msg: tr("✓ Entrada registrada exitosamente") });
         setForm(initForm);
         loadHistory();
       } catch (err: unknown) {
         setFeedback({
           type: "error",
-          msg: err instanceof Error ? err.message : "Error al registrar",
+          msg: err instanceof Error ? err.message : tr("Error al registrar"),
         });
       }
     });
@@ -1800,7 +1817,7 @@ function EntradasTab({
         setDeletingId(null);
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al eliminar") });
       }
     });
   }
@@ -1811,16 +1828,16 @@ function EntradasTab({
       {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
-          <h2 className="text-xl font-serif">Registrar Entrada</h2>
+          <h2 className="text-xl font-serif">{tr("Registrar Entrada")}</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            Registra una compra o ingreso de cualquier producto al inventario.
+            {tr("Registra una compra o ingreso de cualquier producto al inventario.")}
           </p>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
             <div>
               <label htmlFor="ent-date" className={labelCls}>
-                Fecha <span className="text-red-400">*</span>
+                {tr("Fecha")}{" "}<span className="text-red-400">*</span>
               </label>
               <input
                 id="ent-date"
@@ -1834,7 +1851,7 @@ function EntradasTab({
             </div>
             <div>
               <label htmlFor="ent-product" className={labelCls}>
-                Producto <span className="text-red-400">*</span>
+                {tr("Producto")}{" "}<span className="text-red-400">*</span>
               </label>
               <ProductSelect
                 id="ent-product"
@@ -1861,20 +1878,20 @@ function EntradasTab({
             />
             <div>
               <label htmlFor="ent-qty" className={labelCls}>
-                Cantidad <span className="text-red-400">*</span>
+                {tr("Cantidad")}{" "}<span className="text-red-400">*</span>
               </label>
               <QuantityInput
                 id="ent-qty"
                 value={form.qty}
                 onChange={(v) => setForm((f) => ({ ...f, qty: v }))}
                 baseUnit={selectedItem?.unit}
-                placeholder="ej. 100"
+                placeholder={tr("ej. 100")}
                 required
               />
             </div>
             <div>
               <label htmlFor="ent-type" className={labelCls}>
-                Tipo
+                {tr("Tipo")}
               </label>
               <select
                 id="ent-type"
@@ -1886,21 +1903,20 @@ function EntradasTab({
               >
                 {(Object.keys(ENTRY_TYPE_LABELS) as EntryType[]).map((t) => (
                   <option key={t} value={t}>
-                    {t} — {ENTRY_TYPE_LABELS[t]}
+                    {t} — {tr.msg(ENTRY_TYPE_LABELS[t])}
                   </option>
                 ))}
               </select>
             </div>
             {selectedItem?.category === "equipo" && (
               <p className="md:col-span-2 lg:col-span-3 text-xs text-foreground/60 bg-[#fdfbf7] border border-foreground/5 rounded-xl px-4 py-3">
-                Después de registrar la entrada, da de alta cada máquina con su serial en{" "}
-                <Link href="/admin/comodatos" className="underline font-bold">Comodatos</Link> para saber qué cliente la tiene.
-                Las máquinas que registres allí se cuentan contra este stock, sin duplicarlo.
+                {tr("Después de registrar la entrada, da de alta cada máquina con su serial en")}{" "}
+                <Link href="/admin/comodatos" className="underline font-bold">{tr("Comodatos")}</Link>{" "}{tr("para saber qué cliente la tiene. Las máquinas que registres allí se cuentan contra este stock, sin duplicarlo.")}
               </p>
             )}
             <div>
               <label htmlFor="ent-resp" className={labelCls}>
-                Responsable (opcional)
+                {tr("Responsable (opcional)")}
               </label>
               <input
                 id="ent-resp"
@@ -1909,20 +1925,20 @@ function EntradasTab({
                 onChange={(e) =>
                   setForm({ ...form, responsable: e.target.value })
                 }
-                placeholder="Nombre..."
+                placeholder={tr("Nombre...")}
                 className={inputCls}
               />
             </div>
             <div>
               <label htmlFor="ent-lote" className={labelCls}>
-                Lote (opcional)
+                {tr("Lote (opcional)")}
               </label>
               <input
                 id="ent-lote"
                 type="text"
                 value={form.lote}
                 onChange={(e) => setForm({ ...form, lote: e.target.value })}
-                placeholder="ej. L2025-01-P00"
+                placeholder={tr("ej. L2025-01-P00")}
                 className={inputCls}
               />
             </div>
@@ -1938,7 +1954,7 @@ function EntradasTab({
             ) : (
               <PackagePlus className="w-4 h-4" />
             )}
-            {isPending ? "Registrando..." : "Registrar Entrada"}
+            {isPending ? tr("Registrando...") : tr("Registrar Entrada")}
           </button>
         </form>
       </div>
@@ -1948,11 +1964,11 @@ function EntradasTab({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-[#fdfbf7]">
           <h3 className="font-serif text-lg">
-            Historial{" "}
+            {tr("Historial")}{" "}
             <span className="text-foreground/40 text-base font-sans">
               · {filteredRecords.length}
               {filteredRecords.length !== records.length && (
-                <span className="text-foreground/30"> de {records.length}</span>
+                <span className="text-foreground/30">{" "}{tr("de {length}", { length: records.length })}</span>
               )}
             </span>
           </h3>
@@ -1963,15 +1979,15 @@ function EntradasTab({
                 type="text"
                 value={search}
                 onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Buscar código, producto, lote..."
-                aria-label="Buscar en el historial de entradas"
+                placeholder={tr("Buscar código, producto, lote...")}
+                aria-label={tr("Buscar en el historial de entradas")}
                 className={`${inputCls} pl-10 ${search ? "pr-10" : ""}`}
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => handleSearch("")}
-                  aria-label="Limpiar búsqueda"
+                  aria-label={tr("Limpiar búsqueda")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-lg text-foreground/30 hover:text-foreground/60 hover:bg-foreground/5"
                 >
                   <X className="w-4 h-4" />
@@ -1980,7 +1996,7 @@ function EntradasTab({
             </div>
             <button
               onClick={loadHistory}
-              title="Recargar"
+              title={tr("Recargar")}
               className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40 shrink-0"
             >
               <RefreshCw className="w-4 h-4" />
@@ -1992,16 +2008,16 @@ function EntradasTab({
         ) : filteredRecords.length === 0 ? (
           <div className="text-center py-16">
             <Search className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-            <p className="font-serif text-foreground/60">Sin coincidencias</p>
+            <p className="font-serif text-foreground/60">{tr("Sin coincidencias")}</p>
             <p className="text-sm text-foreground/40 mt-1">
-              Ningún registro coincide con “{search.trim()}”.
+              {tr("Ningún registro coincide con “{trim}”.", { trim: search.trim() })}
             </p>
             <button
               type="button"
               onClick={() => handleSearch("")}
               className="mt-4 px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl hover:bg-foreground/5"
             >
-              Limpiar búsqueda
+              {tr("Limpiar búsqueda")}
             </button>
           </div>
         ) : (
@@ -2010,15 +2026,15 @@ function EntradasTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Molienda" field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Lote" field="lote" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Tipo" field="entry_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Responsable" field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <th className={thCls}>Acciones</th>
+                  <SortableTh label={tr("Fecha")} field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Código")} field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Producto")} field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Cantidad")} field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Molienda")} field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Lote")} field="lote" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Tipo")} field="entry_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Responsable")} field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className={thCls}>{tr("Acciones")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -2101,6 +2117,7 @@ function TrillaTab({
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
   era: 'v1' | 'v2';
 }) {
+  const tr = useTr();
   const pergaminoOptions = useMemo(() => {
     return inventory.filter((i) => i.category === "cafe" && i.product_code.startsWith("CAPG"));
   }, [inventory]);
@@ -2191,7 +2208,7 @@ function TrillaTab({
     if (!selectedPergamino || !selectedVerde) {
       setFeedback({
         type: "error",
-        msg: "No se encontró el pergamino o su café verde correspondiente en el inventario",
+        msg: tr("No se encontró el pergamino o su café verde correspondiente en el inventario"),
       });
       return;
     }
@@ -2199,7 +2216,7 @@ function TrillaTab({
     const rendNum = parseFloat(rendimiento) / 100;
     const outputNum = parseFloat(outputQty);
     if (!inputNum || inputNum <= 0 || !rendNum || rendNum <= 0 || !outputNum) {
-      setFeedback({ type: "error", msg: "Ingresa cantidades válidas" });
+      setFeedback({ type: "error", msg: tr("Ingresa cantidades válidas") });
       return;
     }
     startTransition(async () => {
@@ -2214,7 +2231,7 @@ function TrillaTab({
         );
         
         if (!res.success) {
-          setFeedback({ type: "error", msg: res.error || "Error al registrar la Trilla" });
+          setFeedback({ type: "error", msg: res.error || tr("Error al registrar la Trilla") });
           return;
         }
 
@@ -2225,7 +2242,7 @@ function TrillaTab({
 
         setFeedback({
           type: "success",
-          msg: `✓ Trilla registrada — ${inputNum.toFixed(2)} kg Pergamino → ${outputNum.toFixed(2)} kg Verde`,
+          msg: tr("✓ Trilla registrada — {inputNum} kg Pergamino → {outputNum} kg Verde", { inputNum: inputNum.toFixed(2), outputNum: outputNum.toFixed(2) }),
         });
         setInputQty("");
         setOutputQty("");
@@ -2234,7 +2251,7 @@ function TrillaTab({
       } catch (err: unknown) {
         setFeedback({
           type: "error",
-          msg: err instanceof Error ? err.message : "Error al registrar la Trilla",
+          msg: err instanceof Error ? err.message : tr("Error al registrar la Trilla"),
         });
       }
     });
@@ -2251,7 +2268,7 @@ function TrillaTab({
         setDeletingBatchId(null);
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar lote" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al eliminar lote") });
       }
     });
   }
@@ -2266,10 +2283,10 @@ function TrillaTab({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-12 text-center">
         <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
         <p className="font-serif text-xl text-foreground/70">
-          Productos no encontrados
+          {tr("Productos no encontrados")}
         </p>
         <p className="text-sm text-foreground/50 mt-2">
-          Asegúrate de que existen productos Café Pergamino (ej. CAPG-001) en el inventario.
+          {tr("Asegúrate de que existen productos Café Pergamino (ej. CAPG-001) en el inventario.")}
         </p>
       </div>
     );
@@ -2281,9 +2298,9 @@ function TrillaTab({
       {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
-          <h2 className="text-xl font-serif">Registrar Trilla</h2>
+          <h2 className="text-xl font-serif">{tr("Registrar Trilla")}</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            Café Pergamino → Café Verde. La salida se auto-calcula por el rendimiento, pero puedes ajustarla al peso real.
+            {tr("Café Pergamino → Café Verde. La salida se auto-calcula por el rendimiento, pero puedes ajustarla al peso real.")}
           </p>
         </div>
 
@@ -2291,20 +2308,20 @@ function TrillaTab({
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-[#f9f7f0] rounded-2xl p-4">
             <p className={`${labelCls} text-[9px]`}>
-              Pergamino disponible ({selectedPergamino?.product_code || "—"})
+              {tr("Pergamino disponible ({v})", { v: selectedPergamino?.product_code || "—" })}
             </p>
             <p className="text-2xl font-serif font-bold">
               {selectedPergamino ? selectedPergamino.current_stock : 0}{" "}
-              <span className="text-sm font-sans text-foreground/50">kg</span>
+              <span className="text-sm font-sans text-foreground/50">{tr("kg")}</span>
             </p>
           </div>
           <div className="bg-[#f9f7f0] rounded-2xl p-4">
             <p className={`${labelCls} text-[9px]`}>
-              Verde disponible ({selectedVerde?.product_code || "—"})
+              {tr("Verde disponible ({v})", { v: selectedVerde?.product_code || "—" })}
             </p>
             <p className="text-2xl font-serif font-bold">
               {selectedVerde ? selectedVerde.current_stock : 0}{" "}
-              <span className="text-sm font-sans text-foreground/50">kg</span>
+              <span className="text-sm font-sans text-foreground/50">{tr("kg")}</span>
             </p>
           </div>
         </div>
@@ -2313,7 +2330,7 @@ function TrillaTab({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
             <div>
               <label htmlFor="tri-product" className={labelCls}>
-                Tipo de Café <span className="text-red-400">*</span>
+                {tr("Tipo de Café")}{" "}<span className="text-red-400">*</span>
               </label>
               <select
                 id="tri-product"
@@ -2322,7 +2339,7 @@ function TrillaTab({
                 className={`${inputCls} appearance-none cursor-pointer`}
                 required
               >
-                <option value="">Seleccionar café...</option>
+                <option value="">{tr("Seleccionar café...")}</option>
                 {pergaminoOptions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.product_name} ({item.product_code})
@@ -2332,7 +2349,7 @@ function TrillaTab({
             </div>
             <div>
               <label htmlFor="tri-date" className={labelCls}>
-                Fecha <span className="text-red-400">*</span>
+                {tr("Fecha")}{" "}<span className="text-red-400">*</span>
               </label>
               <input
                 id="tri-date"
@@ -2346,20 +2363,20 @@ function TrillaTab({
             </div>
             <div>
               <label htmlFor="tri-input" className={labelCls}>
-                Pergamino entrada <span className="text-red-400">*</span>
+                {tr("Pergamino entrada")}{" "}<span className="text-red-400">*</span>
               </label>
               <QuantityInput
                 id="tri-input"
                 value={inputQty}
                 onChange={setInputQty}
                 baseUnit="kg"
-                placeholder="ej. 287.9"
+                placeholder={tr("ej. 287.9")}
                 required
               />
             </div>
             <div>
               <label htmlFor="tri-rend" className={labelCls}>
-                Rendimiento (%)
+                {tr("Rendimiento (%)")}
               </label>
               <input
                 id="tri-rend"
@@ -2374,15 +2391,15 @@ function TrillaTab({
             </div>
             <div>
               <label htmlFor="tri-output" className={labelCls}>
-                Verde salida — real{" "}
-                <span className="text-amber-500">auto</span>
+                {tr("Verde salida — real")}{" "}
+                <span className="text-amber-500">{tr("auto")}</span>
               </label>
               <QuantityInput
                 id="tri-output"
                 value={outputQty}
                 onChange={setOutputQty}
                 baseUnit="kg"
-                placeholder="Auto-calculado"
+                placeholder={tr("Auto-calculado")}
                 className="border-amber-200 bg-amber-50/50"
                 required
               />
@@ -2393,15 +2410,15 @@ function TrillaTab({
           {inputNum > 0 && outputNum > 0 && (
             <div className="grid grid-cols-3 gap-3 mb-4 bg-[#f9f7f0] rounded-2xl p-4 text-center">
               <div>
-                <p className={labelCls}>Entrada</p>
-                <p className="font-bold">{inputNum.toFixed(2)} kg</p>
+                <p className={labelCls}>{tr("Entrada")}</p>
+                <p className="font-bold">{tr("{inputNum} kg", { inputNum: inputNum.toFixed(2) })}</p>
               </div>
               <div>
-                <p className={labelCls}>Pérdida</p>
-                <p className="font-bold text-red-600">{lossKg.toFixed(2)} kg</p>
+                <p className={labelCls}>{tr("Pérdida")}</p>
+                <p className="font-bold text-red-600">{tr("{lossKg} kg", { lossKg: lossKg.toFixed(2) })}</p>
               </div>
               <div>
-                <p className={labelCls}>% Pérdida</p>
+                <p className={labelCls}>{tr("% Pérdida")}</p>
                 <p
                   className={`font-bold text-xl ${
                     lossPct > 35 ? "text-red-600" : "text-foreground"
@@ -2415,14 +2432,14 @@ function TrillaTab({
 
           <div className="mb-5">
             <label htmlFor="tri-notes" className={labelCls}>
-              Notas (opcional)
+              {tr("Notas (opcional)")}
             </label>
             <input
               id="tri-notes"
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="ej. Lote #3 — Finca La Esperanza"
+              placeholder={tr("ej. Lote #3 — Finca La Esperanza")}
               className={inputCls}
             />
           </div>
@@ -2438,7 +2455,7 @@ function TrillaTab({
             ) : (
               <FlaskConical className="w-4 h-4" />
             )}
-            {isPending ? "Registrando..." : "Registrar Trilla"}
+            {isPending ? tr("Registrando...") : tr("Registrar Trilla")}
           </button>
         </form>
       </div>
@@ -2448,7 +2465,7 @@ function TrillaTab({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
           <h3 className="font-serif text-lg">
-            Historial de Trillas{" "}
+            {tr("Historial de Trillas")}{" "}
             <span className="text-foreground/40 text-base font-sans">
               · {batches.length}
             </span>
@@ -2468,14 +2485,14 @@ function TrillaTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Café / Tipo" field="input_inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Pergamino (kg)" field="input_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Rendimiento" field="rendimiento_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Verde (kg)" field="output_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Pérdida %" field="weight_loss_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Notas" field="notes" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <th className={thCls}>Acciones</th>
+                  <SortableTh label={tr("Fecha")} field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Café / Tipo")} field="input_inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Pergamino (kg)")} field="input_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Rendimiento")} field="rendimiento_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Verde (kg)")} field="output_quantity_kg" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Pérdida %")} field="weight_loss_pct" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Notas")} field="notes" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className={thCls}>{tr("Acciones")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -2509,12 +2526,12 @@ function TrillaTab({
                     <td className={tdCls}>
                       {deletingBatchId === b.id ? (
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-red-600">¿Eliminar?</span>
-                          <button onClick={() => handleDeleteBatch(b.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">Sí</button>
-                          <button onClick={() => setDeletingBatchId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">No</button>
+                          <span className="text-[10px] font-bold text-red-600">{tr("¿Eliminar?")}</span>
+                          <button onClick={() => handleDeleteBatch(b.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">{tr("Sí")}</button>
+                          <button onClick={() => setDeletingBatchId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">{tr("No")}</button>
                         </div>
                       ) : (
-                        <button onClick={() => setDeletingBatchId(b.id)} title="Eliminar" className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
+                        <button onClick={() => setDeletingBatchId(b.id)} title={tr("Eliminar")} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -2549,6 +2566,7 @@ function TostionTab({
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
   era: 'v1' | 'v2';
 }) {
+  const tr = useTr();
   const initForm = {
     inputInventoryId: "",
     outputInventoryId: "",
@@ -2638,7 +2656,7 @@ function TostionTab({
     const { inputInventoryId, outputInventoryId, inputQty, rendimiento, outputQty, date, notes } = form;
 
     if (!inputInventoryId || !outputInventoryId || !inputQty || !outputQty) {
-      setFeedback({ type: "error", msg: "Completa los campos obligatorios" });
+      setFeedback({ type: "error", msg: tr("Completa los campos obligatorios") });
       return;
     }
 
@@ -2654,7 +2672,7 @@ function TostionTab({
         );
 
         if (!res.success) {
-          setFeedback({ type: "error", msg: res.error || "Error al registrar" });
+          setFeedback({ type: "error", msg: res.error || tr("Error al registrar") });
           return;
         }
 
@@ -2663,11 +2681,11 @@ function TostionTab({
           { id: outputInventoryId, newStock: res.newTostadoStock ?? 0 },
         ]);
 
-        setFeedback({ type: "success", msg: "✓ Proceso de Tostión registrado con éxito" });
+        setFeedback({ type: "success", msg: tr("✓ Proceso de Tostión registrado con éxito") });
         setForm(initForm);
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al registrar" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al registrar") });
       }
     });
   }
@@ -2683,7 +2701,7 @@ function TostionTab({
         setDeletingId(null);
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al eliminar") });
       }
     });
   }
@@ -2698,16 +2716,16 @@ function TostionTab({
       {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
-          <h2 className="text-xl font-serif">Proceso de Tostión</h2>
+          <h2 className="text-xl font-serif">{tr("Proceso de Tostión")}</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            Convierte café verde en café tostado. El sistema descontará el verde e incrementará el tostado.
+            {tr("Convierte café verde en café tostado. El sistema descontará el verde e incrementará el tostado.")}
           </p>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
             <div>
-              <label htmlFor="tos-date" className={labelCls}>Fecha <span className="text-red-400">*</span></label>
+              <label htmlFor="tos-date" className={labelCls}>{tr("Fecha")}{" "}<span className="text-red-400">*</span></label>
               <input
                 id="tos-date"
                 type="date"
@@ -2718,29 +2736,29 @@ function TostionTab({
               />
             </div>
             <div>
-              <label htmlFor="tos-input-product" className={labelCls}>Café Verde (In) <span className="text-red-400">*</span></label>
+              <label htmlFor="tos-input-product" className={labelCls}>{tr("Café Verde (In)")}{" "}<span className="text-red-400">*</span></label>
               <ProductSelect
                 id="tos-input-product"
                 value={form.inputInventoryId}
                 onChange={(v) => setForm({ ...form, inputInventoryId: v })}
                 inventory={inventory}
                 filter={(i) => i.category === 'cafe' && i.product_code.startsWith('CAFV')}
-                placeholder="Seleccionar café verde..."
+                placeholder={tr("Seleccionar café verde...")}
               />
             </div>
             <div>
-              <label htmlFor="tos-output-product" className={labelCls}>Café Tostado (Out) <span className="text-red-400">*</span></label>
+              <label htmlFor="tos-output-product" className={labelCls}>{tr("Café Tostado (Out)")}{" "}<span className="text-red-400">*</span></label>
               <ProductSelect
                 id="tos-output-product"
                 value={form.outputInventoryId}
                 onChange={(v) => setForm({ ...form, outputInventoryId: v })}
                 inventory={inventory}
                 filter={(i) => i.category === 'cafe' && (i.product_code.startsWith('CAFT') || i.product_name.toLowerCase().includes('tostado'))}
-                placeholder="Seleccionar café tostado..."
+                placeholder={tr("Seleccionar café tostado...")}
               />
             </div>
             <div>
-              <label htmlFor="tos-input-qty" className={labelCls}>Cant. Verde <span className="text-red-400">*</span></label>
+              <label htmlFor="tos-input-qty" className={labelCls}>{tr("Cant. Verde")}{" "}<span className="text-red-400">*</span></label>
               <QuantityInput
                 id="tos-input-qty"
                 value={form.inputQty}
@@ -2750,7 +2768,7 @@ function TostionTab({
               />
             </div>
             <div>
-              <label htmlFor="tos-rend" className={labelCls}>Rendimiento Tostión (%)</label>
+              <label htmlFor="tos-rend" className={labelCls}>{tr("Rendimiento Tostión (%)")}</label>
               <input
                 id="tos-rend"
                 type="number"
@@ -2763,7 +2781,7 @@ function TostionTab({
               />
             </div>
             <div>
-              <label htmlFor="tos-output-qty" className={labelCls}>Cant. Tostado <span className="text-amber-500">auto</span></label>
+              <label htmlFor="tos-output-qty" className={labelCls}>{tr("Cant. Tostado")}{" "}<span className="text-amber-500">{tr("auto")}</span></label>
               <QuantityInput
                 id="tos-output-qty"
                 value={form.outputQty}
@@ -2777,21 +2795,21 @@ function TostionTab({
 
           {inputNum > 0 && outputNum > 0 && (
             <div className="grid grid-cols-3 gap-3 mb-4 bg-[#f9f7f0] rounded-2xl p-4 text-center">
-              <div><p className={labelCls}>Entrada Verde</p><p className="font-bold">{inputNum.toFixed(2)} kg</p></div>
-              <div><p className={labelCls}>Pérdida (Merma)</p><p className="font-bold text-red-600">{lossKg.toFixed(2)} kg</p></div>
-              <div><p className={labelCls}>% Pérdida</p><p className="font-bold text-xl">{lossPct.toFixed(1)}%</p></div>
+              <div><p className={labelCls}>{tr("Entrada Verde")}</p><p className="font-bold">{tr("{inputNum} kg", { inputNum: inputNum.toFixed(2) })}</p></div>
+              <div><p className={labelCls}>{tr("Pérdida (Merma)")}</p><p className="font-bold text-red-600">{tr("{lossKg} kg", { lossKg: lossKg.toFixed(2) })}</p></div>
+              <div><p className={labelCls}>{tr("% Pérdida")}</p><p className="font-bold text-xl">{lossPct.toFixed(1)}%</p></div>
             </div>
           )}
 
           <div className="mb-5">
-            <label htmlFor="tos-notes" className={labelCls}>Notas</label>
+            <label htmlFor="tos-notes" className={labelCls}>{tr("Notas")}</label>
             <input
               id="tos-notes"
               type="text"
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               className={inputCls}
-              placeholder="ej. Tostión media-alta, Lote #..."
+              placeholder={tr("ej. Tostión media-alta, Lote #...")}
             />
           </div>
 
@@ -2802,7 +2820,7 @@ function TostionTab({
             className="mt-4 flex items-center gap-2 px-8 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-2xl transition-all disabled:opacity-60"
           >
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Factory className="w-4 h-4" />}
-            {isPending ? "Registrando..." : "Registrar Tostión"}
+            {isPending ? tr("Registrando...") : tr("Registrar Tostión")}
           </button>
         </form>
       </div>
@@ -2810,7 +2828,7 @@ function TostionTab({
 
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
-          <h3 className="font-serif text-lg">Historial de Tostión <span className="text-foreground/40 text-base font-sans">· {unifiedRecords.length}</span></h3>
+          <h3 className="font-serif text-lg">{tr("Historial de Tostión")}{" "}<span className="text-foreground/40 text-base font-sans">· {unifiedRecords.length}</span></h3>
           <button onClick={loadHistory} className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40"><RefreshCw className="w-4 h-4" /></button>
         </div>
         {loading || unifiedRecords.length === 0 ? (
@@ -2820,39 +2838,39 @@ function TostionTab({
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <th className={thCls}>Fecha</th>
-                  <th className={`${thCls} text-right`}>Verde (In)</th>
-                  <th className={`${thCls} text-right`}>Rend.</th>
-                  <th className={`${thCls} text-right`}>Tostado (Out)</th>
-                  <th className={`${thCls} text-right`}>Merma %</th>
-                  <th className={thCls}>Notas</th>
-                  <th className={thCls}>Acciones</th>
+                  <th className={thCls}>{tr("Fecha")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Verde (In)")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Rend.")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Tostado (Out)")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Merma %")}</th>
+                  <th className={thCls}>{tr("Notas")}</th>
+                  <th className={thCls}>{tr("Acciones")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
                 {paginatedRecords.map((r) => (
                   <tr key={r.id} className="hover:bg-[#fdfbf7]">
                     <td className={tdCls}>{fmtDate(r.date)}</td>
-                    <td className={`${tdCls} text-right font-mono`}>{r.inputQty.toFixed(2)} kg</td>
+                    <td className={`${tdCls} text-right font-mono`}>{tr("{inputQty} kg", { inputQty: r.inputQty.toFixed(2) })}</td>
                     <td className={`${tdCls} text-right`}>{r.rend !== null ? `${r.rend.toFixed(1)}%` : "—"}</td>
-                    <td className={`${tdCls} text-right font-mono font-bold text-emerald-700`}>{r.outputQty !== null ? `${r.outputQty.toFixed(2)} kg` : "—"}</td>
+                    <td className={`${tdCls} text-right font-mono font-bold text-emerald-700`}>{r.outputQty !== null ? tr("{outputQty} kg", { outputQty: r.outputQty.toFixed(2) }) : "—"}</td>
                     <td className={`${tdCls} text-right text-red-500`}>{r.loss !== null ? `${r.loss.toFixed(1)}%` : "—"}</td>
                     <td className={`${tdCls} text-foreground/50 text-xs`}>{r.notes || "—"}</td>
                     <td className={tdCls}>
                       {!r.isLegacy ? (
                         deletingId === r.id ? (
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-red-600">¿Eliminar?</span>
-                            <button onClick={() => handleDeleteBatch(r.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">Sí</button>
-                            <button onClick={() => setDeletingId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">No</button>
+                            <span className="text-[10px] font-bold text-red-600">{tr("¿Eliminar?")}</span>
+                            <button onClick={() => handleDeleteBatch(r.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg">{tr("Sí")}</button>
+                            <button onClick={() => setDeletingId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">{tr("No")}</button>
                           </div>
                         ) : (
-                          <button onClick={() => setDeletingId(r.id)} title="Eliminar" className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
+                          <button onClick={() => setDeletingId(r.id)} title={tr("Eliminar")} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )
                       ) : (
-                        <span className="text-[9px] font-bold text-foreground/20 uppercase tracking-tighter">Legacy</span>
+                        <span className="text-[9px] font-bold text-foreground/20 uppercase tracking-tighter">{tr("Legacy")}</span>
                       )}
                     </td>
                   </tr>
@@ -2900,6 +2918,7 @@ function ProdAltasTab({
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
   era: 'v1' | 'v2';
 }) {
+  const tr = useTr();
   const initForm = {
     inventoryId: "",
     qty: "",
@@ -2962,11 +2981,11 @@ function ProdAltasTab({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.inventoryId || !form.qty) {
-      setFeedback({ type: "error", msg: "Completa los campos obligatorios" });
+      setFeedback({ type: "error", msg: tr("Completa los campos obligatorios") });
       return;
     }
     if (isGrindTracked(selectedProduct?.product_code) && !form.molienda) {
-      setFeedback({ type: "error", msg: "Selecciona la molienda (Grano o Molido)" });
+      setFeedback({ type: "error", msg: tr("Selecciona la molienda (Grano o Molido)") });
       return;
     }
     startTransition(async () => {
@@ -2986,7 +3005,7 @@ function ProdAltasTab({
         );
 
         if (!res.success) {
-          setFeedback({ type: "error", msg: res.error || "Error al registrar" });
+          setFeedback({ type: "error", msg: res.error || tr("Error al registrar") });
           return;
         }
 
@@ -2997,14 +3016,14 @@ function ProdAltasTab({
           });
         }
         onStocksUpdate(updates);
-        setFeedback({ type: "success", msg: "✓ Alta de producción registrada" });
+        setFeedback({ type: "success", msg: tr("✓ Alta de producción registrada") });
         setForm(initForm);
         setConsumos([]);
         loadHistory();
       } catch (err: unknown) {
         setFeedback({
           type: "error",
-          msg: err instanceof Error ? err.message : "Error al registrar",
+          msg: err instanceof Error ? err.message : tr("Error al registrar"),
         });
       }
     });
@@ -3018,7 +3037,7 @@ function ProdAltasTab({
         setDeletingId(null);
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al eliminar") });
       }
     });
   }
@@ -3077,16 +3096,16 @@ function ProdAltasTab({
       {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
-          <h2 className="text-xl font-serif">Producción — Altas</h2>
+          <h2 className="text-xl font-serif">{tr("Producción — Altas")}</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            Registra los productos terminados que salen de la Tostión (café tostado empacado).
+            {tr("Registra los productos terminados que salen de la Tostión (café tostado empacado).")}
           </p>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
             <div>
               <label htmlFor="pa-date" className={labelCls}>
-                Fecha <span className="text-red-400">*</span>
+                {tr("Fecha")}{" "}<span className="text-red-400">*</span>
               </label>
               <input
                 id="pa-date"
@@ -3100,7 +3119,7 @@ function ProdAltasTab({
             </div>
             <div>
               <label htmlFor="pa-product" className={labelCls}>
-                Producto terminado <span className="text-red-400">*</span>
+                {tr("Producto terminado")}{" "}<span className="text-red-400">*</span>
               </label>
               <ProductSelect
                 id="pa-product"
@@ -3115,7 +3134,7 @@ function ProdAltasTab({
                 }}
                 inventory={inventory}
                 filter={(i) => FINISHED_CODES.includes(i.product_code)}
-                placeholder="Seleccionar café tostado..."
+                placeholder={tr("Seleccionar café tostado...")}
               />
             </div>
             <MoliendaField
@@ -3126,7 +3145,7 @@ function ProdAltasTab({
             />
             <div>
               <label htmlFor="pa-qty" className={labelCls}>
-                Cantidad (kg / ud) <span className="text-red-400">*</span>
+                {tr("Cantidad (kg / ud)")}{" "}<span className="text-red-400">*</span>
               </label>
               <input
                 id="pa-qty"
@@ -3135,34 +3154,34 @@ function ProdAltasTab({
                 step="0.001"
                 value={form.qty}
                 onChange={(e) => setForm({ ...form, qty: e.target.value })}
-                placeholder="ej. 50"
+                placeholder={tr("ej. 50")}
                 className={inputCls}
                 required
               />
             </div>
             <div>
               <label htmlFor="pa-lote" className={labelCls}>
-                Lote referencia (opcional)
+                {tr("Lote referencia (opcional)")}
               </label>
               <input
                 id="pa-lote"
                 type="text"
                 value={form.lote}
                 onChange={(e) => setForm({ ...form, lote: e.target.value })}
-                placeholder="ej. Lote #5"
+                placeholder={tr("ej. Lote #5")}
                 className={inputCls}
               />
             </div>
             <div>
               <label htmlFor="pa-notes" className={labelCls}>
-                Notas (opcional)
+                {tr("Notas (opcional)")}
               </label>
               <input
                 id="pa-notes"
                 type="text"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Observaciones..."
+                placeholder={tr("Observaciones...")}
                 className={inputCls}
               />
             </div>
@@ -3172,8 +3191,8 @@ function ProdAltasTab({
           <div className="mb-6 p-5 rounded-2xl border border-foreground/10 bg-[#fdfbf7]">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-bold text-foreground">Materiales Consumidos</h3>
-                <p className="text-xs text-foreground/50">Opcional. Registra bolsas o stickers utilizados.</p>
+                <h3 className="text-sm font-bold text-foreground">{tr("Materiales Consumidos")}</h3>
+                <p className="text-xs text-foreground/50">{tr("Opcional. Registra bolsas o stickers utilizados.")}</p>
               </div>
               <button
                 type="button"
@@ -3181,7 +3200,7 @@ function ProdAltasTab({
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-xs font-bold text-foreground transition-colors"
               >
                 <PackagePlus className="w-3.5 h-3.5" />
-                Agregar Material
+                {tr("Agregar Material")}
               </button>
             </div>
             
@@ -3190,7 +3209,7 @@ function ProdAltasTab({
                 {consumos.map((c, i) => (
                   <div key={i} className="flex flex-col sm:flex-row gap-3 items-end">
                     <div className="flex-1">
-                      <label className="text-[10px] uppercase font-bold text-foreground/40 mb-1 block">Material</label>
+                      <label className="text-[10px] uppercase font-bold text-foreground/40 mb-1 block">{tr("Material")}</label>
                       <ProductSelect
                         value={c.id}
                         onChange={(v) => {
@@ -3200,16 +3219,16 @@ function ProdAltasTab({
                         }}
                         inventory={inventory}
                         filter={(inv) => inv.category === "empaque" || inv.category === "accesorio" || inv.category === "cafe"}
-                        placeholder="Seleccionar bolsa o sticker..."
+                        placeholder={tr("Seleccionar bolsa o sticker...")}
                       />
                     </div>
                     <div className="w-full sm:w-48">
-                      <label className="text-[10px] uppercase font-bold text-foreground/40 mb-1 block">Cantidad</label>
+                      <label className="text-[10px] uppercase font-bold text-foreground/40 mb-1 block">{tr("Cantidad")}</label>
                       <QuantityInput
                         value={c.qty}
                         onChange={(v) => setConsumos((prev) => prev.map((x, idx) => (idx === i ? { ...x, qty: v } : x)))}
                         baseUnit={inventory.find((inv) => inv.id === c.id)?.unit}
-                        placeholder="ej. 50"
+                        placeholder={tr("ej. 50")}
                         ariaLabel="Cantidad consumida"
                       />
                     </div>
@@ -3225,7 +3244,7 @@ function ProdAltasTab({
               </div>
             ) : (
               <p className="text-xs text-center text-foreground/40 border-2 border-dashed border-foreground/5 rounded-xl py-6">
-                No has agregado materiales consumidos.
+                {tr("No has agregado materiales consumidos.")}
               </p>
             )}
           </div>
@@ -3241,7 +3260,7 @@ function ProdAltasTab({
             ) : (
               <TrendingUp className="w-4 h-4" />
             )}
-            {isPending ? "Registrando..." : "Registrar Alta"}
+            {isPending ? tr("Registrando...") : tr("Registrar Alta")}
           </button>
         </form>
       </div>
@@ -3250,7 +3269,7 @@ function ProdAltasTab({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
           <h3 className="font-serif text-lg">
-            Historial{" "}
+            {tr("Historial")}{" "}
             <span className="text-foreground/40 text-base font-sans">
               · {records.length}
             </span>
@@ -3270,13 +3289,13 @@ function ProdAltasTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Molienda" field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Lote / Notas" field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <th className={thCls}>Acciones</th>
+                  <SortableTh label={tr("Fecha")} field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Código")} field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Producto")} field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Cantidad")} field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Molienda")} field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Lote / Notas")} field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className={thCls}>{tr("Acciones")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -3302,7 +3321,7 @@ function ProdAltasTab({
                         <MoliendaBadge value={r.molienda} />
                       </td>
                       <td className={`${tdCls} text-foreground/50`}>
-                        {r.reason || "—"}
+                        {tr.msg(r.reason) || "—"}
                       </td>
                       <td className={tdCls}>
                         <AccionesCell id={r.id} deletingId={deletingId} onEdit={() => setEditingRecord(r)} onConfirmDelete={() => handleDeleteRecord(r)} onCancelDelete={() => setDeletingId(null)} onDelete={() => setDeletingId(r.id)} />
@@ -3339,6 +3358,7 @@ function ColdBrewTab({
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
   era: 'v1' | 'v2';
 }) {
+  const tr = useTr();
   const defaultCoffee = inventory.find(i => i.product_code === "CAFT-001") || inventory.find(i => i.product_code.startsWith("CAFT-"));
   const defaultColdBrew = inventory.find(i => i.product_code === "CAFC-340ML") || inventory.find(i => i.product_name.toLowerCase().includes("cold brew"));
 
@@ -3399,14 +3419,14 @@ function ColdBrewTab({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.coffeeId || !form.coldBrewId || !form.inputQtyKg || !form.outputBottles) {
-      setFeedback({ type: "error", msg: "Completa los campos obligatorios (*)" });
+      setFeedback({ type: "error", msg: tr("Completa los campos obligatorios (*)") });
       return;
     }
 
     if (selectedCoffee && Number(selectedCoffee.current_stock) < inputNum) {
       setFeedback({
         type: "error",
-        msg: `Stock insuficiente de café tostado (${selectedCoffee.product_name}). Disponible: ${selectedCoffee.current_stock} kg`,
+        msg: tr("Stock insuficiente de café tostado ({product_name}). Disponible: {current_stock} kg", { product_name: selectedCoffee.product_name, current_stock: selectedCoffee.current_stock }),
       });
       return;
     }
@@ -3425,7 +3445,7 @@ function ColdBrewTab({
         );
 
         if (!res.success) {
-          setFeedback({ type: "error", msg: res.error || "Error al registrar el lote de Cold Brew" });
+          setFeedback({ type: "error", msg: res.error || tr("Error al registrar el lote de Cold Brew") });
           return;
         }
 
@@ -3436,7 +3456,7 @@ function ColdBrewTab({
 
         setFeedback({
           type: "success",
-          msg: `✓ Lote de Cold Brew 340ml registrado con éxito (+${bottlesNum} botellas, -${inputNum} kg café)`,
+          msg: tr("✓ Lote de Cold Brew 340ml registrado con éxito (+{bottlesNum} botellas, -{inputNum} kg café)", { bottlesNum: bottlesNum, inputNum: inputNum }),
         });
 
         setForm(prev => ({
@@ -3446,7 +3466,7 @@ function ColdBrewTab({
         }));
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al registrar" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al registrar") });
       }
     });
   }
@@ -3460,10 +3480,10 @@ function ColdBrewTab({
           { id: res.outputInventoryId, newStock: res.newOutputStock },
         ]);
         setDeletingId(null);
-        setFeedback({ type: "success", msg: "✓ Lote eliminado e inventario revertido correctamente" });
+        setFeedback({ type: "success", msg: tr("✓ Lote eliminado e inventario revertido correctamente") });
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar lote" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al eliminar lote") });
       }
     });
   }
@@ -3486,14 +3506,13 @@ function ColdBrewTab({
           <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-xl font-serif">Pipeline Cold Brew — Tercero Café 11:11</h2>
+                <h2 className="text-xl font-serif">{tr("Pipeline Cold Brew — Tercero Café 11:11")}</h2>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#C59F59]/15 text-[#C59F59] uppercase tracking-wider">
-                  Maquila Café 11:11
+                  {tr("Maquila Café 11:11")}
                 </span>
               </div>
               <p className="text-sm text-foreground/60 max-w-2xl">
-                Registra la salida de café tostado a granel entregado al maquilador y la entrada de unidades de Cold Brew 340ml terminadas.
-                Las botellas y tapas son suministradas directamente por el tercero.
+                {tr("Registra la salida de café tostado a granel entregado al maquilador y la entrada de unidades de Cold Brew 340ml terminadas. Las botellas y tapas son suministradas directamente por el tercero.")}
               </p>
             </div>
           </div>
@@ -3502,7 +3521,7 @@ function ColdBrewTab({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
               <div>
                 <label htmlFor="cb-date" className={labelCls}>
-                  Fecha <span className="text-red-400">*</span>
+                  {tr("Fecha")}{" "}<span className="text-red-400">*</span>
                 </label>
                 <input
                   id="cb-date"
@@ -3517,7 +3536,7 @@ function ColdBrewTab({
 
               <div>
                 <label htmlFor="cb-coffee" className={labelCls}>
-                  Café Tostado a Enviar <span className="text-red-400">*</span>
+                  {tr("Café Tostado a Enviar")}{" "}<span className="text-red-400">*</span>
                 </label>
                 <ProductSelect
                   id="cb-coffee"
@@ -3528,32 +3547,32 @@ function ColdBrewTab({
                     i.category === "cafe" &&
                     (i.product_code.startsWith("CAFT") || i.product_name.toLowerCase().includes("tostado"))
                   }
-                  placeholder="Seleccionar café tostado..."
+                  placeholder={tr("Seleccionar café tostado...")}
                 />
                 {selectedCoffee && (
                   <p className="text-xs text-foreground/50 mt-1">
-                    Disponible: <span className="font-semibold text-foreground">{Number(selectedCoffee.current_stock).toFixed(2)} kg</span>
+                    {tr("Disponible:")}{" "}<span className="font-semibold text-foreground">{tr("{v} kg", { v: Number(selectedCoffee.current_stock).toFixed(2) })}</span>
                   </p>
                 )}
               </div>
 
               <div>
                 <label htmlFor="cb-qty-coffee" className={labelCls}>
-                  Cantidad Café Tostado <span className="text-red-400">*</span>
+                  {tr("Cantidad Café Tostado")}{" "}<span className="text-red-400">*</span>
                 </label>
                 <QuantityInput
                   id="cb-qty-coffee"
                   value={form.inputQtyKg}
                   onChange={(v) => setForm((f) => ({ ...f, inputQtyKg: v }))}
                   baseUnit="kg"
-                  placeholder="ej. 5.0"
+                  placeholder={tr("ej. 5.0")}
                   required
                 />
               </div>
 
               <div>
                 <label htmlFor="cb-product" className={labelCls}>
-                  Producto Terminado <span className="text-red-400">*</span>
+                  {tr("Producto Terminado")}{" "}<span className="text-red-400">*</span>
                 </label>
                 <ProductSelect
                   id="cb-product"
@@ -3564,18 +3583,18 @@ function ColdBrewTab({
                     i.product_code === "CAFC-340ML" ||
                     i.product_name.toLowerCase().includes("cold brew")
                   }
-                  placeholder="Seleccionar producto Cold Brew..."
+                  placeholder={tr("Seleccionar producto Cold Brew...")}
                 />
                 {selectedColdBrew && (
                   <p className="text-xs text-foreground/50 mt-1">
-                    Stock actual: <span className="font-semibold text-foreground">{selectedColdBrew.current_stock} uds</span>
+                    {tr("Stock actual:")}{" "}<span className="font-semibold text-foreground">{tr("{current_stock} uds", { current_stock: selectedColdBrew.current_stock })}</span>
                   </p>
                 )}
               </div>
 
               <div>
                 <label htmlFor="cb-qty-bottles" className={labelCls}>
-                  Botellas Recibidas (340ml) <span className="text-red-400">*</span>
+                  {tr("Botellas Recibidas (340ml)")}{" "}<span className="text-red-400">*</span>
                 </label>
                 <input
                   id="cb-qty-bottles"
@@ -3584,7 +3603,7 @@ function ColdBrewTab({
                   step="1"
                   value={form.outputBottles}
                   onChange={(e) => setForm({ ...form, outputBottles: e.target.value })}
-                  placeholder="ej. 50"
+                  placeholder={tr("ej. 50")}
                   className={inputCls}
                   required
                 />
@@ -3592,14 +3611,14 @@ function ColdBrewTab({
 
               <div>
                 <label htmlFor="cb-lote" className={labelCls}>
-                  Lote / Referencia (opcional)
+                  {tr("Lote / Referencia (opcional)")}
                 </label>
                 <input
                   id="cb-lote"
                   type="text"
                   value={form.lote}
                   onChange={(e) => setForm({ ...form, lote: e.target.value })}
-                  placeholder="ej. CB-2026-Lote1"
+                  placeholder={tr("ej. CB-2026-Lote1")}
                   className={inputCls}
                 />
               </div>
@@ -3609,33 +3628,33 @@ function ColdBrewTab({
             <div className="mb-6 p-4 rounded-2xl border border-[#C59F59]/20 bg-[#fdfbf7] flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-6">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">Tercero Responsable</span>
-                  <span className="text-sm font-semibold text-[#8a6b32]">Café 11:11 (Maquila)</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">{tr("Tercero Responsable")}</span>
+                  <span className="text-sm font-semibold text-[#8a6b32]">{tr("Café 11:11 (Maquila)")}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">Volumen Total</span>
-                  <span className="text-sm font-semibold text-foreground">{totalLiters} Litros</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">{tr("Volumen Total")}</span>
+                  <span className="text-sm font-semibold text-foreground">{tr("{totalLiters} Litros", { totalLiters: totalLiters })}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">Rendimiento Extracción</span>
-                  <span className="text-sm font-semibold text-foreground">{ratio} botellas / kg</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 block">{tr("Rendimiento Extracción")}</span>
+                  <span className="text-sm font-semibold text-foreground">{tr("{ratio} botellas / kg", { ratio: ratio })}</span>
                 </div>
               </div>
               <div className="text-xs text-foreground/50">
-                ✓ Botellas y tapas suministradas directamente por Café 11:11
+                {tr("✓ Botellas y tapas suministradas directamente por Café 11:11")}
               </div>
             </div>
 
             <div className="mb-6">
               <label htmlFor="cb-notes" className={labelCls}>
-                Notas / Observaciones (opcional)
+                {tr("Notas / Observaciones (opcional)")}
               </label>
               <input
                 id="cb-notes"
                 type="text"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Detalles del lote, entrega o características de la extracción..."
+                placeholder={tr("Detalles del lote, entrega o características de la extracción...")}
                 className={inputCls}
               />
             </div>
@@ -3658,7 +3677,7 @@ function ColdBrewTab({
               className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#C59F59] text-white font-medium hover:bg-[#b08d4b] transition-all shadow-sm disabled:opacity-50"
             >
               {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Registrar Lote Cold Brew
+              {tr("Registrar Lote Cold Brew")}
             </button>
           </form>
         </div>
@@ -3668,15 +3687,15 @@ function ColdBrewTab({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-lg font-serif">Historial de Lotes — Cold Brew (Café 11:11)</h3>
+            <h3 className="text-lg font-serif">{tr("Historial de Lotes — Cold Brew (Café 11:11)")}</h3>
             <p className="text-xs text-foreground/50 mt-0.5">
-              Registro de producciones y lotes elaborados por el tercero Café 11:11.
+              {tr("Registro de producciones y lotes elaborados por el tercero Café 11:11.")}
             </p>
           </div>
           <button
             onClick={loadHistory}
             className="p-2 text-foreground/40 hover:text-foreground hover:bg-foreground/5 rounded-xl transition-all"
-            title="Refrescar historial"
+            title={tr("Refrescar historial")}
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -3685,11 +3704,11 @@ function ColdBrewTab({
         {loading ? (
           <div className="flex items-center justify-center py-12 text-foreground/40 gap-2">
             <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Cargando lotes de Cold Brew...</span>
+            <span className="text-sm">{tr("Cargando lotes de Cold Brew...")}</span>
           </div>
         ) : batches.length === 0 ? (
           <div className="text-center py-12 text-foreground/40">
-            <p className="text-sm">No hay lotes de Cold Brew registrados en este periodo.</p>
+            <p className="text-sm">{tr("No hay lotes de Cold Brew registrados en este periodo.")}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -3697,14 +3716,14 @@ function ColdBrewTab({
               <thead>
                 <tr className="border-b border-foreground/5">
                   <th className={`${thCls} cursor-pointer select-none`} onClick={() => handleSort("date")}>
-                    <div className="flex items-center gap-1">Fecha {sortField === "date" && (sortAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
+                    <div className="flex items-center gap-1">{tr("Fecha")}{" "}{sortField === "date" && (sortAsc ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</div>
                   </th>
-                  <th className={thCls}>Café Tostado Salida</th>
-                  <th className={thCls}>Cold Brew 340ml Entrada</th>
-                  <th className={thCls}>Rendimiento</th>
-                  <th className={thCls}>Maquila</th>
-                  <th className={thCls}>Notas / Lote</th>
-                  <th className={`${thCls} text-right`}>Acciones</th>
+                  <th className={thCls}>{tr("Café Tostado Salida")}</th>
+                  <th className={thCls}>{tr("Cold Brew 340ml Entrada")}</th>
+                  <th className={thCls}>{tr("Rendimiento")}</th>
+                  <th className={thCls}>{tr("Maquila")}</th>
+                  <th className={thCls}>{tr("Notas / Lote")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Acciones")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -3719,20 +3738,20 @@ function ColdBrewTab({
                     <tr key={b.id} className="hover:bg-foreground/[0.01] transition-colors">
                       <td className={tdCls}>{fmtDate(b.movement_date || b.created_at)}</td>
                       <td className={tdCls}>
-                        <span className="font-semibold text-rose-600">-{inputKg} kg</span>
-                        <span className="text-xs text-foreground/50 block">{inputInv?.product_name || "Café Tostado"}</span>
+                        <span className="font-semibold text-rose-600">{tr("-{inputKg} kg", { inputKg: inputKg })}</span>
+                        <span className="text-xs text-foreground/50 block">{inputInv?.product_name || tr("Café Tostado")}</span>
                       </td>
                       <td className={tdCls}>
-                        <span className="font-semibold text-emerald-600">+{outputUds} uds</span>
-                        <span className="text-xs text-foreground/50 block">{outputInv?.product_name || "Cold Brew 340ml"} ({(outputUds * 0.34).toFixed(1)} L)</span>
+                        <span className="font-semibold text-emerald-600">{tr("+{outputUds} uds", { outputUds: outputUds })}</span>
+                        <span className="text-xs text-foreground/50 block">{outputInv?.product_name || tr("Cold Brew 340ml")} ({(outputUds * 0.34).toFixed(1)} L)</span>
                       </td>
                       <td className={tdCls}>
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#C59F59]/10 text-[#8a6b32]">
-                          {rend} bot/kg
+                          {tr("{rend} bot/kg", { rend: rend })}
                         </span>
                       </td>
                       <td className={tdCls}>
-                        <span className="text-xs font-semibold text-foreground/70">Café 11:11</span>
+                        <span className="text-xs font-semibold text-foreground/70">{tr("Café 11:11")}</span>
                       </td>
                       <td className={`${tdCls} max-w-xs truncate text-xs text-foreground/60`}>
                         {b.notes || "—"}
@@ -3740,13 +3759,13 @@ function ColdBrewTab({
                       <td className={tdCls}>
                         {deletingId === b.id ? (
                           <div className="flex items-center justify-end gap-2">
-                            <span className="text-[10px] font-bold text-red-600">¿Revertir lote?</span>
-                            <button onClick={() => handleDeleteBatch(b.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg hover:bg-red-600">Sí</button>
-                            <button onClick={() => setDeletingId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg hover:bg-foreground/20">No</button>
+                            <span className="text-[10px] font-bold text-red-600">{tr("¿Revertir lote?")}</span>
+                            <button onClick={() => handleDeleteBatch(b.id)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-lg hover:bg-red-600">{tr("Sí")}</button>
+                            <button onClick={() => setDeletingId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg hover:bg-foreground/20">{tr("No")}</button>
                           </div>
                         ) : (
                           <div className="flex justify-end">
-                            <button onClick={() => setDeletingId(b.id)} title="Eliminar y revertir lote" className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500 transition-colors">
+                            <button onClick={() => setDeletingId(b.id)} title={tr("Eliminar y revertir lote")} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500 transition-colors">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -3781,6 +3800,7 @@ function SalidasTab({
   onStockUpdate: (id: string, newStock: number) => void;
   era: 'v1' | 'v2';
 }) {
+  const tr = useTr();
   const initForm = {
     inventoryId: "",
     qty: "",
@@ -3843,16 +3863,16 @@ function SalidasTab({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.inventoryId || !form.qty) {
-      setFeedback({ type: "error", msg: "Completa los campos obligatorios" });
+      setFeedback({ type: "error", msg: tr("Completa los campos obligatorios") });
       return;
     }
     if (isGrindTracked(selectedItem?.product_code) && !form.molienda) {
-      setFeedback({ type: "error", msg: "Selecciona la molienda (Grano o Molido)" });
+      setFeedback({ type: "error", msg: tr("Selecciona la molienda (Grano o Molido)") });
       return;
     }
     const valor = parseFloat(form.valor);
     if (form.esVenta && !(valor > 0)) {
-      setFeedback({ type: "error", msg: "Ingresa el valor cobrado de la venta" });
+      setFeedback({ type: "error", msg: tr("Ingresa el valor cobrado de la venta") });
       return;
     }
     startTransition(async () => {
@@ -3868,7 +3888,7 @@ function SalidasTab({
         );
 
         if (!res.success) {
-          setFeedback({ type: "error", msg: res.error || "Error al registrar" });
+          setFeedback({ type: "error", msg: res.error || tr("Error al registrar") });
           return;
         }
 
@@ -3876,15 +3896,15 @@ function SalidasTab({
         setFeedback({
           type: "success",
           msg: form.esVenta
-            ? "✓ Venta registrada: stock descontado e ingreso creado en Flujo de Caja"
-            : "✓ Salida registrada exitosamente",
+            ? tr("✓ Venta registrada: stock descontado e ingreso creado en Flujo de Caja")
+            : tr("✓ Salida registrada exitosamente"),
         });
         setForm(initForm);
         loadHistory();
       } catch (err: unknown) {
         setFeedback({
           type: "error",
-          msg: err instanceof Error ? err.message : "Error al registrar",
+          msg: err instanceof Error ? err.message : tr("Error al registrar"),
         });
       }
     });
@@ -3898,7 +3918,7 @@ function SalidasTab({
         setDeletingId(null);
         loadHistory();
       } catch (err: unknown) {
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al eliminar" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al eliminar") });
       }
     });
   }
@@ -3908,18 +3928,16 @@ function SalidasTab({
       {era === 'v2' && (
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="mb-6">
-          <h2 className="text-xl font-serif">Registrar Salida</h2>
+          <h2 className="text-xl font-serif">{tr("Registrar Salida")}</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            Registra una salida de stock: ventas directas, muestras, merma, etc.
-            Si es una venta pagada, márcala para que el ingreso quede en el Flujo
-            de Caja con la misma fecha de pago.
+            {tr("Registra una salida de stock: ventas directas, muestras, merma, etc. Si es una venta pagada, márcala para que el ingreso quede en el Flujo de Caja con la misma fecha de pago.")}
           </p>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
             <div>
               <label htmlFor="sal-date" className={labelCls}>
-                Fecha <span className="text-red-400">*</span>
+                {tr("Fecha")}{" "}<span className="text-red-400">*</span>
               </label>
               <input
                 id="sal-date"
@@ -3933,7 +3951,7 @@ function SalidasTab({
             </div>
             <div>
               <label htmlFor="sal-product" className={labelCls}>
-                Producto <span className="text-red-400">*</span>
+                {tr("Producto")}{" "}<span className="text-red-400">*</span>
               </label>
               <ProductSelect
                 id="sal-product"
@@ -3958,33 +3976,33 @@ function SalidasTab({
             />
             <div>
               <label htmlFor="sal-qty" className={labelCls}>
-                Cantidad <span className="text-red-400">*</span>
+                {tr("Cantidad")}{" "}<span className="text-red-400">*</span>
               </label>
               <QuantityInput
                 id="sal-qty"
                 value={form.qty}
                 onChange={(v) => setForm((f) => ({ ...f, qty: v }))}
                 baseUnit={selectedItem?.unit}
-                placeholder="ej. 10"
+                placeholder={tr("ej. 10")}
                 required
               />
             </div>
             <div>
               <label htmlFor="sal-motivo" className={labelCls}>
-                Motivo (opcional)
+                {tr("Motivo (opcional)")}
               </label>
               <input
                 id="sal-motivo"
                 type="text"
                 value={form.motivo}
                 onChange={(e) => setForm({ ...form, motivo: e.target.value })}
-                placeholder="ej. Venta, Muestra, Merma..."
+                placeholder={tr("ej. Venta, Muestra, Merma...")}
                 className={inputCls}
               />
             </div>
             <div>
               <label htmlFor="sal-resp" className={labelCls}>
-                Responsable (opcional)
+                {tr("Responsable (opcional)")}
               </label>
               <input
                 id="sal-resp"
@@ -3993,7 +4011,7 @@ function SalidasTab({
                 onChange={(e) =>
                   setForm({ ...form, responsable: e.target.value })
                 }
-                placeholder="Nombre..."
+                placeholder={tr("Nombre...")}
                 className={inputCls}
               />
             </div>
@@ -4008,16 +4026,16 @@ function SalidasTab({
                 className="w-4 h-4 accent-[#C59F59]"
               />
               <span className="text-sm">
-                <span className="font-bold">Venta pagada</span>
+                <span className="font-bold">{tr("Venta pagada")}</span>
                 <span className="block text-xs text-foreground/50">
-                  Registra el ingreso en Flujo de Caja (Ventas Físicas)
+                  {tr("Registra el ingreso en Flujo de Caja (Ventas Físicas)")}
                 </span>
               </span>
             </label>
             {form.esVenta && (
               <div>
                 <label htmlFor="sal-valor" className={labelCls}>
-                  Valor cobrado (COP) <span className="text-red-400">*</span>
+                  {tr("Valor cobrado (COP)")}{" "}<span className="text-red-400">*</span>
                 </label>
                 <input
                   id="sal-valor"
@@ -4026,7 +4044,7 @@ function SalidasTab({
                   step="any"
                   value={form.valor}
                   onChange={(e) => setForm({ ...form, valor: e.target.value })}
-                  placeholder="ej. 45000"
+                  placeholder={tr("ej. 45000")}
                   className={inputCls}
                   required
                 />
@@ -4044,7 +4062,7 @@ function SalidasTab({
             ) : (
               <PackageMinus className="w-4 h-4" />
             )}
-            {isPending ? "Registrando..." : "Registrar Salida"}
+            {isPending ? tr("Registrando...") : tr("Registrar Salida")}
           </button>
         </form>
       </div>
@@ -4053,7 +4071,7 @@ function SalidasTab({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
           <h3 className="font-serif text-lg">
-            Historial{" "}
+            {tr("Historial")}{" "}
             <span className="text-foreground/40 text-base font-sans">
               · {records.length}
             </span>
@@ -4073,14 +4091,14 @@ function SalidasTab({
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Código" field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Producto" field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Cantidad" field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Molienda" field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Motivo" field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Responsable" field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <th className={thCls}>Acciones</th>
+                  <SortableTh label={tr("Fecha")} field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Código")} field="inventory.product_code" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Producto")} field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Cantidad")} field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Molienda")} field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Motivo")} field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Responsable")} field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className={thCls}>{tr("Acciones")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -4106,11 +4124,11 @@ function SalidasTab({
                         <MoliendaBadge value={r.molienda} />
                       </td>
                       <td className={`${tdCls} text-foreground/50`}>
-                        {r.reason || "—"}
+                        {tr.msg(r.reason) || "—"}
                         {r.income_id && (
                           <span
                             className="ml-2 inline-block px-2 py-0.5 text-[10px] font-black rounded-full bg-green-100 text-green-700"
-                            title="Venta pagada — vinculada al Flujo de Caja"
+                            title={tr("Venta pagada — vinculada al Flujo de Caja")}
                           >
                             {fmtCOP(saleAmountOf(r) ?? 0)}
                           </span>
@@ -4167,6 +4185,7 @@ function ReempaqueTab({
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
   era: "v1" | "v2";
 }) {
+  const tr = useTr();
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState("");
   const [origins, setOrigins] = useState<RepackFormLine[]>(() => [newRepackLine()]);
@@ -4261,9 +4280,9 @@ function ReempaqueTab({
         .map((l) => ({ inventoryId: l.inventoryId, qty: parseFloat(l.qty), molienda: l.molienda || null }));
     const o = parse(origins);
     const d = parse(destinations);
-    if (o.length === 0) return setFeedback({ type: "error", msg: "Agrega al menos un producto de origen" });
+    if (o.length === 0) return setFeedback({ type: "error", msg: tr("Agrega al menos un producto de origen") });
     if ([...o, ...d].some((l) => !l.molienda)) {
-      return setFeedback({ type: "error", msg: "Selecciona la molienda de cada línea" });
+      return setFeedback({ type: "error", msg: tr("Selecciona la molienda de cada línea") });
     }
     if (calc.errors.length) return setFeedback({ type: "error", msg: calc.errors[0] });
 
@@ -4287,7 +4306,7 @@ function ReempaqueTab({
         type: "success",
         msg: res.sobranteKg > 0
           ? `✓ Reempaque registrado. Sobrante ${fmtKg(res.sobranteKg)} ${sobranteDestino === "granel" ? "devuelto a granel" : "registrado como merma"}`
-          : "✓ Reempaque registrado",
+          : tr("✓ Reempaque registrado"),
       });
       resetForm();
       loadHistory();
@@ -4303,7 +4322,7 @@ function ReempaqueTab({
         loadHistory();
       } catch (err: unknown) {
         setDeletingId(null);
-        setFeedback({ type: "error", msg: err instanceof Error ? err.message : "Error al revertir" });
+        setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al revertir") });
       }
     });
   }
@@ -4323,7 +4342,7 @@ function ReempaqueTab({
         return (
           <div key={l.key} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1.4fr_auto] gap-3 items-end p-4 rounded-2xl border border-foreground/5 bg-[#fdfbf7]">
             <div>
-              <label className={labelCls}>Producto</label>
+              <label className={labelCls}>{tr("Producto")}</label>
               <ProductSelect
                 id={`rep-${side}-${l.key}`}
                 value={l.inventoryId}
@@ -4335,19 +4354,19 @@ function ReempaqueTab({
             </div>
             <div>
               <label htmlFor={`rep-${side}-qty-${l.key}`} className={labelCls}>
-                Cantidad {it ? `(${it.unit})` : ""}
+                {tr("Cantidad {v}", { v: it ? `(${it.unit})` : "" })}
               </label>
               <QuantityInput
                 id={`rep-${side}-qty-${l.key}`}
                 value={l.qty}
                 onChange={(v) => update({ qty: v })}
                 baseUnit={it?.unit}
-                placeholder="ej. 1"
+                placeholder={tr("ej. 1")}
               />
               {w !== null && q > 0 && (
                 <p className="text-[10px] text-foreground/40 mt-1">
                   = {fmtKg(q * w)}
-                  {side === "origen" && it ? ` · stock ${it.current_stock}` : ""}
+                  {side === "origen" && it ? tr(" · stock {current_stock}", { current_stock: it.current_stock }) : ""}
                 </p>
               )}
             </div>
@@ -4361,7 +4380,7 @@ function ReempaqueTab({
               type="button"
               onClick={() => setLines(lines.length > 1 ? lines.filter((x) => x.key !== l.key) : [newRepackLine()])}
               className="p-3 rounded-xl text-foreground/30 hover:text-red-500 hover:bg-red-50"
-              aria-label={`Quitar línea ${idx + 1} de ${side}`}
+              aria-label={tr("Quitar línea {v} de {side}", { v: idx + 1, side: side })}
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -4374,7 +4393,7 @@ function ReempaqueTab({
         className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-foreground/20 text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5"
       >
         <Plus className="w-3.5 h-3.5" />
-        Agregar {side}
+        {tr("Agregar")}{" "}{side}
       </button>
     </div>
   );
@@ -4384,67 +4403,64 @@ function ReempaqueTab({
       {era === "v2" && (
         <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
           <div className="mb-6">
-            <h2 className="text-xl font-serif">Registrar Reempaque</h2>
+            <h2 className="text-xl font-serif">{tr("Registrar Reempaque")}</h2>
             <p className="text-sm text-foreground/50 mt-1">
-              Abre bolsas y vuelve a empacar el café: divide una grande en varias
-              pequeñas (ej. 2.5 kg → 250 g o muestras) o combina pequeñas en una
-              grande. Los kilos se conservan y el sobrante vuelve a granel o se
-              registra como merma.
+              {tr("Abre bolsas y vuelve a empacar el café: divide una grande en varias pequeñas (ej. 2.5 kg → 250 g o muestras) o combina pequeñas en una grande. Los kilos se conservan y el sobrante vuelve a granel o se registra como merma.")}
             </p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label htmlFor="rep-date" className={labelCls}>
-                  Fecha <span className="text-red-400">*</span>
+                  {tr("Fecha")}{" "}<span className="text-red-400">*</span>
                 </label>
                 <input id="rep-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
               </div>
               <div className="md:col-span-2">
-                <label htmlFor="rep-notes" className={labelCls}>Notas (opcional)</label>
+                <label htmlFor="rep-notes" className={labelCls}>{tr("Notas (opcional)")}</label>
                 <input
                   id="rep-notes"
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="ej. Muestras para feria, cliente X..."
+                  placeholder={tr("ej. Muestras para feria, cliente X...")}
                   className={inputCls}
                 />
               </div>
             </div>
 
             <div>
-              <p className="text-sm font-bold mb-3">1. Bolsas que se abren (origen)</p>
+              <p className="text-sm font-bold mb-3">{tr("1. Bolsas que se abren (origen)")}</p>
               {renderLines(origins, setOrigins, "origen")}
             </div>
             <div>
-              <p className="text-sm font-bold mb-3">2. Bolsas que se empacan (destino)</p>
+              <p className="text-sm font-bold mb-3">{tr("2. Bolsas que se empacan (destino)")}</p>
               {renderLines(destinations, setDestinations, "destino")}
             </div>
 
             {/* Cuadre */}
             <div className="rounded-2xl border border-foreground/10 p-5 space-y-4">
-              <p className="text-sm font-bold">3. Cuadre en kilos{calc.profile ? ` · ${PROFILE_LABELS[calc.profile]}` : ""}</p>
+              <p className="text-sm font-bold">{tr("3. Cuadre en kilos{v}", { v: calc.profile ? ` · ${PROFILE_LABELS[calc.profile]}` : "" })}</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 <div className="rounded-xl bg-[#fdfbf7] p-3">
-                  <p className={labelCls}>Café abierto</p>
+                  <p className={labelCls}>{tr("Café abierto")}</p>
                   <p className="font-bold text-lg">{fmtKg(calc.inKg)}</p>
-                  <p className="text-[10px] text-foreground/40">Grano {fmtKg(calc.inGrano)} · Molido {fmtKg(calc.inMolido)}</p>
+                  <p className="text-[10px] text-foreground/40">{tr("Grano {fmtKg} · Molido {fmtKg2}", { fmtKg: fmtKg(calc.inGrano), fmtKg2: fmtKg(calc.inMolido) })}</p>
                 </div>
                 <div className="rounded-xl bg-[#fdfbf7] p-3">
-                  <p className={labelCls}>Café empacado</p>
+                  <p className={labelCls}>{tr("Café empacado")}</p>
                   <p className="font-bold text-lg">{fmtKg(calc.outKg)}</p>
-                  <p className="text-[10px] text-foreground/40">Grano {fmtKg(calc.outGrano)} · Molido {fmtKg(calc.outMolido)}</p>
+                  <p className="text-[10px] text-foreground/40">{tr("Grano {fmtKg} · Molido {fmtKg2}", { fmtKg: fmtKg(calc.outGrano), fmtKg2: fmtKg(calc.outMolido) })}</p>
                 </div>
                 <div className={`rounded-xl p-3 ${calc.errors.length ? "bg-red-50" : "bg-[#fdfbf7]"}`}>
-                  <p className={labelCls}>Sobrante</p>
+                  <p className={labelCls}>{tr("Sobrante")}</p>
                   <p className={`font-bold text-lg ${calc.errors.length ? "text-red-600" : "text-[#C59F59]"}`}>
                     {calc.errors.length ? "—" : fmtKg(calc.sobrante)}
                   </p>
                 </div>
               </div>
               {calc.errors.map((e) => (
-                <p key={e} className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-xl">{e}</p>
+                <p key={e} className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-xl">{tr.msg(e)}</p>
               ))}
               {calc.sobrante > 0.0005 && !calc.errors.length && (
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -4463,13 +4479,13 @@ function ReempaqueTab({
                         className="mt-1 accent-[#C59F59]"
                       />
                       <span className="text-sm">
-                        <span className="font-bold">{opt === "granel" ? "Devolver a granel" : "Registrar como merma"}</span>
+                        <span className="font-bold">{opt === "granel" ? tr("Devolver a granel") : tr("Registrar como merma")}</span>
                         <span className="block text-xs text-foreground/50">
                           {opt === "granel"
                             ? bulkItem
-                              ? `Entra ${fmtKg(calc.sobrante)} a ${bulkItem.product_name} (${bulkItem.product_code}) con su molienda`
-                              : "No se encontró el café a granel de este perfil"
-                            : "El sobrante no vuelve al inventario; queda registrado en el lote"}
+                              ? tr("Entra {fmtKg} a {product_name} ({product_code}) con su molienda", { fmtKg: fmtKg(calc.sobrante), product_name: bulkItem.product_name, product_code: bulkItem.product_code })
+                              : tr("No se encontró el café a granel de este perfil")
+                            : tr("El sobrante no vuelve al inventario; queda registrado en el lote")}
                         </span>
                       </span>
                     </label>
@@ -4482,9 +4498,9 @@ function ReempaqueTab({
             <div className="rounded-2xl border border-foreground/10 p-5 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-bold">4. Empaques consumidos</p>
+                  <p className="text-sm font-bold">{tr("4. Empaques consumidos")}</p>
                   <p className="text-xs text-foreground/50">
-                    Sugeridos según la receta de empaque de cada destino (Inventario → Costos). Para muestras, cambia la bolsa por la blanca de muestras.
+                    {tr("Sugeridos según la receta de empaque de cada destino (Inventario → Costos). Para muestras, cambia la bolsa por la blanca de muestras.")}
                   </p>
                 </div>
                 {customConsumos && (
@@ -4493,12 +4509,12 @@ function ReempaqueTab({
                     onClick={() => setCustomConsumos(null)}
                     className="text-[10px] font-bold uppercase tracking-widest text-[#C59F59] hover:underline whitespace-nowrap"
                   >
-                    Restablecer sugeridos
+                    {tr("Restablecer sugeridos")}
                   </button>
                 )}
               </div>
               {consumos.length === 0 && (
-                <p className="text-sm text-foreground/40">Sin empaques.</p>
+                <p className="text-sm text-foreground/40">{tr("Sin empaques.")}</p>
               )}
               {consumos.map((c, i) => (
                 <div key={i} className="grid grid-cols-[2fr_1fr_auto] gap-3 items-end">
@@ -4520,7 +4536,7 @@ function ReempaqueTab({
                     type="button"
                     onClick={() => editConsumos(consumos.filter((_, j) => j !== i))}
                     className="p-3 rounded-xl text-foreground/30 hover:text-red-500 hover:bg-red-50"
-                    aria-label="Quitar empaque"
+                    aria-label={tr("Quitar empaque")}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -4532,7 +4548,7 @@ function ReempaqueTab({
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-foreground/20 text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Agregar empaque
+                {tr("Agregar empaque")}
               </button>
             </div>
 
@@ -4543,7 +4559,7 @@ function ReempaqueTab({
               className="flex items-center gap-2 px-8 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-2xl transition-all disabled:opacity-60"
             >
               {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shuffle className="w-4 h-4" />}
-              {isPending ? "Registrando..." : "Registrar Reempaque"}
+              {isPending ? tr("Registrando...") : tr("Registrar Reempaque")}
             </button>
           </form>
         </div>
@@ -4553,9 +4569,9 @@ function ReempaqueTab({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 flex items-center justify-between bg-[#fdfbf7]">
           <h3 className="font-serif text-lg">
-            Historial <span className="text-foreground/40 text-base font-sans">· {batches.length}</span>
+            {tr("Historial")}{" "}<span className="text-foreground/40 text-base font-sans">· {batches.length}</span>
           </h3>
-          <button onClick={loadHistory} className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40" aria-label="Recargar historial">
+          <button onClick={loadHistory} className="p-2 rounded-xl hover:bg-foreground/5 text-foreground/40" aria-label={tr("Recargar historial")}>
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
@@ -4595,23 +4611,23 @@ function ReempaqueTab({
                     {b.notes && <p className="text-xs text-foreground/50 mt-1">{b.notes}</p>}
                   </div>
                   <div>
-                    <p className={labelCls}>Abierto</p>
+                    <p className={labelCls}>{tr("Abierto")}</p>
                     <ul className="space-y-1">{opened.map(line)}</ul>
                   </div>
                   <div>
-                    <p className={labelCls}>Empacado</p>
+                    <p className={labelCls}>{tr("Empacado")}</p>
                     <ul className="space-y-1">{packed.map(line)}</ul>
                     {pkg.length > 0 && (
                       <p className="text-[10px] text-foreground/40 mt-2">
-                        Empaques: {pkg.map((m) => `${fmtQty(Math.abs(Number(m.quantity)))} ${getRelation(m.inventory)?.product_code}`).join(", ")}
+                        {tr("Empaques: {v}", { v: pkg.map((m) => `${fmtQty(Math.abs(Number(m.quantity)))} ${getRelation(m.inventory)?.product_code}`).join(", ") })}
                       </p>
                     )}
                   </div>
                   <div className="text-xs text-foreground/60 space-y-0.5">
-                    <p>Entró {fmtKg(Number(b.input_kg))} · salió {fmtKg(Number(b.output_kg))}</p>
+                    <p>{tr("Entró {fmtKg} · salió {fmtKg2}", { fmtKg: fmtKg(Number(b.input_kg)), fmtKg2: fmtKg(Number(b.output_kg)) })}</p>
                     {Number(b.sobrante_kg) > 0 && (
                       <p className="font-bold text-[#C59F59]">
-                        Sobrante {fmtKg(Number(b.sobrante_kg))} → {b.sobrante_destino === "merma" ? "merma" : "granel"}
+                        {tr("Sobrante")}{" "}{fmtKg(Number(b.sobrante_kg))} → {b.sobrante_destino === "merma" ? tr("merma") : tr("granel")}
                       </p>
                     )}
                   </div>
@@ -4624,21 +4640,21 @@ function ReempaqueTab({
                             disabled={isPending}
                             className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-[10px] font-bold uppercase tracking-widest"
                           >
-                            Revertir
+                            {tr("Revertir")}
                           </button>
                           <button
                             onClick={() => setDeletingId(null)}
                             className="px-3 py-1.5 rounded-lg border border-foreground/10 text-[10px] font-bold uppercase tracking-widest"
                           >
-                            No
+                            {tr("No")}
                           </button>
                         </div>
                       ) : (
                         <button
                           onClick={() => setDeletingId(b.id)}
                           className="p-2 rounded-lg text-foreground/30 hover:text-red-500 hover:bg-red-50"
-                          title="Revertir reempaque completo"
-                          aria-label="Revertir reempaque"
+                          title={tr("Revertir reempaque completo")}
+                          aria-label={tr("Revertir reempaque")}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -4698,6 +4714,7 @@ function KardexProducto({
   inventoryId: string;
   onInventoryChange: (id: string) => void;
 }) {
+  const tr = useTr();
   const [molienda, setMolienda] = useState<Molienda | "">("");
   const [data, setData] = useState<KardexData | null>(null);
   const [error, setError] = useState("");
@@ -4726,7 +4743,7 @@ function KardexProducto({
           setError("");
         }
       } catch (err: unknown) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar el kardex");
+        if (!cancelled) setError(err instanceof Error ? err.message : tr("Error al cargar el kardex"));
       }
     });
     return () => {
@@ -4762,10 +4779,11 @@ function KardexProducto({
       ]),
       [to || "", "Saldo final", "", "", "", data.summary.entradas, data.summary.salidas, data.summary.closing, data.summary.ventasCobradas || null, ""],
     ];
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    // Labels, origins and stored reasons in the admin's language.
+    const ws = XLSX.utils.aoa_to_sheet(aoa.map((row) => row.map((c) => (typeof c === "string" ? tr.msg(c) : c))));
     ws["!cols"] = [12, 18, 40, 12, 10, 10, 10, 10, 18, 18].map((wch) => ({ wch }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Kardex");
+    XLSX.utils.book_append_sheet(wb, ws, tr("Kardex"));
     const suffix = [from, to].filter(Boolean).join("_a_") || "completo";
     XLSX.writeFile(wb, `Kardex_${data.item.product_code}_${suffix}.xlsx`);
   }
@@ -4776,7 +4794,7 @@ function KardexProducto({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="lg:col-span-2">
             <label htmlFor="kardex-product" className={labelCls}>
-              Producto
+              {tr("Producto")}
             </label>
             <ProductSelect
               id="kardex-product"
@@ -4794,7 +4812,7 @@ function KardexProducto({
           {grindTracked && (
             <div>
               <label htmlFor="kardex-molienda" className={labelCls}>
-                Molienda
+                {tr("Molienda")}
               </label>
               <select
                 id="kardex-molienda"
@@ -4802,10 +4820,10 @@ function KardexProducto({
                 onChange={(e) => setMolienda(e.target.value as Molienda | "")}
                 className={inputCls}
               >
-                <option value="">Todas</option>
+                <option value="">{tr("Todas")}</option>
                 {MOLIENDAS.map((m) => (
                   <option key={m} value={m}>
-                    {MOLIENDA_LABELS[m]}
+                    {tr.msg(MOLIENDA_LABELS[m])}
                   </option>
                 ))}
               </select>
@@ -4813,14 +4831,14 @@ function KardexProducto({
           )}
         </div>
         {error && (
-          <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>
+          <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{tr.msg(error)}</p>
         )}
       </div>
 
       {!inventoryId ? (
         <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm text-center py-16">
           <ScrollText className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-          <p className="font-serif text-foreground/50">Selecciona un producto para ver su kardex</p>
+          <p className="font-serif text-foreground/50">{tr("Selecciona un producto para ver su kardex")}</p>
         </div>
       ) : !data ? (
         <div className="flex items-center justify-center py-16">
@@ -4829,23 +4847,21 @@ function KardexProducto({
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <KpiCard label="Saldo inicial" value={fmtQty(data.summary.opening)} sub={unit} />
-            <KpiCard label="Entradas" value={`+${fmtQty(data.summary.entradas)}`} sub={unit} color="text-emerald-700" />
-            <KpiCard label="Salidas" value={`−${fmtQty(data.summary.salidas)}`} sub={unit} color="text-red-600" />
-            <KpiCard label="Saldo final" value={fmtQty(data.summary.closing)} sub={unit} color="text-[#C59F59]" />
-            <KpiCard label="Ventas cobradas" value={fmtCOP(data.summary.ventasCobradas)} sub="Flujo de Caja" />
+            <KpiCard label={tr("Saldo inicial")} value={fmtQty(data.summary.opening)} sub={unit} />
+            <KpiCard label={tr("Entradas")} value={`+${fmtQty(data.summary.entradas)}`} sub={unit} color="text-emerald-700" />
+            <KpiCard label={tr("Salidas")} value={`−${fmtQty(data.summary.salidas)}`} sub={unit} color="text-red-600" />
+            <KpiCard label={tr("Saldo final")} value={fmtQty(data.summary.closing)} sub={unit} color="text-[#C59F59]" />
+            <KpiCard label={tr("Ventas cobradas")} value={fmtCOP(data.summary.ventasCobradas)} sub="Flujo de Caja" />
           </div>
 
           {data.reconciliation && Math.abs(data.reconciliation.difference) > 0.0005 && (
             <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
               <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold">El kardex no cuadra con el stock del sistema.</span>{" "}
-                La suma de todos los movimientos da {fmtQty(data.reconciliation.ledgerTotal)} {unit},
-                pero el stock registrado es {fmtQty(data.reconciliation.systemStock)} {unit}
-                {" "}(diferencia {data.reconciliation.difference > 0 ? "+" : ""}
-                {fmtQty(data.reconciliation.difference)} {unit}). Algún cambio de stock
-                quedó sin movimiento; revisa la pestaña Auditoría.
+                <span className="font-bold">{tr("El kardex no cuadra con el stock del sistema.")}</span>{" "}
+                {tr("La suma de todos los movimientos da")}{" "}{fmtQty(data.reconciliation.ledgerTotal)} {unit}{tr(", pero el stock registrado es")}{" "}{fmtQty(data.reconciliation.systemStock)} {unit}
+                {" "}{tr("(diferencia")}{" "}{data.reconciliation.difference > 0 ? "+" : ""}
+                {fmtQty(data.reconciliation.difference)} {unit}{tr("). Algún cambio de stock quedó sin movimiento; revisa la pestaña Auditoría.")}
               </div>
             </div>
           )}
@@ -4855,7 +4871,7 @@ function KardexProducto({
               <div>
                 <h3 className="font-serif text-lg">
                   {data.item.product_name}{" "}
-                  <span className="text-foreground/40 text-base font-sans">· {data.summary.count} movimientos</span>
+                  <span className="text-foreground/40 text-base font-sans">{tr("· {count} movimientos", { count: data.summary.count })}</span>
                 </h3>
                 <p className="text-xs text-foreground/50 font-mono">{data.item.product_code}</p>
               </div>
@@ -4866,7 +4882,7 @@ function KardexProducto({
                   className="flex items-center gap-2 px-4 py-2 rounded-xl border border-foreground/10 text-xs font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Excel
+                  {tr("Excel")}
                 </button>
               </div>
             </div>
@@ -4874,22 +4890,22 @@ function KardexProducto({
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                    <th className={thCls}>Fecha</th>
-                    <th className={thCls}>Origen</th>
-                    <th className={thCls}>Motivo / Documento</th>
-                    {grindTracked && <th className={thCls}>Molienda</th>}
-                    <th className={`${thCls} text-right`}>Entrada</th>
-                    <th className={`${thCls} text-right`}>Salida</th>
-                    <th className={`${thCls} text-right`}>Saldo</th>
-                    <th className={`${thCls} text-right`}>Valor cobrado</th>
-                    <th className={thCls}>Responsable</th>
+                    <th className={thCls}>{tr("Fecha")}</th>
+                    <th className={thCls}>{tr("Origen")}</th>
+                    <th className={thCls}>{tr("Motivo / Documento")}</th>
+                    {grindTracked && <th className={thCls}>{tr("Molienda")}</th>}
+                    <th className={`${thCls} text-right`}>{tr("Entrada")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Salida")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Saldo")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Valor cobrado")}</th>
+                    <th className={thCls}>{tr("Responsable")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-foreground/5">
                   <tr className="bg-[#fdfbf7]">
                     <td className={`${tdCls} text-foreground/50`}>{from ? fmtDate(from) : "—"}</td>
                     <td className={`${tdCls} font-bold`} colSpan={grindTracked ? 6 : 5}>
-                      Saldo inicial
+                      {tr("Saldo inicial")}
                     </td>
                     <td className={`${tdCls} text-right font-bold`}>{fmtQty(data.summary.opening)}</td>
                     <td className={tdCls} colSpan={2} />
@@ -4897,7 +4913,7 @@ function KardexProducto({
                   {data.rows.length === 0 ? (
                     <tr>
                       <td colSpan={grindTracked ? 9 : 8} className="text-center py-10 text-sm text-foreground/40">
-                        Sin movimientos en el periodo seleccionado.
+                        {tr("Sin movimientos en el periodo seleccionado.")}
                       </td>
                     </tr>
                   ) : (
@@ -4914,14 +4930,14 @@ function KardexProducto({
                                 : "bg-red-50 text-red-700"
                             }`}
                           >
-                            {kardexOrigin(r)}
+                            {tr.msg(kardexOrigin(r))}
                           </span>
                         </td>
                         <td className={`${tdCls} text-foreground/60 max-w-[280px]`}>
-                          <div className="truncate" title={r.reason ?? r.sale_concept ?? ""}>
-                            {r.reason ?? r.sale_concept ?? "—"}
+                          <div className="truncate" title={tr.msg(r.reason ?? r.sale_concept ?? "")}>
+                            {tr.msg(r.reason ?? r.sale_concept) || "—"}
                           </div>
-                          {r.lote && <div className="text-[10px] text-foreground/40">Lote {r.lote}</div>}
+                          {r.lote && <div className="text-[10px] text-foreground/40">{tr("Lote {lote}", { lote: r.lote })}</div>}
                         </td>
                         {grindTracked && (
                           <td className={tdCls}>
@@ -4937,9 +4953,9 @@ function KardexProducto({
                     ))
                   )}
                   <tr className="bg-[#fdfbf7]">
-                    <td className={`${tdCls} text-foreground/50`}>{to ? fmtDate(to) : "Hoy"}</td>
+                    <td className={`${tdCls} text-foreground/50`}>{to ? fmtDate(to) : tr("Hoy")}</td>
                     <td className={`${tdCls} font-bold`} colSpan={grindTracked ? 3 : 2}>
-                      Saldo final
+                      {tr("Saldo final")}
                     </td>
                     <td className={`${tdCls} text-right font-bold text-emerald-700`}>+{fmtQty(data.summary.entradas)}</td>
                     <td className={`${tdCls} text-right font-bold text-red-600`}>−{fmtQty(data.summary.salidas)}</td>
@@ -4981,6 +4997,7 @@ function KardexGeneral({
   to: string;
   onOpenProduct: (id: string) => void;
 }) {
+  const tr = useTr();
   const [data, setData] = useState<KardexGeneralData | null>(null);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -5002,7 +5019,7 @@ function KardexGeneral({
           setPage(1);
         }
       } catch (err: unknown) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar el kardex");
+        if (!cancelled) setError(err instanceof Error ? err.message : tr("Error al cargar el kardex"));
       }
     });
     return () => {
@@ -5082,19 +5099,20 @@ function KardexGeneral({
         }),
     ];
 
-    const wsResumen = XLSX.utils.aoa_to_sheet(resumen);
+    const loc = (rows: (string | number | null)[][]) => rows.map((row) => row.map((c) => (typeof c === "string" ? tr.msg(c) : c)));
+    const wsResumen = XLSX.utils.aoa_to_sheet(loc(resumen));
     wsResumen["!cols"] = [14, 36, 12, 10, 16, 12, 12, 16, 12, 20].map((wch) => ({ wch }));
-    const wsMovs = XLSX.utils.aoa_to_sheet(movs);
+    const wsMovs = XLSX.utils.aoa_to_sheet(loc(movs));
     wsMovs["!cols"] = [12, 14, 32, 10, 18, 40, 12, 10, 10, 10, 14, 18, 18].map((wch) => ({ wch }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
-    XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
+    XLSX.utils.book_append_sheet(wb, wsResumen, tr("Resumen"));
+    XLSX.utils.book_append_sheet(wb, wsMovs, tr("Movimientos"));
     const suffix = [from, to].filter(Boolean).join("_a_") || "completo";
     XLSX.writeFile(wb, `Kardex_General_${suffix}.xlsx`);
   }
 
   if (error) {
-    return <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>;
+    return <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{tr.msg(error)}</p>;
   }
   if (!data) {
     return (
@@ -5108,14 +5126,14 @@ function KardexGeneral({
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Productos con movimiento"
+          label={tr("Productos con movimiento")}
           value={products.filter((p) => p.movimientos > 0).length}
           sub={`de ${products.length} listados`}
         />
-        <KpiCard label="Movimientos" value={history.length.toLocaleString("es-CO")} sub="en el periodo" />
-        <KpiCard label="Ventas cobradas" value={fmtCOP(ventasFiltradas)} sub="Flujo de Caja" color="text-emerald-700" />
+        <KpiCard label={tr("Movimientos")} value={history.length.toLocaleString("es-CO")} sub="en el periodo" />
+        <KpiCard label={tr("Ventas cobradas")} value={fmtCOP(ventasFiltradas)} sub="Flujo de Caja" color="text-emerald-700" />
         <KpiCard
-          label="Descuadres"
+          label={tr("Descuadres")}
           value={descuadres.length}
           sub="stock ≠ movimientos"
           color={descuadres.length ? "text-amber-600" : "text-foreground"}
@@ -5126,9 +5144,9 @@ function KardexGeneral({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7] flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
           <div>
-            <h3 className="font-serif text-lg">Resumen por producto</h3>
+            <h3 className="font-serif text-lg">{tr("Resumen por producto")}</h3>
             <p className="text-xs text-foreground/50 mt-0.5">
-              Inventario final = inicial + entradas − salidas. Haz clic en un producto para ver su kardex.
+              {tr("Inventario final = inicial + entradas − salidas. Haz clic en un producto para ver su kardex.")}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -5138,18 +5156,18 @@ function KardexGeneral({
                 type="text"
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                placeholder="Buscar producto..."
-                aria-label="Buscar producto en el kardex general"
+                placeholder={tr("Buscar producto...")}
+                aria-label={tr("Buscar producto en el kardex general")}
                 className="pl-8 pr-3 py-2 rounded-xl border border-foreground/10 text-xs bg-white w-44"
               />
             </div>
             <select
               value={category}
               onChange={(e) => { setCategory(e.target.value); setPage(1); }}
-              aria-label="Filtrar por categoría"
+              aria-label={tr("Filtrar por categoría")}
               className="px-3 py-2 rounded-xl border border-foreground/10 text-xs bg-white"
             >
-              <option value="">Todas las categorías</option>
+              <option value="">{tr("Todas las categorías")}</option>
               {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
@@ -5161,7 +5179,7 @@ function KardexGeneral({
                 onChange={(e) => { setOnlyActive(e.target.checked); setPage(1); }}
                 className="accent-[#C59F59]"
               />
-              Solo con saldo o movimiento
+              {tr("Solo con saldo o movimiento")}
             </label>
             {isPending && <Loader2 className="w-4 h-4 text-[#C59F59] animate-spin" />}
             <button
@@ -5169,26 +5187,26 @@ function KardexGeneral({
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-foreground/10 text-xs font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5 bg-white"
             >
               <Download className="w-3.5 h-3.5" />
-              Excel
+              {tr("Excel")}
             </button>
           </div>
         </div>
         {products.length === 0 ? (
-          <p className="text-sm text-foreground/40 text-center py-12">Ningún producto coincide con los filtros.</p>
+          <p className="text-sm text-foreground/40 text-center py-12">{tr("Ningún producto coincide con los filtros.")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <th className={thCls}>Código</th>
-                  <th className={thCls}>Producto</th>
-                  <th className={thCls}>Unidad</th>
-                  <th className={`${thCls} text-right`}>Inv. inicial</th>
-                  <th className={`${thCls} text-right`}>Entradas</th>
-                  <th className={`${thCls} text-right`}>Salidas</th>
-                  <th className={`${thCls} text-right`}>Inv. final</th>
-                  <th className={`${thCls} text-right`}>Mov.</th>
-                  <th className={`${thCls} text-right`}>Ventas cobradas</th>
+                  <th className={thCls}>{tr("Código")}</th>
+                  <th className={thCls}>{tr("Producto")}</th>
+                  <th className={thCls}>{tr("Unidad")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Inv. inicial")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Entradas")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Salidas")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Inv. final")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Mov.")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Ventas cobradas")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -5199,7 +5217,7 @@ function KardexGeneral({
                       key={p.id}
                       onClick={() => onOpenProduct(p.id)}
                       className="hover:bg-[#fdfbf7] cursor-pointer"
-                      title="Ver kardex del producto"
+                      title={tr("Ver kardex del producto")}
                     >
                       <td className={tdCls}>
                         <span className="font-mono text-xs bg-foreground/5 px-2 py-1 rounded-lg">{p.product_code}</span>
@@ -5208,7 +5226,7 @@ function KardexGeneral({
                         <span className="flex items-center gap-2">
                           {p.product_name}
                           {off && (
-                            <span title={`El stock registrado difiere de la suma de movimientos en ${fmtQty(p.difference)} ${p.unit}`}>
+                            <span title={tr("El stock registrado difiere de la suma de movimientos en {fmtQty} {unit}", { fmtQty: fmtQty(p.difference), unit: p.unit })}>
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                             </span>
                           )}
@@ -5234,7 +5252,7 @@ function KardexGeneral({
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7] flex items-center justify-between gap-4">
           <h3 className="font-serif text-lg">
-            Histórico de movimientos{" "}
+            {tr("Histórico de movimientos")}{" "}
             <span className="text-foreground/40 text-base font-sans">· {history.length}</span>
           </h3>
           <button
@@ -5242,27 +5260,27 @@ function KardexGeneral({
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-foreground/10 text-[10px] font-bold uppercase tracking-widest text-foreground/60 hover:bg-foreground/5 bg-white"
           >
             {newestFirst ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-            {newestFirst ? "Más recientes primero" : "Más antiguos primero"}
+            {newestFirst ? tr("Más recientes primero") : tr("Más antiguos primero")}
           </button>
         </div>
         {history.length === 0 ? (
-          <p className="text-sm text-foreground/40 text-center py-12">Sin movimientos en el periodo seleccionado.</p>
+          <p className="text-sm text-foreground/40 text-center py-12">{tr("Sin movimientos en el periodo seleccionado.")}</p>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                    <th className={thCls}>Fecha</th>
-                    <th className={thCls}>Producto</th>
-                    <th className={thCls}>Origen</th>
-                    <th className={thCls}>Motivo / Documento</th>
-                    <th className={thCls}>Molienda</th>
-                    <th className={`${thCls} text-right`}>Entrada</th>
-                    <th className={`${thCls} text-right`}>Salida</th>
-                    <th className={`${thCls} text-right`}>Saldo producto</th>
-                    <th className={`${thCls} text-right`}>Valor cobrado</th>
-                    <th className={thCls}>Responsable</th>
+                    <th className={thCls}>{tr("Fecha")}</th>
+                    <th className={thCls}>{tr("Producto")}</th>
+                    <th className={thCls}>{tr("Origen")}</th>
+                    <th className={thCls}>{tr("Motivo / Documento")}</th>
+                    <th className={thCls}>{tr("Molienda")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Entrada")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Salida")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Saldo producto")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Valor cobrado")}</th>
+                    <th className={thCls}>{tr("Responsable")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-foreground/5">
@@ -5275,7 +5293,7 @@ function KardexGeneral({
                           <button
                             onClick={() => onOpenProduct(h.inventory_id)}
                             className="text-left hover:text-[#C59F59]"
-                            title="Ver kardex del producto"
+                            title={tr("Ver kardex del producto")}
                           >
                             <div className="font-bold text-sm">{it?.product_name ?? "—"}</div>
                             <div className="font-mono text-[10px] text-foreground/40">{it?.product_code}</div>
@@ -5291,12 +5309,12 @@ function KardexGeneral({
                                 : "bg-red-50 text-red-700"
                             }`}
                           >
-                            {kardexOrigin(h)}
+                            {tr.msg(kardexOrigin(h))}
                           </span>
                         </td>
                         <td className={`${tdCls} text-foreground/60 max-w-[240px]`}>
-                          <div className="truncate" title={h.reason ?? ""}>{h.reason ?? "—"}</div>
-                          {h.lote && <div className="text-[10px] text-foreground/40">Lote {h.lote}</div>}
+                          <div className="truncate" title={tr.msg(h.reason ?? "")}>{tr.msg(h.reason) || "—"}</div>
+                          {h.lote && <div className="text-[10px] text-foreground/40">{tr("Lote {lote}", { lote: h.lote })}</div>}
                         </td>
                         <td className={tdCls}>
                           {h.molienda ? <MoliendaBadge value={h.molienda} /> : <span className="text-foreground/30">—</span>}
@@ -5317,7 +5335,7 @@ function KardexGeneral({
             {totalPages > 1 && (
               <div className="flex items-center justify-between border-t border-foreground/5 px-6 py-4 bg-[#fdfbf7] gap-4">
                 <span className="text-[11px] font-bold uppercase tracking-widest text-foreground/50">
-                  Página <span className="text-[#C59F59] text-sm">{currentPage}</span> de {totalPages}
+                  {tr("Página")}{" "}<span className="text-[#C59F59] text-sm">{currentPage}</span>{" "}{tr("de")}{" "}{totalPages}
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -5325,14 +5343,14 @@ function KardexGeneral({
                     disabled={currentPage === 1}
                     className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl disabled:opacity-30 disabled:pointer-events-none hover:bg-foreground/5"
                   >
-                    Anterior
+                    {tr("Anterior")}
                   </button>
                   <button
                     onClick={() => setPage(currentPage + 1)}
                     disabled={currentPage === totalPages}
                     className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest bg-white border border-foreground/10 rounded-xl disabled:opacity-30 disabled:pointer-events-none hover:bg-foreground/5"
                   >
-                    Siguiente
+                    {tr("Siguiente")}
                   </button>
                 </div>
               </div>
@@ -5345,6 +5363,7 @@ function KardexGeneral({
 }
 
 function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" | "v2" }) {
+  const tr = useTr();
   const [mode, setMode] = useState<"general" | "producto">("general");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -5356,11 +5375,11 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-8">
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-xl font-serif">Kardex</h2>
+            <h2 className="text-xl font-serif">{tr("Kardex")}</h2>
             <p className="text-sm text-foreground/50 mt-1">
               {mode === "general"
-                ? "Histórico de todo el inventario: inventario inicial, entradas, salidas e inventario final por producto."
-                : "Trazabilidad de un producto: saldo inicial, cada entrada y salida con su saldo acumulado, y el valor cobrado de las ventas pagadas."}
+                ? tr("Histórico de todo el inventario: inventario inicial, entradas, salidas e inventario final por producto.")
+                : tr("Trazabilidad de un producto: saldo inicial, cada entrada y salida con su saldo acumulado, y el valor cobrado de las ventas pagadas.")}
             </p>
           </div>
           <div className="flex gap-1 bg-foreground/5 rounded-xl p-1 self-start">
@@ -5372,7 +5391,7 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
                   mode === m ? "bg-white text-foreground shadow-sm" : "text-foreground/50 hover:text-foreground"
                 }`}
               >
-                {m === "general" ? "General" : "Por producto"}
+                {m === "general" ? tr("General") : tr("Por producto")}
               </button>
             ))}
           </div>
@@ -5380,7 +5399,7 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label htmlFor="kardex-from" className={labelCls}>
-              Desde
+              {tr("Desde")}
             </label>
             <input
               id="kardex-from"
@@ -5392,7 +5411,7 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
           </div>
           <div>
             <label htmlFor="kardex-to" className={labelCls}>
-              Hasta
+              {tr("Hasta")}
             </label>
             <input
               id="kardex-to"
@@ -5408,14 +5427,14 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
                 onClick={() => { setFrom(""); setTo(""); }}
                 className="px-4 py-3 rounded-2xl text-xs font-bold uppercase tracking-widest text-foreground/50 hover:bg-foreground/5"
               >
-                Todo el histórico
+                {tr("Todo el histórico")}
               </button>
             </div>
           )}
         </div>
         {rangeInvalid && (
           <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">
-            La fecha &quot;Desde&quot; no puede ser posterior a &quot;Hasta&quot;.
+            {tr("La fecha \"Desde\" no puede ser posterior a \"Hasta\".")}
           </p>
         )}
       </div>
@@ -5476,13 +5495,14 @@ function KpiCard({
   sub?: string;
   color?: string;
 }) {
+  const tr = useTr();
   return (
     <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6">
       <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">
-        {label}
+        {tr(label)}
       </p>
       <p className={`text-3xl font-serif font-bold ${color}`}>{value}</p>
-      {sub && <p className="text-xs text-foreground/40 mt-1">{sub}</p>}
+      {sub && <p className="text-xs text-foreground/40 mt-1">{tr(sub)}</p>}
     </div>
   );
 }
@@ -5503,6 +5523,7 @@ function ChartCard({
 }
 
 function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1' | 'v2' }) {
+  const tr = useTr();
   const [reportData, setReportData] = useState<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     movements: any[];
@@ -5697,25 +5718,25 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-serif">Reportes y Estadísticas</h2>
+        <h2 className="text-xl font-serif">{tr("Reportes y Estadísticas")}</h2>
         <p className="text-sm text-foreground/50 mt-1">
-          Resumen visual del estado del inventario y flujo de producción.
+          {tr("Resumen visual del estado del inventario y flujo de producción.")}
         </p>
       </div>
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <KpiCard label="SKUs totales" value={inventory.length} />
+        <KpiCard label={tr("SKUs totales")} value={inventory.length} />
         <KpiCard
-          label="Stock bajo"
+          label={tr("Stock bajo")}
           value={lowStock}
           sub="productos en alerta"
           color={lowStock > 0 ? "text-amber-600" : "text-emerald-600"}
         />
-        <KpiCard label="Entradas (total)" value={totalEntradas} color="text-emerald-600" />
-        <KpiCard label="Salidas (total)" value={totalSalidas} color="text-red-600" />
+        <KpiCard label={tr("Entradas (total)")} value={totalEntradas} color="text-emerald-600" />
+        <KpiCard label={tr("Salidas (total)")} value={totalSalidas} color="text-red-600" />
         <KpiCard
-          label="Trillas realizadas"
+          label={tr("Trillas realizadas")}
           value={totalTrilla}
           sub={`${totalPergaminoKg.toFixed(1)} kg procesados`}
           color="text-[#C59F59]"
@@ -5725,7 +5746,7 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
       {/* Row 1: Stock bar + Category donut */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <ChartCard title="Stock Actual vs Mínimo por Producto">
+          <ChartCard title={tr("Stock Actual vs Mínimo por Producto")}>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart
                 data={stockData}
@@ -5755,7 +5776,7 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
           </ChartCard>
         </div>
 
-        <ChartCard title="SKUs por Categoría">
+        <ChartCard title={tr("SKUs por Categoría")}>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -5791,10 +5812,10 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
       {/* Row 2: Weekly line + Movements pie */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <ChartCard title="Tendencia Semanal — Entradas vs Salidas (últimas 8 semanas)">
+          <ChartCard title={tr("Tendencia Semanal — Entradas vs Salidas (últimas 8 semanas)")}>
             {weeklyData.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-foreground/40 text-sm">
-                Sin datos de movimientos aún.
+                {tr("Sin datos de movimientos aún.")}
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
@@ -5838,10 +5859,10 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
           </ChartCard>
         </div>
 
-        <ChartCard title="Movimientos por Tipo">
+        <ChartCard title={tr("Movimientos por Tipo")}>
           {pieData.length === 0 ? (
             <div className="flex items-center justify-center h-48 text-foreground/40 text-sm">
-              Sin movimientos aún.
+              {tr("Sin movimientos aún.")}
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
@@ -5880,10 +5901,10 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
       </div>
 
       {/* Row 3: Trilla efficiency bar */}
-      <ChartCard title="Historial de Trillas — Pergamino Entrada vs Verde Salida (kg)">
+      <ChartCard title={tr("Historial de Trillas — Pergamino Entrada vs Verde Salida (kg)")}>
         {trillaData.length === 0 ? (
           <div className="flex items-center justify-center h-48 text-foreground/40 text-sm">
-            Sin trillas registradas aún.
+            {tr("Sin trillas registradas aún.")}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
@@ -5945,10 +5966,10 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
       </ChartCard>
 
       {/* Row 4: Tostión efficiency bar */}
-      <ChartCard title="Historial de Tostión — Verde Entrada vs Procesado Salida (kg)">
+      <ChartCard title={tr("Historial de Tostión — Verde Entrada vs Procesado Salida (kg)")}>
         {tostionData.length === 0 ? (
           <div className="flex items-center justify-center h-48 text-foreground/40 text-sm">
-            Sin datos de tostión aún.
+            {tr("Sin datos de tostión aún.")}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
@@ -6015,6 +6036,7 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
 // ─── Auditoría Tab ─────────────────────────────────────────────────────────────
 
 function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
+  const tr = useTr();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -6087,16 +6109,16 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7] flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h3 className="font-serif text-lg">Historial de Auditoría</h3>
-            <p className="text-sm text-foreground/50">Registro completo de creaciones, modificaciones y eliminaciones</p>
+            <h3 className="font-serif text-lg">{tr("Historial de Auditoría")}</h3>
+            <p className="text-sm text-foreground/50">{tr("Registro completo de creaciones, modificaciones y eliminaciones")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-black text-[#C59F59] mr-2">FILTROS:</span>
+            <span className="text-[10px] font-black text-[#C59F59] mr-2">{tr("FILTROS:")}</span>
             <div className="relative min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
               <input 
                 type="text"
-                placeholder="Buscar en detalles..."
+                placeholder={tr("Buscar en detalles...")}
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
                 className="w-full pl-9 pr-4 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
@@ -6107,7 +6129,7 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
               onChange={(e) => { setUserFilter(e.target.value); setCurrentPage(1); }}
               className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             >
-              <option value="all">Todos los Usuarios</option>
+              <option value="all">{tr("Todos los Usuarios")}</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
             <select
@@ -6115,29 +6137,29 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
               onChange={(e) => { setActionFilter(e.target.value); setCurrentPage(1); }}
               className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             >
-              <option value="all">Todas las Acciones</option>
-              <option value="CREATE">CREATE</option>
-              <option value="UPDATE">UPDATE</option>
-              <option value="DELETE">DELETE</option>
+              <option value="all">{tr("Todas las Acciones")}</option>
+              <option value="CREATE">{tr("CREATE")}</option>
+              <option value="UPDATE">{tr("UPDATE")}</option>
+              <option value="DELETE">{tr("DELETE")}</option>
             </select>
             <select
               value={entityFilter}
               onChange={(e) => { setEntityFilter(e.target.value); setCurrentPage(1); }}
               className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             >
-              <option value="all">Todas las Entidades</option>
-              <option value="MOVEMENT">MOVEMENT</option>
-              <option value="TRILLA_BATCH">TRILLA_BATCH</option>
+              <option value="all">{tr("Todas las Entidades")}</option>
+              <option value="MOVEMENT">{tr("MOVEMENT")}</option>
+              <option value="TRILLA_BATCH">{tr("TRILLA_BATCH")}</option>
             </select>
           </div>
         </div>
         {loading ? (
           <div className="py-20 text-center text-foreground/40 text-sm font-bold tracking-widest flex items-center justify-center gap-2">
-             <Loader2 className="w-4 h-4 animate-spin" /> CARGANDO AUDITORÍA...
+             <Loader2 className="w-4 h-4 animate-spin" />{" "}{tr("CARGANDO AUDITORÍA...")}
           </div>
         ) : logs.length === 0 ? (
           <div className="py-20 text-center text-foreground/40 text-sm font-bold tracking-widest">
-            NO HAY REGISTROS DE AUDITORÍA
+            {tr("NO HAY REGISTROS DE AUDITORÍA")}
           </div>
         ) : (
           <>
@@ -6145,11 +6167,11 @@ function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
               <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <SortableTh label="Fecha" field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Usuario (Admin)" field="profiles.first_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Acción" field="action_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label="Entidad / Ref" field="entity_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <th className={thCls}>Detalle Base</th>
+                  <SortableTh label={tr("Fecha")} field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Usuario (Admin)")} field="profiles.first_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Acción")} field="action_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Entidad / Ref")} field="entity_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className={thCls}>{tr("Detalle Base")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -6206,6 +6228,7 @@ export default function InventoryClient({
 }: {
   inventory: InventoryItem[];
 }) {
+  const tr = useTr();
   const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
   const [activeTab, setActiveTab] = useState<TabId>("inventario");
   const [era, setEra] = useState<'v1' | 'v2'>('v2');
@@ -6254,9 +6277,9 @@ export default function InventoryClient({
       {/* Page header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-serif text-foreground mb-1">Inventario</h1>
+          <h1 className="text-3xl font-serif text-foreground mb-1">{tr("Inventario")}</h1>
           <p className="text-foreground/60">
-            Control de stock y flujo de producción de Café Amantti.
+            {tr("Control de stock y flujo de producción de Café Amantti.")}
           </p>
         </div>
         <button
@@ -6269,7 +6292,7 @@ export default function InventoryClient({
           }`}
         >
           <Archive className="w-3.5 h-3.5" />
-          {isLegacy ? 'Viendo: Archivo (pre-Sept 2026)' : 'Ver datos anteriores'}
+          {isLegacy ? tr("Viendo: Archivo (pre-Sept 2026)") : tr("Ver datos anteriores")}
         </button>
       </div>
 
@@ -6278,13 +6301,13 @@ export default function InventoryClient({
         <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
           <Archive className="w-5 h-5 flex-shrink-0" />
           <div>
-            <span className="font-bold">Modo archivo</span> — Estás viendo datos anteriores a septiembre 2026. Estos datos son de solo lectura.
+            <span className="font-bold">{tr("Modo archivo")}</span>{" "}{tr("— Estás viendo datos anteriores a septiembre 2026. Estos datos son de solo lectura.")}
           </div>
           <button
             onClick={() => setEra('v2')}
             className="ml-auto px-3 py-1.5 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-xs font-bold uppercase tracking-widest transition-colors"
           >
-            Volver a datos actuales
+            {tr("Volver a datos actuales")}
           </button>
         </div>
       )}
@@ -6304,7 +6327,7 @@ export default function InventoryClient({
             }`}
           >
             <Icon className="w-3.5 h-3.5" />
-            {label}
+            {tr(label)}
           </button>
         ))}
       </div>

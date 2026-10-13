@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { Search, Building2, Mail, Phone, MapPin, CreditCard, Trash2, Calendar, Edit2 } from 'lucide-react';
 import { getSuppliers, deleteSupplier } from './actions';
 import CreateSupplierModal from './CreateSupplierModal';
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 export default function AdminSuppliersPage() {
+  const tr = useTr();
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -22,12 +24,12 @@ export default function AdminSuppliersPage() {
   }, []);
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar al proveedor "${name}"?`)) return;
+    if (!confirm(tr("¿Estás seguro de que deseas eliminar al proveedor \"{name}\"?", { name: name }))) return;
     const res = await deleteSupplier(id);
     if (res.success) {
       await loadData();
     } else {
-      alert(res.error || 'No se pudo eliminar el proveedor.');
+      alert(tr.msg(res.error || tr("No se pudo eliminar el proveedor.")));
     }
   };
 
@@ -47,8 +49,8 @@ export default function AdminSuppliersPage() {
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-serif text-foreground mb-2">Directorio de Proveedores</h1>
-          <p className="text-foreground/60">Gestión de proveedores para compras, servicios y cuentas de cobro de egreso.</p>
+          <h1 className="text-3xl font-serif text-foreground mb-2">{tr("Directorio de Proveedores")}</h1>
+          <p className="text-foreground/60">{tr("Gestión de proveedores para compras, servicios y cuentas de cobro de egreso.")}</p>
         </div>
         <div className="self-start md:self-auto">
           <CreateSupplierModal onSuccess={loadData} />
@@ -63,37 +65,37 @@ export default function AdminSuppliersPage() {
             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
             <input
               type="text"
-              placeholder="Buscar por nombre, NIT, email o ciudad..."
+              placeholder={tr("Buscar por nombre, NIT, email o ciudad...")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-11 pr-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             />
           </div>
           <div className="text-xs font-bold text-foreground/50">
-            Total Proveedores: <span className="text-[#C59F59] text-sm font-extrabold">{suppliers.length}</span>
+            {tr("Total Proveedores:")}{" "}<span className="text-[#C59F59] text-sm font-extrabold">{suppliers.length}</span>
           </div>
         </div>
 
         {/* Suppliers List */}
         <div className="overflow-x-auto">
           {isLoading ? (
-            <div className="p-20 text-center text-foreground/40 font-medium">Cargando directorio de proveedores...</div>
+            <div className="p-20 text-center text-foreground/40 font-medium">{tr("Cargando directorio de proveedores...")}</div>
           ) : filteredSuppliers.length === 0 ? (
             <div className="p-20 text-center">
               <Building2 className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-              <p className="text-lg font-serif text-foreground">No se encontraron proveedores</p>
-              <p className="text-sm text-foreground/50">Crea tu primer proveedor manual o genera una cuenta de cobro de gasto para registrarlo automáticamente.</p>
+              <p className="text-lg font-serif text-foreground">{tr("No se encontraron proveedores")}</p>
+              <p className="text-sm text-foreground/50">{tr("Crea tu primer proveedor manual o genera una cuenta de cobro de gasto para registrarlo automáticamente.")}</p>
             </div>
           ) : (
             <table className="w-full text-left text-sm text-foreground/80 border-collapse">
               <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
                 <tr>
-                  <th className="px-6 py-4 font-medium">Proveedor / Razón Social</th>
-                  <th className="px-6 py-4 font-medium">Documento</th>
-                  <th className="px-6 py-4 font-medium">Contacto</th>
-                  <th className="px-6 py-4 font-medium">Ubicación</th>
-                  <th className="px-6 py-4 font-medium">Datos Bancarios</th>
-                  <th className="px-6 py-4 font-medium text-right">Acciones</th>
+                  <th className="px-6 py-4 font-medium">{tr("Proveedor / Razón Social")}</th>
+                  <th className="px-6 py-4 font-medium">{tr("Documento")}</th>
+                  <th className="px-6 py-4 font-medium">{tr("Contacto")}</th>
+                  <th className="px-6 py-4 font-medium">{tr("Ubicación")}</th>
+                  <th className="px-6 py-4 font-medium">{tr("Datos Bancarios")}</th>
+                  <th className="px-6 py-4 font-medium text-right">{tr("Acciones")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
@@ -106,7 +108,7 @@ export default function AdminSuppliersPage() {
                         </div>
                         <div>
                           <p className="font-bold text-foreground">{supplier.name}</p>
-                          <span className="text-[11px] text-foreground/40">ID: {supplier.id.slice(0, 8)}...</span>
+                          <span className="text-[11px] text-foreground/40">{tr("ID: {slice}...", { slice: supplier.id.slice(0, 8) })}</span>
                         </div>
                       </div>
                     </td>
@@ -115,12 +117,12 @@ export default function AdminSuppliersPage() {
                       {supplier.document_number ? (
                         <div>
                           <span className="text-[10px] font-bold uppercase tracking-widest bg-foreground/5 text-foreground/50 px-2 py-0.5 rounded-md mr-2">
-                            {supplier.document_type || 'NIT'}
+                            {supplier.document_type || tr("NIT")}
                           </span>
                           <span className="font-mono text-xs">{supplier.document_number}</span>
                         </div>
                       ) : (
-                        <span className="text-foreground/40 italic text-xs">Sin documento</span>
+                        <span className="text-foreground/40 italic text-xs">{tr("Sin documento")}</span>
                       )}
                     </td>
 
@@ -136,7 +138,7 @@ export default function AdminSuppliersPage() {
                             <Phone className="w-3.5 h-3.5 text-foreground/40" /> {supplier.phone}
                           </span>
                         )}
-                        {!supplier.email && !supplier.phone && <span className="text-foreground/40 italic">Sin contacto</span>}
+                        {!supplier.email && !supplier.phone && <span className="text-foreground/40 italic">{tr("Sin contacto")}</span>}
                       </div>
                     </td>
 
@@ -151,7 +153,7 @@ export default function AdminSuppliersPage() {
                           </span>
                         </div>
                       ) : (
-                        <span className="text-foreground/40 italic">No registrada</span>
+                        <span className="text-foreground/40 italic">{tr("No registrada")}</span>
                       )}
                     </td>
 
@@ -159,10 +161,10 @@ export default function AdminSuppliersPage() {
                       {supplier.bank_name ? (
                         <div className="flex flex-col gap-0.5">
                           <span className="font-semibold text-foreground">{supplier.bank_name}</span>
-                          <span className="text-foreground/60">{supplier.bank_account_type} No. {supplier.bank_account_number}</span>
+                          <span className="text-foreground/60">{tr("{bank_account_type} No. {bank_account_number}", { bank_account_type: supplier.bank_account_type, bank_account_number: supplier.bank_account_number })}</span>
                         </div>
                       ) : (
-                        <span className="text-foreground/40 italic">Sin datos bancarios</span>
+                        <span className="text-foreground/40 italic">{tr("Sin datos bancarios")}</span>
                       )}
                     </td>
 
@@ -171,7 +173,7 @@ export default function AdminSuppliersPage() {
                       <button
                         onClick={() => handleDelete(supplier.id, supplier.name)}
                         className="p-2 hover:bg-red-50 text-foreground/40 hover:text-red-500 rounded-lg transition-colors border border-transparent hover:border-red-100 inline-flex"
-                        title="Eliminar proveedor"
+                        title={tr("Eliminar proveedor")}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

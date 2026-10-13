@@ -4,9 +4,11 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Coffee, LogOut, Menu, Settings, X } from "lucide-react";
 import AdminNav from "./AdminNav";
+import { LanguageSwitch, useTr } from "@/app/(admin)/AdminI18n";
 
 /** Phone/tablet header with a slide-in menu; the sidebar is hidden below md. */
 export default function AdminMobileNav() {
+  const tr = useTr();
   const [open, setOpen] = useState(false);
 
   // Lock page scroll behind the open menu.
@@ -26,24 +28,24 @@ export default function AdminMobileNav() {
           type="button"
           onClick={() => setOpen(true)}
           className="p-2 -ml-2 rounded-xl hover:bg-foreground/5"
-          aria-label="Abrir menú"
+          aria-label={tr("Abrir menú")}
           aria-expanded={open}
         >
           <Menu className="w-6 h-6 text-foreground/70" />
         </button>
-        <h1 className="font-serif text-lg">Amantti Admin</h1>
-        <Link href="/" aria-label="Ir a la tienda">
+        <h1 className="font-serif text-lg">{tr("Amantti Admin")}</h1>
+        <Link href="/" aria-label={tr("Ir a la tienda")}>
           <Coffee className="w-7 h-7 text-[#C59F59]" />
         </Link>
       </header>
 
       {open && (
-        <div className="md:hidden fixed inset-0 z-[70] flex" role="dialog" aria-modal="true" aria-label="Menú">
+        <div className="md:hidden fixed inset-0 z-[70] flex" role="dialog" aria-modal="true" aria-label={tr("Menú")}>
           <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
           <aside className="relative w-[82%] max-w-xs h-full bg-white shadow-2xl flex flex-col overflow-y-auto">
             <div className="px-5 py-4 border-b border-foreground/5 flex items-center justify-between">
               <Coffee className="w-8 h-8 text-[#C59F59]" />
-              <button type="button" onClick={() => setOpen(false)} className="p-2 rounded-xl hover:bg-foreground/5" aria-label="Cerrar menú">
+              <button type="button" onClick={() => setOpen(false)} className="p-2 rounded-xl hover:bg-foreground/5" aria-label={tr("Cerrar menú")}>
                 <X className="w-5 h-5 text-foreground/50" />
               </button>
             </div>
@@ -57,12 +59,13 @@ export default function AdminMobileNav() {
                 className="flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl text-foreground/60 hover:bg-foreground/5 transition-all mb-1"
               >
                 <Settings className="w-4 h-4 text-foreground/40" />
-                Ajustes
+                {tr("Ajustes")}
               </Link>
+              <LanguageSwitch className="px-4 pb-3" />
               <form action="/auth/signout" method="post">
                 <button className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold uppercase tracking-widest rounded-xl text-red-500 hover:bg-red-50 transition-all">
                   <LogOut className="w-4 h-4 text-red-400" />
-                  Salir
+                  {tr("Salir")}
                 </button>
               </form>
             </div>

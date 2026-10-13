@@ -13,6 +13,8 @@ import RichTextBlock from './blocks/RichTextBlock';
 import PriceTableBlock from './blocks/PriceTableBlock';
 import ChecklistBlock from './blocks/ChecklistBlock';
 import BrandIdentityPanel from './BrandIdentityPanel';
+import { DocLanguagePicker, useTr } from "@/app/(admin)/AdminI18n";
+import { translate, type Locale } from "@/utils/i18n/translate";
 
 function genId() { return `block_${Math.random().toString(36).substring(2, 9)}`; }
 
@@ -43,6 +45,8 @@ interface ProposalFormProps {
 }
 
 export default function ProposalForm({ clients, initialProposal, sellerName }: ProposalFormProps) {
+  const tr = useTr();
+  const [docLang, setDocLang] = useState<Locale>(tr.locale);
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -99,8 +103,8 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
   // Date handling to avoid hydration mismatch
   const [currentDate, setCurrentDate] = useState('');
   useEffect(() => {
-    setCurrentDate(new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }));
-  }, []);
+    setCurrentDate(new Date().toLocaleDateString(docLang === 'en' ? 'en-US' : 'es-CO', { day: 'numeric', month: 'long', year: 'numeric' }));
+  }, [docLang]);
 
   // Debounced preview data
   const [debouncedPreview, setDebouncedPreview] = useState<ProposalData | null>(null);
@@ -117,16 +121,17 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
   }, [clientId, customClientName, customClientDocument, customClientEmail, customClientPhone, clients]);
 
   const buildProposalData = useCallback((): ProposalData => ({
-    clientName: client?.name || 'Cliente',
+    clientName: client?.name || translate(docLang, 'Cliente'),
     date: currentDate || '...',
     title,
     subtitle: subtitle.replace('Cliente', client?.name || 'Cliente'),
     content: blocks,
-    sellerName: sellerName || 'Asesor Amantti',
+    sellerName: sellerName || translate(docLang, 'Asesor Amantti'),
     allyLogoUrl: allyLogoSignedUrl || undefined,
     backgroundImageUrl: backgroundSignedUrl || undefined,
     backgroundOpacity,
-  }), [client, currentDate, title, subtitle, blocks, sellerName, allyLogoSignedUrl, backgroundSignedUrl, backgroundOpacity]);
+    lang: docLang,
+  }), [client, currentDate, title, subtitle, blocks, sellerName, allyLogoSignedUrl, backgroundSignedUrl, backgroundOpacity, docLang]);
 
   // Debounce preview updates by 300ms
   useEffect(() => {
@@ -194,13 +199,13 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
-      alert('Error generando PDF');
+      alert(tr("Error generando PDF"));
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientId) return alert('Selecciona un cliente');
+    if (!clientId) return alert(tr("Selecciona un cliente"));
 
     setIsSubmitting(true);
     try {
@@ -231,7 +236,7 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
         throw new Error(res.error);
       }
     } catch (err: any) {
-      alert('Error: ' + err.message);
+      alert(tr.msg('Error: ' + err.message));
     } finally {
       setIsSubmitting(false);
     }
@@ -243,7 +248,7 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
     return (
       <div className="flex flex-col items-center justify-center p-20 bg-white border border-foreground/10 rounded-3xl space-y-4">
         <div className="w-12 h-12 border-4 border-[#C59F59]/20 border-t-[#C59F59] rounded-full animate-spin" />
-        <p className="text-sm font-medium text-foreground/40">Cargando editor de bloques...</p>
+        <p className="text-sm font-medium text-foreground/40">{tr("Cargando editor de bloques...")}</p>
       </div>
     );
   }
@@ -269,15 +274,15 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
           <div className="bg-white border border-foreground/10 rounded-2xl p-5 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Cliente *</label>
+                <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">{tr("Cliente *")}</label>
                 <select
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
                   required
                   className="w-full p-3 bg-foreground/[0.03] border border-foreground/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all text-sm"
                 >
-                  <option value="">Selecciona un cliente...</option>
-                  <option value="custom" className="font-bold text-[#C59F59]">+ Cliente Personalizado (No en CRM)</option>
+                  <option value="">{tr("Selecciona un cliente...")}</option>
+                  <option value="custom" className="font-bold text-[#C59F59]">{tr("+ Cliente Personalizado (No en CRM)")}</option>
                   {clients.map(c => (
                     <option key={c.id} value={c.id}>{c.name} {c.document_number ? `(${c.document_number})` : ''}</option>
                   ))}
@@ -286,7 +291,7 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
               {clientId === 'custom' && (
                 <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 bg-foreground/[0.01] p-4 rounded-xl border border-foreground/5">
                   <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Nombre Completo *</label>
+                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">{tr("Nombre Completo *")}</label>
                     <input
                       required
                       type="text"
@@ -296,7 +301,7 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Documento (Opcional)</label>
+                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">{tr("Documento (Opcional)")}</label>
                     <input
                       type="text"
                       value={customClientDocument}
@@ -305,7 +310,7 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Teléfono (Opcional)</label>
+                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">{tr("Teléfono (Opcional)")}</label>
                     <input
                       type="text"
                       value={customClientPhone}
@@ -314,7 +319,7 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
                     />
                   </div>
                   <div className="col-span-full">
-                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Email (Opcional)</label>
+                    <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">{tr("Email (Opcional)")}</label>
                     <input
                       type="email"
                       value={customClientEmail}
@@ -325,20 +330,20 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
                 </div>
               )}
               <div>
-                <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Estado</label>
+                <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">{tr("Estado")}</label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                   className="w-full p-3 bg-foreground/[0.03] border border-foreground/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all text-sm"
                 >
-                  <option value="Borrador">Borrador</option>
-                  <option value="Enviada">Enviada</option>
-                  <option value="Aprobada">Aprobada</option>
+                  <option value="Borrador">{tr("Borrador")}</option>
+                  <option value="Enviada">{tr("Enviada")}</option>
+                  <option value="Aprobada">{tr("Aprobada")}</option>
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Título</label>
+              <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">{tr("Título")}</label>
               <input
                 type="text"
                 value={title}
@@ -347,12 +352,12 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">Subtítulo / Alianza</label>
+              <label className="block text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5">{tr("Subtítulo / Alianza")}</label>
               <input
                 type="text"
                 value={subtitle}
                 onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="Ej: Café Amantti × Magicka"
+                placeholder={tr("Ej: Café Amantti × Magicka")}
                 className="w-full p-3 bg-foreground/[0.03] border border-foreground/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all text-sm"
               />
             </div>
@@ -361,14 +366,14 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
           {/* Blocks Editor */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-foreground">Bloques de Contenido</h3>
+              <h3 className="text-base font-bold text-foreground">{tr("Bloques de Contenido")}</h3>
               <button
                 type="button"
                 onClick={() => addBlock('rich-text')}
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-[#C59F59] hover:text-[#B38E4D] transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Agregar Bloque
+                {tr("Agregar Bloque")}
               </button>
             </div>
 
@@ -399,7 +404,7 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
                           type="button"
                           onClick={() => addBlock('rich-text', index)}
                           className="p-1 rounded-full text-foreground/10 hover:text-[#C59F59] hover:bg-[#C59F59]/5 transition-all"
-                          title="Insertar bloque aquí"
+                          title={tr("Insertar bloque aquí")}
                         >
                           <Plus className="w-4 h-4" />
                         </button>
@@ -418,15 +423,16 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
               disabled={isSubmitting}
               className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-[#292524] text-white rounded-xl font-bold hover:bg-[#1c1917] transition-all disabled:opacity-50"
             >
-              {isSubmitting ? 'Guardando...' : <><Save className="w-5 h-5" /> Guardar Propuesta</>}
+              {isSubmitting ? tr("Guardando...") : <><Save className="w-5 h-5" />{" "}{tr("Guardar Propuesta")}</>}
             </button>
+            <DocLanguagePicker value={docLang} onChange={setDocLang} />
             <button
               type="button"
               onClick={handleDownloadPDF}
               className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-foreground/5 text-foreground/70 rounded-xl font-bold hover:bg-foreground/10 transition-colors"
             >
               <FileDown className="w-5 h-5" />
-              Descargar PDF
+              {tr("Descargar PDF")}
             </button>
           </div>
         </div>
@@ -435,7 +441,7 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
         <div className="hidden xl:block sticky top-8">
           <div className="bg-foreground/[0.03] border border-foreground/10 rounded-2xl overflow-hidden">
             <div className="px-5 py-3 bg-[#FDFBF7] border-b border-foreground/5 flex items-center justify-between">
-              <span className="text-xs font-bold text-foreground/50 uppercase tracking-wider">Preview en Vivo</span>
+              <span className="text-xs font-bold text-foreground/50 uppercase tracking-wider">{tr("Preview en Vivo")}</span>
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             </div>
             <div className="p-4 overflow-auto max-h-[calc(100vh-140px)]">

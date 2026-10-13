@@ -2,7 +2,8 @@
 // the screen already has and returns the sheets; utils/excel/workbook
 // turns them into the file.
 
-import type { Cell, TableSheet } from "@/utils/excel/workbook";
+import { localizeSheets, type Cell, type TableSheet } from "@/utils/excel/workbook";
+import { translateMessage, type Locale } from "@/utils/i18n/translate";
 import type { FixedAssetRow } from "./calculations";
 import { ASSET_USES, type AssetUse } from "./types";
 
@@ -16,6 +17,9 @@ const num = (v: unknown) => Number(v ?? 0) || 0;
 const useLabel = (u: AssetUse | null | undefined) => (u && ASSET_USES[u] ? ASSET_USES[u].label : "");
 const dateOf = (r: { cashflow?: { date?: string } | null; date?: string; created_at?: string }) =>
   r.cashflow?.date ?? r.date ?? r.created_at?.slice(0, 10) ?? "";
+
+/** Spanish as built; other languages through the admin dictionary. */
+const inLang = (sheets: TableSheet[], lang: Locale) => (lang === "es" ? sheets : localizeSheets(sheets, (t) => translateMessage(lang, t)));
 
 export type ExportFilters = { from?: string; to?: string; category?: string; search?: string };
 
@@ -43,7 +47,7 @@ function groupSum<T>(rows: T[], key: (r: T) => string, values: ((r: T) => number
 // ── Libro de gastos ─────────────────────────────────────────
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export function expenseLedger(expenses: any[], filters: ExportFilters, generatedAt: string): TableSheet[] {
+export function expenseLedger(expenses: any[], filters: ExportFilters, generatedAt: string, lang: Locale = "es"): TableSheet[] {
   const rows = [...expenses].sort((a, b) => dateOf(a).localeCompare(dateOf(b)));
   const net = (e: any) => num(e.net_amount ?? e.amount);
   const tax = (e: any) => num(e.tax_amount);
@@ -111,7 +115,7 @@ export function expenseLedger(expenses: any[], filters: ExportFilters, generated
     totals: ["Total", "", rows.length, rows.reduce((s, e) => s + net(e), 0), rows.reduce((s, e) => s + tax(e), 0), rows.reduce((s, e) => s + total(e), 0)],
   };
 
-  return [ledger, summary];
+  return inLang([ledger, summary], lang);
 }
 
 // ── Libro de ingresos ───────────────────────────────────────
@@ -122,7 +126,7 @@ function incomeOrigin(i: any) {
   return "Manual";
 }
 
-export function incomeLedger(incomes: any[], filters: ExportFilters, generatedAt: string): TableSheet[] {
+export function incomeLedger(incomes: any[], filters: ExportFilters, generatedAt: string, lang: Locale = "es"): TableSheet[] {
   const rows = [...incomes].sort((a, b) => dateOf(a).localeCompare(dateOf(b)));
   const gross = (i: any) => num(i.gross_amount ?? i.amount);
   const fee = (i: any) => num(i.fee_amount);
@@ -185,7 +189,7 @@ export function incomeLedger(incomes: any[], filters: ExportFilters, generatedAt
     totals: ["Total", "", rows.length, sums(gross), sums(fee), sums(ship), sums(tax), sums(net)],
   };
 
-  return [ledger, summary];
+  return inLang([ledger, summary], lang);
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -197,7 +201,7 @@ const STATUS_LABEL: Record<FixedAssetRow["status"], string> = {
   depreciado: "Totalmente depreciado",
 };
 
-export function fixedAssetSheets(register: FixedAssetRow[], asOf: string, generatedAt: string): TableSheet[] {
+export function fixedAssetSheets(register: FixedAssetRow[], asOf: string, generatedAt: string, lang: Locale = "es"): TableSheet[] {
   const sums = (f: (r: FixedAssetRow) => number, rows = register) => rows.reduce((s, r) => s + f(r), 0);
 
   const detail: TableSheet = {
@@ -263,5 +267,5 @@ export function fixedAssetSheets(register: FixedAssetRow[], asOf: string, genera
     totals: ["Total", register.length, sums((r) => r.cost), sums((r) => r.accumulated), sums((r) => r.book_value), sums((r) => r.current_month_quota)],
   };
 
-  return [detail, summary];
+  return inLang([detail, summary], lang);
 }

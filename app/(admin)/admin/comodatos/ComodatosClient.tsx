@@ -26,6 +26,7 @@ import {
   updateEquipmentStatus,
 } from "./actions";
 import { UNIT_STATUS_LABELS, canApply, commitmentProgress, daysSince, summarizeUnits, type UnitStatus } from "@/utils/comodato";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 type Data = Awaited<ReturnType<typeof getComodatosData>>;
 type Unit = Data["units"][number] & {
@@ -63,6 +64,7 @@ type Dialog =
 
 /** Machines lent in comodato: who has each one, since when, and how much coffee they buy. */
 export default function ComodatosClient() {
+  const tr = useTr();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -76,7 +78,7 @@ export default function ComodatosClient() {
         setData(await getComodatosData());
         setError("");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudieron cargar los comodatos");
+        setError(err instanceof Error ? err.message : tr("No se pudieron cargar los comodatos"));
       }
     });
   }
@@ -95,7 +97,7 @@ export default function ComodatosClient() {
     });
   }, [units, search, statusFilter]);
 
-  if (error) return <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>;
+  if (error) return <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{tr.msg(error)}</p>;
   if (!data) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -108,11 +110,11 @@ export default function ComodatosClient() {
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-serif mb-1">Comodatos</h1>
-          <p className="text-foreground/60 text-sm">Máquinas prestadas a clientes: quién tiene cada una, desde cuándo y cuánto café compran.</p>
+          <h1 className="text-2xl sm:text-3xl font-serif mb-1">{tr("Comodatos")}</h1>
+          <p className="text-foreground/60 text-sm">{tr("Máquinas prestadas a clientes: quién tiene cada una, desde cuándo y cuánto café compran.")}</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={load} className="p-2.5 rounded-xl border border-foreground/10 bg-white hover:bg-foreground/5" aria-label="Recargar">
+          <button onClick={load} className="p-2.5 rounded-xl border border-foreground/10 bg-white hover:bg-foreground/5" aria-label={tr("Recargar")}>
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 text-foreground/50" />}
           </button>
           <button
@@ -120,7 +122,7 @@ export default function ComodatosClient() {
             disabled={!data.migrated}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-foreground text-background hover:bg-[#C59F59] hover:text-white text-xs font-bold uppercase tracking-widest disabled:opacity-50"
           >
-            <Plus className="w-4 h-4" /> Registrar máquina
+            <Plus className="w-4 h-4" />{" "}{tr("Registrar máquina")}
           </button>
         </div>
       </div>
@@ -128,16 +130,15 @@ export default function ComodatosClient() {
       {!data.migrated && (
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          Falta aplicar la migración <code className="font-mono">20261010010000_comodatos.sql</code> en Supabase.
+          {tr("Falta aplicar la migración")}{" "}<code className="font-mono">20261010010000_comodatos.sql</code>{" "}{tr("en Supabase.")}
         </div>
       )}
       {data.migrated && data.models.length === 0 && (
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-[#fdfbf7] border border-foreground/10 text-sm text-foreground/70">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-[#C59F59]" />
           <span>
-            Primero crea el <strong>modelo</strong> de la máquina en{" "}
-            <Link href="/admin/inventory" className="underline">Inventario → Nuevo producto</Link> con la categoría <strong>Equipo</strong>.
-            Luego registra aquí cada máquina física con su serial.
+            {tr("Primero crea el")}{" "}<strong>{tr("modelo")}</strong>{" "}{tr("de la máquina en")}{" "}
+            <Link href="/admin/inventory" className="underline">{tr("Inventario → Nuevo producto")}</Link>{" "}{tr("con la categoría")}{" "}<strong>{tr("Equipo")}</strong>{tr(". Luego registra aquí cada máquina física con su serial.")}
           </span>
         </div>
       )}
@@ -156,7 +157,7 @@ export default function ComodatosClient() {
             onClick={() => setStatusFilter(key)}
             className={`text-left bg-white rounded-2xl border p-4 shadow-sm ${statusFilter === key ? "border-[#C59F59] ring-2 ring-[#C59F59]/20" : "border-foreground/5"}`}
           >
-            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{label}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{tr(label)}</p>
             <p className="text-2xl font-serif font-bold mt-1">{value}</p>
           </button>
         ))}
@@ -168,8 +169,8 @@ export default function ComodatosClient() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar serial, modelo, cliente…"
-            aria-label="Buscar máquinas"
+            placeholder={tr("Buscar serial, modelo, cliente…")}
+            aria-label={tr("Buscar máquinas")}
             className={`${inputCls} pl-10`}
           />
         </div>
@@ -177,14 +178,14 @@ export default function ComodatosClient() {
           onClick={() => setStatusFilter(statusFilter === "baja" ? "activos" : "baja")}
           className={`self-start px-3 py-2 rounded-xl border text-xs font-bold ${statusFilter === "baja" ? "bg-foreground text-background border-foreground" : "bg-white text-foreground/60 border-foreground/10"}`}
         >
-          Ver dadas de baja ({summary.baja})
+          {tr("Ver dadas de baja ({baja})", { baja: summary.baja })}
         </button>
       </div>
 
       {filtered.length === 0 ? (
         <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm text-center py-16">
           <Handshake className="w-12 h-12 text-foreground/20 mx-auto mb-3" />
-          <p className="font-serif text-foreground/50">No hay máquinas en esta vista.</p>
+          <p className="font-serif text-foreground/50">{tr("No hay máquinas en esta vista.")}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -197,30 +198,30 @@ export default function ComodatosClient() {
                   <div className="min-w-0">
                     <h3 className="font-bold leading-snug">{unitTitle(u)}</h3>
                     <p className="text-xs text-foreground/50 font-mono mt-0.5">
-                      {u.serial ? `S/N ${u.serial}` : "Sin serial"}
+                      {u.serial ? `S/N ${u.serial}` : tr("Sin serial")}
                       {u.label && u.model ? ` · ${u.model.product_name}` : ""}
                     </p>
                   </div>
                   <span className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${STATUS_STYLE[u.status]}`}>
-                    {UNIT_STATUS_LABELS[u.status]}
+                    {tr.msg(UNIT_STATUS_LABELS[u.status])}
                   </span>
                 </div>
 
                 {u.status === "en_comodato" && u.assignment && (
                   <div className="rounded-2xl bg-[#fdfbf7] p-4 space-y-2 text-sm">
-                    <p className="font-bold">{u.client?.name ?? "Cliente"}</p>
+                    <p className="font-bold">{u.client?.name ?? tr("Cliente")}</p>
                     <p className="text-xs text-foreground/50">
-                      Desde {fmtDate(u.assignment.start_date)} · {daysSince(u.assignment.start_date, data.today)} días
+                      {tr("Desde {fmtDate} · {daysSince} días", { fmtDate: fmtDate(u.assignment.start_date), daysSince: daysSince(u.assignment.start_date, data.today) })}
                     </p>
                     <div className="text-xs">
-                      <span className="text-foreground/50">Café últimos 30 días: </span>
+                      <span className="text-foreground/50">{tr("Café últimos 30 días:")}{" "}</span>
                       <span className="font-bold">{kg(bought)}</span>
                       {u.assignment.monthly_commitment_kg ? (
-                        <span className="text-foreground/50"> de {kg(Number(u.assignment.monthly_commitment_kg))} comprometidos</span>
+                        <span className="text-foreground/50">{" "}{tr("de {kg} comprometidos", { kg: kg(Number(u.assignment.monthly_commitment_kg)) })}</span>
                       ) : null}
                     </div>
                     {progress !== null && (
-                      <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden" aria-label={`Compromiso cumplido ${Math.round(progress * 100)} %`}>
+                      <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden" aria-label={tr("Compromiso cumplido {round} %", { round: Math.round(progress * 100) })}>
                         <div
                           className={`h-full ${progress >= 1 ? "bg-emerald-500" : progress >= 0.6 ? "bg-amber-500" : "bg-red-500"}`}
                           style={{ width: `${Math.min(100, progress * 100)}%` }}
@@ -235,33 +236,33 @@ export default function ComodatosClient() {
                 <div className="flex flex-wrap gap-2 mt-auto">
                   {canApply("asignar", u.status) && (
                     <ActionButton primary icon={<Handshake className="w-3.5 h-3.5" />} onClick={() => setDialog({ kind: "assign", unit: u })}>
-                      Entregar
+                      {tr("Entregar")}
                     </ActionButton>
                   )}
                   {canApply("devolver", u.status) && (
                     <ActionButton primary icon={<Undo2 className="w-3.5 h-3.5" />} onClick={() => setDialog({ kind: "return", unit: u })}>
-                      Registrar devolución
+                      {tr("Registrar devolución")}
                     </ActionButton>
                   )}
                   {canApply("mantenimiento", u.status) && (
                     <ActionButton icon={<Wrench className="w-3.5 h-3.5" />} onClick={() => setDialog({ kind: "status", unit: u, action: "mantenimiento" })}>
-                      Mantenimiento
+                      {tr("Mantenimiento")}
                     </ActionButton>
                   )}
                   {canApply("disponible", u.status) && (
                     <ActionButton icon={<CheckCircle2 className="w-3.5 h-3.5" />} onClick={() => setDialog({ kind: "status", unit: u, action: "disponible" })}>
-                      Lista para usar
+                      {tr("Lista para usar")}
                     </ActionButton>
                   )}
                   <ActionButton icon={<StickyNote className="w-3.5 h-3.5" />} onClick={() => setDialog({ kind: "status", unit: u, action: "nota" })}>
-                    Nota
+                    {tr("Nota")}
                   </ActionButton>
                   <ActionButton icon={<History className="w-3.5 h-3.5" />} onClick={() => setDialog({ kind: "history", unit: u })}>
-                    Historial
+                    {tr("Historial")}
                   </ActionButton>
                   {canApply("baja", u.status) && (
                     <ActionButton icon={<Archive className="w-3.5 h-3.5" />} onClick={() => setDialog({ kind: "status", unit: u, action: "baja" })}>
-                      Dar de baja
+                      {tr("Dar de baja")}
                     </ActionButton>
                   )}
                 </div>
@@ -298,6 +299,7 @@ function ActionButton({ children, icon, onClick, primary }: { children: React.Re
 }
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: React.ReactNode }) {
+  const tr = useTr();
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -309,9 +311,9 @@ function Modal({ title, subtitle, onClose, children }: { title: string; subtitle
         <div className="px-6 pt-6 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4">
           <div>
             <h3 className="text-xl font-serif">{title}</h3>
-            {subtitle && <p className="text-xs text-foreground/50 mt-1">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-foreground/50 mt-1">{tr(subtitle)}</p>}
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5" aria-label="Cerrar">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5" aria-label={tr("Cerrar")}>
             <X className="w-5 h-5 text-foreground/40" />
           </button>
         </div>
@@ -339,9 +341,10 @@ function useSubmit(onDone: () => void, onClose: () => void) {
 }
 
 function Footer({ isPending, error, label, danger }: { isPending: boolean; error: string; label: string; danger?: boolean }) {
+  const tr = useTr();
   return (
     <>
-      {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
+      {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{tr.msg(error)}</p>}
       <button
         type="submit"
         disabled={isPending}
@@ -350,13 +353,14 @@ function Footer({ isPending, error, label, danger }: { isPending: boolean; error
         }`}
       >
         {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-        {label}
+        {tr(label)}
       </button>
     </>
   );
 }
 
 function RegisterDialog({ data, onClose, onDone }: { data: Data; onClose: () => void; onDone: () => void }) {
+  const tr = useTr();
   const [inventoryId, setInventoryId] = useState(data.models[0]?.id ?? "");
   const [serial, setSerial] = useState("");
   const [label, setLabel] = useState("");
@@ -364,7 +368,7 @@ function RegisterDialog({ data, onClose, onDone }: { data: Data; onClose: () => 
   const [date, setDate] = useState(data.today);
   const { error, isPending, submit } = useSubmit(onDone, onClose);
   return (
-    <Modal title="Registrar máquina" subtitle="Cada máquina física, con su serial. El modelo se crea en Inventario (categoría Equipo)." onClose={onClose}>
+    <Modal title={tr("Registrar máquina")} subtitle="Cada máquina física, con su serial. El modelo se crea en Inventario (categoría Equipo)." onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -373,9 +377,9 @@ function RegisterDialog({ data, onClose, onDone }: { data: Data; onClose: () => 
         }}
       >
         <div>
-          <label htmlFor="reg-model" className={labelCls}>Modelo *</label>
+          <label htmlFor="reg-model" className={labelCls}>{tr("Modelo *")}</label>
           <select id="reg-model" value={inventoryId} onChange={(e) => setInventoryId(e.target.value)} className={inputCls} required>
-            {data.models.length === 0 && <option value="">Crea primero un producto de categoría Equipo</option>}
+            {data.models.length === 0 && <option value="">{tr("Crea primero un producto de categoría Equipo")}</option>}
             {data.models.map((m: { id: string; product_name: string; product_code: string }) => (
               <option key={m.id} value={m.id}>{m.product_name} ({m.product_code})</option>
             ))}
@@ -383,36 +387,37 @@ function RegisterDialog({ data, onClose, onDone }: { data: Data; onClose: () => 
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="reg-serial" className={labelCls}>Serial</label>
-            <input id="reg-serial" value={serial} onChange={(e) => setSerial(e.target.value)} placeholder="Número de serie" className={`${inputCls} font-mono`} />
+            <label htmlFor="reg-serial" className={labelCls}>{tr("Serial")}</label>
+            <input id="reg-serial" value={serial} onChange={(e) => setSerial(e.target.value)} placeholder={tr("Número de serie")} className={`${inputCls} font-mono`} />
           </div>
           <div>
-            <label htmlFor="reg-label" className={labelCls}>Nombre corto (opcional)</label>
-            <input id="reg-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ej. La Marzocco #2" className={inputCls} />
+            <label htmlFor="reg-label" className={labelCls}>{tr("Nombre corto (opcional)")}</label>
+            <input id="reg-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={tr("Ej. La Marzocco #2")} className={inputCls} />
           </div>
         </div>
         <div>
-          <label htmlFor="reg-date" className={labelCls}>Fecha de alta</label>
+          <label htmlFor="reg-date" className={labelCls}>{tr("Fecha de alta")}</label>
           <input id="reg-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
         </div>
         <div>
-          <label htmlFor="reg-notes" className={labelCls}>Notas</label>
-          <textarea id="reg-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Marca, accesorios incluidos, valor comercial…" className={`${inputCls} resize-y`} />
+          <label htmlFor="reg-notes" className={labelCls}>{tr("Notas")}</label>
+          <textarea id="reg-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder={tr("Marca, accesorios incluidos, valor comercial…")} className={`${inputCls} resize-y`} />
         </div>
-        <Footer isPending={isPending} error={error} label="Registrar máquina" />
+        <Footer isPending={isPending} error={error} label={tr("Registrar máquina")} />
       </form>
     </Modal>
   );
 }
 
 function AssignDialog({ data, unit, onClose, onDone }: { data: Data; unit: Unit; onClose: () => void; onDone: () => void }) {
+  const tr = useTr();
   const [clientId, setClientId] = useState("");
   const [startDate, setStartDate] = useState(data.today);
   const [commitment, setCommitment] = useState("");
   const [notes, setNotes] = useState("");
   const { error, isPending, submit } = useSubmit(onDone, onClose);
   return (
-    <Modal title="Entregar en comodato" subtitle={`${unitTitle(unit)}${unit.serial ? ` · S/N ${unit.serial}` : ""}`} onClose={onClose}>
+    <Modal title={tr("Entregar en comodato")} subtitle={`${unitTitle(unit)}${unit.serial ? ` · S/N ${unit.serial}` : ""}`} onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -423,47 +428,48 @@ function AssignDialog({ data, unit, onClose, onDone }: { data: Data; unit: Unit;
         }}
       >
         <div>
-          <label htmlFor="as-client" className={labelCls}>Cliente *</label>
+          <label htmlFor="as-client" className={labelCls}>{tr("Cliente *")}</label>
           <select id="as-client" value={clientId} onChange={(e) => setClientId(e.target.value)} className={inputCls} required>
-            <option value="">Seleccionar cliente del CRM…</option>
+            <option value="">{tr("Seleccionar cliente del CRM…")}</option>
             {data.clients.map((c: { id: string; name: string; document_number: string | null }) => (
               <option key={c.id} value={c.id}>{c.name}{c.document_number ? ` (${c.document_number})` : ""}</option>
             ))}
           </select>
           <p className="text-[11px] text-foreground/40 mt-1">
-            ¿No está? Créalo en <Link href="/admin/customers" className="underline">Clientes (B2B)</Link>.
+            {tr("¿No está? Créalo en")}{" "}<Link href="/admin/customers" className="underline">{tr("Clientes (B2B)")}</Link>.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="as-date" className={labelCls}>Fecha de entrega *</label>
+            <label htmlFor="as-date" className={labelCls}>{tr("Fecha de entrega *")}</label>
             <input id="as-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} required />
           </div>
           <div>
-            <label htmlFor="as-kg" className={labelCls}>Compromiso mensual</label>
+            <label htmlFor="as-kg" className={labelCls}>{tr("Compromiso mensual")}</label>
             <div className="flex items-center gap-2">
-              <input id="as-kg" type="number" min="0" step="0.5" inputMode="decimal" value={commitment} onChange={(e) => setCommitment(e.target.value)} placeholder="Opcional" className={inputCls} />
-              <span className="text-xs text-foreground/40">kg</span>
+              <input id="as-kg" type="number" min="0" step="0.5" inputMode="decimal" value={commitment} onChange={(e) => setCommitment(e.target.value)} placeholder={tr("Opcional")} className={inputCls} />
+              <span className="text-xs text-foreground/40">{tr("kg")}</span>
             </div>
           </div>
         </div>
         <div>
-          <label htmlFor="as-notes" className={labelCls}>Notas de entrega</label>
-          <textarea id="as-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Contrato, accesorios entregados, estado de la máquina…" className={`${inputCls} resize-y`} />
+          <label htmlFor="as-notes" className={labelCls}>{tr("Notas de entrega")}</label>
+          <textarea id="as-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder={tr("Contrato, accesorios entregados, estado de la máquina…")} className={`${inputCls} resize-y`} />
         </div>
-        <Footer isPending={isPending} error={error} label="Entregar" />
+        <Footer isPending={isPending} error={error} label={tr("Entregar")} />
       </form>
     </Modal>
   );
 }
 
 function ReturnDialog({ today, unit, onClose, onDone }: { today: string; unit: Unit; onClose: () => void; onDone: () => void }) {
+  const tr = useTr();
   const [endDate, setEndDate] = useState(today);
   const [returnTo, setReturnTo] = useState<"disponible" | "mantenimiento">("disponible");
   const [notes, setNotes] = useState("");
   const { error, isPending, submit } = useSubmit(onDone, onClose);
   return (
-    <Modal title="Registrar devolución" subtitle={`${unitTitle(unit)} · ${unit.client?.name ?? ""}`} onClose={onClose}>
+    <Modal title={tr("Registrar devolución")} subtitle={`${unitTitle(unit)} · ${unit.client?.name ?? ""}`} onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -472,11 +478,11 @@ function ReturnDialog({ today, unit, onClose, onDone }: { today: string; unit: U
         }}
       >
         <div>
-          <label htmlFor="ret-date" className={labelCls}>Fecha de devolución *</label>
+          <label htmlFor="ret-date" className={labelCls}>{tr("Fecha de devolución *")}</label>
           <input id="ret-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} required />
         </div>
         <div>
-          <p className={labelCls}>¿Cómo vuelve?</p>
+          <p className={labelCls}>{tr("¿Cómo vuelve?")}</p>
           <div className="grid grid-cols-2 gap-2">
             {(["disponible", "mantenimiento"] as const).map((v) => (
               <button
@@ -486,16 +492,16 @@ function ReturnDialog({ today, unit, onClose, onDone }: { today: string; unit: U
                 onClick={() => setReturnTo(v)}
                 className={`px-3 py-2.5 rounded-xl border text-xs font-bold ${returnTo === v ? "bg-[#C59F59] text-white border-[#C59F59]" : "bg-white text-foreground/60 border-foreground/10"}`}
               >
-                {v === "disponible" ? "Lista para otro cliente" : "Necesita mantenimiento"}
+                {v === "disponible" ? tr("Lista para otro cliente") : tr("Necesita mantenimiento")}
               </button>
             ))}
           </div>
         </div>
         <div>
-          <label htmlFor="ret-notes" className={labelCls}>Notas</label>
-          <textarea id="ret-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Estado en que llegó, accesorios faltantes…" className={`${inputCls} resize-y`} />
+          <label htmlFor="ret-notes" className={labelCls}>{tr("Notas")}</label>
+          <textarea id="ret-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder={tr("Estado en que llegó, accesorios faltantes…")} className={`${inputCls} resize-y`} />
         </div>
-        <Footer isPending={isPending} error={error} label="Registrar devolución" />
+        <Footer isPending={isPending} error={error} label={tr("Registrar devolución")} />
       </form>
     </Modal>
   );
@@ -521,13 +527,14 @@ function StatusDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const tr = useTr();
   const [date, setDate] = useState(today);
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
   const { error, isPending, submit } = useSubmit(onDone, onClose);
   const cfg = STATUS_DIALOG[action];
   return (
-    <Modal title={cfg.title} subtitle={`${unitTitle(unit)}${unit.serial ? ` · S/N ${unit.serial}` : ""}`} onClose={onClose}>
+    <Modal title={tr(cfg.title)} subtitle={`${unitTitle(unit)}${unit.serial ? ` · S/N ${unit.serial}` : ""}`} onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -537,24 +544,24 @@ function StatusDialog({
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="st-date" className={labelCls}>Fecha</label>
+            <label htmlFor="st-date" className={labelCls}>{tr("Fecha")}</label>
             <input id="st-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
           </div>
           {action !== "baja" && (
             <div>
-              <label htmlFor="st-cost" className={labelCls}>Costo (opcional)</label>
+              <label htmlFor="st-cost" className={labelCls}>{tr("Costo (opcional)")}</label>
               <input id="st-cost" type="number" min="0" step="1000" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="$" className={inputCls} />
             </div>
           )}
         </div>
         <div>
-          <label htmlFor="st-desc" className={labelCls}>Descripción{action === "nota" ? " *" : ""}</label>
-          <textarea id="st-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder={cfg.placeholder} className={`${inputCls} resize-y`} required={action === "nota"} />
+          <label htmlFor="st-desc" className={labelCls}>{tr("Descripción")}{action === "nota" ? " *" : ""}</label>
+          <textarea id="st-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder={tr(cfg.placeholder)} className={`${inputCls} resize-y`} required={action === "nota"} />
         </div>
         {action === "baja" && (
-          <p className="text-xs text-red-700 bg-red-50 px-3 py-2 rounded-xl">La máquina sale del inventario (una salida del modelo). Queda en el historial.</p>
+          <p className="text-xs text-red-700 bg-red-50 px-3 py-2 rounded-xl">{tr("La máquina sale del inventario (una salida del modelo). Queda en el historial.")}</p>
         )}
-        <Footer isPending={isPending} error={error} label={cfg.button} danger={action === "baja"} />
+        <Footer isPending={isPending} error={error} label={tr(cfg.button)} danger={action === "baja"} />
       </form>
     </Modal>
   );
@@ -571,32 +578,33 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 function HistoryDialog({ unit, onClose }: { unit: Unit; onClose: () => void }) {
+  const tr = useTr();
   const [history, setHistory] = useState<Awaited<ReturnType<typeof getUnitHistory>> | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     getUnitHistory(unit.id)
       .then(setHistory)
-      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo cargar"));
+      .catch((err) => setError(err instanceof Error ? err.message : tr("No se pudo cargar")));
   }, [unit.id]);
   const nameOf = (c: unknown) => (Array.isArray(c) ? c[0]?.name : (c as { name?: string } | null)?.name);
   return (
-    <Modal title="Historial" subtitle={`${unitTitle(unit)}${unit.serial ? ` · S/N ${unit.serial}` : ""}`} onClose={onClose}>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+    <Modal title={tr("Historial")} subtitle={`${unitTitle(unit)}${unit.serial ? ` · S/N ${unit.serial}` : ""}`} onClose={onClose}>
+      {error && <p className="text-sm text-red-600">{tr.msg(error)}</p>}
       {!history && !error && <Loader2 className="w-6 h-6 animate-spin text-[#C59F59] mx-auto" />}
       {history && (
         <div className="space-y-6">
           <section>
-            <p className={labelCls}>Comodatos</p>
+            <p className={labelCls}>{tr("Comodatos")}</p>
             {history.assignments.length === 0 ? (
-              <p className="text-sm text-foreground/40">Nunca ha estado en comodato.</p>
+              <p className="text-sm text-foreground/40">{tr("Nunca ha estado en comodato.")}</p>
             ) : (
               <ul className="space-y-2">
                 {history.assignments.map((a: { id: string; start_date: string; end_date: string | null; monthly_commitment_kg: number | null; client: unknown }) => (
                   <li key={a.id} className="rounded-xl bg-[#fdfbf7] px-4 py-3 text-sm">
-                    <p className="font-bold">{nameOf(a.client) ?? "Cliente"}</p>
+                    <p className="font-bold">{nameOf(a.client) ?? tr("Cliente")}</p>
                     <p className="text-xs text-foreground/50">
-                      {fmtDate(a.start_date)} → {a.end_date ? fmtDate(a.end_date) : "actualmente"}
-                      {a.monthly_commitment_kg ? ` · compromiso ${kg(Number(a.monthly_commitment_kg))}/mes` : ""}
+                      {fmtDate(a.start_date)} → {a.end_date ? fmtDate(a.end_date) : tr("actualmente")}
+                      {a.monthly_commitment_kg ? tr(" · compromiso {kg}/mes", { kg: kg(Number(a.monthly_commitment_kg)) }) : ""}
                     </p>
                   </li>
                 ))}
@@ -604,18 +612,18 @@ function HistoryDialog({ unit, onClose }: { unit: Unit; onClose: () => void }) {
             )}
           </section>
           <section>
-            <p className={labelCls}>Eventos</p>
+            <p className={labelCls}>{tr("Eventos")}</p>
             <ul className="space-y-3">
               {history.events.map((ev: { id: string; event_date: string; kind: string; description: string | null; cost: number | null; client: unknown }) => (
                 <li key={ev.id} className="flex gap-3 text-sm">
                   <span className="text-xs text-foreground/40 w-24 shrink-0">{fmtDate(ev.event_date)}</span>
                   <span>
-                    <span className="font-bold">{EVENT_LABELS[ev.kind] ?? ev.kind}</span>
+                    <span className="font-bold">{tr.msg(EVENT_LABELS[ev.kind] ?? ev.kind)}</span>
                     {nameOf(ev.client) ? <span className="text-foreground/60"> · {nameOf(ev.client)}</span> : null}
-                    {ev.description ? <span className="block text-foreground/60">{ev.description}</span> : null}
+                    {ev.description ? <span className="block text-foreground/60">{tr(ev.description)}</span> : null}
                     {ev.cost ? (
                       <span className="block text-xs text-foreground/40">
-                        Costo {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(Number(ev.cost))}
+                        {tr("Costo {format}", { format: new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(Number(ev.cost)) })}
                       </span>
                     ) : null}
                   </span>

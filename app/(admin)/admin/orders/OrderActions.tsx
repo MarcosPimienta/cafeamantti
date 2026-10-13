@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Edit, Trash2, X, Plus, UserRound, MapPin, CalendarClock, Package } from "lucide-react";
 import { deleteManualAdminOrder, updateManualAdminOrder } from "../../actions";
 import { isSellable } from "@/utils/inventory/sellable";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 interface InventoryItem {
   id: string;
@@ -53,6 +54,7 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export default function OrderActions({ order, inventory, crmClients = [] }: { order: any, inventory: InventoryItem[], crmClients?: any[] }) {
+  const tr = useTr();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -128,13 +130,13 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
   };
 
   const handleDelete = async () => {
-    if (!confirm("¿Estás seguro de que quieres eliminar esta orden? Se revertirá el stock descontado de los productos vendidos.")) return;
+    if (!confirm(tr("¿Estás seguro de que quieres eliminar esta orden? Se revertirá el stock descontado de los productos vendidos."))) return;
     setIsDeleting(true);
     try {
       await deleteManualAdminOrder(order.id);
       // Let the server component re-render via revalidatePath
     } catch (err: any) {
-      alert("Error eliminando la orden: " + err.message);
+      alert(tr.msg("Error eliminando la orden: " + err.message));
       setIsDeleting(false);
     }
   };
@@ -173,16 +175,16 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
     e.preventDefault();
     if (itemsDirty) {
       if (items.length === 0) {
-        setError("Debes agregar al menos un producto.");
+        setError(tr("Debes agregar al menos un producto."));
         return;
       }
       if (items.some(i => !i.inventory_id)) {
-        setError("Todos los items deben tener un producto de inventario seleccionado (es necesario para descontar stock correctamente).");
+        setError(tr("Todos los items deben tener un producto de inventario seleccionado (es necesario para descontar stock correctamente)."));
         return;
       }
     }
     if (syncClient && selectedClientId && !customerName.trim()) {
-      setError("El nombre del cliente es obligatorio.");
+      setError(tr("El nombre del cliente es obligatorio."));
       return;
     }
 
@@ -214,7 +216,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
               }
             : null,
       });
-      if (res.warning) alert(res.warning);
+      if (res.warning) alert(tr.msg(res.warning));
       setItemsDirty(false);
       setIsEditOpen(false);
     } catch (err: any) {
@@ -236,7 +238,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
         <button
           onClick={() => setIsEditOpen(true)}
           className="p-2 text-foreground/40 hover:text-[#C59F59] hover:bg-foreground/5 rounded-lg transition-colors"
-          title="Editar Orden"
+          title={tr("Editar Orden")}
         >
           <Edit className="w-4 h-4" />
         </button>
@@ -245,7 +247,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
             onClick={handleDelete}
             disabled={isDeleting}
             className="p-2 text-foreground/40 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-            title="Eliminar Orden"
+            title={tr("Eliminar Orden")}
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -256,8 +258,8 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-foreground/20 backdrop-blur-sm">
           <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-xl w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto border border-foreground/10 flex flex-col">
             <div className="px-5 sm:px-6 py-4 sm:py-6 border-b border-foreground/5 flex justify-between items-center sticky top-0 bg-white z-10">
-              <h2 className="text-xl sm:text-2xl font-serif text-foreground">Editar Orden #{order.id.split('-')[0]}</h2>
-              <button onClick={() => setIsEditOpen(false)} className="p-2 hover:bg-foreground/5 rounded-full transition-colors" aria-label="Cerrar">
+              <h2 className="text-xl sm:text-2xl font-serif text-foreground">{tr("Editar Orden #{v}", { v: order.id.split('-')[0] })}</h2>
+              <button onClick={() => setIsEditOpen(false)} className="p-2 hover:bg-foreground/5 rounded-full transition-colors" aria-label={tr("Cerrar")}>
                 <X className="w-5 h-5 text-foreground/40" />
               </button>
             </div>
@@ -265,21 +267,21 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
             <form onSubmit={handleUpdate} className="p-5 sm:p-6 space-y-8 text-left">
               {error && (
                 <div className="p-4 bg-red-50 text-red-800 rounded-xl text-sm border border-red-100">
-                  {error}
+                  {tr.msg(error)}
                 </div>
               )}
 
               {/* Cliente */}
-              <Section icon={<UserRound className="w-3.5 h-3.5" />} title="Cliente">
+              <Section icon={<UserRound className="w-3.5 h-3.5" />} title={tr("Cliente")}>
                 {crmClients.length > 0 && (
                   <div>
-                    <label className="block text-xs font-bold text-[#C59F59] mb-1">Cliente del CRM</label>
+                    <label className="block text-xs font-bold text-[#C59F59] mb-1">{tr("Cliente del CRM")}</label>
                     <select
                       value={selectedClientId}
                       onChange={e => handleClientSelect(e.target.value)}
                       className="w-full px-4 py-2.5 bg-[#f9f7f0] border border-[#C59F59]/20 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/40"
                     >
-                      <option value="">-- Sin Cliente CRM --</option>
+                      <option value="">{tr("-- Sin Cliente CRM --")}</option>
                       {crmClients.map((c: any) => (
                         <option key={c.id} value={c.id}>{c.name} {c.document_number ? `(${c.document_number})` : ''}</option>
                       ))}
@@ -289,29 +291,29 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
-                    <label className={labelCls}>Nombre / Razón social</label>
-                    <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className={inputCls} placeholder="Nombre del cliente" />
+                    <label className={labelCls}>{tr("Nombre / Razón social")}</label>
+                    <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className={inputCls} placeholder={tr("Nombre del cliente")} />
                   </div>
                   {selectedClientId && (
                     <div className="grid grid-cols-[100px_1fr] gap-3 sm:col-span-2">
                       <div>
-                        <label className={labelCls}>Tipo doc.</label>
+                        <label className={labelCls}>{tr("Tipo doc.")}</label>
                         <select value={documentType} onChange={e => setDocumentType(e.target.value)} className={inputCls}>
                           {DOCUMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className={labelCls}>Número de documento</label>
+                        <label className={labelCls}>{tr("Número de documento")}</label>
                         <input type="text" inputMode="numeric" value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} className={inputCls} />
                       </div>
                     </div>
                   )}
                   <div>
-                    <label className={labelCls}>Email</label>
+                    <label className={labelCls}>{tr("Email")}</label>
                     <input type="email" inputMode="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>Teléfono</label>
+                    <label className={labelCls}>{tr("Teléfono")}</label>
                     <input type="tel" inputMode="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} className={inputCls} />
                   </div>
                 </div>
@@ -325,9 +327,9 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                       className="mt-0.5 w-4 h-4 accent-[#C59F59]"
                     />
                     <span className="text-sm">
-                      <span className="font-bold">Actualizar también la ficha del cliente</span>
+                      <span className="font-bold">{tr("Actualizar también la ficha del cliente")}</span>
                       <span className="block text-xs text-foreground/50">
-                        Guarda nombre, documento, contacto y dirección en el CRM. Desmárcalo si el cambio es solo para esta orden.
+                        {tr("Guarda nombre, documento, contacto y dirección en el CRM. Desmárcalo si el cambio es solo para esta orden.")}
                       </span>
                     </span>
                   </label>
@@ -335,52 +337,52 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
               </Section>
 
               {/* Envío */}
-              <Section icon={<MapPin className="w-3.5 h-3.5" />} title="Envío">
+              <Section icon={<MapPin className="w-3.5 h-3.5" />} title={tr("Envío")}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
-                    <label className={labelCls}>Dirección</label>
+                    <label className={labelCls}>{tr("Dirección")}</label>
                     <input type="text" value={address} onChange={e => setAddress(e.target.value)} className={inputCls} />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className={labelCls}>Detalles (apto, oficina, indicaciones)</label>
-                    <input type="text" value={details} onChange={e => setDetails(e.target.value)} className={inputCls} placeholder="Apto 302, torre B..." />
+                    <label className={labelCls}>{tr("Detalles (apto, oficina, indicaciones)")}</label>
+                    <input type="text" value={details} onChange={e => setDetails(e.target.value)} className={inputCls} placeholder={tr("Apto 302, torre B...")} />
                   </div>
                   <div>
-                    <label className={labelCls}>Ciudad</label>
+                    <label className={labelCls}>{tr("Ciudad")}</label>
                     <input type="text" value={city} onChange={e => setCity(e.target.value)} className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>Departamento</label>
+                    <label className={labelCls}>{tr("Departamento")}</label>
                     <input type="text" value={state} onChange={e => setState(e.target.value)} className={inputCls} />
                   </div>
                 </div>
               </Section>
 
               {/* Seguimiento */}
-              <Section icon={<CalendarClock className="w-3.5 h-3.5" />} title="Seguimiento">
+              <Section icon={<CalendarClock className="w-3.5 h-3.5" />} title={tr("Seguimiento")}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelCls}>Estado de la orden</label>
+                    <label className={labelCls}>{tr("Estado de la orden")}</label>
                     <select value={status} onChange={e => setStatus(e.target.value)} className={inputCls}>
-                      {STATUS_OPTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                      {STATUS_OPTIONS.map((s) => <option key={s.id} value={s.id}>{tr(s.label)}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={labelCls}>Entrega prometida</label>
+                    <label className={labelCls}>{tr("Entrega prometida")}</label>
                     <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className={labelCls}>Notas</label>
-                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={`${inputCls} resize-y`} placeholder="Medio de pago, instrucciones de entrega..." />
+                    <label className={labelCls}>{tr("Notas")}</label>
+                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={`${inputCls} resize-y`} placeholder={tr("Medio de pago, instrucciones de entrega...")} />
                   </div>
                 </div>
               </Section>
 
               {/* Productos */}
-              <Section icon={<Package className="w-3.5 h-3.5" />} title="Productos">
+              <Section icon={<Package className="w-3.5 h-3.5" />} title={tr("Productos")}>
                 {!isManual && (
                   <p className="text-xs text-foreground/50 italic -mt-2">
-                    Orden en línea: los productos no se pueden modificar para que coincidan con lo que pagó el cliente. El resto de datos sí.
+                    {tr("Orden en línea: los productos no se pueden modificar para que coincidan con lo que pagó el cliente. El resto de datos sí.")}
                   </p>
                 )}
 
@@ -388,54 +390,54 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                   {items.map((item, index) => (
                     <div key={index} className="grid grid-cols-2 sm:grid-cols-[1fr_80px_120px_90px_110px_auto] gap-3 items-end p-4 bg-[#f9f7f0] rounded-xl border border-foreground/5">
                       <div className="col-span-2 sm:col-span-1">
-                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">Inventario</label>
+                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Inventario")}</label>
                         <select
                           value={item.inventory_id}
                           onChange={e => updateItem(index, 'inventory_id', e.target.value)}
                           disabled={!isManual}
                           className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#C59F59]/20 disabled:opacity-50 disabled:bg-foreground/5"
                         >
-                          <option value="">Seleccione producto...</option>
+                          <option value="">{tr("Seleccione producto...")}</option>
                           {/* Products we sell, plus whatever this line already had (older orders). */}
                           {inventory
                             .filter(inv => isSellable(inv) || inv.id === item.inventory_id)
                             .map(inv => (
                               <option key={inv.id} value={inv.id}>
-                                {inv.product_name} {inv.category === "servicio" ? "(servicio)" : `(Stock: ${Number(inv.current_stock)})`}{isSellable(inv) ? "" : " · insumo"}
+                                {inv.product_name} {inv.category === "servicio" ? tr("(servicio)") : tr("(Stock: {Number})", { Number: Number(inv.current_stock) })}{isSellable(inv) ? "" : tr(" · insumo")}
                               </option>
                             ))}
                         </select>
-                        {!item.inventory_id && <p className="text-[10px] text-red-500 mt-1">Este producto no está mapeado a un item de inventario actual.</p>}
+                        {!item.inventory_id && <p className="text-[10px] text-red-500 mt-1">{tr("Este producto no está mapeado a un item de inventario actual.")}</p>}
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">Cant.</label>
+                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Cant.")}</label>
                         <input type="number" inputMode="numeric" min="1" value={item.quantity} onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} disabled={!isManual} className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm disabled:opacity-50" />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">Precio unitario</label>
+                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Precio unitario")}</label>
                         <input type="number" inputMode="numeric" min="0" step="100" value={item.price} onChange={e => updateItem(index, 'price', parseInt(e.target.value) || 0)} disabled={!isManual} className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm disabled:opacity-50" />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">Peso (opc)</label>
+                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Peso (opc)")}</label>
                         <input type="text" placeholder="250g" value={item.weight} onChange={e => updateItem(index, 'weight', e.target.value)} disabled={!isManual} className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm disabled:opacity-50" />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">Molienda (opc)</label>
+                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Molienda (opc)")}</label>
                         <select value={item.grind} onChange={e => updateItem(index, 'grind', e.target.value)} disabled={!isManual} className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm disabled:opacity-50">
                           <option value="">N/A</option>
-                          <option value="whole">Grano</option>
-                          <option value="ground">Molido</option>
+                          <option value="whole">{tr("Grano")}</option>
+                          <option value="ground">{tr("Molido")}</option>
                         </select>
                       </div>
 
                       {isManual && (
-                        <button type="button" onClick={() => handleRemoveItem(index)} className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold" aria-label={`Quitar producto ${index + 1}`}>
+                        <button type="button" onClick={() => handleRemoveItem(index)} className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold" aria-label={tr("Quitar producto {v}", { v: index + 1 })}>
                           <Trash2 className="w-4 h-4" />
-                          <span className="sm:hidden">Quitar</span>
+                          <span className="sm:hidden">{tr("Quitar")}</span>
                         </button>
                       )}
                     </div>
@@ -444,19 +446,19 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
 
                 {isManual && (
                   <button type="button" onClick={handleAddItem} className="text-xs font-bold text-[#C59F59] hover:underline flex items-center gap-1">
-                    <Plus className="w-3.5 h-3.5" /> Agregar producto
+                    <Plus className="w-3.5 h-3.5" />{" "}{tr("Agregar producto")}
                   </button>
                 )}
 
                 <div className="flex justify-between items-center pt-4 border-t border-foreground/5">
-                  <span className="font-medium text-sm">Total Orden</span>
+                  <span className="font-medium text-sm">{tr("Total Orden")}</span>
                   <span className="font-serif text-xl text-[#C59F59]">
                     {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(totalAmount)}
                   </span>
                 </div>
                 {itemsDirty && (
                   <p className="text-[11px] text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-                    Cambiaste los productos: al guardar se recalcula el total y, si la orden está pagada, se ajusta el inventario.
+                    {tr("Cambiaste los productos: al guardar se recalcula el total y, si la orden está pagada, se ajusta el inventario.")}
                   </p>
                 )}
               </Section>
@@ -467,7 +469,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                   disabled={isSaving}
                   className="w-full py-4 bg-foreground text-background text-sm font-bold uppercase tracking-widest rounded-xl hover:bg-[#C59F59] hover:text-white transition-all shadow-lg disabled:opacity-50"
                 >
-                  {isSaving ? "Guardando..." : "Guardar Cambios"}
+                  {isSaving ? tr("Guardando...") : tr("Guardar Cambios")}
                 </button>
               </div>
             </form>

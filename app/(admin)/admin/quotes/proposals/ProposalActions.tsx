@@ -5,13 +5,15 @@ import Link from 'next/link';
 import { Edit2, Trash2 } from 'lucide-react';
 import { deleteProposal } from '../actions';
 import { useRouter } from 'next/navigation';
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 export default function ProposalActions({ id }: { id: string }) {
+  const tr = useTr();
   const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
 
   const handleDelete = async () => {
-    if (!window.confirm('¿Estás seguro de eliminar esta propuesta?')) return;
+    if (!window.confirm(tr("¿Estás seguro de eliminar esta propuesta?"))) return;
     
     setIsDeleting(true);
     try {
@@ -22,7 +24,7 @@ export default function ProposalActions({ id }: { id: string }) {
       window.location.reload();
     } catch (err) {
       console.error(err);
-      alert('Error al eliminar la propuesta');
+      alert(tr("Error al eliminar la propuesta"));
     } finally {
       setIsDeleting(false);
     }
@@ -33,7 +35,7 @@ export default function ProposalActions({ id }: { id: string }) {
       <Link 
         href={`/admin/quotes/proposals/${id}`}
         className="text-[#C59F59] hover:text-[#B38E4D] p-2 hover:bg-[#C59F59]/10 rounded-lg transition-colors"
-        title="Editar"
+        title={tr("Editar")}
       >
         <Edit2 className="w-4 h-4" />
       </Link>
@@ -41,7 +43,7 @@ export default function ProposalActions({ id }: { id: string }) {
         onClick={handleDelete}
         disabled={isDeleting}
         className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-        title="Eliminar"
+        title={tr("Eliminar")}
       >
         <Trash2 className="w-4 h-4" />
       </button>

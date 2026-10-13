@@ -4,8 +4,10 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { Users, Phone, MapPin, Search, Filter, Calendar, CreditCard, ShoppingBag, DollarSign } from "lucide-react";
 import CreateCustomerModal from "./CreateCustomerModal";
+import { getTr } from "@/utils/i18n/server";
 
 export default async function AdminCustomersPage() {
+  const tr = await getTr();
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
 
@@ -77,8 +79,8 @@ export default async function AdminCustomersPage() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-serif text-foreground mb-2">Usuarios Registrados y Ventas</h1>
-          <p className="text-foreground/60">Directorio de usuarios online y compras manuales históricas.</p>
+          <h1 className="text-3xl font-serif text-foreground mb-2">{tr("Usuarios Registrados y Ventas")}</h1>
+          <p className="text-foreground/60">{tr("Directorio de usuarios online y compras manuales históricas.")}</p>
         </div>
       </div>
 
@@ -89,14 +91,14 @@ export default async function AdminCustomersPage() {
             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
             <input 
               type="text" 
-              placeholder="Buscar por nombre, cédula o teléfono..." 
+              placeholder={tr("Buscar por nombre, cédula o teléfono...")} 
               className="w-full pl-11 pr-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             />
           </div>
           <div className="flex items-center gap-2 w-full md:w-auto">
             <button className="flex items-center gap-2 px-6 py-3 bg-white border border-foreground/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-foreground/5 transition-all w-full md:w-auto shrink-0">
               <Filter className="w-4 h-4" />
-              Filtrar
+              {tr("Filtrar")}
             </button>
             <CreateCustomerModal />
           </div>
@@ -107,12 +109,12 @@ export default async function AdminCustomersPage() {
           <table className="w-full text-left text-sm text-foreground/80">
             <thead className="bg-[#fdfbf7] border-b border-foreground/5 text-xs font-bold uppercase tracking-widest text-foreground/60">
               <tr>
-                <th className="px-6 py-4 font-medium">Usuario</th>
-                <th className="px-6 py-4 font-medium">Contacto</th>
-                <th className="px-6 py-4 font-medium">Ubicación</th>
-                <th className="px-6 py-4 font-medium text-center">Nº Órdenes</th>
-                <th className="px-6 py-4 font-medium text-right">Total Comprado</th>
-                <th className="px-6 py-4 font-medium">Registro</th>
+                <th className="px-6 py-4 font-medium">{tr("Usuario")}</th>
+                <th className="px-6 py-4 font-medium">{tr("Contacto")}</th>
+                <th className="px-6 py-4 font-medium">{tr("Ubicación")}</th>
+                <th className="px-6 py-4 font-medium text-center">{tr("Nº Órdenes")}</th>
+                <th className="px-6 py-4 font-medium text-right">{tr("Total Comprado")}</th>
+                <th className="px-6 py-4 font-medium">{tr("Registro")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-foreground/5">
@@ -120,8 +122,8 @@ export default async function AdminCustomersPage() {
                 <tr>
                   <td colSpan={6} className="px-6 py-20 text-center">
                     <Users className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-                    <p className="text-lg font-serif text-foreground">Aún no hay usuarios ni ventas</p>
-                    <p className="text-sm text-foreground/50">Los usuarios registrados o compras aparecerán aquí.</p>
+                    <p className="text-lg font-serif text-foreground">{tr("Aún no hay usuarios ni ventas")}</p>
+                    <p className="text-sm text-foreground/50">{tr("Los usuarios registrados o compras aparecerán aquí.")}</p>
                   </td>
                 </tr>
               ) : (
@@ -134,8 +136,8 @@ export default async function AdminCustomersPage() {
                         </div>
                         <div>
                           <p className="font-medium text-foreground">
-                            {customer.first_name || "Sin nombre"} {customer.last_name || ""}
-                            {customer.is_guest && <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">Invitado</span>}
+                            {customer.first_name || tr("Sin nombre")} {customer.last_name || ""}
+                            {customer.is_guest && <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">{tr("Invitado")}</span>}
                           </p>
                           {customer.cedula_number && (
                             <p className="text-xs text-foreground/50 flex items-center gap-1 mt-0.5">
@@ -152,14 +154,14 @@ export default async function AdminCustomersPage() {
                       <div className="flex flex-col gap-1 text-sm">
                         {customer.phone_number ? (
                           <span className="flex items-center gap-2"><Phone className="w-3 h-3 text-foreground/40" /> {customer.phone_number}</span>
-                        ) : <span className="text-foreground/40 italic">Sin teléfono</span>}
+                        ) : <span className="text-foreground/40 italic">{tr("Sin teléfono")}</span>}
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-start gap-2 max-w-[200px]">
                         <MapPin className="w-4 h-4 text-foreground/40 shrink-0 mt-0.5" />
                         <span className="truncate" title={`${customer.address}, ${customer.city}, ${customer.department}`}>
-                          {customer.address ? `${customer.address}, ${customer.city}` : "No registrada"}
+                          {customer.address ? `${customer.address}, ${customer.city}` : tr("No registrada")}
                         </span>
                       </div>
                     </td>

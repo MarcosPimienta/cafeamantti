@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 import NewQuoteForm from "./NewQuoteForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { getTr } from "@/utils/i18n/server";
 
 export default async function NewQuotePage() {
+  const tr = await getTr();
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
 
@@ -27,8 +29,8 @@ export default async function NewQuotePage() {
           <ArrowLeft className="w-5 h-5 text-foreground/60" />
         </Link>
         <div>
-          <h1 className="text-3xl font-serif text-foreground mb-2">Nueva Cotización</h1>
-          <p className="text-foreground/60">Crea una cotización y genera el documento PDF al instante.</p>
+          <h1 className="text-3xl font-serif text-foreground mb-2">{tr("Nueva Cotización")}</h1>
+          <p className="text-foreground/60">{tr("Crea una cotización y genera el documento PDF al instante.")}</p>
         </div>
       </div>
 

@@ -4,10 +4,12 @@ import { checkIsAdmin, updateStoreSettings, updateShippingSettings } from "../..
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { Settings as SettingsIcon, Store, Bell, Shield, Wallet, Users, Receipt } from "lucide-react";
+import { getTr } from "@/utils/i18n/server";
 
 export default async function AdminSettingsPage(props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const tr = await getTr();
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) redirect('/dashboard');
 
@@ -42,8 +44,8 @@ export default async function AdminSettingsPage(props: {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-serif text-foreground mb-2">Ajustes</h1>
-        <p className="text-foreground/60">Configuración global de la tienda y la cuenta administrativa.</p>
+        <h1 className="text-3xl font-serif text-foreground mb-2">{tr("Ajustes")}</h1>
+        <p className="text-foreground/60">{tr("Configuración global de la tienda y la cuenta administrativa.")}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -60,7 +62,7 @@ export default async function AdminSettingsPage(props: {
               }`}
             >
               <nav.icon className="w-5 h-5" />
-              {nav.label}
+              {tr(nav.label)}
             </Link>
           ))}
           <Link
@@ -68,7 +70,7 @@ export default async function AdminSettingsPage(props: {
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm transition-all border border-transparent hover:bg-white hover:border-foreground/10 font-medium text-foreground/60 hover:text-foreground"
           >
             <Receipt className="w-5 h-5" />
-            Siigo (facturación y contabilidad)
+            {tr("Siigo (facturación y contabilidad)")}
           </Link>
         </div>
 
@@ -79,8 +81,8 @@ export default async function AdminSettingsPage(props: {
               <Icon className="w-6 h-6 text-[#C59F59]" />
             </div>
             <div>
-              <h2 className="text-xl font-serif text-foreground">{currentNav.label}</h2>
-              <p className="text-sm text-foreground/60">{currentNav.desc}</p>
+              <h2 className="text-xl font-serif text-foreground">{tr(currentNav.label)}</h2>
+              <p className="text-sm text-foreground/60">{tr(currentNav.desc)}</p>
             </div>
           </div>
 
@@ -91,7 +93,7 @@ export default async function AdminSettingsPage(props: {
             }}>
               <div className="space-y-6">
                 <div className="space-y-4">
-                  <label htmlFor="store_name" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">Nombre de la Tienda</label>
+                  <label htmlFor="store_name" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">{tr("Nombre de la Tienda")}</label>
                   <input suppressHydrationWarning
                     type="text" 
                     name="store_name"
@@ -102,7 +104,7 @@ export default async function AdminSettingsPage(props: {
                   />
                 </div>
                 <div className="space-y-4">
-                  <label htmlFor="admin_email" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">Email Administrativo</label>
+                  <label htmlFor="admin_email" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">{tr("Email Administrativo")}</label>
                   <input suppressHydrationWarning
                     type="email" 
                     name="admin_email"
@@ -111,25 +113,25 @@ export default async function AdminSettingsPage(props: {
                     className="w-full px-4 py-3 bg-[#f9f7f0] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                     required
                   />
-                  <p className="text-xs text-foreground/40 mt-1">Este email recibirá las notificaciones de nuevas órdenes y contactos.</p>
+                  <p className="text-xs text-foreground/40 mt-1">{tr("Este email recibirá las notificaciones de nuevas órdenes y contactos.")}</p>
                 </div>
                 <div className="space-y-4">
-                  <label htmlFor="base_currency" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">Moneda Base</label>
+                  <label htmlFor="base_currency" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">{tr("Moneda Base")}</label>
                   <select suppressHydrationWarning
                     name="base_currency"
                     id="base_currency"
                     defaultValue={settings?.base_currency || "COP"}
                     className="w-full px-4 py-3 bg-[#f9f7f0] border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
                   >
-                    <option value="COP">COP - Peso Colombiano</option>
-                    <option value="USD">USD - US Dollar</option>
+                    <option value="COP">{tr("COP - Peso Colombiano")}</option>
+                    <option value="USD">{tr("USD - US Dollar")}</option>
                   </select>
                 </div>
               </div>
               
               <div className="mt-8 pt-8 border-t border-foreground/5 flex justify-end">
                  <button suppressHydrationWarning type="submit" className="px-6 py-3 bg-foreground text-background text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#C59F59] hover:text-white transition-all shadow-md">
-                    Guardar Ajustes
+                    {tr("Guardar Ajustes")}
                   </button>
               </div>
             </form>
@@ -142,7 +144,7 @@ export default async function AdminSettingsPage(props: {
             }}>
               <div className="space-y-6">
                 <div className="space-y-4">
-                  <label htmlFor="default_shipping_cost" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">Costo de Envío Estándar</label>
+                  <label htmlFor="default_shipping_cost" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">{tr("Costo de Envío Estándar")}</label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40">$</span>
                     <input suppressHydrationWarning
@@ -156,7 +158,7 @@ export default async function AdminSettingsPage(props: {
                   </div>
                 </div>
                 <div className="space-y-4">
-                  <label htmlFor="free_shipping_threshold" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">Umbral para Envío Gratis</label>
+                  <label htmlFor="free_shipping_threshold" className="block text-sm font-bold uppercase tracking-widest text-foreground/60">{tr("Umbral para Envío Gratis")}</label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40">$</span>
                     <input suppressHydrationWarning
@@ -168,13 +170,13 @@ export default async function AdminSettingsPage(props: {
                       required
                     />
                   </div>
-                  <p className="text-xs text-foreground/40 mt-1">Los pedidos por encima de este valor tendrán envío gratuito.</p>
+                  <p className="text-xs text-foreground/40 mt-1">{tr("Los pedidos por encima de este valor tendrán envío gratuito.")}</p>
                 </div>
               </div>
               
               <div className="mt-8 pt-8 border-t border-foreground/5 flex justify-end">
                  <button type="submit" className="px-6 py-3 bg-foreground text-background text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#C59F59] hover:text-white transition-all shadow-md">
-                    Guardar Ajustes
+                    {tr("Guardar Ajustes")}
                   </button>
               </div>
             </form>
@@ -183,7 +185,7 @@ export default async function AdminSettingsPage(props: {
           {tab === 'security' && (
             <div className="space-y-6">
               <div className="bg-[#f9f7f0] rounded-xl p-6 border border-foreground/5">
-                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">Administradores Actuales</h3>
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-4">{tr("Administradores Actuales")}</h3>
                 <div className="space-y-4">
                   {admins.map(admin => (
                     <div key={admin.id} className="flex items-center gap-4 bg-white p-4 rounded-lg border border-foreground/5">
@@ -191,18 +193,18 @@ export default async function AdminSettingsPage(props: {
                         {(admin.first_name?.[0] || admin.last_name?.[0] || "?").toUpperCase()}
                       </div>
                       <div>
-                        <p className="font-medium text-sm">{admin.first_name || "Sin Nombre"} {admin.last_name || ""}</p>
+                        <p className="font-medium text-sm">{admin.first_name || tr("Sin nombre")} {admin.last_name || ""}</p>
                         <p className="text-xs text-foreground/50 font-mono">{admin.id.split('-')[0]}...</p>
                       </div>
                     </div>
                   ))}
                   {admins.length === 0 && (
-                    <p className="text-sm text-foreground/50">No se encontraron administradores.</p>
+                    <p className="text-sm text-foreground/50">{tr("No se encontraron administradores.")}</p>
                   )}
                 </div>
               </div>
               <div className="pt-4 border-t border-foreground/5">
-                <p className="text-sm text-foreground/60">Para añadir un nuevo administrador, el usuario debe crear una cuenta en la tienda primero, luego puedes promover su rol en la base de datos a `admin`.</p>
+                <p className="text-sm text-foreground/60">{tr("Para añadir un nuevo administrador, el usuario debe crear una cuenta en la tienda primero, luego puedes promover su rol en la base de datos a `admin`.")}</p>
               </div>
             </div>
           )}
@@ -210,9 +212,9 @@ export default async function AdminSettingsPage(props: {
           {tab === 'notifications' && (
             <div className="space-y-6 h-full flex flex-col items-center justify-center py-12 text-center opacity-50 grayscale">
               <Bell className="w-12 h-12 text-foreground/20 mb-4" />
-              <h3 className="text-lg font-serif">Centro de Notificaciones</h3>
+              <h3 className="text-lg font-serif">{tr("Centro de Notificaciones")}</h3>
               <p className="text-sm text-foreground/50 max-w-[250px] mx-auto">
-                Próximamente podrás configurar correos automáticos y manejar webhooks.
+                {tr("Próximamente podrás configurar correos automáticos y manejar webhooks.")}
               </p>
             </div>
           )}

@@ -170,3 +170,43 @@ export function formatDateSpanish(dateStr?: string | null): string {
 }
 
 
+
+/** A document date in the document's language: "13 de octubre de 2026" / "October 13, 2026". */
+export function formatDocDate(dateStr: string | null | undefined, lang: "es" | "en" = "es"): string {
+  if (lang === "es") return formatDateSpanish(dateStr);
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("T")[0].split("-").map(Number);
+  if (!y || !m || !d) return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
+/** Amount in English words, as on the Spanish statement: "ONE MILLION FIVE HUNDRED THOUSAND COLOMBIAN PESOS". */
+export function amountInWordsEn(num: number): string {
+  const ones = ["", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN", "EIGHTEEN", "NINETEEN"];
+  const tens = ["", "", "TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"];
+  const under1000 = (n: number): string => {
+    const h = Math.floor(n / 100);
+    const r = n % 100;
+    const rest = r < 20 ? ones[r] : `${tens[Math.floor(r / 10)]}${r % 10 ? `-${ones[r % 10]}` : ""}`;
+    return [h ? `${ones[h]} HUNDRED` : "", rest].filter(Boolean).join(" ");
+  };
+  const n = Math.floor(num);
+  if (n === 0) return "ZERO COLOMBIAN PESOS";
+  if (n === 1) return "ONE COLOMBIAN PESO";
+  const scales: [number, string][] = [[1_000_000_000, "BILLION"], [1_000_000, "MILLION"], [1_000, "THOUSAND"]];
+  let rest = n;
+  const parts: string[] = [];
+  for (const [value, name] of scales) {
+    if (rest >= value) {
+      parts.push(`${under1000(Math.floor(rest / value))} ${name}`);
+      rest %= value;
+    }
+  }
+  if (rest) parts.push(under1000(rest));
+  return `${parts.join(" ")} COLOMBIAN PESOS`;
+}
+
+/** Amount in words in the document's language. */
+export function amountInWords(num: number, lang: "es" | "en" = "es"): string {
+  return lang === "en" ? amountInWordsEn(num) : numeroALetras(num);
+}

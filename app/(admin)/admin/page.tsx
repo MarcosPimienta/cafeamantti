@@ -3,8 +3,10 @@ import { getDashboardMetrics, getRecentOrders } from "../actions";
 import { DollarSign, ShoppingBag, Coffee, ArrowUpRight, AlertTriangle, Bell } from "lucide-react";
 import Link from "next/link";
 import { getMissingCashflowDays } from "./cashflow/actions";
+import { getTr } from "@/utils/i18n/server";
 
 export default async function AdminDashboardPage() {
+  const tr = await getTr();
   const metrics = await getDashboardMetrics();
   const recentOrders = await getRecentOrders();
   const missingDays = await getMissingCashflowDays();
@@ -45,8 +47,8 @@ export default async function AdminDashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-serif text-foreground mb-2">Resumen General</h1>
-        <p className="text-foreground/60">Bienvenido al panel de control de Amantti.</p>
+        <h1 className="text-3xl font-serif text-foreground mb-2">{tr("Resumen General")}</h1>
+        <p className="text-foreground/60">{tr("Bienvenido al panel de control de Amantti.")}</p>
       </div>
 
       {/* 🚨 ALERTA DE FLUJO DE CAJA */}
@@ -60,15 +62,15 @@ export default async function AdminDashboardPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-black text-amber-900 text-base">
-              ⚠️ {missingDays.length} {missingDays.length === 1 ? 'día sin registros' : 'días sin registros'} en Flujo de Caja
+              ⚠️ {missingDays.length} {missingDays.length === 1 ? tr('día sin registros') : tr('días sin registros')}{" "}{tr("en Flujo de Caja")}
             </p>
             <p className="text-sm text-amber-700 mt-0.5 truncate">
-              Faltan registros desde el 1 mayo 2026 — último pendiente: <span className="font-bold font-mono">{missingDays[missingDays.length - 1]}</span>
+              {tr("Faltan registros desde el 1 mayo 2026 — último pendiente:")}{" "}<span className="font-bold font-mono">{missingDays[missingDays.length - 1]}</span>
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="hidden sm:block text-xs font-bold text-amber-700 bg-amber-200 px-3 py-1.5 rounded-lg group-hover:bg-amber-300 transition-colors">
-              Ir a Flujo de Caja →
+              {tr("Ir a Flujo de Caja →")}
             </span>
             <ArrowUpRight className="w-5 h-5 text-amber-600 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
           </div>
@@ -82,7 +84,7 @@ export default async function AdminDashboardPage() {
             <DollarSign className="w-8 h-8 text-[#C59F59]" />
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-foreground/40 mb-1">Ingresos Totales</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-foreground/40 mb-1">{tr("Ingresos Totales")}</p>
             <p className="text-3xl font-serif">{formatPrice(metrics.totalRevenue)}</p>
           </div>
         </div>
@@ -92,7 +94,7 @@ export default async function AdminDashboardPage() {
             <ShoppingBag className="w-8 h-8 text-foreground" />
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-foreground/40 mb-1">Órdenes</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-foreground/40 mb-1">{tr("Órdenes")}</p>
             <p className="text-3xl font-serif">{metrics.totalOrders}</p>
           </div>
         </div>
@@ -102,7 +104,7 @@ export default async function AdminDashboardPage() {
             <Coffee className="w-8 h-8 text-foreground" />
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-foreground/40 mb-1">Suscripciones Activas</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-foreground/40 mb-1">{tr("Suscripciones Activas")}</p>
             <p className="text-3xl font-serif">{metrics.activeSubscriptions}</p>
           </div>
         </div>
@@ -111,9 +113,9 @@ export default async function AdminDashboardPage() {
       {/* Recent Orders */}
       <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
         <div className="p-8 border-b border-foreground/5 flex items-center justify-between">
-          <h2 className="text-xl font-serif">Órdenes Recientes</h2>
+          <h2 className="text-xl font-serif">{tr("Órdenes Recientes")}</h2>
           <Link href="/admin/orders" className="text-sm font-bold uppercase tracking-widest text-[#C59F59] hover:text-[#b08d4f] flex items-center gap-2 group">
-            Ver todas
+            {tr("Ver todas")}
             <ArrowUpRight className="w-4 h-4 group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
@@ -122,17 +124,17 @@ export default async function AdminDashboardPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#f9f7f0]">
-                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40">ID Orden</th>
-                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40">Cliente</th>
-                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40">Fecha</th>
-                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40 text-right">Monto</th>
-                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40 text-center">Estado</th>
+                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40">{tr("ID Orden")}</th>
+                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40">{tr("Cliente")}</th>
+                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40">{tr("Fecha")}</th>
+                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40 text-right">{tr("Monto")}</th>
+                <th className="py-4 px-8 text-[10px] font-bold uppercase tracking-widest text-foreground/40 text-center">{tr("Estado")}</th>
               </tr>
             </thead>
             <tbody>
               {recentOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-foreground/40">No hay órdenes recientes</td>
+                  <td colSpan={5} className="py-8 text-center text-foreground/40">{tr("No hay órdenes recientes")}</td>
                 </tr>
               ) : (
                 recentOrders.map((order: any) => (

@@ -26,6 +26,7 @@ import { expenseLedger, fixedAssetSheets, incomeLedger, type ExportFilters } fro
 import { getSuppliers } from "../suppliers/actions";
 import ExpenseSiigoPanel from "./ExpenseSiigoPanel";
 import { ASSET_KIND_SUGGESTIONS, ASSET_USES, DEFAULT_DEPRECIATION_MONTHS, EXPENSE_CATEGORY_TYPE_MAP, type AssetUse, type ExpenseType } from "./types";
+import { useTr } from "@/app/(admin)/AdminI18n";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -80,10 +81,11 @@ async function exportExcel(filename: string, sheets: import("@/utils/excel/workb
 const fileSuffix = (f: ExportFilters) => [f.from, f.to].filter(Boolean).join("_a_") || "completo";
 
 function ExportButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  const tr = useTr();
   return (
     <button type="button" onClick={onClick} disabled={disabled}
       className="flex items-center gap-2 px-4 py-2 border border-foreground/15 bg-white text-foreground/70 rounded-lg font-bold text-sm hover:bg-foreground/5 transition-colors disabled:opacity-40">
-      <FileSpreadsheet className="w-4 h-4 text-emerald-700" /> Exportar a Excel
+      <FileSpreadsheet className="w-4 h-4 text-emerald-700" />{" "}{tr("Exportar a Excel")}
     </button>
   );
 }
@@ -99,6 +101,7 @@ function Dropzone({
   isUploading: boolean;
   setIsUploading: (v: boolean) => void;
 }) {
+  const tr = useTr();
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
@@ -114,7 +117,7 @@ function Dropzone({
       const { data } = supabase.storage.from("receipts").getPublicUrl(filePath);
       onImageUploaded(data.publicUrl);
     } catch {
-      alert("Error al subir la imagen.");
+      alert(tr("Error al subir la imagen."));
     } finally {
       setIsUploading(false);
     }
@@ -156,7 +159,7 @@ function Dropzone({
         ? <Loader2 className="w-7 h-7 text-[#C59F59] animate-spin mb-1" />
         : <Upload className="w-7 h-7 text-foreground/40 mb-1" />}
       <p className="text-xs font-bold text-foreground/50 text-center px-4">
-        {isUploading ? "Subiendo..." : "Clic, arrastra o Ctrl+V para pegar imagen"}
+        {isUploading ? tr("Subiendo...") : tr("Clic, arrastra o Ctrl+V para pegar imagen")}
       </p>
     </div>
   );
@@ -177,6 +180,7 @@ function ExpenseModal({
   initialDate?: string;
   expenseToEdit?: any;
 }) {
+  const tr = useTr();
   const today = new Date().toISOString().split("T")[0];
   const [date,     setDate]     = useState(expenseToEdit?.cashflow?.date || initialDate || today);
   const [concept,  setConcept]  = useState(expenseToEdit?.concept || "");
@@ -220,11 +224,11 @@ function ExpenseModal({
     e.preventDefault();
     if (!concept || !category || !amount || !date) return;
     if (isCapex && (!deprMos || Number(deprMos) <= 0)) {
-      alert("Para un activo CAPEX debes indicar los meses de vida útil (> 0).");
+      alert(tr("Para un activo CAPEX debes indicar los meses de vida útil (> 0)."));
       return;
     }
     if (isCapex && !assetUse) {
-      alert("Indica el destino del activo (producción, punto de venta, comodato o administración).");
+      alert(tr("Indica el destino del activo (producción, punto de venta, comodato o administración)."));
       return;
     }
     startTransition(async () => {
@@ -250,7 +254,7 @@ function ExpenseModal({
         : await createExpenseDirect(date, payload);
 
       if (res.error) {
-        alert(res.error);
+        alert(tr.msg(res.error));
       } else {
         onSuccess();
         if (shouldClose) {
@@ -267,7 +271,7 @@ function ExpenseModal({
           setResidual("");
           setSupplierId("");
           setImageUrl(null);
-          setSuccessMessage("¡Gasto registrado con éxito!");
+          setSuccessMessage(tr("¡Gasto registrado con éxito!"));
           setTimeout(() => setSuccessMessage(""), 4000);
         }
       }
@@ -283,9 +287,9 @@ function ExpenseModal({
         {/* Header */}
         <div className="px-8 pt-7 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4 shrink-0">
           <div>
-            <h3 className="text-2xl font-serif">{expenseToEdit ? "Editar Gasto" : "Nuevo Gasto"}</h3>
+            <h3 className="text-2xl font-serif">{expenseToEdit ? tr("Editar Gasto") : tr("Nuevo Gasto")}</h3>
             <p className="text-sm text-foreground/50 mt-0.5">
-              {expenseToEdit ? "Modifica los datos de la salida de dinero registrada." : "Registra una salida de dinero con clasificación contable."}
+              {expenseToEdit ? tr("Modifica los datos de la salida de dinero registrada.") : tr("Registra una salida de dinero con clasificación contable.")}
             </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5 shrink-0">
@@ -297,11 +301,11 @@ function ExpenseModal({
           {/* Fecha + Monto */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="field-label">Fecha</label>
+              <label className="field-label">{tr("Fecha")}</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="field-input" />
             </div>
             <div>
-              <label className="field-label">Valor total ($)</label>
+              <label className="field-label">{tr("Valor total ($)")}</label>
               <input type="number" min="0" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} required
                 placeholder="0" className="field-input" />
             </div>
@@ -309,23 +313,23 @@ function ExpenseModal({
 
           {/* Concepto */}
           <div>
-            <label className="field-label">Concepto</label>
+            <label className="field-label">{tr("Concepto")}</label>
             <input type="text" value={concept} onChange={(e) => setConcept(e.target.value)} required
-              placeholder="Ej. Compra de insumos" className="field-input" />
+              placeholder={tr("Ej. Compra de insumos")} className="field-input" />
           </div>
 
           {/* Proveedor */}
           <div>
-            <label htmlFor="exp-supplier" className="field-label">Proveedor (opcional)</label>
+            <label htmlFor="exp-supplier" className="field-label">{tr("Proveedor (opcional)")}</label>
             <select id="exp-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="field-input">
-              <option value="">— Sin proveedor —</option>
+              <option value="">{tr("— Sin proveedor —")}</option>
               {suppliers.map((sp) => <option key={sp.id} value={sp.id}>{sp.name}{sp.document_number ? ` · ${sp.document_number}` : ""}</option>)}
             </select>
           </div>
 
           {/* Categoría */}
           <div>
-            <label className="field-label">Categoría</label>
+            <label className="field-label">{tr("Categoría")}</label>
             <input type="text" list="exp-categories" value={category}
               onChange={(e) => {
                 setCategory(e.target.value);
@@ -333,15 +337,15 @@ function ExpenseModal({
                 const months = DEFAULT_DEPRECIATION_MONTHS[e.target.value];
                 if (months) setDeprMos((cur) => cur || String(months));
               }} required
-              placeholder="Seleccionar o escribir..." className="field-input" />
+              placeholder={tr("Seleccionar o escribir...")} className="field-input" />
             <datalist id="exp-categories">
-              {PREDEFINED_CATEGORIES.map((c) => <option key={c} value={c} />)}
+              {PREDEFINED_CATEGORIES.map((c) => <option key={c} value={c} label={tr(c)} />)}
             </datalist>
           </div>
 
           {/* Toggle OPEX / COGS / CAPEX */}
           <div>
-            <label className="field-label">Clasificación contable</label>
+            <label className="field-label">{tr("Clasificación contable")}</label>
             <div className="flex gap-2 mt-1">
               {(["OPEX", "COGS", "CAPEX"] as ExpenseType[]).map((t) => {
                 const m = EXPENSE_TYPE_META[t];
@@ -355,15 +359,15 @@ function ExpenseModal({
                         : "border-foreground/10 text-foreground/40 hover:border-foreground/20"
                     }`}
                   >
-                    <span className="text-xs font-black">{m.label}</span>
-                    <span className="text-[9px] leading-tight opacity-80">{m.desc}</span>
+                    <span className="text-xs font-black">{tr(m.label)}</span>
+                    <span className="text-[9px] leading-tight opacity-80">{tr(m.desc)}</span>
                   </button>
                 );
               })}
             </div>
             {inferredType !== expenseType && (
               <p className="text-[10px] text-amber-600 mt-1.5">
-                ⚠️ La categoría sugiere <strong>{inferredType}</strong>, pero seleccionaste <strong>{expenseType}</strong>.
+                {tr("⚠️ La categoría sugiere")}{" "}<strong>{inferredType}</strong>{tr(", pero seleccionaste")}{" "}<strong>{expenseType}</strong>.
               </p>
             )}
           </div>
@@ -371,26 +375,26 @@ function ExpenseModal({
           {/* IVA */}
           <div>
             <label className="field-label">
-              IVA discriminado ($)
+              {tr("IVA discriminado ($)")}
               {autoTax && !taxAmt && (
                 <button type="button" onClick={() => setTaxAmt(autoTax)}
                   className="ml-2 text-[10px] text-[#C59F59] font-bold underline-offset-2 underline">
-                  Sugerir 19% = ${Number(autoTax).toLocaleString("es-CO")}
+                  {tr("Sugerir 19% = ${v}", { v: Number(autoTax).toLocaleString("es-CO") })}
                 </button>
               )}
             </label>
             <input type="number" min="0" step="1" value={taxAmt} onChange={(e) => setTaxAmt(e.target.value)}
-              placeholder="0 si no aplica" className="field-input" />
+              placeholder={tr("0 si no aplica")} className="field-input" />
             {taxAmt && amount && (
               <p className="text-[10px] text-foreground/50 mt-1">
-                Neto antes de IVA: <strong>{fmt(Number(amount) - Number(taxAmt))}</strong>
+                {tr("Neto antes de IVA:")}{" "}<strong>{fmt(Number(amount) - Number(taxAmt))}</strong>
               </p>
             )}
           </div>
 
           {category === "Mercancía para Reventa (Inventario PUC 1435)" && (
             <p className="text-[11px] text-foreground/60 bg-foreground/5 rounded-xl px-3 py-2">
-              Equipos que compras para vender: son inventario, no activo fijo. No se deprecian; su costo va al costo de ventas.
+              {tr("Equipos que compras para vender: son inventario, no activo fijo. No se deprecian; su costo va al costo de ventas.")}
             </p>
           )}
 
@@ -398,49 +402,49 @@ function ExpenseModal({
           {isCapex && (
             <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl space-y-3">
               <p className="text-[11px] text-purple-700">
-                Activo fijo. ¿Lo compraste para revender? Usa la categoría <strong>Mercancía para Reventa</strong>.
+                {tr("Activo fijo. ¿Lo compraste para revender? Usa la categoría")}{" "}<strong>{tr("Mercancía para Reventa")}</strong>.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="field-label text-purple-700">Qué es</label>
+                  <label className="field-label text-purple-700">{tr("Qué es")}</label>
                   <input type="text" list="asset-kinds" value={assetKind} onChange={(e) => setAssetKind(e.target.value)}
-                    placeholder="Ej. Máquina de espresso" className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
+                    placeholder={tr("Ej. Máquina de espresso")} className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
                   <datalist id="asset-kinds">
                     {(ASSET_KIND_SUGGESTIONS[category] ?? Object.values(ASSET_KIND_SUGGESTIONS).flat()).map((k) => <option key={k} value={k} />)}
                   </datalist>
                 </div>
                 <div>
-                  <label className="field-label text-purple-700">Destino *</label>
+                  <label className="field-label text-purple-700">{tr("Destino *")}</label>
                   <select value={assetUse} onChange={(e) => setAssetUse(e.target.value as AssetUse | "")} required
                     className="field-input border-purple-200 focus:ring-purple-300 mt-1">
-                    <option value="">Seleccionar…</option>
-                    {(Object.keys(ASSET_USES) as AssetUse[]).map((u) => <option key={u} value={u}>{ASSET_USES[u].label}</option>)}
+                    <option value="">{tr("Seleccionar…")}</option>
+                    {(Object.keys(ASSET_USES) as AssetUse[]).map((u) => <option key={u} value={u}>{tr(ASSET_USES[u].label)}</option>)}
                   </select>
-                  {assetUse && <p className="text-[10px] text-purple-700 mt-1">{ASSET_USES[assetUse].hint}</p>}
+                  {assetUse && <p className="text-[10px] text-purple-700 mt-1">{tr(ASSET_USES[assetUse].hint)}</p>}
                 </div>
                 <div>
-                  <label className="field-label text-purple-700">Fecha de puesta en uso</label>
+                  <label className="field-label text-purple-700">{tr("Fecha de puesta en uso")}</label>
                   <input type="date" value={inServiceDate || date} onChange={(e) => setInServiceDate(e.target.value)}
                     className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
-                  <p className="text-[10px] text-purple-700 mt-1">La depreciación empieza en este mes.</p>
+                  <p className="text-[10px] text-purple-700 mt-1">{tr("La depreciación empieza en este mes.")}</p>
                 </div>
                 <div>
-                  <label className="field-label text-purple-700">Valor residual ($)</label>
+                  <label className="field-label text-purple-700">{tr("Valor residual ($)")}</label>
                   <input type="number" min="0" step="1" value={residual} onChange={(e) => setResidual(e.target.value)}
                     placeholder="0" className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
-                  <p className="text-[10px] text-purple-700 mt-1">Lo que esperas recuperar al final.</p>
+                  <p className="text-[10px] text-purple-700 mt-1">{tr("Lo que esperas recuperar al final.")}</p>
                 </div>
               </div>
               <div>
-                <label className="field-label text-purple-700">Vida útil del activo (meses)</label>
+                <label className="field-label text-purple-700">{tr("Vida útil del activo (meses)")}</label>
                 <input type="number" min="1" step="1" value={deprMos} onChange={(e) => setDeprMos(e.target.value)} required
-                  placeholder="Ej. 36 meses = 3 años" className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
+                  placeholder={tr("Ej. 36 meses = 3 años")} className="field-input border-purple-200 focus:ring-purple-300 mt-1" />
                 {deprMos && amount && (
                   <p className="text-[10px] text-purple-700 mt-1.5">
-                    Depreciación mensual: <strong>
+                    {tr("Depreciación mensual:")}{" "}<strong>
                       {fmt(Math.max(0, Number(amount) - (taxAmt ? Number(taxAmt) : 0) - (residual ? Number(residual) : 0)) / Number(deprMos))}
-                    </strong> / mes durante {deprMos} meses
-                    {DEFAULT_DEPRECIATION_MONTHS[category] ? ` · sugerido ${DEFAULT_DEPRECIATION_MONTHS[category]} (tope fiscal); ajústalo al uso real` : ""}
+                    </strong>{" "}{tr("/ mes durante")}{" "}{deprMos}{" "}{tr("meses")}
+                    {DEFAULT_DEPRECIATION_MONTHS[category] ? tr(" · sugerido {v} (tope fiscal); ajústalo al uso real", { v: DEFAULT_DEPRECIATION_MONTHS[category] }) : ""}
                   </p>
                 )}
               </div>
@@ -453,10 +457,10 @@ function ExpenseModal({
 
           {/* Soporte */}
           <div>
-            <label className="field-label">Soporte (Recibo/Factura)</label>
+            <label className="field-label">{tr("Soporte (Recibo/Factura)")}</label>
             {imageUrl ? (
               <div className="relative rounded-xl border border-foreground/10 overflow-hidden group h-28">
-                <img src={imageUrl} alt="Soporte" className="w-full h-full object-cover" />
+                <img src={imageUrl} alt={tr("Soporte")} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <button type="button" onClick={() => setImageUrl(null)}
                     className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600">
@@ -471,7 +475,7 @@ function ExpenseModal({
 
           {successMessage && (
             <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-xs font-bold rounded-xl text-center">
-              {successMessage}
+              {tr.msg(successMessage)}
             </div>
           )}
 
@@ -482,7 +486,7 @@ function ExpenseModal({
                 onClick={onClose}
                 className="flex-1 py-3 border border-foreground/15 text-foreground/70 font-bold uppercase tracking-wider text-xs rounded-xl hover:bg-foreground/5 cursor-pointer transition-colors"
               >
-                Cancelar
+                {tr("Cancelar")}
               </button>
               <button
                 type="submit"
@@ -491,7 +495,7 @@ function ExpenseModal({
                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Guardar Cambios
+                {tr("Guardar Cambios")}
               </button>
             </div>
           ) : (
@@ -503,7 +507,7 @@ function ExpenseModal({
                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-[#C59F59] hover:bg-[#C59F59]/5 text-[#C59F59] font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
               >
                 {isPending && !shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                Guardar y agregar otro
+                {tr("Guardar y agregar otro")}
               </button>
               <button
                 type="submit"
@@ -512,7 +516,7 @@ function ExpenseModal({
                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
               >
                 {isPending && shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Guardar y cerrar
+                {tr("Guardar y cerrar")}
               </button>
             </div>
           )}
@@ -537,6 +541,7 @@ function IncomeModal({
   initialDate?: string;
   incomeToEdit?: any;
 }) {
+  const tr = useTr();
   const today = new Date().toISOString().split("T")[0];
   const [date,     setDate]     = useState(incomeToEdit?.date || incomeToEdit?.cashflow?.date || initialDate || today);
   const [concept,  setConcept]  = useState(incomeToEdit?.concept || "");
@@ -587,7 +592,7 @@ function IncomeModal({
         : await createIncomeDirect(date, payload);
 
       if (res.error) {
-        alert(res.error);
+        alert(tr.msg(res.error));
       } else {
         onSuccess();
         if (shouldClose) {
@@ -600,7 +605,7 @@ function IncomeModal({
           setShipping("");
           setTax("");
           setImageUrl(null);
-          setSuccessMessage("¡Ingreso registrado con éxito!");
+          setSuccessMessage(tr("¡Ingreso registrado con éxito!"));
           setTimeout(() => setSuccessMessage(""), 4000);
         }
       }
@@ -615,9 +620,9 @@ function IncomeModal({
       >
         <div className="px-8 pt-7 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4 shrink-0">
           <div>
-            <h3 className="text-2xl font-serif">{incomeToEdit ? "Editar Ingreso Manual" : "Nuevo Ingreso Manual"}</h3>
+            <h3 className="text-2xl font-serif">{incomeToEdit ? tr("Editar Ingreso Manual") : tr("Nuevo Ingreso Manual")}</h3>
             <p className="text-sm text-foreground/50 mt-0.5">
-              {incomeToEdit ? "Modifica los datos de la entrada de dinero registrada." : "Registra una entrada de dinero con desglose P&amp;L."}
+              {incomeToEdit ? tr("Modifica los datos de la entrada de dinero registrada.") : tr("Registra una entrada de dinero con desglose P&amp;L.")}
             </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5 shrink-0">
@@ -629,11 +634,11 @@ function IncomeModal({
           {/* Fecha + Bruto */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="field-label">Fecha</label>
+              <label className="field-label">{tr("Fecha")}</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="field-input" />
             </div>
             <div>
-              <label className="field-label">Valor Bruto ($)</label>
+              <label className="field-label">{tr("Valor Bruto ($)")}</label>
               <input type="number" min="0" step="1" value={gross} onChange={(e) => setGross(e.target.value)} required
                 placeholder="0" className="field-input" />
             </div>
@@ -641,42 +646,42 @@ function IncomeModal({
 
           {/* Concepto */}
           <div>
-            <label className="field-label">Concepto</label>
+            <label className="field-label">{tr("Concepto")}</label>
             <input type="text" value={concept} onChange={(e) => setConcept(e.target.value)} required
-              placeholder="Ej. Aporte capital" className="field-input" />
+              placeholder={tr("Ej. Aporte capital")} className="field-input" />
           </div>
 
           {/* Categoría */}
           <div>
-            <label className="field-label">Categoría</label>
+            <label className="field-label">{tr("Categoría")}</label>
             <input type="text" list="inc-categories" value={category}
               onChange={(e) => setCategory(e.target.value)} required
-              placeholder="Seleccionar..." className="field-input" />
+              placeholder={tr("Seleccionar...")} className="field-input" />
             <datalist id="inc-categories">
-              {INCOME_CATEGORIES.map((c) => <option key={c} value={c} />)}
+              {INCOME_CATEGORIES.map((c) => <option key={c} value={c} label={tr(c)} />)}
             </datalist>
           </div>
 
           {/* Desglose financiero */}
           <div className="p-4 bg-[#f9f7f0] rounded-xl space-y-3 border border-foreground/5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-foreground/50">Desglose P&amp;L</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-foreground/50">{tr("Desglose P&L")}</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="field-label">
-                  Comisión pasarela ($)
+                  {tr("Comisión pasarela ($)")}
                   {isWebSale && <span className="ml-1 text-[9px] text-[#C59F59]">≈3.56%</span>}
                 </label>
                 <input type="number" min="0" step="1" value={fee}
                   onChange={(e) => setFee(e.target.value)} placeholder="0" className="field-input text-xs" />
               </div>
               <div>
-                <label className="field-label">Flete / Envío ($)</label>
+                <label className="field-label">{tr("Flete / Envío ($)")}</label>
                 <input type="number" min="0" step="1" value={shipping}
                   onChange={(e) => setShipping(e.target.value)} placeholder="0" className="field-input text-xs" />
               </div>
               <div>
                 <label className="field-label">
-                  IVA ($)
+                  {tr("IVA ($)")}
                   {isWebSale && <span className="ml-1 text-[9px] text-[#C59F59]">19%</span>}
                 </label>
                 <input type="number" min="0" step="1" value={tax}
@@ -685,7 +690,7 @@ function IncomeModal({
             </div>
             {/* Net revenue preview */}
             <div className="flex items-center justify-between pt-2 border-t border-foreground/10">
-              <span className="text-xs text-foreground/50">Ingreso neto estimado:</span>
+              <span className="text-xs text-foreground/50">{tr("Ingreso neto estimado:")}</span>
               <span className={`text-sm font-black font-mono ${netRevenue >= 0 ? "text-green-600" : "text-red-500"}`}>
                 {fmt(netRevenue)}
               </span>
@@ -693,17 +698,15 @@ function IncomeModal({
           </div>
 
           <p className="text-[11px] text-foreground/50 bg-[#f9f7f0] rounded-xl px-4 py-3 border border-foreground/5">
-            Los ingresos del flujo de caja no afectan el inventario. Para registrar
-            una venta de producto, usa <strong>Inventario → Salidas</strong> y marca
-            la salida como venta pagada: se descuenta el stock y se crea el ingreso aquí.
+            {tr("Los ingresos del flujo de caja no afectan el inventario. Para registrar una venta de producto, usa")}{" "}<strong>{tr("Inventario → Salidas")}</strong>{" "}{tr("y marca la salida como venta pagada: se descuenta el stock y se crea el ingreso aquí.")}
           </p>
 
           {/* Soporte */}
           <div>
-            <label className="field-label">Soporte (Opcional)</label>
+            <label className="field-label">{tr("Soporte (Opcional)")}</label>
             {imageUrl ? (
               <div className="relative rounded-xl border border-foreground/10 overflow-hidden group h-28">
-                <img src={imageUrl} alt="Soporte" className="w-full h-full object-cover" />
+                <img src={imageUrl} alt={tr("Soporte")} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <button type="button" onClick={() => setImageUrl(null)}
                     className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600">
@@ -718,7 +721,7 @@ function IncomeModal({
 
           {successMessage && (
             <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-xs font-bold rounded-xl text-center">
-              {successMessage}
+              {tr.msg(successMessage)}
             </div>
           )}
 
@@ -729,7 +732,7 @@ function IncomeModal({
                 onClick={onClose}
                 className="flex-1 py-3 border border-foreground/15 text-foreground/70 font-bold uppercase tracking-wider text-xs rounded-xl hover:bg-foreground/5 cursor-pointer transition-colors"
               >
-                Cancelar
+                {tr("Cancelar")}
               </button>
               <button
                 type="submit"
@@ -738,7 +741,7 @@ function IncomeModal({
                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
               >
                 {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Guardar Cambios
+                {tr("Guardar Cambios")}
               </button>
             </div>
           ) : (
@@ -750,7 +753,7 @@ function IncomeModal({
                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-[#C59F59] hover:bg-[#C59F59]/5 text-[#C59F59] font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
               >
                 {isPending && !shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                Guardar y agregar otro
+                {tr("Guardar y agregar otro")}
               </button>
               <button
                 type="submit"
@@ -759,7 +762,7 @@ function IncomeModal({
                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-wider text-xs rounded-xl transition-all disabled:opacity-60 cursor-pointer"
               >
                 {isPending && shouldClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Guardar y cerrar
+                {tr("Guardar y cerrar")}
               </button>
             </div>
           )}
@@ -774,6 +777,7 @@ function IncomeModal({
 // ─────────────────────────────────────────────────────────────
 
 function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => string }) {
+  const tr = useTr();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year,  setYear]  = useState(now.getFullYear());
@@ -833,7 +837,7 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
         <button onClick={loadReport} disabled={loading}
           className="flex items-center gap-2 px-4 py-2.5 bg-[#C59F59] text-white rounded-xl text-sm font-bold hover:bg-[#b08d4f] transition-colors disabled:opacity-60">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
-          Calcular
+          {tr("Calcular")}
         </button>
         {report && (
           <span className="text-xs text-foreground/50 font-mono">
@@ -853,19 +857,19 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
           {/* KPI Cards row 1 — Ingresos */}
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-foreground/40 mb-3">
-              Ingresos del período
+              {tr("Ingresos del período")}
             </p>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Ingreso Bruto",    value: report.gross_revenue,    color: "text-green-600",  icon: TrendingUp    },
-                { label: "Comisiones Pasa.", value: report.gateway_fees,     color: "text-amber-600",  icon: DollarSign    },
-                { label: "IVA s/ Ingresos",  value: report.sales_tax,        color: "text-amber-600",  icon: Layers        },
-                { label: "Ingreso Neto",     value: report.net_revenue,      color: "text-teal-600",   icon: Check         },
+                { label: tr("Ingreso Bruto"),    value: report.gross_revenue,    color: "text-green-600",  icon: TrendingUp    },
+                { label: tr("Comisiones Pasa."), value: report.gateway_fees,     color: "text-amber-600",  icon: DollarSign    },
+                { label: tr("IVA s/ Ingresos"),  value: report.sales_tax,        color: "text-amber-600",  icon: Layers        },
+                { label: tr("Ingreso Neto"),     value: report.net_revenue,      color: "text-teal-600",   icon: Check         },
               ].map(({ label, value, color, icon: Icon }) => (
                 <div key={label} className="bg-white rounded-2xl p-5 border border-foreground/5 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <Icon className={`w-4 h-4 ${color}`} />
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{label}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{tr(label)}</p>
                   </div>
                   <p className={`text-xl font-serif font-bold ${color}`}>{formatCurrency(value)}</p>
                 </div>
@@ -876,42 +880,42 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
           {/* KPI Cards row 2 — P&L */}
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-foreground/40 mb-3">
-              Estado de Resultados
+              {tr("Estado de Resultados")}
             </p>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {[
                 {
-                  label: "Margen Bruto",
+                  label: tr("Margen Bruto"),
                   value: report.gross_profit,
                   pct:   report.gross_margin_pct,
                   color: report.gross_profit >= 0 ? "text-green-600" : "text-red-500",
                   icon:  TrendingUp,
-                  desc:  `${fmtPct(report.gross_margin_pct)} del ingreso neto`,
+                  desc:  tr("{fmtPct} del ingreso neto", { fmtPct: fmtPct(report.gross_margin_pct) }),
                 },
                 {
-                  label: "EBITDA",
+                  label: tr("EBITDA"),
                   value: report.ebitda,
                   pct:   report.ebitda_margin_pct,
                   color: report.ebitda >= 0 ? "text-blue-600" : "text-red-500",
                   icon:  Zap,
-                  desc:  `${fmtPct(report.ebitda_margin_pct)} del ingreso neto`,
+                  desc:  tr("{fmtPct} del ingreso neto", { fmtPct: fmtPct(report.ebitda_margin_pct) }),
                 },
                 {
-                  label: "Utilidad Operativa",
+                  label: tr("Utilidad Operativa"),
                   value: report.operating_income,
                   pct:   null,
                   color: report.operating_income >= 0 ? "text-[#C59F59]" : "text-red-500",
                   icon:  Activity,
-                  desc:  `Depreciación: ${formatCurrency(report.monthly_depreciation)}`,
+                  desc:  tr("Depreciación: {formatCurrency}", { formatCurrency: formatCurrency(report.monthly_depreciation) }),
                 },
               ].map(({ label, value, pct, color, icon: Icon, desc }) => (
                 <div key={label} className="bg-white rounded-2xl p-5 border border-foreground/5 shadow-sm">
                   <div className="flex items-center gap-2 mb-1">
                     <Icon className={`w-4 h-4 ${color}`} />
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{label}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{tr(label)}</p>
                   </div>
                   <p className={`text-2xl font-serif font-bold ${color}`}>{formatCurrency(value)}</p>
-                  <p className="text-[10px] text-foreground/50 mt-1">{desc}</p>
+                  <p className="text-[10px] text-foreground/50 mt-1">{tr(desc)}</p>
                 </div>
               ))}
             </div>
@@ -923,22 +927,22 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
             <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <TrendingDown className="w-5 h-5 text-red-500" />
-                <h3 className="text-lg font-serif">Burn Rate Real</h3>
+                <h3 className="text-lg font-serif">{tr("Burn Rate Real")}</h3>
               </div>
               <p className="text-3xl font-serif font-bold text-red-500">{formatCurrency(report.burn_rate)}</p>
-              <p className="text-xs text-foreground/50 mt-1">Salidas reales de caja en el período (con IVA)</p>
+              <p className="text-xs text-foreground/50 mt-1">{tr("Salidas reales de caja en el período (con IVA)")}</p>
 
               <div className="mt-5 space-y-2">
                 {[
-                  { label: "COGS explícito",  val: report.explicit_cogs,         color: "bg-orange-400" },
-                  { label: "COGS inventario", val: report.inventory_cogs,        color: "bg-orange-200" },
-                  { label: "OPEX",            val: report.opex,                  color: "bg-blue-400"   },
-                  { label: "CAPEX pagado",    val: report.burn_rate - report.opex - report.explicit_cogs - report.inventory_cogs,
+                  { label: tr("COGS explícito"),  val: report.explicit_cogs,         color: "bg-orange-400" },
+                  { label: tr("COGS inventario"), val: report.inventory_cogs,        color: "bg-orange-200" },
+                  { label: tr("OPEX"),            val: report.opex,                  color: "bg-blue-400"   },
+                  { label: tr("CAPEX pagado"),    val: report.burn_rate - report.opex - report.explicit_cogs - report.inventory_cogs,
                     color: "bg-purple-400" },
                 ].filter((r) => r.val > 0).map(({ label, val, color }) => (
                   <div key={label} className="flex items-center gap-2 text-xs">
                     <div className={`w-2.5 h-2.5 rounded-full ${color} shrink-0`} />
-                    <span className="text-foreground/60 flex-1">{label}</span>
+                    <span className="text-foreground/60 flex-1">{tr(label)}</span>
                     <span className="font-mono font-bold text-foreground/80">{formatCurrency(val)}</span>
                   </div>
                 ))}
@@ -949,11 +953,11 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
             <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <Package className="w-5 h-5 text-[#C59F59]" />
-                <h3 className="text-lg font-serif">Distribución de Costos</h3>
+                <h3 className="text-lg font-serif">{tr("Distribución de Costos")}</h3>
               </div>
               {costPieData.length === 0 ? (
                 <div className="flex items-center justify-center h-48 text-foreground/30 text-sm">
-                  Sin datos de costos para este período
+                  {tr("Sin datos de costos para este período")}
                 </div>
               ) : (
                 <div className="h-64">
@@ -977,8 +981,8 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
           {/* Depreciación por destino del activo */}
           {report.monthly_depreciation > 0 && (
             <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-              <h3 className="text-lg font-serif mb-1">Depreciación del Período</h3>
-              <p className="text-xs text-foreground/50 mb-4">Activos fijos según su destino: producción va al costo; lo demás es gasto.</p>
+              <h3 className="text-lg font-serif mb-1">{tr("Depreciación del Período")}</h3>
+              <p className="text-xs text-foreground/50 mb-4">{tr("Activos fijos según su destino: producción va al costo; lo demás es gasto.")}</p>
               <div className="space-y-2">
                 {([
                   ["produccion", "Costo de producción"],
@@ -988,12 +992,12 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
                   ["sin_destino", "Sin destino indicado"],
                 ] as const).filter(([k]) => (report.depreciation_by_use?.[k] ?? 0) > 0).map(([k, label]) => (
                   <div key={k} className="flex items-center justify-between text-sm">
-                    <span className="text-foreground/60">{label}</span>
+                    <span className="text-foreground/60">{tr(label)}</span>
                     <span className="font-mono font-bold text-foreground/80">{formatCurrency(report.depreciation_by_use[k])}</span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between text-sm border-t border-foreground/5 pt-2">
-                  <span className="font-bold">Total</span>
+                  <span className="font-bold">{tr("Total")}</span>
                   <span className="font-mono font-bold">{formatCurrency(report.monthly_depreciation)}</span>
                 </div>
               </div>
@@ -1002,7 +1006,7 @@ function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => strin
 
           {/* Waterfall P&L — BarChart */}
           <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-            <h3 className="text-lg font-serif mb-6">Cascada P&amp;L del Período</h3>
+            <h3 className="text-lg font-serif mb-6">{tr("Cascada P&L del Período")}</h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={waterfallData} margin={{ top: 5, right: 10, left: 20, bottom: 5 }}>
@@ -1034,6 +1038,7 @@ const STATUS_STYLE: Record<string, { label: string; cls: string }> = {
 };
 
 export function FixedAssetsView({ formatCurrency }: { formatCurrency: (v: number) => string }) {
+  const tr = useTr();
   const [assets, setAssets] = useState<FixedAssetInput[] | null>(null);
   const [asOf, setAsOf] = useState(todayBogota());
 
@@ -1050,16 +1055,16 @@ export function FixedAssetsView({ formatCurrency }: { formatCurrency: (v: number
     <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
       <div className="p-5 border-b border-foreground/5 flex flex-wrap gap-3 justify-between items-center bg-[#f9f7f0]">
         <div>
-          <h2 className="text-xl font-serif">Activos Fijos</h2>
-          <p className="text-xs text-foreground/50">Gastos CAPEX con su depreciación en línea recta a la fecha de corte.</p>
+          <h2 className="text-xl font-serif">{tr("Activos Fijos")}</h2>
+          <p className="text-xs text-foreground/50">{tr("Gastos CAPEX con su depreciación en línea recta a la fecha de corte.")}</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div>
-            <label htmlFor="fa-as-of" className="field-label">Fecha de corte</label>
+            <label htmlFor="fa-as-of" className="field-label">{tr("Fecha de corte")}</label>
             <input id="fa-as-of" type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="field-input py-2 px-3 text-xs" />
           </div>
           <ExportButton disabled={register.length === 0} onClick={() =>
-            exportExcel(`Activos_Fijos_${asOf}.xlsx`, fixedAssetSheets(register, asOf, nowLabel()))
+            exportExcel(`Activos_Fijos_${asOf}.xlsx`, fixedAssetSheets(register, asOf, nowLabel(), tr.locale))
           } />
         </div>
       </div>
@@ -1068,7 +1073,7 @@ export function FixedAssetsView({ formatCurrency }: { formatCurrency: (v: number
         <div className="p-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-foreground/30" /></div>
       ) : register.length === 0 ? (
         <div className="p-12 text-center text-sm text-foreground/50">
-          No hay activos fijos. Regístralos en Gastos con una categoría de activo (por ejemplo Maquinaria y Equipo).
+          {tr("No hay activos fijos. Regístralos en Gastos con una categoría de activo (por ejemplo Maquinaria y Equipo).")}
         </div>
       ) : (
         <>
@@ -1080,7 +1085,7 @@ export function FixedAssetsView({ formatCurrency }: { formatCurrency: (v: number
               ["Depreciación del mes", total((r) => r.current_month_quota)],
             ].map(([label, value]) => (
               <div key={label as string}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{label}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{tr(label as string)}</p>
                 <p className="text-lg font-serif font-bold">{formatCurrency(value as number)}</p>
               </div>
             ))}
@@ -1089,25 +1094,25 @@ export function FixedAssetsView({ formatCurrency }: { formatCurrency: (v: number
             <table className="w-full text-left text-sm">
               <thead className="bg-[#fdfbf7] text-[10px] font-bold uppercase tracking-widest text-foreground/50">
                 <tr>
-                  <th className="px-4 py-3">Activo</th>
-                  <th className="px-4 py-3">Destino</th>
-                  <th className="px-4 py-3">Puesta en uso</th>
-                  <th className="px-4 py-3 text-right">Costo</th>
-                  <th className="px-4 py-3 text-right">Cuota / mes</th>
-                  <th className="px-4 py-3 text-right">Meses</th>
-                  <th className="px-4 py-3 text-right">Acumulada</th>
-                  <th className="px-4 py-3 text-right">Valor en libros</th>
-                  <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3">{tr("Activo")}</th>
+                  <th className="px-4 py-3">{tr("Destino")}</th>
+                  <th className="px-4 py-3">{tr("Puesta en uso")}</th>
+                  <th className="px-4 py-3 text-right">{tr("Costo")}</th>
+                  <th className="px-4 py-3 text-right">{tr("Cuota / mes")}</th>
+                  <th className="px-4 py-3 text-right">{tr("Meses")}</th>
+                  <th className="px-4 py-3 text-right">{tr("Acumulada")}</th>
+                  <th className="px-4 py-3 text-right">{tr("Valor en libros")}</th>
+                  <th className="px-4 py-3">{tr("Estado")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-foreground/5">
                 {register.map((r) => (
                   <tr key={r.id}>
                     <td className="px-4 py-3">
-                      <p className="font-bold">{r.asset_kind || r.concept}</p>
-                      <p className="text-[11px] text-foreground/50">{r.category}</p>
+                      <p className="font-bold">{tr.msg(r.asset_kind || r.concept)}</p>
+                      <p className="text-[11px] text-foreground/50">{tr.msg(r.category)}</p>
                     </td>
-                    <td className="px-4 py-3 text-xs">{r.asset_use ? ASSET_USES[r.asset_use].label : <span className="text-amber-600">Sin destino</span>}</td>
+                    <td className="px-4 py-3 text-xs">{r.asset_use ? tr(ASSET_USES[r.asset_use].label) : <span className="text-amber-600">{tr("Sin destino")}</span>}</td>
                     <td className="px-4 py-3 text-xs whitespace-nowrap">{r.start_date}</td>
                     <td className="px-4 py-3 text-right font-mono">{formatCurrency(r.cost)}</td>
                     <td className="px-4 py-3 text-right font-mono">{formatCurrency(r.monthly_quota)}</td>
@@ -1115,7 +1120,7 @@ export function FixedAssetsView({ formatCurrency }: { formatCurrency: (v: number
                     <td className="px-4 py-3 text-right font-mono">{formatCurrency(r.accumulated)}</td>
                     <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrency(r.book_value)}</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${STATUS_STYLE[r.status].cls}`}>{STATUS_STYLE[r.status].label}</span>
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${STATUS_STYLE[r.status].cls}`}>{tr(STATUS_STYLE[r.status].label)}</span>
                     </td>
                   </tr>
                 ))}
@@ -1137,6 +1142,7 @@ function CashflowReportView({
 }: {
   expenses: any[]; incomes: any[]; formatCurrency: (v: number) => string;
 }) {
+  const tr = useTr();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -1163,7 +1169,7 @@ function CashflowReportView({
       acc[e.category] = (acc[e.category] || 0) + Number(e.amount);
       return acc;
     }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value }));
+  ).map(([name, value]) => ({ name: tr.msg(name), value }));
 
   const incByType = Object.entries(
     filteredIncomes.reduce((acc, i) => {
@@ -1178,7 +1184,7 @@ function CashflowReportView({
       {/* Date Filters */}
       <div className="bg-white rounded-3xl p-5 border border-foreground/5 shadow-sm flex flex-wrap md:flex-nowrap items-end gap-4">
         <div className="flex-1 min-w-[150px]">
-          <label className="field-label">Fecha Inicio (Desde)</label>
+          <label className="field-label">{tr("Fecha Inicio (Desde)")}</label>
           <input
             type="date"
             value={startDate}
@@ -1187,7 +1193,7 @@ function CashflowReportView({
           />
         </div>
         <div className="flex-1 min-w-[150px]">
-          <label className="field-label">Fecha Fin (Hasta)</label>
+          <label className="field-label">{tr("Fecha Fin (Hasta)")}</label>
           <input
             type="date"
             value={endDate}
@@ -1204,7 +1210,7 @@ function CashflowReportView({
             className="px-4 py-2 border border-foreground/10 rounded-xl hover:bg-foreground/5 text-foreground/70 font-bold text-xs transition-all h-[38px] flex items-center gap-1 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
-            Limpiar Filtro
+            {tr("Limpiar Filtro")}
           </button>
         )}
       </div>
@@ -1212,15 +1218,15 @@ function CashflowReportView({
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">Total Ingresos</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">{tr("Total Ingresos")}</p>
           <p className="text-3xl font-serif text-green-600">{formatCurrency(totalInc)}</p>
         </div>
         <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">Total Gastos</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">{tr("Total Gastos")}</p>
           <p className="text-3xl font-serif text-red-500">{formatCurrency(totalExp)}</p>
         </div>
         <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">Balance Neto</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-2">{tr("Balance Neto")}</p>
           <p className={`text-3xl font-serif ${balance >= 0 ? "text-[#C59F59]" : "text-red-500"}`}>
             {formatCurrency(balance)}
           </p>
@@ -1230,7 +1236,7 @@ function CashflowReportView({
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-          <h3 className="text-lg font-serif mb-5">Gastos por Categoría</h3>
+          <h3 className="text-lg font-serif mb-5">{tr("Gastos por Categoría")}</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -1248,7 +1254,7 @@ function CashflowReportView({
         </div>
 
         <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-          <h3 className="text-lg font-serif mb-5">Ingresos por Tipo</h3>
+          <h3 className="text-lg font-serif mb-5">{tr("Ingresos por Tipo")}</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -1284,10 +1290,11 @@ function DayActionsModal({
   onMarkNoMovements: () => Promise<void>;
   formatMissingDate: (d: string) => string;
 }) {
+  const tr = useTr();
   const [isPending, startTransition] = useTransition();
 
   const handleMarkNoMovements = () => {
-    if (confirm(`¿Marcar el día ${date} como día sin movimientos (ingresos ni egresos)?`)) {
+    if (confirm(tr("¿Marcar el día {date} como día sin movimientos (ingresos ni egresos)?", { date: date }))) {
       startTransition(async () => {
         await onMarkNoMovements();
       });
@@ -1303,7 +1310,7 @@ function DayActionsModal({
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-xl font-serif text-foreground">Acciones del Día</h3>
+            <h3 className="text-xl font-serif text-foreground">{tr("Acciones del Día")}</h3>
             <p className="text-xs text-foreground/50 mt-1 capitalize">{formatMissingDate(date)} ({date})</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-foreground/5 text-foreground/45 transition-colors">
@@ -1321,8 +1328,8 @@ function DayActionsModal({
               <ArrowDownCircle className="w-5 h-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold text-foreground">Registrar Gasto</p>
-              <p className="text-xs text-foreground/55">Reportar egresos o compras realizadas este día.</p>
+              <p className="text-sm font-bold text-foreground">{tr("Registrar Gasto")}</p>
+              <p className="text-xs text-foreground/55">{tr("Reportar egresos o compras realizadas este día.")}</p>
             </div>
           </button>
 
@@ -1334,8 +1341,8 @@ function DayActionsModal({
               <ArrowUpCircle className="w-5 h-5" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold text-foreground">Registrar Ingreso</p>
-              <p className="text-xs text-foreground/55">Reportar ventas manuales o entradas de dinero.</p>
+              <p className="text-sm font-bold text-foreground">{tr("Registrar Ingreso")}</p>
+              <p className="text-xs text-foreground/55">{tr("Reportar ventas manuales o entradas de dinero.")}</p>
             </div>
           </button>
 
@@ -1348,8 +1355,8 @@ function DayActionsModal({
               {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Activity className="w-5 h-5" />}
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold text-foreground">Día Sin Movimientos</p>
-              <p className="text-xs text-foreground/55">Marcar que no hubo ingresos ni egresos en esta fecha.</p>
+              <p className="text-sm font-bold text-foreground">{tr("Día Sin Movimientos")}</p>
+              <p className="text-xs text-foreground/55">{tr("Marcar que no hubo ingresos ni egresos en esta fecha.")}</p>
             </div>
           </button>
         </div>
@@ -1405,11 +1412,12 @@ function DuplicateExpensesModal({
   onDeleteExpense: (id: string) => Promise<void>;
   formatCurrency: (v: number) => string;
 }) {
+  const tr = useTr();
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const duplicateGroups = getDuplicateExpenses(expenses);
 
   const handleDelete = async (id: string) => {
-    if (confirm("¿Estás seguro de que deseas eliminar este gasto duplicado?")) {
+    if (confirm(tr("¿Estás seguro de que deseas eliminar este gasto duplicado?"))) {
       setIsDeletingId(id);
       try {
         await onDeleteExpense(id);
@@ -1428,9 +1436,9 @@ function DuplicateExpensesModal({
         {/* Header */}
         <div className="px-8 pt-7 pb-4 border-b border-foreground/5 flex items-start justify-between gap-4 shrink-0">
           <div>
-            <h3 className="text-2xl font-serif text-foreground">Revisar Gastos Duplicados</h3>
+            <h3 className="text-2xl font-serif text-foreground">{tr("Revisar Gastos Duplicados")}</h3>
             <p className="text-sm text-foreground/50 mt-0.5">
-              Se detectaron transacciones idénticas en fecha, concepto y valor. Puedes eliminar las copias innecesarias.
+              {tr("Se detectaron transacciones idénticas en fecha, concepto y valor. Puedes eliminar las copias innecesarias.")}
             </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-foreground/5 shrink-0 transition-colors">
@@ -1443,8 +1451,8 @@ function DuplicateExpensesModal({
           {duplicateGroups.length === 0 ? (
             <div className="text-center py-12 text-foreground/40">
               <Check className="w-12 h-12 mx-auto mb-3 text-green-500 bg-green-50 p-2.5 rounded-full" />
-              <p className="font-bold text-foreground/70">¡No quedan gastos duplicados!</p>
-              <p className="text-xs text-foreground/45 mt-1">Todos los duplicados han sido resueltos.</p>
+              <p className="font-bold text-foreground/70">{tr("¡No quedan gastos duplicados!")}</p>
+              <p className="text-xs text-foreground/45 mt-1">{tr("Todos los duplicados han sido resueltos.")}</p>
             </div>
           ) : (
             duplicateGroups.map((group) => (
@@ -1471,13 +1479,13 @@ function DuplicateExpensesModal({
                     <div key={item.id} className="p-4 flex items-center justify-between gap-4 hover:bg-foreground/[0.01] transition-colors">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] uppercase font-bold text-foreground/40">Categoría:</span>
-                          <span className="text-xs font-semibold text-foreground/70">{item.category}</span>
+                          <span className="text-[10px] uppercase font-bold text-foreground/40">{tr("Categoría:")}</span>
+                          <span className="text-xs font-semibold text-foreground/70">{tr.msg(item.category)}</span>
                         </div>
                         <div className="flex items-center gap-2 text-[10px] text-foreground/50">
-                          <span>Registrado: {new Date(item.created_at).toLocaleString("es-CO")}</span>
+                          <span>{tr("Registrado: {v}", { v: new Date(item.created_at).toLocaleString("es-CO") })}</span>
                           {item.profiles?.first_name && (
-                            <span>• Por: {item.profiles.first_name} {item.profiles.last_name || ""}</span>
+                            <span>{tr("• Por: {first_name} {v}", { first_name: item.profiles.first_name, v: item.profiles.last_name || "" })}</span>
                           )}
                         </div>
                       </div>
@@ -1486,7 +1494,7 @@ function DuplicateExpensesModal({
                         onClick={() => handleDelete(item.id)}
                         disabled={isDeletingId === item.id}
                         className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                        title="Eliminar este duplicado"
+                        title={tr("Eliminar este duplicado")}
                       >
                         {isDeletingId === item.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -1508,7 +1516,7 @@ function DuplicateExpensesModal({
             onClick={onClose}
             className="px-5 py-2.5 bg-foreground text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-foreground/80 transition-colors cursor-pointer shadow-sm"
           >
-            Cerrar
+            {tr("Cerrar")}
           </button>
         </div>
       </div>
@@ -1529,13 +1537,14 @@ function PaginationControls({
   itemsPerPage: number;
   onPageChange: (page: number) => void;
 }) {
+  const tr = useTr();
   const from = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
   const to = Math.min(currentPage * itemsPerPage, totalItems);
 
   return (
     <div className="px-5 py-4 border-t border-foreground/5 bg-[#fdfbf7] flex items-center justify-between gap-4 flex-wrap text-xs">
       <span className="text-foreground/50">
-        Mostrando <strong className="text-foreground">{from}</strong> a <strong className="text-foreground">{to}</strong> de <strong className="text-foreground">{totalItems}</strong> registros
+        {tr("Mostrando")}{" "}<strong className="text-foreground">{from}</strong> a <strong className="text-foreground">{to}</strong>{" "}{tr("de")}{" "}<strong className="text-foreground">{totalItems}</strong>{" "}{tr("registros")}
       </span>
       <div className="flex items-center gap-2">
         <button
@@ -1543,17 +1552,17 @@ function PaginationControls({
           disabled={currentPage === 1}
           className="px-3 py-1.5 border border-foreground/10 rounded-lg hover:bg-foreground/5 text-foreground/70 font-bold transition-all disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
         >
-          Anterior
+          {tr("Anterior")}
         </button>
         <span className="text-foreground/60 font-medium">
-          Página {currentPage} de {totalPages}
+          {tr("Página {currentPage} de {totalPages}", { currentPage: currentPage, totalPages: totalPages })}
         </span>
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="px-3 py-1.5 border border-foreground/10 rounded-lg hover:bg-foreground/5 text-foreground/70 font-bold transition-all disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
         >
-          Siguiente
+          {tr("Siguiente")}
         </button>
       </div>
     </div>
@@ -1565,6 +1574,7 @@ function PaginationControls({
 // ─────────────────────────────────────────────────────────────
 
 export default function CashflowClient() {
+  const tr = useTr();
   const [activeTab,      setActiveTab]      = useState<TabId>("gastos");
   const [reportMode,     setReportMode]     = useState<"cash" | "pl">("cash");
   const [era,            setEra]            = useState<'v1' | 'v2'>('v2');
@@ -1637,8 +1647,8 @@ export default function CashflowClient() {
       {/* Title & Legacy Toggle */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-serif text-foreground mb-1">Flujo de Caja</h1>
-          <p className="text-foreground/60">Gestiona y audita los ingresos, gastos y reportes financieros.</p>
+          <h1 className="text-3xl font-serif text-foreground mb-1">{tr("Flujo de Caja")}</h1>
+          <p className="text-foreground/60">{tr("Gestiona y audita los ingresos, gastos y reportes financieros.")}</p>
         </div>
         <button
           id="toggle-legacy-cashflow-era"
@@ -1650,7 +1660,7 @@ export default function CashflowClient() {
           }`}
         >
           <Archive className="w-3.5 h-3.5" />
-          {isLegacy ? 'Viendo: Archivo (pre-Sept 2026)' : 'Ver datos anteriores'}
+          {isLegacy ? tr("Viendo: Archivo (pre-Sept 2026)") : tr("Ver datos anteriores")}
         </button>
       </div>
 
@@ -1659,13 +1669,13 @@ export default function CashflowClient() {
         <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
           <Archive className="w-5 h-5 flex-shrink-0" />
           <div>
-            <span className="font-bold">Modo archivo</span> — Estás viendo datos financieros anteriores a septiembre 2026. Estos datos son de solo lectura.
+            <span className="font-bold">{tr("Modo archivo")}</span>{" "}{tr("— Estás viendo datos financieros anteriores a septiembre 2026. Estos datos son de solo lectura.")}
           </div>
           <button
             onClick={() => setEra('v2')}
             className="ml-auto px-3 py-1.5 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-xs font-bold uppercase tracking-widest transition-colors"
           >
-            Volver a datos actuales
+            {tr("Volver a datos actuales")}
           </button>
         </div>
       )}
@@ -1680,23 +1690,23 @@ export default function CashflowClient() {
               </div>
               <div>
                 <p className="font-black text-amber-900 text-base leading-tight">
-                  ⚠️ {missingDays.length} {missingDays.length === 1 ? "día sin registros" : "días sin registros"} de Flujo de Caja
+                  ⚠️ {missingDays.length} {missingDays.length === 1 ? tr("día sin registros") : tr("días sin registros")}{" "}{tr("de Flujo de Caja")}
                 </p>
                 <p className="text-xs text-amber-700 mt-0.5">
-                  Desde el 1 de Mayo 2026 hasta ayer — estos días no tienen gastos ni ingresos registrados.
+                  {tr("Desde el 1 de Mayo 2026 hasta ayer — estos días no tienen gastos ni ingresos registrados.")}
                 </p>
               </div>
             </div>
             <button onClick={() => setAlertExpanded((v) => !v)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors">
-              {alertExpanded ? "Ocultar" : "Ver días"}
+              {alertExpanded ? tr("Ocultar") : tr("Ver días")}
               {alertExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
           </div>
 
           {alertExpanded && (
             <div className="p-6">
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-700 mb-4">Días pendientes:</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-700 mb-4">{tr("Días pendientes:")}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {missingDays.map((day) => (
                   <button key={day}
@@ -1710,21 +1720,21 @@ export default function CashflowClient() {
                       <p className="text-[10px] text-foreground/50 capitalize truncate">{formatMissingDate(day)}</p>
                     </div>
                     <span className="ml-auto text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0 group-hover:bg-amber-200 transition-colors">
-                      Registrar
+                      {tr("Registrar")}
                     </span>
                   </button>
                 ))}
               </div>
               <div className="mt-4 pt-4 border-t border-amber-200 flex items-center justify-between flex-wrap gap-2">
-                <p className="text-xs text-amber-700">💡 Haz clic en cualquier día para abrir el formulario.</p>
+                <p className="text-xs text-amber-700">{tr("💡 Haz clic en cualquier día para abrir el formulario.")}</p>
                 <div className="flex gap-2">
                   <button onClick={() => { setSelectedDate(undefined); setActiveTab("gastos"); setShowExpModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
-                    <ArrowDownCircle className="w-3.5 h-3.5" /> Nuevo Gasto
+                    <ArrowDownCircle className="w-3.5 h-3.5" />{" "}{tr("Nuevo Gasto")}
                   </button>
                   <button onClick={() => { setSelectedDate(undefined); setActiveTab("ingresos"); setShowIncModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
-                    <ArrowUpCircle className="w-3.5 h-3.5" /> Nuevo Ingreso
+                    <ArrowUpCircle className="w-3.5 h-3.5" />{" "}{tr("Nuevo Ingreso")}
                   </button>
                 </div>
               </div>
@@ -1740,8 +1750,8 @@ export default function CashflowClient() {
             <Check className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="font-bold text-green-800 text-sm">¡Flujo de caja al día!</p>
-            <p className="text-xs text-green-600">Todos los días desde el 1 de Mayo 2026 tienen registros. Buen trabajo.</p>
+            <p className="font-bold text-green-800 text-sm">{tr("¡Flujo de caja al día!")}</p>
+            <p className="text-xs text-green-600">{tr("Todos los días desde el 1 de Mayo 2026 tienen registros. Buen trabajo.")}</p>
           </div>
         </div>
       )}
@@ -1757,7 +1767,7 @@ export default function CashflowClient() {
                 isActive ? "bg-white text-[#C59F59] shadow-sm border border-foreground/5" : "text-foreground/50 hover:text-foreground hover:bg-foreground/5"
               }`}>
               <Icon className="w-4 h-4" />
-              {label}
+              {tr(label)}
             </button>
           );
         })}
@@ -1810,16 +1820,16 @@ export default function CashflowClient() {
             return (
               <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
                 <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
-                  <h2 className="text-xl font-serif">Todos los Gastos</h2>
+                  <h2 className="text-xl font-serif">{tr("Todos los Gastos")}</h2>
                   <div className="flex flex-wrap gap-2 justify-end">
                     <ExportButton disabled={sortedExpenses.length === 0} onClick={() => {
                       const f = { from: expStart, to: expEnd, category: expCategory, search: expSearch };
-                      exportExcel(`Libro_Gastos_${fileSuffix(f)}.xlsx`, expenseLedger(sortedExpenses, f, nowLabel()));
+                      exportExcel(`Libro_Gastos_${fileSuffix(f)}.xlsx`, expenseLedger(sortedExpenses, f, nowLabel(), tr.locale));
                     }} />
                     {era === 'v2' && (
                       <button onClick={() => { setSelectedDate(undefined); setExpenseToEdit(null); setShowExpModal(true); }}
                         className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
-                        <Plus className="w-4 h-4" /> Nuevo Gasto
+                        <Plus className="w-4 h-4" />{" "}{tr("Nuevo Gasto")}
                       </button>
                     )}
                   </div>
@@ -1828,30 +1838,30 @@ export default function CashflowClient() {
                 {/* Filter controls */}
                 <div className="p-5 border-b border-foreground/5 bg-foreground/[0.01] grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
                   <div>
-                    <label className="field-label">Concepto</label>
+                    <label className="field-label">{tr("Concepto")}</label>
                     <input
                       type="text"
                       value={expSearch}
                       onChange={(e) => { setExpSearch(e.target.value); setExpPage(1); }}
-                      placeholder="Buscar concepto..."
+                      placeholder={tr("Buscar concepto...")}
                       className="field-input py-2 px-3 text-xs"
                     />
                   </div>
                   <div>
-                    <label className="field-label">Categoría</label>
+                    <label className="field-label">{tr("Categoría")}</label>
                     <select
                       value={expCategory}
                       onChange={(e) => { setExpCategory(e.target.value); setExpPage(1); }}
                       className="field-input py-2 px-3 text-xs font-bold"
                     >
-                      <option value="">Todas las categorías</option>
+                      <option value="">{tr("Todas las categorías")}</option>
                       {PREDEFINED_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                        <option key={c} value={c}>{tr(c)}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="field-label">Desde</label>
+                    <label className="field-label">{tr("Desde")}</label>
                     <input
                       type="date"
                       value={expStart}
@@ -1860,7 +1870,7 @@ export default function CashflowClient() {
                     />
                   </div>
                   <div>
-                    <label className="field-label">Hasta</label>
+                    <label className="field-label">{tr("Hasta")}</label>
                     <input
                       type="date"
                       value={expEnd}
@@ -1882,7 +1892,7 @@ export default function CashflowClient() {
                       }}
                       className="text-xs font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer"
                     >
-                      Limpiar Filtros
+                      {tr("Limpiar Filtros")}
                     </button>
                   </div>
                 )}
@@ -1894,9 +1904,9 @@ export default function CashflowClient() {
                         <AlertTriangle className="w-5 h-5 animate-pulse" />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-amber-800">Se detectaron posibles gastos duplicados</p>
+                        <p className="text-sm font-bold text-amber-800">{tr("Se detectaron posibles gastos duplicados")}</p>
                         <p className="text-xs text-amber-600 mt-0.5">
-                          Hay {getDuplicateExpenses(expenses).length} {getDuplicateExpenses(expenses).length === 1 ? "grupo" : "grupos"} de transacciones idénticas en fecha, concepto y valor.
+                          {tr("Hay")}{" "}{getDuplicateExpenses(expenses).length} {getDuplicateExpenses(expenses).length === 1 ? tr("grupo") : tr("grupos")}{" "}{tr("de transacciones idénticas en fecha, concepto y valor.")}
                         </p>
                       </div>
                     </div>
@@ -1904,7 +1914,7 @@ export default function CashflowClient() {
                       onClick={() => setShowDuplicatesModal(true)}
                       className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer border-0"
                     >
-                      Revisar Duplicados
+                      {tr("Revisar Duplicados")}
                     </button>
                   </div>
                 )}
@@ -1925,7 +1935,7 @@ export default function CashflowClient() {
                           }}
                         >
                           <div className="flex items-center gap-1.5">
-                            <span>Fecha</span>
+                            <span>{tr("Fecha")}</span>
                             {expSortField === "date" ? (
                               expSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
                             ) : (
@@ -1933,9 +1943,9 @@ export default function CashflowClient() {
                             )}
                           </div>
                         </th>
-                        <th className="px-5 py-4">Concepto</th>
-                        <th className="px-5 py-4">Categoría</th>
-                        <th className="px-5 py-4 text-center">Tipo</th>
+                        <th className="px-5 py-4">{tr("Concepto")}</th>
+                        <th className="px-5 py-4">{tr("Categoría")}</th>
+                        <th className="px-5 py-4 text-center">{tr("Tipo")}</th>
                         <th className="px-5 py-4 text-right cursor-pointer hover:bg-foreground/[0.03] transition-colors select-none group"
                           onClick={() => {
                             if (expSortField === "amount") {
@@ -1948,7 +1958,7 @@ export default function CashflowClient() {
                           }}
                         >
                           <div className="flex items-center justify-end gap-1.5">
-                            <span>Bruto</span>
+                            <span>{tr("Bruto")}</span>
                             {expSortField === "amount" ? (
                               expSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
                             ) : (
@@ -1968,7 +1978,7 @@ export default function CashflowClient() {
                           }}
                         >
                           <div className="flex items-center justify-end gap-1.5">
-                            <span>Neto</span>
+                            <span>{tr("Neto")}</span>
                             {expSortField === "net_amount" ? (
                               expSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
                             ) : (
@@ -1976,23 +1986,23 @@ export default function CashflowClient() {
                             )}
                           </div>
                         </th>
-                        <th className="px-5 py-4 text-center">Soporte</th>
-                        <th className="px-5 py-4 text-center">Acciones</th>
+                        <th className="px-5 py-4 text-center">{tr("Soporte")}</th>
+                        <th className="px-5 py-4 text-center">{tr("Acciones")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-foreground/5">
                       {paginatedExpenses.length === 0 ? (
-                        <tr><td colSpan={8} className="text-center py-10 text-foreground/40">No hay gastos registrados que coincidan.</td></tr>
+                        <tr><td colSpan={8} className="text-center py-10 text-foreground/40">{tr("No hay gastos registrados que coincidan.")}</td></tr>
                       ) : paginatedExpenses.map((exp) => {
                         const meta = EXPENSE_TYPE_META[(exp.expense_type as ExpenseType) ?? "OPEX"];
                         return (
                           <tr key={exp.id} className="hover:bg-foreground/[0.02]">
                             <td className="px-5 py-4 font-mono text-xs">{exp.cashflow?.date}</td>
                             <td className="px-5 py-4 font-bold max-w-[180px] truncate">{exp.concept}</td>
-                            <td className="px-5 py-4 text-xs text-foreground/60 max-w-[160px] truncate">{exp.category}</td>
+                            <td className="px-5 py-4 text-xs text-foreground/60 max-w-[160px] truncate">{tr.msg(exp.category)}</td>
                             <td className="px-5 py-4 text-center">
                               <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${meta.bg} ${meta.color}`}>
-                                {meta.label}
+                                {tr(meta.label)}
                               </span>
                             </td>
                             <td className="px-5 py-4 font-mono text-right text-red-500 font-bold">{formatCurrency(exp.amount)}</td>
@@ -2014,12 +2024,12 @@ export default function CashflowClient() {
                                       setShowExpModal(true);
                                     }}
                                     className="text-[#C59F59] hover:bg-amber-50 p-2 rounded-lg transition-colors cursor-pointer"
-                                    title="Editar gasto"
+                                    title={tr("Editar gasto")}
                                   >
                                     <Pencil className="w-4 h-4" />
                                   </button>
                                   <button onClick={async () => {
-                                    if (confirm("¿Eliminar este gasto?")) {
+                                    if (confirm(tr("¿Eliminar este gasto?"))) {
                                       await deleteExpenseDirect(exp.id);
                                       loadData();
                                     }
@@ -2028,7 +2038,7 @@ export default function CashflowClient() {
                                   </button>
                                 </div>
                               ) : (
-                                <span className="text-xs text-foreground/30 italic">Solo lectura</span>
+                                <span className="text-xs text-foreground/30 italic">{tr("Solo lectura")}</span>
                               )}
                             </td>
                           </tr>
@@ -2089,16 +2099,16 @@ export default function CashflowClient() {
             return (
               <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden animate-fadeIn">
                 <div className="p-5 border-b border-foreground/5 flex justify-between items-center bg-[#f9f7f0]">
-                  <h2 className="text-xl font-serif">Todos los Ingresos</h2>
+                  <h2 className="text-xl font-serif">{tr("Todos los Ingresos")}</h2>
                   <div className="flex flex-wrap gap-2 justify-end">
                     <ExportButton disabled={filteredIncomes.length === 0} onClick={() => {
                       const f = { from: incStart, to: incEnd, category: incCategory, search: incSearch };
-                      exportExcel(`Libro_Ingresos_${fileSuffix(f)}.xlsx`, incomeLedger(filteredIncomes, f, nowLabel()));
+                      exportExcel(`Libro_Ingresos_${fileSuffix(f)}.xlsx`, incomeLedger(filteredIncomes, f, nowLabel(), tr.locale));
                     }} />
                     {era === 'v2' && (
                       <button onClick={() => { setSelectedDate(undefined); setIncomeToEdit(null); setShowIncModal(true); }}
                         className="flex items-center gap-2 px-4 py-2 bg-[#C59F59] text-white rounded-lg font-bold text-sm hover:bg-[#B38E4D] transition-colors">
-                        <Plus className="w-4 h-4" /> Nuevo Ingreso Manual
+                        <Plus className="w-4 h-4" />{" "}{tr("Nuevo Ingreso Manual")}
                       </button>
                     )}
                   </div>
@@ -2107,30 +2117,30 @@ export default function CashflowClient() {
                 {/* Filter controls */}
                 <div className="p-5 border-b border-foreground/5 bg-foreground/[0.01] grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
                   <div>
-                    <label className="field-label">Concepto</label>
+                    <label className="field-label">{tr("Concepto")}</label>
                     <input
                       type="text"
                       value={incSearch}
                       onChange={(e) => { setIncSearch(e.target.value); setIncPage(1); }}
-                      placeholder="Buscar concepto..."
+                      placeholder={tr("Buscar concepto...")}
                       className="field-input py-2 px-3 text-xs"
                     />
                   </div>
                   <div>
-                    <label className="field-label">Categoría</label>
+                    <label className="field-label">{tr("Categoría")}</label>
                     <select
                       value={incCategory}
                       onChange={(e) => { setIncCategory(e.target.value); setIncPage(1); }}
                       className="field-input py-2 px-3 text-xs font-bold"
                     >
-                      <option value="">Todas las categorías</option>
+                      <option value="">{tr("Todas las categorías")}</option>
                       {INCOME_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                        <option key={c} value={c}>{tr(c)}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="field-label">Desde</label>
+                    <label className="field-label">{tr("Desde")}</label>
                     <input
                       type="date"
                       value={incStart}
@@ -2139,7 +2149,7 @@ export default function CashflowClient() {
                     />
                   </div>
                   <div>
-                    <label className="field-label">Hasta</label>
+                    <label className="field-label">{tr("Hasta")}</label>
                     <input
                       type="date"
                       value={incEnd}
@@ -2161,7 +2171,7 @@ export default function CashflowClient() {
                       }}
                       className="text-xs font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer"
                     >
-                      Limpiar Filtros
+                      {tr("Limpiar Filtros")}
                     </button>
                   </div>
                 )}
@@ -2182,7 +2192,7 @@ export default function CashflowClient() {
                           }}
                         >
                           <div className="flex items-center gap-1.5">
-                            <span>Fecha</span>
+                            <span>{tr("Fecha")}</span>
                             {incSortField === "date" ? (
                               incSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
                             ) : (
@@ -2190,9 +2200,9 @@ export default function CashflowClient() {
                             )}
                           </div>
                         </th>
-                        <th className="px-5 py-4">Concepto</th>
-                        <th className="px-5 py-4">Categoría</th>
-                        <th className="px-5 py-4 text-center">Tipo</th>
+                        <th className="px-5 py-4">{tr("Concepto")}</th>
+                        <th className="px-5 py-4">{tr("Categoría")}</th>
+                        <th className="px-5 py-4 text-center">{tr("Tipo")}</th>
                         <th className="px-5 py-4 text-right cursor-pointer hover:bg-foreground/[0.03] transition-colors select-none group"
                           onClick={() => {
                             if (incSortField === "amount") {
@@ -2205,7 +2215,7 @@ export default function CashflowClient() {
                           }}
                         >
                           <div className="flex items-center justify-end gap-1.5">
-                            <span>Bruto</span>
+                            <span>{tr("Bruto")}</span>
                             {incSortField === "amount" ? (
                               incSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
                             ) : (
@@ -2225,7 +2235,7 @@ export default function CashflowClient() {
                           }}
                         >
                           <div className="flex items-center justify-end gap-1.5">
-                            <span>Neto</span>
+                            <span>{tr("Neto")}</span>
                             {incSortField === "net_amount" ? (
                               incSortDirection === "asc" ? <ChevronUp className="w-3.5 h-3.5 text-[#C59F59]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#C59F59]" />
                             ) : (
@@ -2233,12 +2243,12 @@ export default function CashflowClient() {
                             )}
                           </div>
                         </th>
-                        <th className="px-5 py-4 text-center">Soporte / Acciones</th>
+                        <th className="px-5 py-4 text-center">{tr("Soporte / Acciones")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-foreground/5">
                       {paginatedIncomes.length === 0 ? (
-                        <tr><td colSpan={7} className="text-center py-10 text-foreground/40">No hay ingresos registrados que coincidan.</td></tr>
+                        <tr><td colSpan={7} className="text-center py-10 text-foreground/40">{tr("No hay ingresos registrados que coincidan.")}</td></tr>
                       ) : paginatedIncomes.map((inc) => (
                         <tr key={inc.id} className="hover:bg-foreground/[0.02]">
                           <td className="px-5 py-4 font-mono text-xs">{inc.date ?? inc.cashflow?.date ?? new Date(inc.created_at).toISOString().split("T")[0]}</td>
@@ -2248,19 +2258,19 @@ export default function CashflowClient() {
                               <div className="text-[10px] font-normal text-[#C59F59] mt-0.5 flex items-center gap-1">
                                 <Package className="w-3 h-3 text-[#C59F59]" />
                                 <span>
-                                  {inc.inventory.product_name} ({inc.quantity_sold} {inc.inventory.unit || 'und'})
+                                  {inc.inventory.product_name} ({inc.quantity_sold} {inc.inventory.unit || tr("und")})
                                 </span>
                               </div>
                             )}
                           </td>
-                          <td className="px-5 py-4 text-xs text-foreground/60">{inc.category}</td>
+                          <td className="px-5 py-4 text-xs text-foreground/60">{tr.msg(inc.category)}</td>
                           <td className="px-5 py-4 text-center">
                             {inc.from_salida ? (
                               <span
                                 className="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-100 text-amber-700"
-                                title="Generado por una salida de inventario pagada"
+                                title={tr("Generado por una salida de inventario pagada")}
                               >
-                                salida
+                                {tr("salida")}
                               </span>
                             ) : (
                               <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
@@ -2285,8 +2295,8 @@ export default function CashflowClient() {
                               
                               {era === 'v2' ? (
                                 inc.from_salida ? (
-                                  <span className="text-[10px] text-foreground/40 px-2" title="Edítalo desde Inventario → Salidas">
-                                    Inventario → Salidas
+                                  <span className="text-[10px] text-foreground/40 px-2" title={tr("Edítalo desde Inventario → Salidas")}>
+                                    {tr("Inventario → Salidas")}
                                   </span>
                                 ) : inc.type === "manual" && (
                                   <>
@@ -2296,27 +2306,27 @@ export default function CashflowClient() {
                                         setShowIncModal(true);
                                       }}
                                       className="text-[#C59F59] hover:bg-amber-50 p-2 rounded-lg transition-colors cursor-pointer"
-                                      title="Editar ingreso"
+                                      title={tr("Editar ingreso")}
                                     >
                                       <Pencil className="w-4 h-4" />
                                     </button>
                                     <button
                                       onClick={async () => {
-                                        if (confirm("¿Eliminar este ingreso manual?")) {
+                                        if (confirm(tr("¿Eliminar este ingreso manual?"))) {
                                           const res = await deleteIncomeDirect(inc.id);
-                                          if (res?.error) alert(res.error);
+                                          if (res?.error) alert(tr.msg(res.error));
                                           loadData();
                                         }
                                       }}
                                       className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors cursor-pointer"
-                                      title="Eliminar ingreso"
+                                      title={tr("Eliminar ingreso")}
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </>
                                 )
                               ) : (
-                                <span className="text-xs text-foreground/30 italic">Solo lectura</span>
+                                <span className="text-xs text-foreground/30 italic">{tr("Solo lectura")}</span>
                               )}
                             </div>
                           </td>
@@ -2351,7 +2361,7 @@ export default function CashflowClient() {
                       : "text-foreground/50 hover:text-foreground"
                   }`}>
                   <Activity className="w-4 h-4" />
-                  Flujo de Caja (Efectivo Real)
+                  {tr("Flujo de Caja (Efectivo Real)")}
                 </button>
                 <button
                   onClick={() => setReportMode("pl")}
@@ -2361,7 +2371,7 @@ export default function CashflowClient() {
                       : "text-foreground/50 hover:text-foreground"
                   }`}>
                   <BarChart2 className="w-4 h-4" />
-                  Estado de Resultados (P&amp;L Contable)
+                  {tr("Estado de Resultados (P&L Contable)")}
                 </button>
               </div>
 
@@ -2377,7 +2387,7 @@ export default function CashflowClient() {
               {historyLogs.length === 0 ? (
                 <div className="text-center py-12 text-foreground/40">
                   <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>No hay registros en el historial todavía.</p>
+                  <p>{tr("No hay registros en el historial todavía.")}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -2396,22 +2406,22 @@ export default function CashflowClient() {
                           </span>
                         </div>
                         <p className="text-sm text-foreground/60">
-                          Por: <span className="font-semibold">
+                          {tr("Por:")}{" "}<span className="font-semibold">
                             {log.profiles?.first_name
                               ? `${log.profiles.first_name} ${log.profiles.last_name || ""}`
-                              : "Admin"}
+                              : tr("Admin")}
                           </span>
                         </p>
                         <div className="mt-3 bg-white border border-foreground/5 rounded-lg p-3 overflow-x-auto text-xs font-mono text-foreground/55">
                           {log.details?.old && (
                             <div className="mb-1.5">
-                              <span className="text-red-500 font-bold">Anterior: </span>
+                              <span className="text-red-500 font-bold">{tr("Anterior:")}{" "}</span>
                               {JSON.stringify(log.details.old)}
                             </div>
                           )}
                           {log.details?.new && (
                             <div>
-                              <span className="text-green-500 font-bold">Nuevo: </span>
+                              <span className="text-green-500 font-bold">{tr("Nuevo:")}{" "}</span>
                               {JSON.stringify(log.details.new)}
                             </div>
                           )}
@@ -2471,7 +2481,7 @@ export default function CashflowClient() {
           onMarkNoMovements={async () => {
             const res = await markDateAsNoMovements(selectedDate);
             if (res.error) {
-              alert(res.error);
+              alert(tr.msg(res.error));
             } else {
               setShowDayActionsModal(false);
               setSelectedDate(undefined);
@@ -2488,7 +2498,7 @@ export default function CashflowClient() {
           onDeleteExpense={async (id) => {
             const res = await deleteExpenseDirect(id);
             if (res.error) {
-              alert(res.error);
+              alert(tr.msg(res.error));
             } else {
               loadData();
             }
