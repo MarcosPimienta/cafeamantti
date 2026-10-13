@@ -5,6 +5,7 @@
 
 import { calculateProposal, effectiveMinimum, type MaquilaLine, type MaquilaSettings } from "@/utils/maquila";
 import { formatCOP, formatDateSpanish, imageUrlToBase64 } from "./cuentasCobroHelpers";
+import { renderHtmlToPdf } from "./renderPages";
 
 export type MaquilaPdfData = {
   title: string;
@@ -39,7 +40,7 @@ const paragraphs = (text: string | null) =>
     .filter(Boolean);
 
 
-/** The proposal as an HTML string (A4 width), ready for html2pdf. */
+/** The proposal as an HTML string (A4 width), ready for renderHtmlToPdf. */
 export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
   const { lines, totals } = calculateProposal(data.lines, data.settings, data.minimumUnits);
   const th = "padding:10px 12px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#78716c; text-align:left; border-bottom:2px solid #C59F59;";
@@ -155,22 +156,8 @@ export function buildMaquilaHtml(data: MaquilaPdfData, logoSrc = ""): string {
   </div>`;
 }
 
-/** A4 page at 96 dpi, in CSS px (the PDF page size below). */
-export const PAGE_HEIGHT = 1123;
-
-/**
- * Height to give the document so it fills whole pages: a little under N
- * pages, because html2pdf rounds the canvas up and a document exactly one
- * page tall would otherwise spill a few pixels onto an empty second page.
- */
-export function pageFitHeight(contentHeight: number, pageHeight = PAGE_HEIGHT): number {
-  const pages = Math.max(1, Math.ceil((contentHeight - 4) / pageHeight));
-  return pages * pageHeight - 4;
-}
-
 /** Renders the client PDF in the browser and returns it as a Blob. */
 export async function generateMaquilaPDF(data: MaquilaPdfData): Promise<Blob> {
-  const html2pdf = (await import("html2pdf.js")).default;
   const absolute = (u: string) => (u.startsWith("http") || u.startsWith("data:") ? u : `${window.location.origin}${u}`);
   // Inline every image so the canvas renderer never trips on CORS.
   const [logo, background, allyLogo] = await Promise.all([
@@ -178,26 +165,7 @@ export async function generateMaquilaPDF(data: MaquilaPdfData): Promise<Blob> {
     data.backgroundImage ? imageUrlToBase64(absolute(data.backgroundImage)) : Promise.resolve(null),
     data.allyLogo ? imageUrlToBase64(absolute(data.allyLogo)) : Promise.resolve(null),
   ]);
-  const element = document.createElement("div");
-  element.innerHTML = buildMaquilaHtml({ ...data, backgroundImage: background, allyLogo }, logo);
-  // Measure the content off-screen, then size the page to whole pages.
-  const root = element.firstElementChild as HTMLElement;
-  element.style.cssText = "position:fixed; left:-10000px; top:0;";
-  document.body.appendChild(element);
-  root.style.minHeight = "0";
-  const height = pageFitHeight(root.scrollHeight);
-  root.style.height = `${height}px`;
-  root.style.overflow = "hidden";
-  document.body.removeChild(element);
-  element.style.cssText = "";
-  return await html2pdf()
-    .set({
-      margin: 0,
-      filename: "propuesta-maquila.pdf",
-      image: { type: "jpeg", quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: "px", format: [794, 1123], orientation: "portrait" },
-    })
-    .from(element)
-    .output("blob");
+  // Page count is decided by renderHtmlToPdf, not html2pdf, so a one-page
+  // proposal never gets an extra blank page.
+  return renderHtmlToPdf(buildMaquilaHtml({ ...data, backgroundImage: background, allyLogo }, logo));
 }

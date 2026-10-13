@@ -1,6 +1,7 @@
 import { REFERENCE_OPTIONS } from "@/utils/maquila";
+import { pageCount } from "../renderPages";
 import { describe, it, expect } from "vitest";
-import { pageFitHeight, buildMaquilaHtml, type MaquilaPdfData } from "../maquilaPdf";
+import { buildMaquilaHtml, type MaquilaPdfData } from "../maquilaPdf";
 
 const data: MaquilaPdfData = {
   title: "Propuesta de café con su marca",
@@ -139,12 +140,14 @@ describe("buildMaquilaHtml (client PDF)", () => {
   });
 });
 
-describe("pageFitHeight", () => {
-  it("fills whole pages, just under the limit, so no blank page is added", () => {
-    expect(pageFitHeight(600)).toBe(1119); // short content → one full page
-    expect(pageFitHeight(1123)).toBe(1119); // exactly one page → still one
-    expect(pageFitHeight(1127)).toBe(1119);
-    expect(pageFitHeight(1200)).toBe(2242); // really longer → two pages
-    expect(pageFitHeight(0)).toBe(1119);
+describe("pageCount", () => {
+  it("one page unless the content really needs more; a few px of bottom margin never add a page", () => {
+    expect(pageCount(600)).toBe(1);
+    expect(pageCount(1008)).toBe(1); // Galletas Compostela
+    expect(pageCount(1123)).toBe(1);
+    expect(pageCount(1130)).toBe(1);
+    expect(pageCount(1200)).toBe(2);
+    expect(pageCount(2246)).toBe(2);
+    expect(pageCount(0)).toBe(1);
   });
 });
