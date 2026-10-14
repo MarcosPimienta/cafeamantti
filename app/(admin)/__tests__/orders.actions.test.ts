@@ -174,7 +174,7 @@ describe("updateManualAdminOrder", () => {
   it("refuses to blank the CRM name", async () => {
     db.rows("clients").push({ id: "c1", name: "Okus" });
     const { orderId } = await createManualAdminOrder({ ...baseOrder("pending"), client_id: "c1" });
-    await expect(updateManualAdminOrder(orderId, { ...baseOrder("pending"), client_id: "c1", client_update: { name: "  " } })).rejects.toThrow(/nombre/);
+    expect(await updateManualAdminOrder(orderId, { ...baseOrder("pending"), client_id: "c1", client_update: { name: "  " } })).toMatchObject({ success: false, error: expect.stringMatching(/nombre/) });
     expect(db.byId("clients", "c1")!.name).toBe("Okus");
   });
 });

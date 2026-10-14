@@ -133,7 +133,11 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
     if (!confirm(tr("¿Estás seguro de que quieres eliminar esta orden? Se revertirá el stock descontado de los productos vendidos."))) return;
     setIsDeleting(true);
     try {
-      await deleteManualAdminOrder(order.id);
+      const res = await deleteManualAdminOrder(order.id);
+      if (!res.success) {
+        alert(tr("Error eliminando la orden: {error}", { error: tr.msg("error" in res ? res.error : "") }));
+        setIsDeleting(false);
+      }
       // Let the server component re-render via revalidatePath
     } catch (err: any) {
       alert(tr.msg("Error eliminando la orden: " + err.message));
@@ -216,7 +220,11 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
               }
             : null,
       });
-      if (res.warning) alert(tr.msg(res.warning));
+      if (!res.success) {
+        setError(tr.msg("error" in res ? res.error : ""));
+        return;
+      }
+      if ("warning" in res && res.warning) alert(tr.msg(res.warning));
       setItemsDirty(false);
       setIsEditOpen(false);
     } catch (err: any) {

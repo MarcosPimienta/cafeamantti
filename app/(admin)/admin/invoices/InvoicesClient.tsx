@@ -31,6 +31,7 @@ type Invoice = {
   issue_date: string | null;
   due_date: string | null;
   siigo_name: string | null;
+  siigo_number?: string | null;
   siigo_status: string | null;
   siigo_public_url: string | null;
   siigo_error: string | null;
@@ -225,7 +226,7 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
         <div className="min-w-0">
           <p className="font-bold truncate">{inv.customer_name}</p>
           <p className="text-xs text-foreground/50">
-            {inv.siigo_name ?? tr("Sin número")}
+            {inv.siigo_number ?? inv.siigo_name ?? tr("Sin número")}
             {" · "}
             <Link href={`/admin/orders?order=${inv.order_id}`} className="hover:text-[#C59F59] hover:underline">{tr("Pedido #{id}", { id: inv.order_id.slice(0, 8) })}</Link>
             {" · "}

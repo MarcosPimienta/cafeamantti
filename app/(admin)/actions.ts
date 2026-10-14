@@ -132,6 +132,30 @@ export async function getRecentOrders() {
 }
 
 /**
+ * Runs an order action and returns its error as data: production builds
+ * hide thrown messages, and these (e.g. "the order is invoiced") must be read.
+ */
+async function _asResult<T extends object>(run: () => Promise<T>): Promise<T | { success: false; error: string }> {
+  try {
+    return await run();
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function updateOrderStatus(orderId: string, newStatus: string) {
+  return _asResult(() => _updateOrderStatus(orderId, newStatus));
+}
+
+export async function deleteManualAdminOrder(orderId: string) {
+  return _asResult(() => _deleteManualAdminOrder(orderId));
+}
+
+export async function updateManualAdminOrder(...args: Parameters<typeof _updateManualAdminOrder>) {
+  return _asResult(() => _updateManualAdminOrder(...args));
+}
+
+/**
  * An invoiced order keeps its products and cannot be cancelled or deleted:
  * the invoice has to be annulled first (an issued one, with a credit note in
  * Siigo). Throws a message saying so.
@@ -139,18 +163,18 @@ export async function getRecentOrders() {
 async function _assertNotInvoiced(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string, change: "cancelar" | "eliminar" | "productos") {
   const { data, error } = await supabase
     .from('sales_invoices')
-    .select('status, siigo_name')
+    .select('*')
     .eq('order_id', orderId)
     .neq('status', 'anulada')
     .limit(1);
   if (error || !data?.length) return; // no invoice (or invoices not set up yet)
   const inv = data[0];
   if (change === "productos") throw new Error('El pedido ya está facturado: sus productos no se pueden cambiar. Anula el borrador de la factura para editarlo.');
-  if (inv.status === 'emitida') throw new Error(`El pedido tiene la factura ${inv.siigo_name ?? 'emitida'}: anúlala con una nota crédito en Siigo antes de cancelarlo o eliminarlo.`);
+  if (inv.status === 'emitida') throw new Error(`El pedido tiene la factura ${inv.siigo_number ?? inv.siigo_name ?? 'emitida'}. Anúlala en Siigo y luego, en Facturas, pulsa "Actualizar estado" para liberar el pedido.`);
   throw new Error('El pedido tiene una factura en borrador: anúlala en Facturas antes de cancelarlo o eliminarlo.');
 }
 
-export async function updateOrderStatus(orderId: string, newStatus: string) {
+async function _updateOrderStatus(orderId: string, newStatus: string) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
 
@@ -482,7 +506,7 @@ export async function createManualAdminOrder(
   };
 }
 
-export async function deleteManualAdminOrder(orderId: string) {
+async function _deleteManualAdminOrder(orderId: string) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
 
@@ -494,6 +518,10 @@ export async function deleteManualAdminOrder(orderId: string) {
   for (const mov of reverted) {
     await logAuditAction("DELETE", "MOVEMENT", mov.id, mov.inventory_id, { old_quantity: mov.quantity, note: "Reverted by order deletion" });
   }
+
+  // Voided invoices (they stay in Siigo) would block the delete.
+  const { error: invErr } = await supabase.from('sales_invoices').delete().eq('order_id', orderId).eq('status', 'anulada');
+  if (invErr && !/sales_invoices/.test(invErr.message)) throw new Error(invErr.message);
 
   // Delete the order (cascade will handle order_items)
   const { error: orderErr } = await supabase.from('orders').delete().eq('id', orderId);
@@ -524,7 +552,7 @@ export type OrderItemInput = {
  * rewrite inventory history). `client_update` also saves the customer's
  * data to their CRM record.
  */
-export async function updateManualAdminOrder(
+async function _updateManualAdminOrder(
   orderId: string,
   data: {
     client_id?: string | null;

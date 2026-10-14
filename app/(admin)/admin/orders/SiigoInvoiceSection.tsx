@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, ExternalLink, FileText, Loader2 } from "lucide-react";
-import { createInvoice, getOrderInvoice } from "../invoices/actions";
+import { AlertTriangle, ExternalLink, FileText, Loader2, RefreshCw } from "lucide-react";
+import { createInvoice, getOrderInvoice, refreshInvoice } from "../invoices/actions";
 import { balanceDue, type PaymentMethod } from "@/utils/invoices/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
@@ -52,7 +52,7 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
     return (
       <Section title={tr("Factura")}>
         <p className="text-sm">
-          <strong>{order.siigo_invoice ?? tr("Factura creada")}</strong>
+          <strong>{order.siigo_number ?? order.siigo_invoice ?? tr("Factura creada")}</strong>
           {order.siigo_status && <span className="ml-2 text-xs text-foreground/60">{tr.msg(DIAN_LABEL[order.siigo_status] ?? order.siigo_status)}</span>}
         </p>
         {order.siigo_public_url && (
@@ -76,13 +76,24 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
       setOpen(false);
     });
 
+  const refreshFromSiigo = () =>
+    startTransition(async () => {
+      setError("");
+      const res = await refreshInvoice(invoice.id);
+      if (!res.success) return setError(res.error);
+      if (res.annulled) {
+        setInvoice(null);
+        setError(tr("La factura fue anulada en Siigo: el pedido quedó libre."));
+      } else setInvoice({ ...invoice, ...res.invoice });
+    });
+
   if (invoice) {
     const balance = balanceDue(invoice, invoice.payments ?? []);
     return (
       <Section title={tr("Factura")}>
         <div className="space-y-1 text-sm">
           <p>
-            <strong>{invoice.siigo_name ?? tr("Sin número")}</strong>
+            <strong>{invoice.siigo_number ?? invoice.siigo_name ?? tr("Sin número")}</strong>
             <span className="ml-2 text-xs text-foreground/60">{tr(STATUS_LABEL[invoice.status] ?? invoice.status)}</span>
             {invoice.siigo_status && <span className="ml-2 text-xs text-foreground/60">· {tr.msg(DIAN_LABEL[invoice.siigo_status] ?? invoice.siigo_status)}</span>}
           </p>
@@ -95,8 +106,14 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
           {invoice.siigo_error && <p className="text-xs text-red-600 break-words">{tr.msg(invoice.siigo_error)}</p>}
         </div>
         <ProblemList problems={problems} />
+        {error && <p className="text-xs text-red-600 break-words">{tr.msg(error)}</p>}
         <div className="flex flex-wrap gap-3">
           <Link href="/admin/invoices" className="text-xs font-bold text-[#C59F59] hover:underline">{tr("Ir a Facturas")}</Link>
+          {invoice.status === "emitida" && (
+            <button type="button" onClick={refreshFromSiigo} disabled={isPending} className="inline-flex items-center gap-1 text-xs font-bold text-foreground/60 hover:text-foreground disabled:opacity-50">
+              {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}{" "}{tr("Actualizar estado")}
+            </button>
+          )}
           {invoice.siigo_public_url && (
             <a href={invoice.siigo_public_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#C59F59] hover:underline">
               {tr("Ver factura")}{" "}<ExternalLink className="w-3.5 h-3.5" />

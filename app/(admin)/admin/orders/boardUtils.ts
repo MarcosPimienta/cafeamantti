@@ -18,6 +18,7 @@ export type BoardOrder = {
   contact_phone?: string | null;
   shipping_info?: any;
   siigo_invoice?: string | null;
+  siigo_number?: string | null;
   client?: { name: string | null } | { name: string | null }[] | null;
   order_items?: any[];
   [key: string]: any;
@@ -58,7 +59,7 @@ export function fmtDay(ymd: string) {
 export const customerOf = (o: BoardOrder) => orderCustomer(o);
 
 export function siigoOf(o: BoardOrder): string | null {
-  return o.siigo_invoice || o.shipping_info?.siigo_invoice || null;
+  return o.siigo_number || o.siigo_invoice || o.shipping_info?.siigo_invoice || null;
 }
 
 /** Due-date state of an order that is not delivered yet. */

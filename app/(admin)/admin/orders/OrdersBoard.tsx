@@ -191,7 +191,8 @@ export default function OrdersBoard({
     );
     startMoving(async () => {
       try {
-        await updateOrderStatus(orderId, status);
+        const res = await updateOrderStatus(orderId, status);
+        if (!res.success) throw new Error(tr.msg("error" in res ? res.error : ""));
       } catch (err) {
         setOrders((list) => list.map((o) => (o.id === orderId ? prev : o)));
         setNotice({ type: "error", msg: err instanceof Error ? err.message : tr("No se pudo mover la orden") });

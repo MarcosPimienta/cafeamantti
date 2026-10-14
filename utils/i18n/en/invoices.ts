@@ -91,4 +91,11 @@ export const invoices: Record<string, string> = {
   "El pago ya está en Siigo como recibo de caja: anúlalo allá.": "The payment is already in Siigo as a cash receipt: void it there.",
   "La factura aún no está en Siigo.": "The invoice is not in Siigo yet.",
   "Medio de pago": "Payment method",
+  "Error eliminando la orden: {error}": "Error deleting the order: {error}",
+  "La factura fue anulada en Siigo: el pedido quedó libre.": "The invoice was voided in Siigo: the order is free again.",
+  "El pedido tiene la factura {name}. Anúlala en Siigo y luego, en Facturas, pulsa \"Actualizar estado\" para liberar el pedido.": "The order has invoice {name}. Void it in Siigo, then press \"Refresh status\" in Invoices to free the order.",
+  "La factura está anulada en Siigo pero tiene recibos de caja enviados: anúlalos en Siigo y avísale a tu contadora.": "The invoice is voided in Siigo but has cash receipts already sent: void them in Siigo and tell your accountant.",
+  "Anulada en Siigo": "Voided in Siigo",
+  "Eliminada en Siigo": "Deleted in Siigo",
+  "No se pudo actualizar el pedido.": "The order could not be updated.",
 };

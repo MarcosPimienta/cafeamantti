@@ -22,7 +22,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { annulInvoice, createInvoice, deletePayment, registerPayment, sendPendingToSiigo } from "../actions";
+import { annulInvoice, createInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo } from "../actions";
 import { updateOrderStatus, deleteManualAdminOrder } from "../../../actions";
 
 const SETTINGS = {
@@ -75,8 +75,8 @@ describe("credit sales invoice", () => {
 
   it("annulling the draft returns the stock; the invoiced order can't be cancelled meanwhile", async () => {
     await createInvoice(ORDER, { terms: "credito" });
-    await expect(updateOrderStatus(ORDER, "cancelled")).rejects.toThrow("factura en borrador");
-    await expect(deleteManualAdminOrder(ORDER)).rejects.toThrow("factura en borrador");
+    expect(await updateOrderStatus(ORDER, "cancelled")).toMatchObject({ success: false, error: expect.stringContaining("factura en borrador") });
+    expect(await deleteManualAdminOrder(ORDER)).toMatchObject({ success: false, error: expect.stringContaining("factura en borrador") });
     expect(await annulInvoice(invoice().id)).toMatchObject({ success: true });
     expect(invoice().status).toBe("anulada");
     expect(stock()).toBe(10);
@@ -88,17 +88,17 @@ describe("credit sales invoice", () => {
     // Paid before being sent: the receipt waits for its invoice.
     expect(await registerPayment(id, { date: "2026-10-14", amount: 30000, method: "transfer" })).toMatchObject({ success: true, fullyPaid: false });
 
-    h.responses["POST /v1/invoices"] = { id: "sg-inv", name: "FV-1-55", public_url: "https://x", stamp: { status: "Accepted", cufe: "cufe1" } };
+    h.responses["POST /v1/invoices"] = { id: "sg-inv", name: "FV-1-55", prefix: "FEA", number: 55, public_url: "https://x", stamp: { status: "Accepted", cufe: "cufe1" } };
     h.responses["POST /v1/vouchers"] = { id: "sg-rc", name: "RC-1-9" };
     const res = await sendPendingToSiigo();
-    expect(res).toMatchObject({ success: true, invoicesSent: ["FV-1-55"], vouchersSent: ["RC-1-9"], invoicesFailed: [], vouchersFailed: [] });
+    expect(res).toMatchObject({ success: true, invoicesSent: ["FEA55"], vouchersSent: ["RC-1-9"], invoicesFailed: [], vouchersFailed: [] });
 
     const inv = h.calls.find((c) => c.path === "/v1/invoices")!;
     expect(inv.opts?.idempotencyKey).toMatch(/^INV/);
     expect(inv.opts?.body).toMatchObject({ customer: { identification: "900123456" }, payments: [{ id: 5640, value: 70000 }] });
-    expect(invoice()).toMatchObject({ status: "emitida", siigo_name: "FV-1-55", siigo_cufe: "cufe1", siigo_invoice_id: "sg-inv" });
+    expect(invoice()).toMatchObject({ status: "emitida", siigo_name: "FV-1-55", siigo_number: "FEA55", siigo_cufe: "cufe1", siigo_invoice_id: "sg-inv" });
     expect(invoice().due_date).toBe((inv.opts?.body as { payments: { due_date: string }[] }).payments[0].due_date);
-    expect(db.byId("orders", ORDER)).toMatchObject({ siigo_invoice_id: "sg-inv", siigo_invoice: "FV-1-55" });
+    expect(db.byId("orders", ORDER)).toMatchObject({ siigo_invoice_id: "sg-inv", siigo_invoice: "FV-1-55", siigo_number: "FEA55" });
 
     const rc = h.calls.find((c) => c.path === "/v1/vouchers")!;
     expect(rc.opts?.body).toMatchObject({ type: "DebtPayment", items: [{ due: { prefix: "FV-1", consecutive: 55 }, value: 30000 }], payment: { id: 77, value: 30000 } });
@@ -121,5 +121,23 @@ describe("credit sales invoice", () => {
     const res = await sendPendingToSiigo();
     expect(res).toMatchObject({ success: true, invoicesSent: [], invoicesFailed: [{ error: "El código 004 no existe" }] });
     expect(invoice()).toMatchObject({ status: "error", siigo_error: "El código 004 no existe" });
+  });
+});
+
+describe("an invoice annulled in Siigo", () => {
+  it("is voided on refresh, frees the order (which can then be deleted) and returns the stock", async () => {
+    await createInvoice(ORDER, { terms: "credito" });
+    h.responses["POST /v1/invoices"] = { id: "sg-inv", name: "FV-2-719", prefix: "FEA", number: 719, stamp: { status: "Draft" } };
+    await sendPendingToSiigo();
+    expect(await deleteManualAdminOrder(ORDER)).toMatchObject({ success: false, error: expect.stringContaining("FEA719") });
+
+    h.responses["GET /v1/invoices/sg-inv"] = { id: "sg-inv", name: "FV-2-719", annulled: true, stamp: { status: "Draft" } };
+    expect(await refreshInvoice(invoice().id)).toMatchObject({ success: true, annulled: true });
+    expect(invoice()).toMatchObject({ status: "anulada", siigo_error: "Anulada en Siigo" });
+    expect(db.byId("orders", ORDER)).toMatchObject({ siigo_invoice_id: null, siigo_number: null });
+    expect(stock()).toBe(10);
+
+    expect(await deleteManualAdminOrder(ORDER)).toMatchObject({ success: true });
+    expect(db.byId("orders", ORDER)).toBeUndefined();
   });
 });
