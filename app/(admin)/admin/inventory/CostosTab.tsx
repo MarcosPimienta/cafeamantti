@@ -415,7 +415,7 @@ export default function CostosTab() {
                   onSave={(v) => saveCost(i.id, v)}
                   placeholder={tr("$ / kg")}
                   ariaLabel={`Precio por kg de ${i.product_name}`}
-                  step="100"
+                  step="any"
                 />
               </div>
             ))}
@@ -453,7 +453,7 @@ export default function CostosTab() {
                   value={settings.roasting_fee_per_kg}
                   onSave={(v) => saveSetting({ roasting_fee_per_kg: v ?? 0 })}
                   ariaLabel="Tarifa de maquila por kg"
-                  step="100"
+                  step="any"
                 />
               </div>
               <div>
@@ -474,7 +474,7 @@ export default function CostosTab() {
                   value={settings.dispatch_cost_per_order}
                   onSave={(v) => saveSetting({ dispatch_cost_per_order: v ?? 0 })}
                   ariaLabel="Costo promedio por despacho"
-                  step="500"
+                  step="any"
                 />
               </div>
               <div>

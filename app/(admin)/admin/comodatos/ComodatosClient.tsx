@@ -550,7 +550,7 @@ function StatusDialog({
           {action !== "baja" && (
             <div>
               <label htmlFor="st-cost" className={labelCls}>{tr("Costo (opcional)")}</label>
-              <input id="st-cost" type="number" min="0" step="1000" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="$" className={inputCls} />
+              <input id="st-cost" type="number" min="0" step="any" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="$" className={inputCls} />
             </div>
           )}
         </div>

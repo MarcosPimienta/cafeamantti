@@ -390,7 +390,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
 
                       <div>
                         <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Precio unitario")}</label>
-                        <input type="number" inputMode="numeric" min="0" step="100" value={item.price} onChange={e => updateItem(index, 'price', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm" />
+                        <input type="number" inputMode="numeric" min="0" step="1" value={item.price} onChange={e => updateItem(index, 'price', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm" />
                       </div>
 
                       <div>
