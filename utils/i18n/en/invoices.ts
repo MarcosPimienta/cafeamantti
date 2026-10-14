@@ -104,4 +104,5 @@ export const invoices: Record<string, string> = {
   "La factura ya fue aceptada por la DIAN.": "The invoice was already accepted by the DIAN.",
   "La factura ya está en proceso de envío a la DIAN.": "The invoice is already being sent to the DIAN.",
   "Siigo no deja editar una factura con recibos de caja: elimínalos en Siigo, envíala a la DIAN y vuelve a enviar los pagos.": "Siigo doesn't allow editing an invoice with cash receipts: delete them in Siigo, send it to the DIAN and send the payments again.",
+  "Enviando a la DIAN…": "Sending to the DIAN…",
 };

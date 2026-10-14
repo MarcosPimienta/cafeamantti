@@ -13,7 +13,7 @@ type Invoice = any;
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 const STATUS_LABEL: Record<string, string> = { borrador: "Por enviar a Siigo", error: "Error al enviar", emitida: "En Siigo" };
-const DIAN_LABEL: Record<string, string> = { Accepted: "Aceptada por la DIAN", Rejected: "Rechazada por la DIAN", Pending: "Enviada a la DIAN", Draft: "Creada (sin enviar a la DIAN)" };
+const DIAN_LABEL: Record<string, string> = { Accepted: "Aceptada por la DIAN", Rejected: "Rechazada por la DIAN", Pending: "Enviada a la DIAN", Sending: "Enviando a la DIAN…", Draft: "Creada (sin enviar a la DIAN)" };
 const PAID = new Set(["paid", "processing", "shipped", "delivered"]);
 
 /**

@@ -160,6 +160,19 @@ describe("sending a draft invoice to the DIAN", () => {
     expect(db.byId("orders", ORDER)).toMatchObject({ siigo_invoice: "FV-2-720", siigo_status: "Accepted" });
   });
 
+  it("reads the invoice again while Siigo is still sending it", async () => {
+    let reads = 0;
+    h.responses["PUT /v1/invoices/sg-inv"] = { id: "sg-inv", name: "FV-2-720", stamp: { status: "Sending" } };
+    h.responses["GET /v1/invoices/sg-inv"] = { id: "sg-inv", name: "FV-2-720", stamp: { status: "Draft" } };
+    const draftThenAccepted = h.responses;
+    Object.defineProperty(draftThenAccepted, "GET /v1/invoices/sg-inv", {
+      get: () => (reads++ === 0 ? { id: "sg-inv", stamp: { status: "Draft" } } : reads < 3 ? { id: "sg-inv", stamp: { status: "Sending" } } : { id: "sg-inv", stamp: { status: "Accepted", cufe: "cufe-720" } }),
+      configurable: true,
+    });
+    expect(await stampInvoice(invoice().id)).toMatchObject({ success: true, invoice: { siigo_status: "Accepted", siigo_cufe: "cufe-720" } });
+    expect(invoice().siigo_status).toBe("Accepted");
+  });
+
   it("refuses one the DIAN already accepted or that has cash receipts", async () => {
     h.responses["GET /v1/invoices/sg-inv"] = { id: "sg-inv", stamp: { status: "Accepted" } };
     expect(await stampInvoice(invoice().id)).toMatchObject({ success: false, error: "La factura ya fue aceptada por la DIAN." });

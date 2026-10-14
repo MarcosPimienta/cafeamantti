@@ -398,6 +398,9 @@ export async function refreshInvoice(invoiceId: string) {
 
 /** States in which Siigo still lets the invoice be edited and sent to the DIAN. */
 const STAMPABLE = new Set(['Draft', 'Rejected']);
+const IN_PROGRESS = new Set(['Sending', 'Pending']);
+const STAMP_POLLS = 4;
+const STAMP_POLL_MS = process.env.VITEST ? 0 : 2500;
 
 /**
  * Sends to the DIAN an invoice that is in Siigo as a draft (created with
@@ -425,7 +428,12 @@ export async function stampInvoice(invoiceId: string) {
     const today = todayBogota();
     const { payload, problems } = siigoPayload(inv, inv.customer_identification, { ...settings, stamp_dian: true }, today);
     if (problems.length) throw new Error(problems.join(' · '));
-    const out = await siigo.request<SiigoInvoiceOut>('PUT', `/v1/invoices/${inv.siigo_invoice_id}`, { body: payload });
+    let out = await siigo.request<SiigoInvoiceOut>('PUT', `/v1/invoices/${inv.siigo_invoice_id}`, { body: payload });
+    // The DIAN answers in a few seconds: read it again while Siigo says it is sending.
+    for (let i = 0; i < STAMP_POLLS && IN_PROGRESS.has(out.stamp?.status ?? ''); i++) {
+      await new Promise((r) => setTimeout(r, STAMP_POLL_MS));
+      out = { ...out, ...(await siigo.request<SiigoInvoiceOut>('GET', `/v1/invoices/${inv.siigo_invoice_id}`)) };
+    }
 
     const fields = {
       siigo_status: out.stamp?.status ?? 'Pending',
