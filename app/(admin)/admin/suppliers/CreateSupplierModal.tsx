@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { Plus, X, Building2, Edit2 } from 'lucide-react';
 import { createSupplier, updateSupplier } from './actions';
+import { uploadSupplierRut } from './SupplierRut';
+import { RUT_ACCEPT, isNaturalPerson, rutFileProblem } from '@/utils/suppliers/rut';
 import { useTr } from "@/app/(admin)/AdminI18n";
 
 interface SupplierModalProps {
@@ -24,6 +26,7 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
   const [bankName, setBankName] = useState(supplierToEdit?.bank_name || '');
   const [bankAccountType, setBankAccountType] = useState(supplierToEdit?.bank_account_type || 'Ahorros');
   const [bankAccountNumber, setBankAccountNumber] = useState(supplierToEdit?.bank_account_number || '');
+  const [rutFile, setRutFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const openModal = () => {
@@ -50,6 +53,7 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
       setBankAccountType('Ahorros');
       setBankAccountNumber('');
     }
+    setRutFile(null);
     setIsOpen(true);
   };
 
@@ -75,10 +79,17 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
     };
 
     let res;
+    let supplierId: string | undefined = supplierToEdit?.id;
     if (supplierToEdit?.id) {
       res = await updateSupplier(supplierToEdit.id, payload);
     } else {
       res = await createSupplier(payload);
+      supplierId = res.data?.id;
+    }
+
+    if (res.success && rutFile && supplierId) {
+      const up = await uploadSupplierRut(supplierId, rutFile);
+      if (!up.success) alert(tr("El proveedor se guardó, pero el RUT no se pudo subir: {error}", { error: tr.msg(up.error || '') }));
     }
 
     if (res.success) {
@@ -178,6 +189,33 @@ export default function CreateSupplierModal({ supplierToEdit, onSuccess, trigger
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* RUT */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#C59F59]">{tr("RUT")}</h3>
+                <p className="text-xs text-foreground/50">
+                  {isNaturalPerson(documentType)
+                    ? tr("Persona natural: la DIAN pide su RUT para aceptar el gasto como deducible. Sube el PDF o una foto legible.")
+                    : tr("Opcional para empresas. PDF o foto, hasta 10 MB.")}
+                </p>
+                {supplierToEdit?.rut_path && !rutFile && (
+                  <p className="text-xs text-foreground/60">{tr("Ya tiene RUT. Elige un archivo solo si quieres reemplazarlo.")}</p>
+                )}
+                <input
+                  type="file"
+                  accept={RUT_ACCEPT}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    const problem = file && rutFileProblem(file);
+                    if (problem) {
+                      alert(tr.msg(problem));
+                      e.target.value = '';
+                      setRutFile(null);
+                    } else setRutFile(file);
+                  }}
+                  className="block w-full text-xs text-foreground/70 file:mr-3 file:px-4 file:py-2 file:rounded-xl file:border-0 file:bg-[#C59F59]/10 file:text-[#C59F59] file:font-bold hover:file:bg-[#C59F59]/20"
+                />
               </div>
 
               {/* Contacto & Ubicación */}

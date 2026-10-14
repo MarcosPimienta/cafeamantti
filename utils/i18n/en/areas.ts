@@ -10,3 +10,4 @@ export { inventory } from "./inventory";
 export { server } from "./server";
 export { documents } from "./documents";
 export { invoices } from "./invoices";
+export { suppliers } from "./suppliers";

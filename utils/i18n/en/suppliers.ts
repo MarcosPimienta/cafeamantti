@@ -1,0 +1,25 @@
+// Suppliers (Proveedores): their RUT file.
+export const suppliers: Record<string, string> = {
+  "El proveedor se guardó, pero el RUT no se pudo subir: {error}": "The supplier was saved, but the RUT could not be uploaded: {error}",
+  "RUT": "RUT",
+  "Persona natural: la DIAN pide su RUT para aceptar el gasto como deducible. Sube el PDF o una foto legible.": "Natural person: the DIAN requires their RUT to accept the expense as deductible. Upload the PDF or a legible photo.",
+  "Opcional para empresas. PDF o foto, hasta 10 MB.": "Optional for companies. PDF or photo, up to 10 MB.",
+  "Ya tiene RUT. Elige un archivo solo si quieres reemplazarlo.": "A RUT is already on file. Choose a file only to replace it.",
+  "No se pudo guardar el RUT.": "The RUT could not be saved.",
+  "No se pudo abrir el RUT.": "The RUT could not be opened.",
+  "Ver RUT": "View RUT",
+  "Subido {date}": "Uploaded {date}",
+  "Reemplazar": "Replace",
+  "¿Quitar el RUT de este proveedor?": "Remove this supplier's RUT?",
+  "Quitar RUT": "Remove RUT",
+  "Falta RUT": "RUT missing",
+  "Sin RUT": "No RUT",
+  "Subir RUT": "Upload RUT",
+  "Personas naturales sin RUT: {n}": "Natural persons without RUT: {n}",
+  // Server messages
+  "El RUT debe ser un PDF o una imagen (JPG, PNG o WEBP).": "The RUT must be a PDF or an image (JPG, PNG or WEBP).",
+  "El archivo del RUT supera 10 MB.": "The RUT file is larger than 10 MB.",
+  "Archivo de RUT inválido.": "Invalid RUT file.",
+  "El proveedor no tiene RUT.": "The supplier has no RUT.",
+  "Falta aplicar la migración 20261020000000_supplier_rut.sql": "The 20261020000000_supplier_rut.sql migration has not been applied yet",
+};

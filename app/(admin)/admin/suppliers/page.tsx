@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Building2, Mail, Phone, MapPin, CreditCard, Trash2, Calendar, Edit2 } from 'lucide-react';
 import { getSuppliers, deleteSupplier } from './actions';
 import CreateSupplierModal from './CreateSupplierModal';
+import SupplierRut from './SupplierRut';
+import { isNaturalPerson } from '@/utils/suppliers/rut';
 import { useTr } from "@/app/(admin)/AdminI18n";
 
 export default function AdminSuppliersPage() {
@@ -11,6 +13,7 @@ export default function AdminSuppliersPage() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [missingRut, setMissingRut] = useState(false);
 
   async function loadData() {
     setIsLoading(true);
@@ -33,7 +36,10 @@ export default function AdminSuppliersPage() {
     }
   };
 
+  const missingRutCount = suppliers.filter((s) => !s.rut_path && isNaturalPerson(s.document_type)).length;
+
   const filteredSuppliers = suppliers.filter((s) => {
+    if (missingRut && (s.rut_path || !isNaturalPerson(s.document_type))) return false;
     const query = search.toLowerCase();
     return (
       (s.name && s.name.toLowerCase().includes(query)) ||
@@ -71,6 +77,15 @@ export default function AdminSuppliersPage() {
               className="w-full pl-11 pr-4 py-3 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
             />
           </div>
+          {missingRutCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setMissingRut((v) => !v)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${missingRut ? 'bg-amber-600 text-white border-amber-600' : 'border-amber-300 text-amber-700 hover:bg-amber-50'}`}
+            >
+              {tr("Personas naturales sin RUT: {n}", { n: String(missingRutCount) })}
+            </button>
+          )}
           <div className="text-xs font-bold text-foreground/50">
             {tr("Total Proveedores:")}{" "}<span className="text-[#C59F59] text-sm font-extrabold">{suppliers.length}</span>
           </div>
@@ -95,6 +110,7 @@ export default function AdminSuppliersPage() {
                   <th className="px-6 py-4 font-medium">{tr("Contacto")}</th>
                   <th className="px-6 py-4 font-medium">{tr("Ubicación")}</th>
                   <th className="px-6 py-4 font-medium">{tr("Datos Bancarios")}</th>
+                  <th className="px-6 py-4 font-medium">{tr("RUT")}</th>
                   <th className="px-6 py-4 font-medium text-right">{tr("Acciones")}</th>
                 </tr>
               </thead>
@@ -166,6 +182,10 @@ export default function AdminSuppliersPage() {
                       ) : (
                         <span className="text-foreground/40 italic">{tr("Sin datos bancarios")}</span>
                       )}
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <SupplierRut supplier={supplier} onChanged={loadData} />
                     </td>
 
                     <td className="px-6 py-4 text-right space-x-1 whitespace-nowrap">

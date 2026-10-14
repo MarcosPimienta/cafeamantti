@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { RUT_BUCKET, isRutPathOf } from '@/utils/suppliers/rut';
 
 async function checkAdmin(supabase: any) {
   const { data: { user }, error: userErr } = await supabase.auth.getUser();
@@ -137,18 +138,79 @@ export async function deleteSupplier(id: string) {
   try {
     await checkAdmin(supabase);
 
+    const { data: s } = await supabase.from('suppliers').select('rut_path').eq('id', id).maybeSingle();
     const { error } = await supabase
       .from('suppliers')
       .delete()
       .eq('id', id);
 
     if (error) throw error;
+    if (s?.rut_path) await supabase.storage.from(RUT_BUCKET).remove([s.rut_path]);
 
     revalidatePath('/admin/suppliers');
     revalidatePath('/admin/cuentas-cobro');
     return { success: true };
   } catch (err: any) {
     console.error('Error deleting supplier:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ── RUT ─────────────────────────────────────────────────────
+// The browser uploads the file straight to the private bucket (server
+// actions cap request bodies at 1 MB); these record it, show it and
+// remove it.
+
+export async function saveSupplierRut(supplierId: string, path: string, fileName: string) {
+  const supabase = await createClient();
+  try {
+    await checkAdmin(supabase);
+    if (!isRutPathOf(supplierId, path)) throw new Error('Archivo de RUT inválido.');
+    const { data: prev, error: prevErr } = await supabase.from('suppliers').select('rut_path').eq('id', supplierId).single();
+    if (prevErr) throw prevErr;
+    const { error } = await supabase
+      .from('suppliers')
+      .update({ rut_path: path, rut_file_name: fileName.slice(0, 200) || null, rut_uploaded_at: new Date().toISOString() })
+      .eq('id', supplierId);
+    if (error) throw error;
+    // The previous copy is replaced, not kept.
+    if (prev?.rut_path && prev.rut_path !== path) await supabase.storage.from(RUT_BUCKET).remove([prev.rut_path]);
+    revalidatePath('/admin/suppliers');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving supplier RUT:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/** A link to the supplier's RUT valid for 10 minutes. */
+export async function getSupplierRutUrl(supplierId: string) {
+  const supabase = await createClient();
+  try {
+    await checkAdmin(supabase);
+    const { data: s, error } = await supabase.from('suppliers').select('rut_path').eq('id', supplierId).single();
+    if (error) throw error;
+    if (!s?.rut_path) throw new Error('El proveedor no tiene RUT.');
+    const { data, error: urlErr } = await supabase.storage.from(RUT_BUCKET).createSignedUrl(s.rut_path, 600);
+    if (urlErr || !data) throw urlErr ?? new Error('No se pudo abrir el RUT.');
+    return { success: true, url: data.signedUrl };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteSupplierRut(supplierId: string) {
+  const supabase = await createClient();
+  try {
+    await checkAdmin(supabase);
+    const { data: s, error } = await supabase.from('suppliers').select('rut_path').eq('id', supplierId).single();
+    if (error) throw error;
+    const { error: upErr } = await supabase.from('suppliers').update({ rut_path: null, rut_file_name: null, rut_uploaded_at: null }).eq('id', supplierId);
+    if (upErr) throw upErr;
+    if (s?.rut_path) await supabase.storage.from(RUT_BUCKET).remove([s.rut_path]);
+    revalidatePath('/admin/suppliers');
+    return { success: true };
+  } catch (err: any) {
     return { success: false, error: err.message };
   }
 }
