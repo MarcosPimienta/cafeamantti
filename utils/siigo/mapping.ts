@@ -17,6 +17,16 @@ export type SiigoSettings = {
   payment_web_id?: number | null;
   payment_cash_id?: number | null;
   payment_transfer_id?: number | null;
+  /** Payment type for credit sales: one with due date (GET /v1/payment-types?document_type=FV). */
+  payment_credit_id?: number | null;
+  /** Days a credit invoice is due in, by default. */
+  credit_term_days?: number | null;
+  /** Cash receipt document type for customer payments (GET /v1/document-types?type=RC). */
+  voucher_document_id?: number | null;
+  /** Payment types of cash receipts per way the customer pays (GET /v1/payment-types?document_type=RC). */
+  voucher_cash_id?: number | null;
+  voucher_transfer_id?: number | null;
+  voucher_web_id?: number | null;
   /**
    * IVA tax applied to products (GET /v1/taxes); null = products without
    * IVA. App prices are final (IVA included), so they go as taxed_price and
@@ -142,9 +152,17 @@ export type AppOrder = {
   source?: string | null;
   shipping_cost?: number | null;
   notes?: string | null;
-  /** How it was paid: web (ePayco), cash, transfer. */
-  payment_method?: "web" | "cash" | "transfer";
+  /** How it was paid: web (ePayco), cash, transfer; or credit (paid later). */
+  payment_method?: "web" | "cash" | "transfer" | "credit";
+  /** Credit sales: days until the invoice is due. */
+  term_days?: number | null;
 };
+
+/** 'YYYY-MM-DD' plus `days`, without time zones. */
+export function addDays(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
 
 /**
  * POST /v1/invoices body. `customerIdentification` is the client's
@@ -155,9 +173,12 @@ export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], cust
   const problems: string[] = [];
   if (!settings.invoice_document_id) problems.push("Elige el tipo de factura de venta en Ajustes → Siigo.");
   if (!settings.seller_id) problems.push("Elige el vendedor en Ajustes → Siigo.");
-  const paymentId =
-    order.payment_method === "cash" ? settings.payment_cash_id : order.payment_method === "transfer" ? settings.payment_transfer_id : settings.payment_web_id;
-  if (!paymentId) problems.push("Elige la forma de pago para este tipo de venta en Ajustes → Siigo.");
+  const credit = order.payment_method === "credit";
+  const paymentId = credit
+    ? settings.payment_credit_id
+    : order.payment_method === "cash" ? settings.payment_cash_id : order.payment_method === "transfer" ? settings.payment_transfer_id : settings.payment_web_id;
+  if (!paymentId) problems.push(credit ? "Elige la forma de pago a crédito en Ajustes → Siigo." : "Elige la forma de pago para este tipo de venta en Ajustes → Siigo.");
+  const dueDate = credit ? addDays(today, Math.max(0, Math.round(num(order.term_days ?? settings.credit_term_days ?? 30)))) : today;
   if (!customerIdentification) problems.push("El pedido no tiene cliente con identificación y no hay consumidor final configurado.");
   if (items.length === 0) problems.push("El pedido no tiene productos.");
   for (const it of items) {
@@ -193,7 +214,7 @@ export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], cust
     observations: [`Pedido Café Amantti #${order.id.split("-")[0]}`, order.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
     items: lines,
     // Prices include IVA (taxed_price), so the invoice total is the order total.
-    payments: [{ id: paymentId ?? 0, value: total, due_date: today }],
+    payments: [{ id: paymentId ?? 0, value: total, due_date: dueDate }],
   };
   return { payload, problems };
 }
@@ -497,4 +518,40 @@ export function serviceTypeUpdate(p: SiigoProduct) {
     ...(p.reference ? { reference: p.reference } : {}),
     ...(p.description ? { description: p.description } : {}),
   };
+}
+
+// ── Cash receipts (customer payments → Siigo) ───────────────
+
+/** "FV-1-55" → { prefix: "FV-1", consecutive: 55 }; null if it does not look like that. */
+export function splitDocumentName(name: string | null | undefined): { prefix: string; consecutive: number } | null {
+  const m = /^(.+)-(\d+)$/.exec((name ?? "").trim());
+  return m ? { prefix: m[1], consecutive: Number(m[2]) } : null;
+}
+
+export type AppPayment = { id: string; payment_date: string; amount: number; method: "web" | "transfer" | "cash"; notes?: string | null };
+export type EmittedInvoice = { siigo_name: string | null; due_date: string | null; customer_identification: string | null };
+
+/**
+ * POST /v1/vouchers body: a "DebtPayment" receipt that pays (part of) an
+ * invoice already issued in Siigo.
+ */
+export function buildVoucherPayload(payment: AppPayment, invoice: EmittedInvoice, settings: SiigoSettings) {
+  const problems: string[] = [];
+  if (!settings.voucher_document_id) problems.push("Elige el tipo de recibo de caja en Ajustes → Siigo.");
+  const paymentId = payment.method === "cash" ? settings.voucher_cash_id : payment.method === "transfer" ? settings.voucher_transfer_id : settings.voucher_web_id;
+  if (!paymentId) problems.push("Elige la forma de pago de los recibos de caja para este medio en Ajustes → Siigo.");
+  const due = splitDocumentName(invoice.siigo_name);
+  if (!due) problems.push("La factura aún no tiene número de Siigo: envíala primero.");
+  if (!invoice.customer_identification) problems.push("La factura no tiene la identificación del cliente.");
+  const value = round2(num(payment.amount));
+  const payload = {
+    document: { id: settings.voucher_document_id ?? 0 },
+    date: payment.payment_date,
+    type: "DebtPayment",
+    customer: { identification: invoice.customer_identification ?? "", branch_office: 0 },
+    items: [{ due: { prefix: due?.prefix ?? "", consecutive: due?.consecutive ?? 0, quote: 1, date: invoice.due_date ?? payment.payment_date }, value }],
+    payment: { id: paymentId ?? 0, value },
+    observations: [`Pago de ${invoice.siigo_name ?? "factura"} · Café Amantti`, payment.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+  };
+  return { payload, problems };
 }

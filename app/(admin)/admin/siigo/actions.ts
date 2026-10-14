@@ -8,9 +8,9 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin } from '../../actions';
 import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
+import { ensureSiigoCustomer, loadSiigoSettings, siigoLog, todayBogota, type Supabase as SharedSupabase } from '@/utils/siigo/server';
 import {
   API_ROW_MAPPING,
-  buildCustomerPayload,
   buildInvoicePayload,
   buildProductPayload,
   buildPurchasePayload,
@@ -56,23 +56,9 @@ async function guard<T extends object>(run: () => Promise<T>): Promise<Result<T>
   }
 }
 
-type Supabase = Awaited<ReturnType<typeof createClient>>;
-
-async function log(
-  supabase: Supabase,
-  userId: string | null,
-  entry: { entity: string; local_id?: string | null; siigo_id?: string | null; siigo_name?: string | null; status: 'ok' | 'error'; message?: string | null }
-) {
-  const { error } = await supabase.from('siigo_sync_log').insert({ ...entry, created_by: userId });
-  if (error) console.error('siigo_sync_log:', error.message);
-}
-
-async function loadSettings(supabase: Supabase): Promise<SiigoSettings> {
-  const { data } = await supabase.from('siigo_settings').select('config').eq('id', 1).maybeSingle();
-  return normalizeSiigoSettings(data?.config);
-}
-
-const todayBogota = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+type Supabase = SharedSupabase;
+const log = siigoLog;
+const loadSettings = loadSiigoSettings;
 
 // ── Settings & connection ───────────────────────────────────
 
@@ -99,7 +85,7 @@ export async function testSiigoConnection() {
   const res = await guard(async () => {
     const siigo = getSiigoClient();
     const get = <T,>(path: string, query?: Record<string, string>) => siigo.request<T>('GET', path, { query });
-    const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups] = await Promise.all([
+    const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups, voucherTypes, voucherPayments] = await Promise.all([
       get<Named[]>('/v1/document-types', { type: 'FV' }),
       get<Named[]>('/v1/document-types', { type: 'FC' }),
       get<{ results?: { id: number; first_name: string; last_name: string; active: boolean }[] }>('/v1/users'),
@@ -107,6 +93,8 @@ export async function testSiigoConnection() {
       get<(Named & { due_date?: boolean })[]>('/v1/payment-types', { document_type: 'FC' }),
       get<(Named & { type?: string; percentage?: number })[]>('/v1/taxes'),
       get<Named[]>('/v1/account-groups'),
+      get<Named[]>('/v1/document-types', { type: 'RC' }),
+      get<(Named & { due_date?: boolean })[]>('/v1/payment-types', { document_type: 'RC' }),
     ]);
     const active = <T extends { active?: boolean }>(xs: T[] | null | undefined) => (xs ?? []).filter((x) => x.active !== false);
     return {
@@ -118,6 +106,8 @@ export async function testSiigoConnection() {
         purchasePayments: active(purchasePayments).map((p) => ({ id: p.id, name: p.name, dueDate: !!p.due_date })),
         taxes: active(taxes).filter((t) => t.type === 'IVA').map((t) => ({ id: t.id, name: t.name, percentage: t.percentage ?? null })),
         accountGroups: active(accountGroups).map((g) => ({ id: g.id, name: g.name })),
+        voucherTypes: active(voucherTypes).map((d) => ({ id: d.id, name: d.name })),
+        voucherPayments: active(voucherPayments).map((p) => ({ id: p.id, name: p.name })),
       },
     };
   });
@@ -131,11 +121,15 @@ export async function saveSiigoSettings(input: SiigoSettings) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
     const s = normalizeSiigoSettings(input);
-    for (const key of ['invoice_document_id', 'seller_id', 'payment_web_id', 'payment_cash_id', 'payment_transfer_id', 'sales_tax_id', 'product_account_group_id', 'purchase_document_id', 'purchase_payment_id'] as const) {
+    for (const key of ['invoice_document_id', 'seller_id', 'payment_web_id', 'payment_cash_id', 'payment_transfer_id', 'payment_credit_id', 'sales_tax_id', 'product_account_group_id', 'purchase_document_id', 'purchase_payment_id', 'voucher_document_id', 'voucher_cash_id', 'voucher_transfer_id', 'voucher_web_id'] as const) {
       const v = optId(s[key]);
       if (Number.isNaN(v)) throw new Error(`Valor inválido en ${key}.`);
       s[key] = v;
     }
+    if (s.credit_term_days != null && !(Number.isInteger(Number(s.credit_term_days)) && Number(s.credit_term_days) >= 0 && Number(s.credit_term_days) <= 365)) {
+      throw new Error('El plazo de crédito debe ser un número de días entre 0 y 365.');
+    }
+    s.credit_term_days = s.credit_term_days == null || (s.credit_term_days as unknown) === '' ? null : Number(s.credit_term_days);
     const ident = cleanIdentification(s.final_consumer_identification).identification;
     s.final_consumer_identification = ident || null;
     s.shipping_product_code = s.shipping_product_code?.trim() || null;
@@ -323,32 +317,6 @@ export async function createSiigoProducts(inventoryIds: string[], accountGroupId
 }
 
 // ── Customers ───────────────────────────────────────────────
-
-/** The client's Siigo customer: linked, found by identification, or created. */
-async function ensureSiigoCustomer(supabase: Supabase, userId: string | null, client: AppClient): Promise<string> {
-  const siigo = getSiigoClient();
-  const { identification } = cleanIdentification(client.document_number);
-  if (client.siigo_customer_id && identification) return identification;
-  if (identification) {
-    const found = await siigo.request<{ results?: { id: string }[] }>('GET', '/v1/customers', { query: { identification } });
-    const existing = found?.results?.[0];
-    if (existing) {
-      await supabase.from('clients').update({ siigo_customer_id: existing.id }).eq('id', client.id);
-      return identification;
-    }
-  }
-  const { payload, problems } = buildCustomerPayload(client);
-  if (problems.length) throw new Error(`Para crear el cliente en Siigo: ${problems.join(' ')}`);
-  try {
-    const res = await siigo.request<{ id: string }>('POST', '/v1/customers', { body: payload });
-    await supabase.from('clients').update({ siigo_customer_id: res.id }).eq('id', client.id);
-    await log(supabase, userId, { entity: 'customer', local_id: client.id, siigo_id: res.id, siigo_name: client.name, status: 'ok' });
-    return payload.identification;
-  } catch (err) {
-    await log(supabase, userId, { entity: 'customer', local_id: client.id, status: 'error', message: message(err) });
-    throw err;
-  }
-}
 
 // ── Sales invoices: app → Siigo ─────────────────────────────
 

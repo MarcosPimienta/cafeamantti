@@ -49,6 +49,14 @@ const RELATIONS: Record<string, Record<string, Relation>> = {
   maquila_proposals: {
     client_id: { table: "clients", localKey: "client_id" },
   },
+  sales_invoices: {
+    order_id: { table: "orders", localKey: "order_id" },
+    client_id: { table: "clients", localKey: "client_id" },
+    invoice_payments: { table: "invoice_payments", foreignKey: "invoice_id", many: true },
+  },
+  invoice_payments: {
+    invoice_id: { table: "sales_invoices", localKey: "invoice_id" },
+  },
 };
 
 /** Column defaults applied on insert, mirroring the migrations. */
@@ -58,6 +66,8 @@ const DEFAULTS: Record<string, () => Row> = {
   cashflow_expenses: () => ({ era: "v2" }),
   repack_batches: () => ({ era: "v2" }),
   orders: () => ({ status: "pending" }),
+  sales_invoices: () => ({ status: "borrador", siigo_invoice_id: null, siigo_name: null, issue_date: null, due_date: null }),
+  invoice_payments: () => ({ siigo_status: "pendiente", siigo_voucher_id: null }),
 };
 
 export type FakeError = { message: string; code?: string };

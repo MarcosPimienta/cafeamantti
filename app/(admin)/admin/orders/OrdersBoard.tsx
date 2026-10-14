@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -121,7 +122,9 @@ export default function OrdersBoard({
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
   const [allDelivered, setAllDelivered] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // ?order=<id> opens that order's panel (links from Facturas).
+  const linkedOrder = useSearchParams().get("order");
+  const [selectedId, setSelectedId] = useState<string | null>(linkedOrder);
   // Mobile shows one status at a time; start on the first one with work in it.
   const [mobileCol, setMobileCol] = useState<string>(
     () => COLUMNS.find((c) => UNDELIVERED.has(c.id) && initialOrders.some((o) => o.status === c.id))?.id ?? "pending"

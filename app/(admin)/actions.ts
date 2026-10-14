@@ -131,12 +131,32 @@ export async function getRecentOrders() {
   return orders;
 }
 
+/**
+ * An invoiced order keeps its products and cannot be cancelled or deleted:
+ * the invoice has to be annulled first (an issued one, with a credit note in
+ * Siigo). Throws a message saying so.
+ */
+async function _assertNotInvoiced(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string, change: "cancelar" | "eliminar" | "productos") {
+  const { data, error } = await supabase
+    .from('sales_invoices')
+    .select('status, siigo_name')
+    .eq('order_id', orderId)
+    .neq('status', 'anulada')
+    .limit(1);
+  if (error || !data?.length) return; // no invoice (or invoices not set up yet)
+  const inv = data[0];
+  if (change === "productos") throw new Error('El pedido ya está facturado: sus productos no se pueden cambiar. Anula el borrador de la factura para editarlo.');
+  if (inv.status === 'emitida') throw new Error(`El pedido tiene la factura ${inv.siigo_name ?? 'emitida'}: anúlala con una nota crédito en Siigo antes de cancelarlo o eliminarlo.`);
+  throw new Error('El pedido tiene una factura en borrador: anúlala en Facturas antes de cancelarlo o eliminarlo.');
+}
+
 export async function updateOrderStatus(orderId: string, newStatus: string) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (newStatus === 'cancelled') await _assertNotInvoiced(supabase, orderId, "cancelar");
   
   const { error } = await supabase
     .from('orders')
@@ -467,6 +487,7 @@ export async function deleteManualAdminOrder(orderId: string) {
   if (!isAdmin) throw new Error("Unauthorized");
 
   const supabase = await createClient();
+  await _assertNotInvoiced(supabase, orderId, "eliminar");
 
   // Give back whatever stock the order took.
   const reverted = await revertOrderStock(supabase, orderId);
@@ -532,6 +553,8 @@ export async function updateManualAdminOrder(
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (data.status === 'cancelled') await _assertNotInvoiced(supabase, orderId, "cancelar");
+  if (data.items) await _assertNotInvoiced(supabase, orderId, "productos");
 
   const { data: current, error: curErr } = await supabase
     .from('orders')

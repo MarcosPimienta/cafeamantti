@@ -47,6 +47,12 @@ async function changeStock(supabase: DB, inventoryId: string, delta: number, all
   return next;
 }
 
+/** The order has an invoice that is not annulled (false while the invoices migration is missing). */
+export async function hasLiveInvoice(supabase: DB, orderId: string): Promise<boolean> {
+  const { data, error } = await supabase.from("sales_invoices").select("id").eq("order_id", orderId).neq("status", "anulada").limit(1);
+  return !error && (data ?? []).length > 0;
+}
+
 /** Gives back every unit an order took and deletes its movements. */
 export async function revertOrderStock(supabase: DB, orderId: string): Promise<Movement[]> {
   const movements = await findOrderMovements(supabase, orderId);
@@ -78,7 +84,8 @@ export type SyncOptions = {
 export async function syncOrderStock(supabase: DB, opts: SyncOptions): Promise<"deducted" | "reverted" | "unchanged"> {
   const { orderId, status, userId, allowNegative = false, onMovement } = opts;
   const existing = await findOrderMovements(supabase, orderId);
-  const shouldDeduct = PAID_ORDER_STATUSES.includes(status);
+  // Paid, or invoiced (credit sale: the coffee leaves when it is invoiced).
+  const shouldDeduct = PAID_ORDER_STATUSES.includes(status) || (status !== "cancelled" && (await hasLiveInvoice(supabase, orderId)));
   if ((existing.length > 0) === shouldDeduct) return "unchanged";
 
   const { data: items, error: itemsErr } = await supabase

@@ -24,6 +24,8 @@ type Catalogs = {
   purchasePayments: Option[];
   taxes: (Option & { percentage: number | null })[];
   accountGroups: Option[];
+  voucherTypes: Option[];
+  voucherPayments: Option[];
 };
 type Kind = "servicio" | "repuesto";
 type Comparison = {
@@ -232,6 +234,12 @@ export default function SiigoSettingsClient({
             <IdSelect id="sg-pay-web" label={tr("Forma de pago · ventas web (ePayco)")} value={settings.payment_web_id} options={catalogs?.salesPayments ?? null} onChange={(v) => set("payment_web_id", v)} />
             <IdSelect id="sg-pay-cash" label={tr("Forma de pago · efectivo")} value={settings.payment_cash_id} options={catalogs?.salesPayments ?? null} onChange={(v) => set("payment_cash_id", v)} />
             <IdSelect id="sg-pay-transfer" label={tr("Forma de pago · transferencia")} value={settings.payment_transfer_id} options={catalogs?.salesPayments ?? null} onChange={(v) => set("payment_transfer_id", v)} />
+            <IdSelect id="sg-pay-credit" label={tr("Forma de pago · a crédito")} value={settings.payment_credit_id} options={catalogs?.salesPayments ?? null} onChange={(v) => set("payment_credit_id", v)}
+              hint={tr("La que maneja vencimiento (por ejemplo «Pago a crédito»). Se usa en las facturas que el cliente paga después.")} />
+            <div>
+              <label htmlFor="sg-term" className={labelCls}>{tr("Plazo de crédito por defecto (días)")}</label>
+              <input id="sg-term" inputMode="numeric" value={settings.credit_term_days ?? ""} onChange={(e) => set("credit_term_days", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))} placeholder="30" className={inputCls} />
+            </div>
             <IdSelect id="sg-tax" label={tr("IVA de los productos")} value={settings.sales_tax_id} options={catalogs?.taxes.map((t) => ({ id: t.id, name: t.name })) ?? null} onChange={(v) => set("sales_tax_id", v)}
               hint="Los precios de la app ya incluyen este IVA. Sin elegir = productos sin IVA (excluidos)." />
             <div>
@@ -256,6 +264,20 @@ export default function SiigoSettingsClient({
               <input type="checkbox" checked={!!settings.send_mail} onChange={(e) => set("send_mail", e.target.checked)} className="w-4 h-4 accent-[#C59F59]" />
               <span className="text-sm">{tr("Enviar la factura por correo al cliente")}</span>
             </label>
+          </div>
+        </section>
+
+        {/* Customer payments → cash receipts */}
+        <section className={card}>
+          <div>
+            <h2 className="text-lg font-serif">{tr("Pagos de clientes (recibos de caja)")}</h2>
+            <p className="text-xs text-foreground/50">{tr("Cada pago que registras en una factura se envía a Siigo como recibo de caja que abona a esa factura.")}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <IdSelect id="sg-rc" label={tr("Tipo de recibo de caja")} value={settings.voucher_document_id} options={catalogs?.voucherTypes ?? null} onChange={(v) => set("voucher_document_id", v)} />
+            <IdSelect id="sg-rc-transfer" label={tr("Forma de pago · transferencia")} value={settings.voucher_transfer_id} options={catalogs?.voucherPayments ?? null} onChange={(v) => set("voucher_transfer_id", v)} />
+            <IdSelect id="sg-rc-cash" label={tr("Forma de pago · efectivo")} value={settings.voucher_cash_id} options={catalogs?.voucherPayments ?? null} onChange={(v) => set("voucher_cash_id", v)} />
+            <IdSelect id="sg-rc-web" label={tr("Forma de pago · ventas web (ePayco)")} value={settings.voucher_web_id} options={catalogs?.voucherPayments ?? null} onChange={(v) => set("voucher_web_id", v)} />
           </div>
         </section>
 
