@@ -3,7 +3,7 @@
 // the browser.
 import type { createClient } from "@/utils/supabase/server";
 import { SiigoError, getSiigoClient } from "./api";
-import { buildCustomerPayload, cleanIdentification, normalizeSiigoSettings, type AppClient, type SiigoSettings } from "./mapping";
+import { buildCustomerPayload, buildSupplierPayload, cleanIdentification, normalizeSiigoSettings, type AppClient, type SiigoSettings } from "./mapping";
 
 export type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -50,6 +50,32 @@ export async function ensureSiigoCustomer(supabase: Supabase, userId: string | n
     return payload.identification;
   } catch (err) {
     await siigoLog(supabase, userId, { entity: "customer", local_id: client.id, status: "error", message: errorText(err) });
+    throw err;
+  }
+}
+
+/**
+ * The supplier of a cuenta de cobro in Siigo: found by identification, or
+ * created as a Supplier (needs address and DANE city). Returns its identification.
+ */
+export async function ensureSiigoSupplier(
+  supabase: Supabase,
+  userId: string | null,
+  s: { name: string; document_number: string; email?: string | null; phone?: string | null; address?: string | null; city_code?: string | null }
+): Promise<string> {
+  const siigo = getSiigoClient();
+  const { identification } = cleanIdentification(s.document_number);
+  if (!identification) throw new Error("La cuenta de cobro no tiene la cédula o NIT del proveedor.");
+  const found = await siigo.request<{ results?: { id: string }[] }>("GET", "/v1/customers", { query: { identification } });
+  if (found?.results?.length) return identification;
+  const { payload, problems } = buildSupplierPayload(s);
+  if (problems.length) throw new Error(`El proveedor no existe en Siigo. Para crearlo: ${problems.join(" ")} Complétalo en Proveedores o créalo en Siigo.`);
+  try {
+    const res = await siigo.request<{ id: string }>("POST", "/v1/customers", { body: payload });
+    await siigoLog(supabase, userId, { entity: "customer", siigo_id: res.id, siigo_name: s.name, status: "ok", message: "Proveedor creado" });
+    return identification;
+  } catch (err) {
+    await siigoLog(supabase, userId, { entity: "customer", status: "error", message: errorText(err) });
     throw err;
   }
 }

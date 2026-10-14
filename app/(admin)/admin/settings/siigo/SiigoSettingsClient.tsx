@@ -26,6 +26,8 @@ type Catalogs = {
   accountGroups: Option[];
   voucherTypes: Option[];
   voucherPayments: Option[];
+  supportTypes: Option[];
+  retentions: (Option & { percentage: number | null })[];
 };
 type Kind = "servicio" | "repuesto";
 type Comparison = {
@@ -41,7 +43,7 @@ const labelCls = "block text-[10px] font-bold uppercase tracking-widest text-for
 const inputCls = "w-full px-3 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20";
 const card = "bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-4";
 
-const ENTITY_LABEL: Record<string, string> = { invoice: "Factura", customer: "Cliente", product: "Producto", purchase: "Compra", connection: "Conexión" };
+const ENTITY_LABEL: Record<string, string> = { invoice: "Factura", customer: "Cliente", product: "Producto", purchase: "Compra", connection: "Conexión", voucher: "Recibo de caja", support_document: "Documento soporte" };
 
 function IdSelect({ id, label, value, options, onChange, hint }: {
   id: string; label: string; value: number | null | undefined; options: Option[] | null; onChange: (v: number | null) => void; hint?: string;
@@ -315,6 +317,50 @@ export default function SiigoSettingsClient({
                 </div>
               ))}
             </div>
+          </details>
+        </section>
+
+        {/* Signed cuentas de cobro → support documents */}
+        <section className={card}>
+          <div>
+            <h2 className="text-lg font-serif">{tr("Documento soporte (cuentas de cobro firmadas)")}</h2>
+            <p className="text-xs text-foreground/50">{tr("Cada cuenta de cobro de gasto firmada se envía desde Cuentas de Cobro como documento soporte, con la cuenta contable de su categoría (la misma de Compras) y queda por pagar al proveedor.")}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <IdSelect id="sg-ds" label={tr("Tipo de documento soporte")} value={settings.support_document_id} options={catalogs?.supportTypes ?? null} onChange={(v) => set("support_document_id", v)} />
+            <IdSelect id="sg-ds-pay" label={tr("Forma de pago · por pagar al proveedor")} value={settings.support_payment_id} options={catalogs?.purchasePayments ?? null} onChange={(v) => set("support_payment_id", v)}
+              hint="La que maneja vencimiento (por ejemplo «Crédito proveedores»)." />
+            <div>
+              <label htmlFor="sg-ds-assumed" className={labelCls}>{tr("Cuenta de la retención asumida")}</label>
+              <input id="sg-ds-assumed" value={settings.support_assumed_account ?? ""} onChange={(e) => set("support_assumed_account", e.target.value.replace(/\D/g, ""))}
+                placeholder={tr("Ej. 53152002")} className={inputCls} />
+              <p className="text-[11px] text-foreground/40 mt-1">{tr("Cuando Café Amantti paga la retención y el proveedor recibe el valor completo.")}</p>
+            </div>
+          </div>
+          <details className="rounded-2xl bg-[#fdfbf7] border border-foreground/5 p-4">
+            <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">{tr("Retención en la fuente por categoría")}</summary>
+            <div className="space-y-2 mt-3">
+              {expenseCategories.map((c) => (
+                <div key={c} className="grid grid-cols-[1fr_180px] gap-2 items-center">
+                  <span className="text-sm">{c}</span>
+                  {catalogs ? (
+                    <select value={settings.support_retentions?.[c] ?? ""} aria-label={tr("Retención de {c}", { c: c })} className={inputCls}
+                      onChange={(e) => {
+                        const next = { ...(settings.support_retentions ?? {}) };
+                        if (e.target.value) next[c] = Number(e.target.value);
+                        else delete next[c];
+                        set("support_retentions", next);
+                      }}>
+                      <option value="">{tr("Sin retención")}</option>
+                      {catalogs.retentions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                  ) : (
+                    <p className={`${inputCls} text-foreground/50`}>{settings.support_retentions?.[c] ? tr("ID {value}", { value: settings.support_retentions[c] }) : tr("Sin retención")}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-foreground/40 mt-3">{tr("Tu contadora define la tarifa de cada categoría. Al enviar cada cuenta de cobro puedes cambiarla.")}</p>
           </details>
         </section>
 

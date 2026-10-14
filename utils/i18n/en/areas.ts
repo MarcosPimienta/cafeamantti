@@ -11,3 +11,4 @@ export { server } from "./server";
 export { documents } from "./documents";
 export { invoices } from "./invoices";
 export { suppliers } from "./suppliers";
+export { supportDocuments } from "./supportDocuments";

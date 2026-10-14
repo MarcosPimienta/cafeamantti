@@ -50,6 +50,14 @@ export type SiigoSettings = {
   expense_accounts?: Record<string, string>;
   /** Fixed asset code in Siigo per asset class, for CAPEX purchases. */
   fixed_asset_codes?: Record<string, string>;
+  /** Support document type for signed cuentas de cobro (GET /v1/document-types?type=DS). */
+  support_document_id?: number | null;
+  /** Payment type of support documents: owed to the supplier, with due date (GET /v1/payment-types?document_type=FC). */
+  support_payment_id?: number | null;
+  /** Retefuente tax id (GET /v1/taxes) per expense category, for support documents. */
+  support_retentions?: Record<string, number>;
+  /** Ledger account of a withholding the business assumes (e.g. 53152002 Otros impuestos asumidos). */
+  support_assumed_account?: string | null;
 };
 
 export const DEFAULT_SIIGO_SETTINGS: SiigoSettings = {
@@ -58,11 +66,18 @@ export const DEFAULT_SIIGO_SETTINGS: SiigoSettings = {
   final_consumer_identification: "222222222222",
   expense_accounts: {},
   fixed_asset_codes: {},
+  support_retentions: {},
 };
 
 export function normalizeSiigoSettings(raw: unknown): SiigoSettings {
   const s = (raw && typeof raw === "object" ? raw : {}) as SiigoSettings;
-  return { ...DEFAULT_SIIGO_SETTINGS, ...s, expense_accounts: { ...(s.expense_accounts ?? {}) }, fixed_asset_codes: { ...(s.fixed_asset_codes ?? {}) } };
+  return {
+    ...DEFAULT_SIIGO_SETTINGS,
+    ...s,
+    expense_accounts: { ...(s.expense_accounts ?? {}) },
+    fixed_asset_codes: { ...(s.fixed_asset_codes ?? {}) },
+    support_retentions: { ...(s.support_retentions ?? {}) },
+  };
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -554,4 +569,88 @@ export function buildVoucherPayload(payment: AppPayment, invoice: EmittedInvoice
     observations: [`Pago de ${invoice.siigo_name ?? "factura"} · Café Amantti`, payment.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
   };
   return { payload, problems };
+}
+
+// ── Support documents (signed cuentas de cobro → Siigo) ─────
+
+export type AppCuentaCobro = {
+  number: number;
+  issuer_name: string;
+  issuer_document: string;
+  concept?: string | null;
+  signed_at?: string | null;
+  items: { description: string; quantity: number | string; unit_price: number | string; total_price?: number | string }[];
+};
+export type Retention = { id: number; name: string; percentage: number };
+export type SupportOptions = {
+  /** Date of the document (YYYY-MM-DD): when the service was bought. */
+  date: string;
+  /** Expense category: its ledger account comes from Ajustes → Siigo. */
+  category: string;
+  /** Retefuente applied, or null for none. */
+  retention: Retention | null;
+  /** The business pays the withholding itself: the supplier gets the full amount. */
+  assumed: boolean;
+};
+
+/**
+ * POST /v1/purchase-support-documents body for a signed cuenta de cobro, the
+ * way Café Amantti already makes them in Siigo: one ledger-account line per
+ * item, Retefuente on each line, owed to the supplier (due the same day).
+ * With an assumed withholding, an extra line books it as an expense and the
+ * supplier is owed the full amount.
+ */
+export function buildSupportDocumentPayload(cc: AppCuentaCobro, opts: SupportOptions, settings: SiigoSettings) {
+  const problems: string[] = [];
+  if (!settings.support_document_id) problems.push("Elige el tipo de documento soporte en Ajustes → Siigo.");
+  if (!settings.support_payment_id) problems.push("Elige la forma de pago de los documentos soporte en Ajustes → Siigo.");
+  const { identification } = cleanIdentification(cc.issuer_document);
+  if (!identification) problems.push("La cuenta de cobro no tiene la cédula o NIT del proveedor.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) problems.push("Fecha del documento soporte inválida.");
+  const account = opts.category ? settings.expense_accounts?.[opts.category] : undefined;
+  if (!opts.category) problems.push("Elige la categoría del gasto.");
+  else if (!account) problems.push(`Configura la cuenta contable para la categoría "${opts.category}" en Ajustes → Siigo.`);
+  const assumedAccount = settings.support_assumed_account?.trim() || null;
+  if (opts.retention && opts.assumed && !assumedAccount) problems.push("Configura la cuenta de la retención asumida en Ajustes → Siigo.");
+
+  const lines = cc.items
+    .map((it) => ({ description: (it.description || cc.concept || "Servicios").slice(0, 200), quantity: round2(num(it.quantity)) || 1, price: round2(num(it.unit_price)) }))
+    .filter((l) => l.price > 0);
+  if (!lines.length) problems.push("La cuenta de cobro no tiene valores.");
+
+  const gross = round2(lines.reduce((s, l) => s + l.quantity * l.price, 0));
+  const withheld = opts.retention ? round2(lines.reduce((s, l) => s + round2((l.quantity * l.price * opts.retention!.percentage) / 100), 0)) : 0;
+  const items: Record<string, unknown>[] = lines.map((l) => ({
+    type: "Account",
+    code: account ?? "",
+    description: l.description,
+    quantity: l.quantity,
+    price: l.price,
+    ...(opts.retention ? { taxes: [{ id: opts.retention.id }] } : {}),
+  }));
+  if (opts.retention && opts.assumed && withheld > 0) {
+    items.push({ type: "Account", code: assumedAccount ?? "", description: `${opts.retention.name} asumida`, quantity: 1, price: withheld });
+  }
+  // What is owed to the supplier: the gross value minus what is withheld,
+  // unless the business assumes it (then the extra line adds it back).
+  const owed = opts.assumed ? gross : round2(gross - withheld);
+  const signed = cc.signed_at ? cc.signed_at.slice(0, 10) : null;
+
+  const payload = {
+    document: { id: settings.support_document_id ?? 0 },
+    date: opts.date,
+    supplier: { identification, branch_office: 0 },
+    supplier_receipt_number: { prefix: "CC", number: String(cc.number) },
+    observations: [`Cuenta de cobro No. ${cc.number}${signed ? ` firmada el ${signed}` : ""}`, cc.concept ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+    items,
+    payments: [{ id: settings.support_payment_id ?? 0, value: owed, due_date: opts.date }],
+    stamp: { send: !!settings.stamp_dian },
+  };
+  return { payload, problems, totals: { gross, withheld, owed } };
+}
+
+/** POST /v1/customers body to create the supplier of a cuenta de cobro in Siigo. */
+export function buildSupplierPayload(s: { name: string; document_number: string; email?: string | null; phone?: string | null; address?: string | null; city_code?: string | null }) {
+  const { payload, problems } = buildCustomerPayload({ id: "", name: s.name, document_type: /-\d$/.test(s.document_number.trim()) ? "NIT" : "CC", document_number: s.document_number, email: s.email, phone: s.phone, address: s.address, city_code: s.city_code });
+  return { payload: { ...payload, type: "Supplier" }, problems };
 }

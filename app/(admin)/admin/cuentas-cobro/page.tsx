@@ -12,6 +12,7 @@ import {
 import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@/utils/pdf/cuentasCobroHelpers";
 import { downloadCuentaCobroPDF } from "@/utils/pdf/cuentasCobroPdf";
 import { DocLanguagePicker, useTr } from "@/app/(admin)/AdminI18n";
+import SupportDocumentSiigo from "./SupportDocumentSiigo";
 import { type Locale } from "@/utils/i18n/translate";
 
 export default function CuentasCobroPage() {
@@ -445,21 +446,24 @@ export default function CuentasCobroPage() {
                           <span className="text-xs text-foreground/30 italic">{tr("Requiere firma")}</span>
                         )
                       ) : (
-                        cc.expense_id ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-600 rounded-md border border-blue-100">
-                            {tr("Registrado")}
-                          </span>
-                        ) : cc.status === 'firmada' ? (
-                          <button
-                            onClick={() => openRegisterModal(cc)}
-                            className="inline-flex items-center gap-1 px-3 py-1 bg-stone-50 hover:bg-stone-100 border border-foreground/10 hover:border-foreground/20 text-[#C59F59] text-xs font-bold rounded-lg transition-colors shadow-sm"
-                          >
-                            <Wallet className="w-3.5 h-3.5" />
-                            {tr("Registrar Gasto")}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-foreground/30 italic">{tr("Requiere firma")}</span>
-                        )
+                        <>
+                          {cc.expense_id ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-600 rounded-md border border-blue-100">
+                              {tr("Registrado")}
+                            </span>
+                          ) : cc.status === 'firmada' ? (
+                            <button
+                              onClick={() => openRegisterModal(cc)}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-stone-50 hover:bg-stone-100 border border-foreground/10 hover:border-foreground/20 text-[#C59F59] text-xs font-bold rounded-lg transition-colors shadow-sm"
+                            >
+                              <Wallet className="w-3.5 h-3.5" />
+                              {tr("Registrar Gasto")}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-foreground/30 italic">{tr("Requiere firma")}</span>
+                          )}
+                          <SupportDocumentSiigo cc={cc} onChanged={loadData} />
+                        </>
                       )}
                     </td>
                     <td className="p-4 text-right space-x-2">

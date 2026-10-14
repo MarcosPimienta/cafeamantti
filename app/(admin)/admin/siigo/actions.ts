@@ -85,7 +85,7 @@ export async function testSiigoConnection() {
   const res = await guard(async () => {
     const siigo = getSiigoClient();
     const get = <T,>(path: string, query?: Record<string, string>) => siigo.request<T>('GET', path, { query });
-    const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups, voucherTypes, voucherPayments] = await Promise.all([
+    const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups, voucherTypes, voucherPayments, supportTypes] = await Promise.all([
       get<Named[]>('/v1/document-types', { type: 'FV' }),
       get<Named[]>('/v1/document-types', { type: 'FC' }),
       get<{ results?: { id: number; first_name: string; last_name: string; active: boolean }[] }>('/v1/users'),
@@ -95,6 +95,7 @@ export async function testSiigoConnection() {
       get<Named[]>('/v1/account-groups'),
       get<Named[]>('/v1/document-types', { type: 'RC' }),
       get<(Named & { due_date?: boolean })[]>('/v1/payment-types', { document_type: 'RC' }),
+      get<Named[]>('/v1/document-types', { type: 'DS' }),
     ]);
     const active = <T extends { active?: boolean }>(xs: T[] | null | undefined) => (xs ?? []).filter((x) => x.active !== false);
     return {
@@ -108,6 +109,11 @@ export async function testSiigoConnection() {
         accountGroups: active(accountGroups).map((g) => ({ id: g.id, name: g.name })),
         voucherTypes: active(voucherTypes).map((d) => ({ id: d.id, name: d.name })),
         voucherPayments: active(voucherPayments).map((p) => ({ id: p.id, name: p.name })),
+        supportTypes: active(supportTypes).map((d) => ({ id: d.id, name: d.name })),
+        retentions: active(taxes)
+          .filter((t) => t.type === 'Retefuente')
+          .map((t) => ({ id: t.id, name: t.name, percentage: t.percentage ?? null }))
+          .sort((a, b) => (a.percentage ?? 0) - (b.percentage ?? 0)),
       },
     };
   });
@@ -121,7 +127,7 @@ export async function saveSiigoSettings(input: SiigoSettings) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
     const s = normalizeSiigoSettings(input);
-    for (const key of ['invoice_document_id', 'seller_id', 'payment_web_id', 'payment_cash_id', 'payment_transfer_id', 'payment_credit_id', 'sales_tax_id', 'product_account_group_id', 'purchase_document_id', 'purchase_payment_id', 'voucher_document_id', 'voucher_cash_id', 'voucher_transfer_id', 'voucher_web_id'] as const) {
+    for (const key of ['invoice_document_id', 'seller_id', 'payment_web_id', 'payment_cash_id', 'payment_transfer_id', 'payment_credit_id', 'sales_tax_id', 'product_account_group_id', 'purchase_document_id', 'purchase_payment_id', 'voucher_document_id', 'voucher_cash_id', 'voucher_transfer_id', 'voucher_web_id', 'support_document_id', 'support_payment_id'] as const) {
       const v = optId(s[key]);
       if (Number.isNaN(v)) throw new Error(`Valor inválido en ${key}.`);
       s[key] = v;
@@ -138,6 +144,14 @@ export async function saveSiigoSettings(input: SiigoSettings) {
       else if (!/^\d{4,10}$/.test(v.trim())) throw new Error(`La cuenta de "${k}" debe ser un código PUC de 4 a 10 dígitos.`);
       else s.expense_accounts![k] = v.trim();
     }
+    for (const [k, v] of Object.entries(s.support_retentions ?? {})) {
+      const id = optId(v);
+      if (Number.isNaN(id)) throw new Error(`Retención inválida para "${k}".`);
+      if (id === null) delete s.support_retentions![k];
+      else s.support_retentions![k] = id;
+    }
+    s.support_assumed_account = s.support_assumed_account?.trim() || null;
+    if (s.support_assumed_account && !/^\d{4,10}$/.test(s.support_assumed_account)) throw new Error('La cuenta de la retención asumida debe ser un código PUC de 4 a 10 dígitos.');
     for (const [k, v] of Object.entries(s.fixed_asset_codes ?? {})) {
       if (!v.trim()) delete s.fixed_asset_codes![k];
       else s.fixed_asset_codes![k] = v.trim();
