@@ -538,16 +538,6 @@ export function serviceTypeUpdate(p: SiigoProduct) {
 // ── Cash receipts (customer payments → Siigo) ───────────────
 
 /** "FV-1-55" → { prefix: "FV-1", consecutive: 55 }; null if it does not look like that. */
-/**
- * The invoice number the customer and the DIAN see: the resolution prefix
- * plus the consecutive (FEA719), not Siigo's internal name (FV-2-719).
- */
-export function invoiceDisplayNumber(inv: { name?: string | null; prefix?: string | null; number?: number | string | null }): string | null {
-  const prefix = (inv.prefix ?? "").trim();
-  if (prefix && inv.number != null && String(inv.number).trim()) return `${prefix}${String(inv.number).trim()}`;
-  return inv.name ?? null;
-}
-
 export function splitDocumentName(name: string | null | undefined): { prefix: string; consecutive: number } | null {
   const m = /^(.+)-(\d+)$/.exec((name ?? "").trim());
   return m ? { prefix: m[1], consecutive: Number(m[2]) } : null;

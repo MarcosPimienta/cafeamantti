@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin, updateOrderStatus as setOrderStatus } from '../../actions';
 import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
-import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, invoiceDisplayNumber, type AppClient } from '@/utils/siigo/mapping';
+import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
 import { ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
 import { syncOrderStock } from '@/utils/orders/stock';
 import { balanceDue, invoiceLinesFromOrder, paymentProblems, paymentState, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
@@ -52,17 +52,23 @@ function refresh() {
   revalidatePath('/admin/orders');
 }
 
-/**
- * Updates a row with the DIAN number (siigo_number); before its migration the
- * column is missing, so the update is retried without it.
- */
-async function updateWithNumber(supabase: Supabase, table: 'sales_invoices' | 'orders', id: string, fields: Record<string, unknown>) {
+async function updateRow(supabase: Supabase, table: 'sales_invoices' | 'orders', id: string, fields: Record<string, unknown>) {
   const { error } = await supabase.from(table).update(fields).eq('id', id);
-  if (error && /siigo_number/.test(error.message)) {
-    const { siigo_number: _omit, ...rest } = fields; // eslint-disable-line @typescript-eslint/no-unused-vars
-    const retry = await supabase.from(table).update(rest).eq('id', id);
-    if (retry.error) throw retry.error;
-  } else if (error) throw error;
+  if (error) throw error;
+}
+
+type InvoiceRow = { id: string; total: number; shipping: number; notes: string | null; payment_terms: string; payment_method: string | null; term_days: number; lines: unknown };
+
+/** The Siigo invoice body for an app invoice, dated `today`. */
+function siigoPayload(inv: InvoiceRow, identification: string | null, settings: SiigoSettings, today: string) {
+  const credit = inv.payment_terms === 'credito';
+  return buildInvoicePayload(
+    { id: inv.id, total_amount: Number(inv.total), shipping_cost: Number(inv.shipping), notes: inv.notes, payment_method: credit ? 'credit' : ((inv.payment_method ?? 'transfer') as 'web' | 'cash' | 'transfer'), term_days: inv.term_days },
+    (inv.lines as InvoiceLine[]).map((l) => ({ product_code: l.code, name: l.name, quantity: l.quantity, unit_price: l.unit_price, linked: l.linked, tax_id: l.tax_id })),
+    identification,
+    settings,
+    today
+  );
 }
 
 type SiigoInvoiceOut = { id: string; name?: string; prefix?: string; number?: number; public_url?: string; stamp?: { status?: string; cufe?: string; errors?: string } };
@@ -292,13 +298,7 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
           ? await ensureSiigoCustomer(supabase, userId, client)
           : settings.final_consumer_identification ?? null;
         const credit = inv.payment_terms === 'credito';
-        const { payload, problems } = buildInvoicePayload(
-          { id: inv.id, total_amount: Number(inv.total), shipping_cost: Number(inv.shipping), notes: inv.notes, payment_method: credit ? 'credit' : inv.payment_method ?? 'transfer', term_days: inv.term_days },
-          (inv.lines as InvoiceLine[]).map((l) => ({ product_code: l.code, name: l.name, quantity: l.quantity, unit_price: l.unit_price, linked: l.linked, tax_id: l.tax_id })),
-          identification,
-          settings,
-          today
-        );
+        const { payload, problems } = siigoPayload(inv, identification, settings, today);
         if (problems.length) throw new Error(problems.join(' · '));
         const out = await siigo.request<SiigoInvoiceOut>('POST', '/v1/invoices', {
           body: payload,
@@ -313,12 +313,11 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
           siigo_public_url: out.public_url ?? null,
           siigo_error: out.stamp?.errors || null,
         };
-        const number = invoiceDisplayNumber(out);
-        await updateWithNumber(supabase, 'sales_invoices', inv.id, { ...siigoFields, siigo_name: out.name ?? null, siigo_number: number, status: 'emitida', issue_date: today, due_date: dueDate, customer_identification: identification, updated_at: new Date().toISOString() });
+        await updateRow(supabase, 'sales_invoices', inv.id, { ...siigoFields, siigo_name: out.name ?? null, status: 'emitida', issue_date: today, due_date: dueDate, customer_identification: identification, updated_at: new Date().toISOString() });
         // The order shows its invoice as before.
-        await updateWithNumber(supabase, 'orders', inv.order_id, { ...siigoFields, siigo_invoice: out.name ?? null, siigo_number: number }).catch((e) => console.error('order siigo fields:', errorText(e)));
-        await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: out.id, siigo_name: number ?? out.name ?? null, status: 'ok', message: out.stamp?.status ?? null });
-        report.invoicesSent.push(number ?? out.name ?? out.id);
+        await updateRow(supabase, 'orders', inv.order_id, { ...siigoFields, siigo_invoice: out.name ?? null }).catch((e) => console.error('order siigo fields:', errorText(e)));
+        await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: out.id, siigo_name: out.name ?? null, status: 'ok', message: out.stamp?.status ?? null });
+        report.invoicesSent.push(out.name ?? out.id);
       } catch (err) {
         const msg = message(err);
         await supabase.from('sales_invoices').update({ status: 'error', siigo_error: msg, updated_at: new Date().toISOString() }).eq('id', inv.id);
@@ -379,9 +378,9 @@ export async function refreshInvoice(invoiceId: string) {
       const { count } = await supabase.from('invoice_payments').select('id', { count: 'exact', head: true }).eq('invoice_id', invoiceId).eq('siigo_status', 'enviado');
       if (count) throw new Error('La factura está anulada en Siigo pero tiene recibos de caja enviados: anúlalos en Siigo y avísale a tu contadora.');
       const note = out ? 'Anulada en Siigo' : 'Eliminada en Siigo';
-      await updateWithNumber(supabase, 'sales_invoices', invoiceId, { status: 'anulada', siigo_status: 'Annulled', siigo_error: note, updated_at: new Date().toISOString() });
+      await updateRow(supabase, 'sales_invoices', invoiceId, { status: 'anulada', siigo_status: 'Annulled', siigo_error: note, updated_at: new Date().toISOString() });
       // The order no longer has an invoice.
-      await updateWithNumber(supabase, 'orders', inv.order_id, { siigo_invoice_id: null, siigo_invoice: null, siigo_number: null, siigo_status: null, siigo_cufe: null, siigo_public_url: null, siigo_error: null });
+      await updateRow(supabase, 'orders', inv.order_id, { siigo_invoice_id: null, siigo_invoice: null, siigo_status: null, siigo_cufe: null, siigo_public_url: null, siigo_error: null });
       const { data: order } = await supabase.from('orders').select('status').eq('id', inv.order_id).single();
       if (order) await syncOrderStock(supabase, { orderId: inv.order_id, status: order.status, userId });
       await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: inv.siigo_invoice_id, status: 'ok', message: note });
@@ -390,10 +389,55 @@ export async function refreshInvoice(invoiceId: string) {
     }
 
     const fields = { siigo_status: out.stamp?.status ?? null, siigo_cufe: out.stamp?.cufe ?? null, siigo_public_url: out.public_url ?? null, siigo_error: out.stamp?.errors || null };
-    const number = invoiceDisplayNumber(out);
-    await updateWithNumber(supabase, 'sales_invoices', invoiceId, { ...fields, siigo_name: out.name ?? null, siigo_number: number });
-    await updateWithNumber(supabase, 'orders', inv.order_id, { ...fields, siigo_invoice: out.name ?? null, siigo_number: number }).catch((e) => console.error('order siigo fields:', errorText(e)));
+    await updateRow(supabase, 'sales_invoices', invoiceId, { ...fields, siigo_name: out.name ?? null });
+    await updateRow(supabase, 'orders', inv.order_id, { ...fields, siigo_invoice: out.name ?? null }).catch((e) => console.error('order siigo fields:', errorText(e)));
     refresh();
     return { invoice: fields, annulled: false };
+  });
+}
+
+/** States in which Siigo still lets the invoice be edited and sent to the DIAN. */
+const STAMPABLE = new Set(['Draft', 'Rejected']);
+
+/**
+ * Sends to the DIAN an invoice that is in Siigo as a draft (created with
+ * "Enviar a la DIAN" off) or that the DIAN rejected: the same invoice is
+ * updated in Siigo with stamp.send, keeping its number. Electronic invoices
+ * can't be dated before today, so it goes with today's date (and, on credit,
+ * its due date counted from today).
+ */
+export async function stampInvoice(invoiceId: string) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    if (!siigoConfigFromEnv()) throw new Error('Siigo no está configurado en el servidor.');
+    const { data: inv, error } = await supabase.from('sales_invoices').select('*').eq('id', invoiceId).single();
+    if (error || !inv) throw error ?? new Error('Factura no encontrada.');
+    if (inv.status !== 'emitida' || !inv.siigo_invoice_id) throw new Error('Primero envía la factura a Siigo.');
+    const siigo = getSiigoClient();
+    const current = await siigo.request<SiigoInvoiceOut & { annulled?: boolean }>('GET', `/v1/invoices/${inv.siigo_invoice_id}`);
+    if (current.annulled) throw new Error('La factura está anulada en Siigo: pulsa "Actualizar estado".');
+    const status = current.stamp?.status ?? 'Draft';
+    if (!STAMPABLE.has(status)) throw new Error(status === 'Accepted' ? 'La factura ya fue aceptada por la DIAN.' : 'La factura ya está en proceso de envío a la DIAN.');
+    const { count } = await supabase.from('invoice_payments').select('id', { count: 'exact', head: true }).eq('invoice_id', invoiceId).eq('siigo_status', 'enviado');
+    if (count) throw new Error('Siigo no deja editar una factura con recibos de caja: elimínalos en Siigo, envíala a la DIAN y vuelve a enviar los pagos.');
+
+    const settings = await loadSiigoSettings(supabase);
+    const today = todayBogota();
+    const { payload, problems } = siigoPayload(inv, inv.customer_identification, { ...settings, stamp_dian: true }, today);
+    if (problems.length) throw new Error(problems.join(' · '));
+    const out = await siigo.request<SiigoInvoiceOut>('PUT', `/v1/invoices/${inv.siigo_invoice_id}`, { body: payload });
+
+    const fields = {
+      siigo_status: out.stamp?.status ?? 'Pending',
+      siigo_cufe: out.stamp?.cufe ?? null,
+      siigo_public_url: out.public_url ?? inv.siigo_public_url ?? null,
+      siigo_error: out.stamp?.errors || null,
+    };
+    const dueDate = inv.payment_terms === 'credito' ? addDays(today, inv.term_days) : today;
+    await updateRow(supabase, 'sales_invoices', invoiceId, { ...fields, siigo_name: out.name ?? inv.siigo_name, issue_date: today, due_date: dueDate, updated_at: new Date().toISOString() });
+    await updateRow(supabase, 'orders', inv.order_id, { ...fields, siigo_invoice: out.name ?? inv.siigo_name }).catch((e) => console.error('order siigo fields:', errorText(e)));
+    await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: inv.siigo_invoice_id, siigo_name: out.name ?? inv.siigo_name, status: 'ok', message: `Enviada a la DIAN: ${fields.siigo_status}` });
+    refresh();
+    return { invoice: fields };
   });
 }

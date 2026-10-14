@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { balanceDue, daysOverdue, invoiceLinesFromOrder, paymentProblems, paymentState, type LedgerInvoice } from "../ledger";
-import { addDays, buildInvoicePayload, buildVoucherPayload, invoiceDisplayNumber, splitDocumentName, type SiigoSettings } from "@/utils/siigo/mapping";
+import { addDays, buildInvoicePayload, buildVoucherPayload, splitDocumentName, type SiigoSettings } from "@/utils/siigo/mapping";
 
 const credit: LedgerInvoice = { total: 100000, status: "emitida", payment_terms: "credito", due_date: "2026-10-10" };
 
@@ -61,11 +61,6 @@ describe("Siigo payloads for credit sales", () => {
     );
     expect(problems).toEqual([]);
     expect(payload.payments).toEqual([{ id: 5640, value: 70000, due_date: "2026-10-29" }]);
-  });
-
-  it("shows the DIAN number (resolution prefix + consecutive), not Siigo's internal name", () => {
-    expect(invoiceDisplayNumber({ name: "FV-2-719", prefix: "FEA", number: 719 })).toBe("FEA719");
-    expect(invoiceDisplayNumber({ name: "FV-1-3" })).toBe("FV-1-3");
   });
 
   it("splits Siigo document names and adds days across months", () => {

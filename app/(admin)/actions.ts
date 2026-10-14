@@ -170,7 +170,7 @@ async function _assertNotInvoiced(supabase: Awaited<ReturnType<typeof createClie
   if (error || !data?.length) return; // no invoice (or invoices not set up yet)
   const inv = data[0];
   if (change === "productos") throw new Error('El pedido ya está facturado: sus productos no se pueden cambiar. Anula el borrador de la factura para editarlo.');
-  if (inv.status === 'emitida') throw new Error(`El pedido tiene la factura ${inv.siigo_number ?? inv.siigo_name ?? 'emitida'}. Anúlala en Siigo y luego, en Facturas, pulsa "Actualizar estado" para liberar el pedido.`);
+  if (inv.status === 'emitida') throw new Error(`El pedido tiene la factura ${inv.siigo_name ?? 'emitida'}. Anúlala en Siigo y luego, en Facturas, pulsa "Actualizar estado" para liberar el pedido.`);
   throw new Error('El pedido tiene una factura en borrador: anúlala en Facturas antes de cancelarlo o eliminarlo.');
 }
 

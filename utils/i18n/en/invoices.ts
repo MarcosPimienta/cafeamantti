@@ -98,4 +98,10 @@ export const invoices: Record<string, string> = {
   "Anulada en Siigo": "Voided in Siigo",
   "Eliminada en Siigo": "Deleted in Siigo",
   "No se pudo actualizar el pedido.": "The order could not be updated.",
+  "La factura {name} se enviará a la DIAN con fecha de hoy. Después solo se puede anular con una nota crédito. ¿Continuar?": "Invoice {name} will be sent to the DIAN dated today. Afterwards it can only be voided with a credit note. Continue?",
+  "Primero envía la factura a Siigo.": "Send the invoice to Siigo first.",
+  "La factura está anulada en Siigo: pulsa \"Actualizar estado\".": "The invoice is voided in Siigo: press \"Refresh status\".",
+  "La factura ya fue aceptada por la DIAN.": "The invoice was already accepted by the DIAN.",
+  "La factura ya está en proceso de envío a la DIAN.": "The invoice is already being sent to the DIAN.",
+  "Siigo no deja editar una factura con recibos de caja: elimínalos en Siigo, envíala a la DIAN y vuelve a enviar los pagos.": "Siigo doesn't allow editing an invoice with cash receipts: delete them in Siigo, send it to the DIAN and send the payments again.",
 };

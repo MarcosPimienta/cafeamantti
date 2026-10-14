@@ -3,8 +3,8 @@
 import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, Plus, RefreshCw, Send, Trash2, X } from "lucide-react";
-import { annulInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo } from "./actions";
+import { AlertTriangle, CheckCircle2, ExternalLink, Landmark, Loader2, Plus, RefreshCw, Send, Trash2, X } from "lucide-react";
+import { annulInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo, stampInvoice } from "./actions";
 import { balanceDue, daysOverdue, paidAmount, paymentState, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
@@ -31,7 +31,6 @@ type Invoice = {
   issue_date: string | null;
   due_date: string | null;
   siigo_name: string | null;
-  siigo_number?: string | null;
   siigo_status: string | null;
   siigo_public_url: string | null;
   siigo_error: string | null;
@@ -226,7 +225,7 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
         <div className="min-w-0">
           <p className="font-bold truncate">{inv.customer_name}</p>
           <p className="text-xs text-foreground/50">
-            {inv.siigo_number ?? inv.siigo_name ?? tr("Sin número")}
+            {inv.siigo_name ?? tr("Sin número")}
             {" · "}
             <Link href={`/admin/orders?order=${inv.order_id}`} className="hover:text-[#C59F59] hover:underline">{tr("Pedido #{id}", { id: inv.order_id.slice(0, 8) })}</Link>
             {" · "}
@@ -286,6 +285,12 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
           <a href={inv.siigo_public_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#C59F59] hover:underline">
             {tr("Ver factura")}{" "}<ExternalLink className="w-3.5 h-3.5" />
           </a>
+        )}
+        {inv.status === "emitida" && (!inv.siigo_status || inv.siigo_status === "Draft" || inv.siigo_status === "Rejected") && (
+          <button type="button" disabled={isPending} onClick={() => run(() => stampInvoice(inv.id), tr("La factura {name} se enviará a la DIAN con fecha de hoy. Después solo se puede anular con una nota crédito. ¿Continuar?", { name: inv.siigo_name ?? "" }))}
+            className="inline-flex items-center gap-1 text-xs font-bold text-[#C59F59] hover:underline disabled:opacity-50">
+            {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Landmark className="w-3.5 h-3.5" />}{" "}{tr("Enviar a la DIAN")}
+          </button>
         )}
         {inv.status === "emitida" && (
           <button type="button" disabled={isPending} onClick={() => run(() => refreshInvoice(inv.id))} className="inline-flex items-center gap-1 text-xs font-bold text-foreground/60 hover:text-foreground disabled:opacity-50">
