@@ -1629,6 +1629,8 @@ export async function createTrillaBatch(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // What was already written, to roll back if a later step fails.
+  const undo: (() => PromiseLike<unknown>)[] = [];
   try {
     // Validate Pergamino stock
     const { data: pergamino, error: pergErr } = await supabase
@@ -1652,7 +1654,9 @@ export async function createTrillaBatch(
       reason: `Trilla → Café Verde${notes ? ` — ${notes}` : ''}`,
       tab_source: 'trilla',
     });
+    undo.push(() => supabase.from('inventory_movements').delete().eq('id', mId1));
     const newPergaminoStock = await _updateStockBy(supabase, pergaminoInventoryId, -inputQtyKg);
+    undo.push(() => _updateStockBy(supabase, pergaminoInventoryId, inputQtyKg));
 
     // Entrada: Verde
     const mId2 = await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'entrada', outputQtyKg, {
@@ -1660,7 +1664,9 @@ export async function createTrillaBatch(
       reason: `Trilla (rend. ${(rendimientoPct * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
       tab_source: 'trilla',
     });
+    undo.push(() => supabase.from('inventory_movements').delete().eq('id', mId2));
     const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, outputQtyKg);
+    undo.push(() => _updateStockBy(supabase, verdeInventoryId, -outputQtyKg));
 
     // Production batch record
     const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
@@ -1687,6 +1693,10 @@ export async function createTrillaBatch(
     revalidatePath('/admin/inventory');
     return { success: true, newPergaminoStock, newVerdeStock };
   } catch (err: any) {
+    // Half a batch must not stay behind (e.g. green coffee out, nothing roasted in).
+    for (const step of undo.reverse()) {
+      try { await step(); } catch (e) { console.error('batch rollback:', e); }
+    }
     return { success: false, error: err.message };
   }
 }
@@ -1705,6 +1715,8 @@ export async function createTostionBatch(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // What was already written, to roll back if a later step fails.
+  const undo: (() => PromiseLike<unknown>)[] = [];
   try {
     // Validate Verde stock
     const { data: verde, error: vErr } = await supabase
@@ -1732,7 +1744,9 @@ export async function createTostionBatch(
       reason: `Tostión → Café Tostado${notes ? ` — ${notes}` : ''}`,
       tab_source: 'prod_consumo', // Keep using same tab_source or create 'tostion'
     });
+    undo.push(() => supabase.from('inventory_movements').delete().eq('id', mId1));
     const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, -inputQtyKg);
+    undo.push(() => _updateStockBy(supabase, verdeInventoryId, inputQtyKg));
 
     // Entrada: Tostado. Coffee leaves the roaster whole-bean — grinding is a
     // separate step — so the batch output is always Grano.
@@ -1742,7 +1756,9 @@ export async function createTostionBatch(
       tab_source: 'prod_consumo',
       molienda: isGrindTracked(tostado?.product_code) ? 'grano' : null,
     });
+    undo.push(() => supabase.from('inventory_movements').delete().eq('id', mId2));
     const newTostadoStock = await _updateStockBy(supabase, tostadoInventoryId, outputQtyKg);
+    undo.push(() => _updateStockBy(supabase, tostadoInventoryId, -outputQtyKg));
 
     // Production batch record
     const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
@@ -1769,6 +1785,10 @@ export async function createTostionBatch(
     revalidatePath('/admin/inventory');
     return { success: true, newVerdeStock, newTostadoStock };
   } catch (err: any) {
+    // Half a batch must not stay behind (e.g. green coffee out, nothing roasted in).
+    for (const step of undo.reverse()) {
+      try { await step(); } catch (e) { console.error('batch rollback:', e); }
+    }
     return { success: false, error: err.message };
   }
 }

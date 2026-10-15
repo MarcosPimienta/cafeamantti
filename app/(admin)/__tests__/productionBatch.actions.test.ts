@@ -5,7 +5,7 @@ const h = vi.hoisted(() => ({ client: null as unknown }));
 vi.mock("@/utils/supabase/server", () => ({ createClient: async () => h.client }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-import { deleteProductionBatch, updateProductionBatch } from "../actions";
+import { createTostionBatch, deleteProductionBatch, updateProductionBatch } from "../actions";
 
 let db: FakeDB;
 beforeEach(() => {
@@ -71,5 +71,25 @@ describe("editing a roast batch", () => {
 
   it("rejects impossible quantities", async () => {
     expect(await updateProductionBatch("b1", { inputQtyKg: 100, outputQtyKg: 120, date: "2026-10-08" })).toMatchObject({ success: false, error: "El café que sale no puede pesar más que el que entra." });
+  });
+});
+
+describe("registering a roast batch", () => {
+  it("rolls back the green coffee if the roasted entry fails (no half batches like the 9 Oct one)", async () => {
+    db.failOn("inventory_movements", "insert", "boom", 1); // the second insert (entrada) fails
+    const res = await createTostionBatch("verde", "tkg", 100, 0.82, "2026-10-09");
+    expect(res).toMatchObject({ success: false, error: "boom" });
+    expect(db.byId("inventory", "verde")!.current_stock).toBeCloseTo(170.43);
+    expect(db.byId("inventory", "tkg")!.current_stock).toBeCloseTo(152.63);
+    expect(db.rows("inventory_movements").filter((m) => m.movement_date === "2026-10-09")).toHaveLength(0);
+    expect(db.rows("production_batches")).toHaveLength(1);
+  });
+
+  it("rolls back both sides if the batch record fails", async () => {
+    db.failOn("production_batches", "insert", "batch boom");
+    expect(await createTostionBatch("verde", "tkg", 100, 0.82, "2026-10-09")).toMatchObject({ success: false, error: "batch boom" });
+    expect(db.byId("inventory", "verde")!.current_stock).toBeCloseTo(170.43);
+    expect(db.byId("inventory", "tkg")!.current_stock).toBeCloseTo(152.63);
+    expect(db.rows("inventory_movements")).toHaveLength(2); // only the 8 Oct ones
   });
 });
