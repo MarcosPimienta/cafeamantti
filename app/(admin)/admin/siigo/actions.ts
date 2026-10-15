@@ -85,7 +85,7 @@ export async function testSiigoConnection() {
   const res = await guard(async () => {
     const siigo = getSiigoClient();
     const get = <T,>(path: string, query?: Record<string, string>) => siigo.request<T>('GET', path, { query });
-    const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups, voucherTypes, voucherPayments, supportTypes, creditNoteTypes] = await Promise.all([
+    const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups, voucherTypes, voucherPayments, supportTypes, creditNoteTypes, receiptTypes] = await Promise.all([
       get<Named[]>('/v1/document-types', { type: 'FV' }),
       get<Named[]>('/v1/document-types', { type: 'FC' }),
       get<{ results?: { id: number; first_name: string; last_name: string; active: boolean }[] }>('/v1/users'),
@@ -97,6 +97,7 @@ export async function testSiigoConnection() {
       get<(Named & { due_date?: boolean })[]>('/v1/payment-types', { document_type: 'RC' }),
       get<Named[]>('/v1/document-types', { type: 'DS' }),
       get<Named[]>('/v1/document-types', { type: 'NC' }),
+      get<Named[]>('/v1/document-types', { type: 'RP' }),
     ]);
     const active = <T extends { active?: boolean }>(xs: T[] | null | undefined) => (xs ?? []).filter((x) => x.active !== false);
     return {
@@ -112,6 +113,7 @@ export async function testSiigoConnection() {
         voucherPayments: active(voucherPayments).map((p) => ({ id: p.id, name: p.name })),
         supportTypes: active(supportTypes).map((d) => ({ id: d.id, name: d.name })),
         creditNoteTypes: active(creditNoteTypes).map((d) => ({ id: d.id, name: d.name })),
+        receiptTypes: active(receiptTypes).map((d) => ({ id: d.id, name: d.name })),
         retentions: active(taxes)
           .filter((t) => t.type === 'Retefuente')
           .map((t) => ({ id: t.id, name: t.name, percentage: t.percentage ?? null }))
@@ -129,7 +131,7 @@ export async function saveSiigoSettings(input: SiigoSettings) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
     const s = normalizeSiigoSettings(input);
-    for (const key of ['invoice_document_id', 'seller_id', 'payment_web_id', 'payment_cash_id', 'payment_transfer_id', 'payment_credit_id', 'sales_tax_id', 'product_account_group_id', 'purchase_document_id', 'purchase_payment_id', 'voucher_document_id', 'voucher_cash_id', 'voucher_transfer_id', 'voucher_web_id', 'support_document_id', 'support_payment_id', 'credit_note_document_id'] as const) {
+    for (const key of ['invoice_document_id', 'seller_id', 'payment_web_id', 'payment_cash_id', 'payment_transfer_id', 'payment_credit_id', 'sales_tax_id', 'product_account_group_id', 'purchase_document_id', 'purchase_payment_id', 'voucher_document_id', 'voucher_cash_id', 'voucher_transfer_id', 'voucher_web_id', 'support_document_id', 'support_payment_id', 'credit_note_document_id', 'payment_receipt_document_id', 'payout_bank_id', 'payout_cash_id'] as const) {
       const v = optId(s[key]);
       if (Number.isNaN(v)) throw new Error(`Valor inválido en ${key}.`);
       s[key] = v;
@@ -162,6 +164,40 @@ export async function saveSiigoSettings(input: SiigoSettings) {
     if (error) throw error;
     revalidatePath('/admin/settings/siigo');
     return { settings: s };
+  });
+}
+
+/**
+ * Brings the ledger accounts registered in Siigo, to choose from instead of
+ * typing codes. Siigo's API has no chart-of-accounts endpoint, so they come
+ * from its trial balance (this year and last): every transactional account
+ * that had movements.
+ */
+export async function refreshSiigoAccounts() {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    const XLSX = await import('xlsx');
+    const siigo = getSiigoClient();
+    const year = Number(todayBogota().slice(0, 4));
+    const accounts = new Map<string, string>();
+    for (const y of [year - 1, year]) {
+      const report = await siigo.request<{ file_url: string }>('POST', '/v1/test-balance-report', { body: { year: y, month_start: 1, month_end: 13, includes_tax_difference: false } });
+      const res = await fetch(report.file_url);
+      if (!res.ok) throw new Error(`No se pudo descargar el balance de prueba ${y}.`);
+      const wb = XLSX.read(Buffer.from(await res.arrayBuffer()), { type: 'buffer' });
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+      for (const r of rows) {
+        const code = String(r[2] ?? '').trim();
+        if (/^\d{6,10}$/.test(code) && /^s/i.test(String(r[1] ?? '').trim())) accounts.set(code, String(r[3] ?? '').trim());
+      }
+    }
+    if (!accounts.size) throw new Error('Siigo no devolvió cuentas en el balance de prueba.');
+    const list = [...accounts].map(([code, name]) => ({ code, name })).sort((a, b) => a.code.localeCompare(b.code));
+    const current = await loadSettings(supabase);
+    const { error } = await supabase.from('siigo_settings').upsert({ id: 1, config: { ...current, siigo_accounts: list }, updated_at: new Date().toISOString(), updated_by: userId });
+    if (error) throw error;
+    revalidatePath('/admin/settings/siigo');
+    return { accounts: list };
   });
 }
 

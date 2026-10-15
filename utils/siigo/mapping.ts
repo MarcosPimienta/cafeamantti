@@ -50,6 +50,13 @@ export type SiigoSettings = {
   expense_accounts?: Record<string, string>;
   /** Fixed asset code in Siigo per asset class, for CAPEX purchases. */
   fixed_asset_codes?: Record<string, string>;
+  /** Payment receipt (recibo de pago/egreso) type for paying suppliers (GET /v1/document-types?type=RP). */
+  payment_receipt_document_id?: number | null;
+  /** Payment types money leaves by, for payment receipts (GET /v1/payment-types?document_type=FC). */
+  payout_bank_id?: number | null;
+  payout_cash_id?: number | null;
+  /** Transactional ledger accounts in Siigo (from its trial balance), to choose from. */
+  siigo_accounts?: { code: string; name: string }[];
   /** Credit note document type (GET /v1/document-types?type=NC). */
   credit_note_document_id?: number | null;
   /** Support document type for signed cuentas de cobro (GET /v1/document-types?type=DS). */
@@ -708,4 +715,79 @@ export function buildCreditNotePayload(
     payments: [{ id: paymentId ?? 0, value: total, due_date: credit ? invoice.due_date ?? today : today }],
   };
   return { payload, problems, total };
+}
+
+// ── Purchases (facturas de compra) and payments to suppliers ─
+
+export type AppBill = {
+  supplier_identification: string;
+  provider_prefix: string;
+  provider_number: string;
+  issue_date: string;
+  due_date: string;
+  notes?: string | null;
+  lines: { account: string; description: string; base: number; tax_id: number | null; retention_id: number | null }[];
+  total: number;
+};
+
+/**
+ * POST /v1/purchases body for a supplier's invoice, the way the accountant
+ * registers them: one ledger-account line per concept with its IVA and
+ * Retefuente, owed to the supplier until it is paid (payment receipt).
+ */
+export function buildPurchaseBillPayload(bill: AppBill, settings: SiigoSettings) {
+  const problems: string[] = [];
+  if (!settings.purchase_document_id) problems.push("Elige el tipo de factura de compra en Ajustes → Siigo.");
+  if (!settings.purchase_payment_id) problems.push("Elige la forma de pago de compras (por pagar al proveedor) en Ajustes → Siigo.");
+  const { identification } = cleanIdentification(bill.supplier_identification);
+  if (!identification) problems.push("El proveedor no tiene NIT.");
+  if (!bill.provider_number.trim()) problems.push("Falta el número de la factura del proveedor.");
+  const payload = {
+    document: { id: settings.purchase_document_id ?? 0 },
+    date: bill.issue_date,
+    supplier: { identification, branch_office: 0 },
+    provider_invoice: { prefix: bill.provider_prefix.trim().slice(0, 6), number: bill.provider_number.trim() },
+    observations: (bill.notes ?? "").slice(0, 4000),
+    items: bill.lines.map((l) => ({
+      type: "Account",
+      code: l.account,
+      description: l.description.slice(0, 200),
+      quantity: 1,
+      price: round2(num(l.base)),
+      taxes: [l.tax_id, l.retention_id].filter(Boolean).map((id) => ({ id })),
+    })),
+    payments: [{ id: settings.purchase_payment_id ?? 0, value: round2(num(bill.total)), due_date: bill.due_date }],
+  };
+  return { payload, problems };
+}
+
+/**
+ * POST /v1/payment-receipts body: a "DebtPayment" egreso that pays (part of)
+ * a document owed to the supplier, found by its due prefix and consecutive
+ * (the supplier's invoice number, or CC + number for a cuenta de cobro).
+ */
+export function buildPaymentReceiptPayload(
+  p: { date: string; amount: number; method: "bank" | "cash"; notes?: string | null },
+  due: { supplier_identification: string; prefix: string; consecutive: string | number; date: string; label: string },
+  settings: SiigoSettings
+) {
+  const problems: string[] = [];
+  if (!settings.payment_receipt_document_id) problems.push("Elige el tipo de recibo de pago/egreso en Ajustes → Siigo.");
+  const paymentId = p.method === "cash" ? settings.payout_cash_id : settings.payout_bank_id;
+  if (!paymentId) problems.push("Elige la forma de pago de los egresos para este medio en Ajustes → Siigo.");
+  const { identification } = cleanIdentification(due.supplier_identification);
+  if (!identification) problems.push("El proveedor no tiene identificación.");
+  const consecutive = Number(String(due.consecutive).replace(/\D/g, ""));
+  if (!consecutive) problems.push("El documento no tiene número para cruzar el pago.");
+  const value = round2(num(p.amount));
+  const payload = {
+    document: { id: settings.payment_receipt_document_id ?? 0 },
+    date: p.date,
+    type: "DebtPayment",
+    supplier: { identification, branch_office: 0 },
+    items: [{ due: { prefix: due.prefix, consecutive, quote: 1, date: due.date }, value }],
+    payment: { id: paymentId ?? 0, value },
+    observations: [`Pago de ${due.label} · Café Amantti`, p.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+  };
+  return { payload, problems };
 }

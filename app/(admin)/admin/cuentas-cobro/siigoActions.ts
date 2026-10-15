@@ -124,7 +124,7 @@ export async function sendSupportDocument(id: string, input: SupportInput) {
     if (cc.siigo_ds_status === 'enviando' && cc.siigo_ds_sent_at && Date.now() - Date.parse(cc.siigo_ds_sent_at) < SENDING_LOCK_MS) {
       throw new Error('Ya se está enviando: espera un momento y recarga.');
     }
-    const { payload, problems } = buildSupportDocumentPayload(cc, options(input, retentions), settings);
+    const { payload, problems, totals } = buildSupportDocumentPayload(cc, options(input, retentions), settings);
     if (problems.length) return { success: false as const, error: problems.join(' · '), problems };
 
     const { error: claimErr } = await supabase
@@ -153,6 +153,9 @@ export async function sendSupportDocument(id: string, input: SupportInput) {
       .update({ siigo_ds_id: out.id, siigo_ds_name: out.name ?? null, siigo_ds_status: out.stamp?.status ?? (settings.stamp_dian ? 'Pending' : 'Draft'), siigo_ds_error: out.stamp?.errors || null, siigo_ds_sent_at: new Date().toISOString() })
       .eq('id', id);
     if (upErr) console.error('sendSupportDocument save:', upErr.message);
+    // What it left owed, for "Registrar pago" (separate: the columns come with the purchases migration).
+    const { error: owedErr } = await supabase.from('cuentas_cobro').update({ siigo_ds_owed: totals.owed, siigo_ds_category: input.category, siigo_ds_date: input.date }).eq('id', id);
+    if (owedErr) console.error('sendSupportDocument owed:', owedErr.message);
     await siigoLog(supabase, userId, { entity: 'support_document', local_id: id, siigo_id: out.id, siigo_name: out.name ?? null, status: 'ok', message: out.stamp?.status ?? null });
     revalidatePath('/admin/cuentas-cobro');
     return { success: true as const, name: out.name ?? out.id, status: out.stamp?.status ?? null };

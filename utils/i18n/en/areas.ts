@@ -13,3 +13,4 @@ export { invoices } from "./invoices";
 export { suppliers } from "./suppliers";
 export { supportDocuments } from "./supportDocuments";
 export { creditNotes } from "./creditNotes";
+export { purchases } from "./purchases";

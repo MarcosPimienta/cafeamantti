@@ -24,7 +24,6 @@ import {
 import { fixedAssetRegister, type FixedAssetInput, type PLReportResult } from "./calculations";
 import { expenseLedger, fixedAssetSheets, incomeLedger, type ExportFilters } from "./exports";
 import { getSuppliers } from "../suppliers/actions";
-import ExpenseSiigoPanel from "./ExpenseSiigoPanel";
 import { ASSET_KIND_SUGGESTIONS, ASSET_USES, DEFAULT_DEPRECIATION_MONTHS, EXPENSE_CATEGORY_TYPE_MAP, type AssetUse, type ExpenseType } from "./types";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
@@ -201,7 +200,6 @@ function ExpenseModal({
     getSuppliers().then((list) => { if (!cancelled) setSuppliers(list); });
     return () => { cancelled = true; };
   }, []);
-  const [dirty, setDirty] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(expenseToEdit?.image_url || null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending,   startTransition] = useTransition();
@@ -297,7 +295,7 @@ function ExpenseModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} onChange={() => setDirty(true)} className="p-8 space-y-5 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-8 space-y-5 overflow-y-auto">
           {/* Fecha + Monto */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -452,7 +450,11 @@ function ExpenseModal({
           )}
 
           {expenseToEdit?.id && (
-            <ExpenseSiigoPanel expenseId={expenseToEdit.id} sentName={expenseToEdit.siigo_purchase_name ?? (expenseToEdit.siigo_purchase_id ? "creada" : null)} dirty={dirty} />
+            <p className="text-[11px] text-foreground/50">
+              {expenseToEdit.siigo_purchase_id
+                ? tr("En Siigo como {name}.", { name: expenseToEdit.siigo_purchase_name ?? tr("factura de compra") })
+                : tr("Para Siigo: las facturas de empresas se registran en Compras y las de personas naturales en Cuentas de Cobro; al pagarlas, la salida llega aquí sola.")}
+            </p>
           )}
 
           {/* Soporte */}

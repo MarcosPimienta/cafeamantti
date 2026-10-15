@@ -14,6 +14,7 @@ import {
   UploadCloud,
   Handshake,
   Receipt,
+  ShoppingCart,
 } from "lucide-react";
 import { useTr } from "./AdminI18n";
 
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { href: "/admin/users", label: "Usuarios", Icon: Users },
   { href: "/admin/customers", label: "Clientes (B2B)", Icon: Users },
   { href: "/admin/suppliers", label: "Proveedores", Icon: Building2 },
+  { href: "/admin/purchases", label: "Compras", Icon: ShoppingCart },
   { href: "/admin/invoices", label: "Facturas", Icon: Receipt },
   { href: "/admin/quotes", label: "Cotizaciones", Icon: FileText },
   { href: "/admin/cuentas-cobro", label: "Cuentas de Cobro", Icon: FileText },

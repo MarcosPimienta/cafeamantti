@@ -13,6 +13,7 @@ import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@
 import { downloadCuentaCobroPDF } from "@/utils/pdf/cuentasCobroPdf";
 import { DocLanguagePicker, useTr } from "@/app/(admin)/AdminI18n";
 import SupportDocumentSiigo from "./SupportDocumentSiigo";
+import CuentaCobroPayments from "./CuentaCobroPayments";
 import { type Locale } from "@/utils/i18n/translate";
 
 export default function CuentasCobroPage() {
@@ -452,13 +453,7 @@ export default function CuentasCobroPage() {
                               {tr("Registrado")}
                             </span>
                           ) : cc.status === 'firmada' ? (
-                            <button
-                              onClick={() => openRegisterModal(cc)}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-stone-50 hover:bg-stone-100 border border-foreground/10 hover:border-foreground/20 text-[#C59F59] text-xs font-bold rounded-lg transition-colors shadow-sm"
-                            >
-                              <Wallet className="w-3.5 h-3.5" />
-                              {tr("Registrar Gasto")}
-                            </button>
+                            <CuentaCobroPayments cc={cc} onChanged={loadData} />
                           ) : (
                             <span className="text-xs text-foreground/30 italic">{tr("Requiere firma")}</span>
                           )}

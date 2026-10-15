@@ -8,6 +8,7 @@ import {
   importSiigoItems,
   linkSiigoProducts,
   markSiigoItemsAsService,
+  refreshSiigoAccounts,
   saveProductTaxes,
   saveSiigoSettings,
   testSiigoConnection,
@@ -28,6 +29,7 @@ type Catalogs = {
   voucherPayments: Option[];
   supportTypes: Option[];
   creditNoteTypes: Option[];
+  receiptTypes: Option[];
   retentions: (Option & { percentage: number | null })[];
 };
 type Kind = "servicio" | "repuesto";
@@ -44,7 +46,7 @@ const labelCls = "block text-[10px] font-bold uppercase tracking-widest text-for
 const inputCls = "w-full px-3 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20";
 const card = "bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-4";
 
-const ENTITY_LABEL: Record<string, string> = { invoice: "Factura", customer: "Cliente", product: "Producto", purchase: "Compra", connection: "Conexión", voucher: "Recibo de caja", support_document: "Documento soporte", credit_note: "Nota crédito" };
+const ENTITY_LABEL: Record<string, string> = { invoice: "Factura", customer: "Cliente", product: "Producto", purchase: "Compra", connection: "Conexión", voucher: "Recibo de caja", support_document: "Documento soporte", credit_note: "Nota crédito", payment_receipt: "Egreso" };
 
 function IdSelect({ id, label, value, options, onChange, hint }: {
   id: string; label: string; value: number | null | undefined; options: Option[] | null; onChange: (v: number | null) => void; hint?: string;
@@ -132,6 +134,13 @@ export default function SiigoSettingsClient({
     setCatalogs(res.catalogs);
     setNotice(tr("✓ Conexión con Siigo verificada"));
   });
+  const loadAccounts = () => run("accounts", async () => {
+    const res = await refreshSiigoAccounts();
+    if (!res.success) return setError(res.error);
+    set("siigo_accounts", res.accounts);
+    setNotice(tr("✓ {n} cuentas traídas de Siigo", { n: String(res.accounts.length) }));
+  });
+  const accounts = settings.siigo_accounts ?? [];
   const save = () => run("save", async () => {
     const res = await saveSiigoSettings(settings);
     if (!res.success) return setError(res.error);
@@ -303,16 +312,37 @@ export default function SiigoSettingsClient({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <IdSelect id="sg-fc" label={tr("Tipo de factura de compra")} value={settings.purchase_document_id} options={catalogs?.purchaseTypes ?? null} onChange={(v) => set("purchase_document_id", v)} />
-            <IdSelect id="sg-pay-fc" label={tr("Forma de pago de compras")} value={settings.purchase_payment_id} options={catalogs?.purchasePayments ?? null} onChange={(v) => set("purchase_payment_id", v)} />
+            <IdSelect id="sg-pay-fc" label={tr("Forma de pago · por pagar al proveedor")} value={settings.purchase_payment_id} options={catalogs?.purchasePayments ?? null} onChange={(v) => set("purchase_payment_id", v)}
+              hint="La que maneja vencimiento (por ejemplo «Crédito proveedores»): la factura queda por pagar hasta que registras el pago." />
+            <IdSelect id="sg-rp" label={tr("Tipo de recibo de pago/egreso")} value={settings.payment_receipt_document_id} options={catalogs?.receiptTypes ?? null} onChange={(v) => set("payment_receipt_document_id", v)} />
+            <IdSelect id="sg-rp-bank" label={tr("Egresos · pagos por banco")} value={settings.payout_bank_id} options={catalogs?.purchasePayments ?? null} onChange={(v) => set("payout_bank_id", v)}
+              hint="Por ejemplo «Pagos por cuenta bancaria»." />
+            <IdSelect id="sg-rp-cash" label={tr("Egresos · pagos en efectivo")} value={settings.payout_cash_id} options={catalogs?.purchasePayments ?? null} onChange={(v) => set("payout_cash_id", v)} />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={loadAccounts} disabled={!configured || !!busy} className={`${btn} border border-foreground/15 text-foreground/70 hover:bg-foreground/5`}>
+              <Spinner k="accounts" icon={<RefreshCw className="w-4 h-4" />} />{" "}{tr("Traer cuentas del PUC de Siigo")}
+            </button>
+            <span className="text-xs text-foreground/50">
+              {accounts.length ? tr("{n} cuentas disponibles para elegir.", { n: String(accounts.length) }) : tr("Trae las cuentas para elegirlas por nombre en vez de escribir el código.")}
+            </span>
           </div>
           <details className="rounded-2xl bg-[#fdfbf7] border border-foreground/5 p-4">
             <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">{tr("Cuenta contable (PUC) por categoría")}</summary>
             <div className="space-y-2 mt-3">
               {expenseCategories.map((c) => (
-                <div key={c} className="grid grid-cols-[1fr_140px] gap-2 items-center">
+                <div key={c} className={`grid ${accounts.length ? "grid-cols-1 md:grid-cols-[1fr_320px]" : "grid-cols-[1fr_140px]"} gap-2 items-center`}>
                   <span className="text-sm">{c}</span>
-                  <input value={settings.expense_accounts?.[c] ?? ""} onChange={(e) => set("expense_accounts", { ...settings.expense_accounts, [c]: e.target.value.replace(/\D/g, "") })}
-                    placeholder={tr("Ej. 51359501")} aria-label={tr("Cuenta de {c}", { c: c })} className={inputCls} />
+                  {accounts.length ? (
+                    <select value={settings.expense_accounts?.[c] ?? ""} onChange={(e) => set("expense_accounts", { ...settings.expense_accounts, [c]: e.target.value })}
+                      aria-label={tr("Cuenta de {c}", { c: c })} className={inputCls}>
+                      <option value="">{tr("— Sin elegir —")}</option>
+                      {accounts.filter((a) => /^[56]/.test(a.code) || a.code === settings.expense_accounts?.[c]).map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                    </select>
+                  ) : (
+                    <input value={settings.expense_accounts?.[c] ?? ""} onChange={(e) => set("expense_accounts", { ...settings.expense_accounts, [c]: e.target.value.replace(/\D/g, "") })}
+                      placeholder={tr("Ej. 51359501")} aria-label={tr("Cuenta de {c}", { c: c })} className={inputCls} />
+                  )}
                 </div>
               ))}
             </div>

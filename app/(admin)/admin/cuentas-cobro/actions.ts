@@ -33,10 +33,14 @@ export async function getCuentasCobro() {
   try {
     await checkAdmin(supabase);
 
-    const { data, error } = await supabase
-      .from('cuentas_cobro')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const query = (withPayments: boolean) =>
+      supabase
+        .from('cuentas_cobro')
+        .select(withPayments ? '*, payments:payable_payments ( * )' : '*')
+        .order('created_at', { ascending: false });
+    let { data, error } = await query(true);
+    // Before the purchases migration: without payments.
+    if (error && /payable_payments/.test(error.message)) ({ data, error } = await query(false));
 
     if (error) {
       console.error('Error fetching cuentas_cobro:', error);

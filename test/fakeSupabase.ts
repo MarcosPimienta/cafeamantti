@@ -58,6 +58,12 @@ const RELATIONS: Record<string, Record<string, Relation>> = {
   invoice_payments: {
     invoice_id: { table: "sales_invoices", localKey: "invoice_id" },
   },
+  purchase_bills: {
+    payable_payments: { table: "payable_payments", foreignKey: "bill_id", many: true },
+  },
+  cuentas_cobro: {
+    payable_payments: { table: "payable_payments", foreignKey: "cuenta_cobro_id", many: true },
+  },
 };
 
 /** Column defaults applied on insert, mirroring the migrations. */
@@ -69,6 +75,8 @@ const DEFAULTS: Record<string, () => Row> = {
   orders: () => ({ status: "pending" }),
   sales_invoices: () => ({ status: "borrador", siigo_invoice_id: null, siigo_name: null, issue_date: null, due_date: null }),
   invoice_payments: () => ({ siigo_status: "pendiente", siigo_voucher_id: null }),
+  purchase_bills: () => ({ status: "borrador", siigo_id: null, siigo_name: null }),
+  payable_payments: () => ({ siigo_status: "pendiente", siigo_id: null, expense_ids: [] }),
 };
 
 export type FakeError = { message: string; code?: string };
