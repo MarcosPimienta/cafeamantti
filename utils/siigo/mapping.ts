@@ -50,6 +50,8 @@ export type SiigoSettings = {
   expense_accounts?: Record<string, string>;
   /** Fixed asset code in Siigo per asset class, for CAPEX purchases. */
   fixed_asset_codes?: Record<string, string>;
+  /** Credit note document type (GET /v1/document-types?type=NC). */
+  credit_note_document_id?: number | null;
   /** Support document type for signed cuentas de cobro (GET /v1/document-types?type=DS). */
   support_document_id?: number | null;
   /** Payment type of support documents: owed to the supplier, with due date (GET /v1/payment-types?document_type=FC). */
@@ -653,4 +655,57 @@ export function buildSupportDocumentPayload(cc: AppCuentaCobro, opts: SupportOpt
 export function buildSupplierPayload(s: { name: string; document_number: string; email?: string | null; phone?: string | null; address?: string | null; city_code?: string | null }) {
   const { payload, problems } = buildCustomerPayload({ id: "", name: s.name, document_type: /-\d$/.test(s.document_number.trim()) ? "NIT" : "CC", document_number: s.document_number, email: s.email, phone: s.phone, address: s.address, city_code: s.city_code });
   return { payload: { ...payload, type: "Supplier" }, problems };
+}
+
+// ── Credit notes (notas crédito) ────────────────────────────
+
+/** DIAN reasons the app offers: 1 partial return, 2 annulment, 3 discount, 4 price adjustment. */
+export type CreditNoteReason = 1 | 2 | 3 | 4;
+export type CreditLine = { code: string | null; name: string; quantity: number; unit_price: number; tax_id: number | null };
+
+/**
+ * POST /v1/credit-notes body against an invoice already in Siigo. Lines go
+ * like the invoice's (IVA included as taxed_price), so the note's total is
+ * the sum the app shows; the payment mirrors the invoice's.
+ */
+export function buildCreditNotePayload(
+  invoice: { siigo_invoice_id: string | null; payment_terms: string; payment_method: string | null; due_date: string | null },
+  note: { reason: CreditNoteReason; lines: CreditLine[]; shipping?: number; notes?: string | null; invoiceName?: string | null },
+  settings: SiigoSettings,
+  today: string
+) {
+  const problems: string[] = [];
+  if (!settings.credit_note_document_id) problems.push("Elige el tipo de nota crédito en Ajustes → Siigo.");
+  if (!invoice.siigo_invoice_id) problems.push("La factura aún no está en Siigo.");
+  const credit = invoice.payment_terms === "credito";
+  const paymentId = credit
+    ? settings.payment_credit_id
+    : invoice.payment_method === "cash" ? settings.payment_cash_id : invoice.payment_method === "transfer" ? settings.payment_transfer_id : settings.payment_web_id;
+  if (!paymentId) problems.push("Falta la forma de pago de la factura en Ajustes → Siigo.");
+  const lines = note.lines.filter((l) => l.quantity > 0 && l.unit_price > 0);
+  if (!lines.length) problems.push("La nota crédito no tiene valores.");
+  for (const l of lines) if (!l.code) problems.push(`"${l.name}" no tiene código de Siigo.`);
+  const shipping = round2(num(note.shipping));
+  if (shipping > 0 && !settings.shipping_product_code) problems.push("Configura el código del servicio de envío en Ajustes → Siigo.");
+
+  const items = [
+    ...lines.map((l) => {
+      const tax = itemTaxId(l.tax_id, settings);
+      return { code: l.code ?? "", description: l.name.slice(0, 200), quantity: round2(l.quantity), [tax ? "taxed_price" : "price"]: round2(l.unit_price), taxes: tax ? [{ id: tax }] : [] };
+    }),
+    ...(shipping > 0 && settings.shipping_product_code ? [{ code: settings.shipping_product_code, description: "Envío", quantity: 1, price: shipping, taxes: [] }] : []),
+  ];
+  const total = round2(lines.reduce((s, l) => s + round2(l.quantity * l.unit_price), 0) + shipping);
+  const payload = {
+    document: { id: settings.credit_note_document_id ?? 0 },
+    date: today,
+    invoice: invoice.siigo_invoice_id ?? "",
+    reason: note.reason,
+    stamp: { send: !!settings.stamp_dian },
+    mail: { send: !!settings.send_mail },
+    observations: [note.invoiceName ? `Nota crédito a ${note.invoiceName}` : "", note.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+    items,
+    payments: [{ id: paymentId ?? 0, value: total, due_date: credit ? invoice.due_date ?? today : today }],
+  };
+  return { payload, problems, total };
 }

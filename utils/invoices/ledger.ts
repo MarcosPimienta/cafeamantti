@@ -19,6 +19,8 @@ export type InvoiceLine = {
 
 export type LedgerInvoice = {
   total: number | string;
+  /** Sum of its credit notes: lowers what is owed. */
+  credited?: number | string | null;
   status: InvoiceStatus;
   payment_terms: "credito" | "contado";
   due_date: string | null;
@@ -35,7 +37,7 @@ export function paidAmount(payments: LedgerPayment[]): number {
 /** What the customer still owes (never negative). A cash sale is paid when invoiced. */
 export function balanceDue(invoice: LedgerInvoice, payments: LedgerPayment[]): number {
   if (invoice.payment_terms === "contado") return 0;
-  return Math.max(0, round2(num(invoice.total) - paidAmount(payments)));
+  return Math.max(0, round2(num(invoice.total) - num(invoice.credited) - paidAmount(payments)));
 }
 
 export function paymentState(invoice: LedgerInvoice, payments: LedgerPayment[]): PaymentState {
@@ -84,4 +86,59 @@ export function invoiceLinesFromOrder(items: OrderItemForInvoice[]): InvoiceLine
       linked: !!(inv && (inv.siigo_product_id || inv.siigo_code)),
     };
   });
+}
+
+// ── Credit notes ────────────────────────────────────────────
+
+export type CreditReason = 1 | 2 | 3 | 4;
+export const CREDIT_REASONS: Record<CreditReason, string> = {
+  1: "Devolución parcial",
+  2: "Anulación de la factura",
+  3: "Rebaja o descuento",
+  4: "Ajuste de precio",
+};
+
+export type CreditNoteLine = InvoiceLine & { restock: boolean };
+export type CreditInput =
+  | { reason: 2; notes?: string | null; cancelOrder: boolean }
+  | { reason: 1; notes?: string | null; items: { index: number; quantity: number; restock: boolean }[] }
+  | { reason: 3 | 4; notes?: string | null; items: { index: number; amount: number }[] };
+
+/**
+ * The lines of a credit note from what the admin chose, checked against the
+ * invoice: no more units than invoiced (minus earlier returns), no more
+ * value than each line, and never more than the invoice still has.
+ */
+export function creditNoteLines(
+  invoice: { lines: InvoiceLine[]; total: number | string; credited?: number | string | null },
+  input: CreditInput,
+  returned: Record<number, number> = {}
+): { lines: CreditNoteLine[]; problems: string[] } {
+  const problems: string[] = [];
+  const lines: CreditNoteLine[] = [];
+  if (input.reason === 2) {
+    if (num(invoice.credited) > 0.5) problems.push("La factura ya tiene notas crédito: anúlala por el saldo con una rebaja o en Siigo.");
+    return { lines: invoice.lines.map((l) => ({ ...l, restock: false })), problems };
+  }
+  for (const it of input.items) {
+    const line = invoice.lines[it.index];
+    if (!line) { problems.push("Producto inválido."); continue; }
+    if (input.reason === 1) {
+      const r = it as { quantity: number; restock: boolean };
+      const left = round2(line.quantity - (returned[it.index] ?? 0));
+      if (!(r.quantity > 0)) continue;
+      if (r.quantity > left + 1e-9) problems.push(`"${line.name}": solo quedan ${left} por devolver.`);
+      lines.push({ ...line, quantity: round2(r.quantity), restock: !!r.restock });
+    } else {
+      const amount = round2(num((it as { amount: number }).amount));
+      if (!(amount > 0)) continue;
+      if (amount > round2(line.quantity * line.unit_price) + 0.5) problems.push(`"${line.name}": la rebaja supera el valor de la línea.`);
+      // Same units, a lower price per unit: the note is the difference.
+      lines.push({ ...line, unit_price: round2(amount / line.quantity), restock: false });
+    }
+  }
+  if (!lines.length) problems.push("Indica qué productos o valores incluye la nota crédito.");
+  const total = round2(lines.reduce((s, l) => s + l.quantity * l.unit_price, 0));
+  if (total > round2(num(invoice.total) - num(invoice.credited)) + 0.5) problems.push("La nota crédito supera el valor pendiente de la factura.");
+  return { lines, problems };
 }

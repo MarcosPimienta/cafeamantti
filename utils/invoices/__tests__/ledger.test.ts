@@ -93,3 +93,47 @@ describe("Siigo payloads for credit sales", () => {
     ]);
   });
 });
+
+import { creditNoteLines } from "../ledger";
+import { buildCreditNotePayload } from "@/utils/siigo/mapping";
+
+describe("credit note lines", () => {
+  const inv = { total: 105000, credited: 0, lines: [
+    { inventory_id: "a", code: "004", name: "Premium 250 g", quantity: 2, unit_price: 35000, tax_id: null, linked: true },
+    { inventory_id: "b", code: "0040", name: "Honey 250 g", quantity: 1, unit_price: 35000, tax_id: null, linked: true },
+  ] };
+
+  it("an annulment takes every line, once", () => {
+    expect(creditNoteLines(inv, { reason: 2, cancelOrder: false }).lines).toHaveLength(2);
+    expect(creditNoteLines({ ...inv, credited: 1000 }, { reason: 2, cancelOrder: false }).problems[0]).toMatch(/ya tiene notas crédito/);
+  });
+
+  it("a return can't exceed what is left to return", () => {
+    const ok = creditNoteLines(inv, { reason: 1, items: [{ index: 0, quantity: 1, restock: false }, { index: 1, quantity: 0, restock: true }] });
+    expect(ok).toEqual({ lines: [expect.objectContaining({ code: "004", quantity: 1, restock: false })], problems: [] });
+    expect(creditNoteLines(inv, { reason: 1, items: [{ index: 0, quantity: 2, restock: true }] }, { 0: 1 }).problems).toEqual(['"Premium 250 g": solo quedan 1 por devolver.']);
+    expect(creditNoteLines(inv, { reason: 1, items: [] }).problems).toEqual(["Indica qué productos o valores incluye la nota crédito."]);
+  });
+
+  it("a discount keeps the units at a lower price and can't exceed the line", () => {
+    expect(creditNoteLines(inv, { reason: 3, items: [{ index: 0, amount: 10000 }] }).lines[0]).toMatchObject({ quantity: 2, unit_price: 5000 });
+    expect(creditNoteLines(inv, { reason: 4, items: [{ index: 1, amount: 40000 }] }).problems).toEqual(['"Honey 250 g": la rebaja supera el valor de la línea.']);
+  });
+
+  it("the Siigo body mirrors the invoice payment and adds shipping on an annulment", () => {
+    const { payload, problems, total } = buildCreditNotePayload(
+      { siigo_invoice_id: "sg", payment_terms: "credito", payment_method: null, due_date: "2026-10-29" },
+      { reason: 2, lines: inv.lines, shipping: 8000, invoiceName: "FV-2-720" },
+      { ...SETTINGS, credit_note_document_id: 27178, shipping_product_code: "ENVIO", sales_tax_id: 9755 } as SiigoSettings,
+      "2026-10-15"
+    );
+    expect(problems).toEqual([]);
+    expect(total).toBe(113000);
+    expect(payload).toMatchObject({ document: { id: 27178 }, invoice: "sg", reason: 2, date: "2026-10-15", payments: [{ id: 5640, value: 113000, due_date: "2026-10-29" }] });
+    expect(payload.items).toEqual([
+      { code: "004", description: "Premium 250 g", quantity: 2, taxed_price: 35000, taxes: [{ id: 9755 }] },
+      { code: "0040", description: "Honey 250 g", quantity: 1, taxed_price: 35000, taxes: [{ id: 9755 }] },
+      { code: "ENVIO", description: "Envío", quantity: 1, price: 8000, taxes: [] },
+    ]);
+  });
+});

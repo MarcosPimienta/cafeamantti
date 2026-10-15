@@ -53,6 +53,7 @@ const RELATIONS: Record<string, Record<string, Relation>> = {
     order_id: { table: "orders", localKey: "order_id" },
     client_id: { table: "clients", localKey: "client_id" },
     invoice_payments: { table: "invoice_payments", foreignKey: "invoice_id", many: true },
+    credit_notes: { table: "credit_notes", foreignKey: "invoice_id", many: true },
   },
   invoice_payments: {
     invoice_id: { table: "sales_invoices", localKey: "invoice_id" },

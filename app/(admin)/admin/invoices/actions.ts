@@ -10,10 +10,10 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin, updateOrderStatus as setOrderStatus } from '../../actions';
 import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
-import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
+import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, buildCreditNotePayload, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
 import { ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
-import { syncOrderStock } from '@/utils/orders/stock';
-import { balanceDue, invoiceLinesFromOrder, paymentProblems, paymentState, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
+import { restockCreditNote, syncOrderStock } from '@/utils/orders/stock';
+import { CREDIT_REASONS, balanceDue, creditNoteLines, invoiceLinesFromOrder, paymentProblems, paymentState, type CreditInput, type CreditNoteLine, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261019000000_sales_invoices.sql';
 
@@ -73,14 +73,25 @@ function siigoPayload(inv: InvoiceRow, identification: string | null, settings: 
 
 type SiigoInvoiceOut = { id: string; name?: string; prefix?: string; number?: number; public_url?: string; stamp?: { status?: string; cufe?: string; errors?: string } };
 
+/** Sum of an invoice's credit notes (0 before their migration). */
+async function creditedOf(supabase: Supabase, invoiceId: string): Promise<number> {
+  const { data, error } = await supabase.from('credit_notes').select('total').eq('invoice_id', invoiceId);
+  if (error) return 0;
+  return (data ?? []).reduce((sum, n) => sum + Number(n.total), 0);
+}
+
 // ── Reading ─────────────────────────────────────────────────
 
 export async function getInvoices() {
   const { supabase } = await requireAdmin();
-  const { data, error } = await supabase
-    .from('sales_invoices')
-    .select('*, payments:invoice_payments ( * ), order:order_id ( id, status, created_at )')
-    .order('created_at', { ascending: false });
+  const query = (embedNotes: boolean) =>
+    supabase
+      .from('sales_invoices')
+      .select(`*, payments:invoice_payments ( * ), order:order_id ( id, status, created_at )${embedNotes ? ', credit_notes ( * )' : ''}`)
+      .order('created_at', { ascending: false });
+  let { data, error } = await query(true);
+  // Before the credit notes migration: invoices without notes.
+  if (error && /credit_notes/.test(error.message)) ({ data, error } = await query(false));
   if (error) {
     console.error('getInvoices:', error.message);
     return { invoices: [], migrationApplied: !/sales_invoices/.test(error.message), today: todayBogota() };
@@ -98,7 +109,7 @@ export async function getOrderInvoice(orderId: string) {
     .neq('status', 'anulada')
     .maybeSingle();
   if (error) return { invoice: null, migrationApplied: !/sales_invoices/.test(error.message) };
-  return { invoice: data, migrationApplied: true };
+  return { invoice: data ? { ...data, credited: await creditedOf(supabase, data.id) } : null, migrationApplied: true };
 }
 
 // ── Creating and annulling ──────────────────────────────────
@@ -225,8 +236,9 @@ export async function registerPayment(invoiceId: string, input: PaymentInput) {
   const { supabase, userId } = await requireAdmin();
   const res = await guard(async () => {
     if (!['web', 'transfer', 'cash'].includes(input.method)) throw new Error('Medio de pago inválido.');
-    const { data: inv, error } = await supabase.from('sales_invoices').select('*, payments:invoice_payments ( amount )').eq('id', invoiceId).single();
-    if (error || !inv) throw error ?? new Error('Factura no encontrada.');
+    const { data: row, error } = await supabase.from('sales_invoices').select('*, payments:invoice_payments ( amount )').eq('id', invoiceId).single();
+    if (error || !row) throw error ?? new Error('Factura no encontrada.');
+    const inv = { ...row, credited: await creditedOf(supabase, invoiceId) };
     const payments = (inv.payments ?? []) as { amount: number }[];
     const problems = paymentProblems(inv, payments, Number(input.amount), input.date);
     if (problems.length) return { problems, fullyPaid: false };
@@ -356,6 +368,70 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
 }
 
 /**
+ * The invoice no longer counts (annulled in Siigo or by a full credit
+ * note): voided here, the order loses its invoice and its stock follows the
+ * order's payment state — or the order is cancelled and everything returns.
+ */
+async function voidInvoiceLocally(supabase: Supabase, userId: string | null, inv: { id: string; order_id: string; siigo_invoice_id: string | null }, note: string, cancelOrder = false) {
+  await updateRow(supabase, 'sales_invoices', inv.id, { status: 'anulada', siigo_status: 'Annulled', siigo_error: note, updated_at: new Date().toISOString() });
+  await updateRow(supabase, 'orders', inv.order_id, { siigo_invoice_id: null, siigo_invoice: null, siigo_status: null, siigo_cufe: null, siigo_public_url: null, siigo_error: null });
+  if (cancelOrder) await updateOrderStatus(inv.order_id, 'cancelled');
+  else {
+    const { data: order } = await supabase.from('orders').select('status').eq('id', inv.order_id).single();
+    if (order) await syncOrderStock(supabase, { orderId: inv.order_id, status: order.status, userId });
+  }
+  await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: inv.siigo_invoice_id, status: 'ok', message: note });
+}
+
+type SiigoCreditNote = { id: string; name?: string; reason?: number; total?: number; invoice?: { id?: string }; stamp?: { status?: string; cude?: string }; items?: { code?: string; description?: string; quantity?: number; price?: number }[] };
+
+/**
+ * Credit notes made directly in Siigo for this invoice that the app doesn't
+ * know: recorded so the balance is right. A full annulment (reason 2) also
+ * voids the invoice. Returned units are not restocked (the app can't know
+ * their state): the admin adds them in Inventario if they came back.
+ */
+async function importSiigoCreditNotes(supabase: Supabase, userId: string | null, inv: { id: string; order_id: string; siigo_invoice_id: string; issue_date: string | null; created_at: string }) {
+  const since = (inv.issue_date ?? inv.created_at.slice(0, 10));
+  let notes: SiigoCreditNote[];
+  try {
+    notes = (await getSiigoClient().listAll<SiigoCreditNote>('/v1/credit-notes', { created_start: since })).filter((n) => n.invoice?.id === inv.siigo_invoice_id);
+  } catch (err) {
+    console.error('credit notes from Siigo:', errorText(err));
+    return { imported: [] as string[], annulled: false };
+  }
+  if (!notes.length) return { imported: [] as string[], annulled: false };
+  const { data: known, error } = await supabase.from('credit_notes').select('siigo_id').eq('invoice_id', inv.id);
+  if (error) return { imported: [] as string[], annulled: false }; // migration missing
+  const seen = new Set((known ?? []).map((k) => k.siigo_id));
+  const imported: string[] = [];
+  let annulled = false;
+  for (const n of notes) {
+    if (seen.has(n.id)) continue;
+    const reason = [1, 2, 3, 4].includes(Number(n.reason)) ? Number(n.reason) : 3;
+    const { error: insErr } = await supabase.from('credit_notes').insert({
+      invoice_id: inv.id,
+      reason,
+      lines: (n.items ?? []).map((i) => ({ inventory_id: null, code: i.code ?? null, name: i.description ?? i.code ?? '', quantity: Number(i.quantity ?? 0), unit_price: Number(i.price ?? 0), tax_id: null, linked: true, restock: false })),
+      total: Number(n.total ?? 0) || 0.01,
+      origin: 'siigo',
+      status: 'enviada',
+      siigo_id: n.id,
+      siigo_name: n.name ?? null,
+      siigo_status: n.stamp?.status ?? null,
+      siigo_cude: n.stamp?.cude ?? null,
+      created_by: userId,
+    });
+    if (insErr) throw insErr;
+    await siigoLog(supabase, userId, { entity: 'credit_note', local_id: inv.id, siigo_id: n.id, siigo_name: n.name ?? null, status: 'ok', message: 'Traída de Siigo' });
+    imported.push(n.name ?? n.id);
+    if (reason === 2) annulled = true;
+  }
+  if (annulled) await voidInvoiceLocally(supabase, userId, inv, `Anulada con nota crédito ${imported.join(', ')} en Siigo`);
+  return { imported, annulled };
+}
+
+/**
  * Re-reads an issued invoice (DIAN status, CUFE, number, public link). If it
  * was annulled or deleted in Siigo, the invoice is voided here too: the
  * order is free again and its stock follows the order's payment state.
@@ -363,7 +439,7 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
 export async function refreshInvoice(invoiceId: string) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
-    const { data: inv, error } = await supabase.from('sales_invoices').select('id, order_id, siigo_invoice_id').eq('id', invoiceId).single();
+    const { data: inv, error } = await supabase.from('sales_invoices').select('id, order_id, siigo_invoice_id, issue_date, created_at').eq('id', invoiceId).single();
     if (error || !inv) throw error ?? new Error('Factura no encontrada.');
     if (!inv.siigo_invoice_id) throw new Error('La factura aún no está en Siigo.');
     let out: (SiigoInvoiceOut & { annulled?: boolean }) | null;
@@ -378,21 +454,21 @@ export async function refreshInvoice(invoiceId: string) {
       const { count } = await supabase.from('invoice_payments').select('id', { count: 'exact', head: true }).eq('invoice_id', invoiceId).eq('siigo_status', 'enviado');
       if (count) throw new Error('La factura está anulada en Siigo pero tiene recibos de caja enviados: anúlalos en Siigo y avísale a tu contadora.');
       const note = out ? 'Anulada en Siigo' : 'Eliminada en Siigo';
-      await updateRow(supabase, 'sales_invoices', invoiceId, { status: 'anulada', siigo_status: 'Annulled', siigo_error: note, updated_at: new Date().toISOString() });
-      // The order no longer has an invoice.
-      await updateRow(supabase, 'orders', inv.order_id, { siigo_invoice_id: null, siigo_invoice: null, siigo_status: null, siigo_cufe: null, siigo_public_url: null, siigo_error: null });
-      const { data: order } = await supabase.from('orders').select('status').eq('id', inv.order_id).single();
-      if (order) await syncOrderStock(supabase, { orderId: inv.order_id, status: order.status, userId });
-      await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: inv.siigo_invoice_id, status: 'ok', message: note });
+      await voidInvoiceLocally(supabase, userId, inv, note);
       refresh();
-      return { invoice: { siigo_status: 'Annulled', siigo_cufe: null, siigo_public_url: null, siigo_error: note }, annulled: true };
+      return { invoice: { siigo_status: 'Annulled', siigo_cufe: null, siigo_public_url: null, siigo_error: note }, annulled: true, creditNotes: [] as string[] };
     }
 
     const fields = { siigo_status: out.stamp?.status ?? null, siigo_cufe: out.stamp?.cufe ?? null, siigo_public_url: out.public_url ?? null, siigo_error: out.stamp?.errors || null };
     await updateRow(supabase, 'sales_invoices', invoiceId, { ...fields, siigo_name: out.name ?? null });
     await updateRow(supabase, 'orders', inv.order_id, { ...fields, siigo_invoice: out.name ?? null }).catch((e) => console.error('order siigo fields:', errorText(e)));
+    // Credit notes made in Siigo (a full one voids the invoice).
+    const notes = await importSiigoCreditNotes(supabase, userId, { ...inv, siigo_invoice_id: inv.siigo_invoice_id });
     refresh();
-    return { invoice: fields, annulled: false };
+    if (notes.annulled) {
+      return { invoice: { siigo_status: 'Annulled', siigo_cufe: null, siigo_public_url: null, siigo_error: 'Anulada con nota crédito' }, annulled: true, creditNotes: notes.imported };
+    }
+    return { invoice: fields, annulled: false, creditNotes: notes.imported };
   });
 }
 
@@ -447,5 +523,96 @@ export async function stampInvoice(invoiceId: string) {
     await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: inv.siigo_invoice_id, siigo_name: out.name ?? inv.siigo_name, status: 'ok', message: `Enviada a la DIAN: ${fields.siigo_status}` });
     refresh();
     return { invoice: fields };
+  });
+}
+
+// ── Credit notes ────────────────────────────────────────────
+
+/**
+ * Makes a credit note in Siigo for an issued invoice and applies it here:
+ * - 2 annulment: the invoice is voided; the order is cancelled (all stock
+ *   back) or kept to invoice again (its stock follows its payment state).
+ *   A draft Siigo invoice (never sent to the DIAN) is annulled instead.
+ * - 1 partial return: the chosen units, back into inventory if they came back fine.
+ * - 3/4 discount or price adjustment: only lowers what the customer owes.
+ */
+export async function createCreditNote(invoiceId: string, input: CreditInput) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    if (!siigoConfigFromEnv()) throw new Error('Siigo no está configurado en el servidor.');
+    if (![1, 2, 3, 4].includes(input.reason)) throw new Error('Motivo inválido.');
+    const { data: inv, error } = await supabase.from('sales_invoices').select('*, credit_notes ( * )').eq('id', invoiceId).single();
+    if (error || !inv) throw error ?? new Error('Factura no encontrada.');
+    if (inv.status !== 'emitida' || !inv.siigo_invoice_id) throw new Error('Solo se hacen notas crédito a facturas que ya están en Siigo.');
+    const previous = ((inv.credit_notes ?? []) as { reason: number; total: number; lines: CreditNoteLine[] }[]);
+    const credited = previous.reduce((s, n) => s + Number(n.total), 0);
+    const siigo = getSiigoClient();
+
+    // A draft was never sent to the DIAN: it is annulled, not credited.
+    if (input.reason === 2 && (!inv.siigo_status || inv.siigo_status === 'Draft')) {
+      const current = await siigo.request<SiigoInvoiceOut & { annulled?: boolean }>('GET', `/v1/invoices/${inv.siigo_invoice_id}`);
+      if (!current.stamp?.status || current.stamp.status === 'Draft') {
+        if (!current.annulled) await siigo.request('POST', `/v1/invoices/${inv.siigo_invoice_id}/annul`);
+        await voidInvoiceLocally(supabase, userId, inv, 'Anulada en Siigo (borrador)', input.cancelOrder);
+        refresh();
+        return { name: null as string | null, annulled: true };
+      }
+    }
+
+    // Units already returned by earlier notes, per invoice line.
+    const returned: Record<number, number> = {};
+    for (const n of previous.filter((n) => n.reason === 1)) {
+      for (const l of n.lines ?? []) {
+        const idx = (inv.lines as InvoiceLine[]).findIndex((x) => x.code === l.code && x.inventory_id === l.inventory_id);
+        if (idx >= 0) returned[idx] = (returned[idx] ?? 0) + Number(l.quantity);
+      }
+    }
+    const { lines, problems } = creditNoteLines({ lines: inv.lines as InvoiceLine[], total: inv.total, credited }, input, returned);
+    if (problems.length) throw new Error(problems.join(' · '));
+
+    const settings = await loadSiigoSettings(supabase);
+    const { payload, problems: siigoProblems, total } = buildCreditNotePayload(
+      inv,
+      { reason: input.reason, lines, shipping: input.reason === 2 ? Number(inv.shipping) : 0, notes: input.notes ?? null, invoiceName: inv.siigo_name },
+      settings,
+      todayBogota()
+    );
+    if (siigoProblems.length) throw new Error(siigoProblems.join(' · '));
+
+    // Saved first: the Siigo id is filled in after, and a failure stays visible.
+    const { data: note, error: insErr } = await supabase
+      .from('credit_notes')
+      .insert({ invoice_id: invoiceId, reason: input.reason, lines, total, notes: input.notes?.trim() || null, origin: 'app', status: 'error', created_by: userId })
+      .select('*')
+      .single();
+    if (insErr) throw insErr;
+
+    let out: { id: string; name?: string; stamp?: { status?: string; cude?: string; errors?: string } };
+    try {
+      out = await siigo.request('POST', '/v1/credit-notes', { body: payload, idempotencyKey: idempotencyKey('NC', note.id) });
+    } catch (err) {
+      const msg = message(err);
+      await supabase.from('credit_notes').update({ siigo_error: msg }).eq('id', note.id);
+      await siigoLog(supabase, userId, { entity: 'credit_note', local_id: invoiceId, status: 'error', message: msg });
+      // Nothing was applied: the failed note is removed so it doesn't count.
+      await supabase.from('credit_notes').delete().eq('id', note.id);
+      throw err;
+    }
+    await supabase
+      .from('credit_notes')
+      .update({ status: 'enviada', siigo_id: out.id, siigo_name: out.name ?? null, siigo_status: out.stamp?.status ?? (settings.stamp_dian ? 'Pending' : 'Draft'), siigo_cude: out.stamp?.cude ?? null, siigo_error: out.stamp?.errors || null })
+      .eq('id', note.id);
+    await siigoLog(supabase, userId, { entity: 'credit_note', local_id: invoiceId, siigo_id: out.id, siigo_name: out.name ?? null, status: 'ok', message: CREDIT_REASONS[input.reason] });
+
+    const label = `Nota crédito ${out.name ?? ''} (${inv.siigo_name ?? 'factura'})`.replace('  ', ' ');
+    if (input.reason === 2) {
+      await voidInvoiceLocally(supabase, userId, inv, `Anulada con ${label}`, input.cancelOrder);
+    } else if (input.reason === 1) {
+      const back = lines.filter((l) => l.restock);
+      if (back.length) await restockCreditNote(supabase, { creditNoteId: note.id, lines: back, reason: `Devolución · ${label}`, userId });
+    }
+    refresh();
+    revalidatePath('/admin/inventory');
+    return { name: out.name ?? out.id, annulled: input.reason === 2 };
   });
 }

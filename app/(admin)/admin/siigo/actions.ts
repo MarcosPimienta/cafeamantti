@@ -85,7 +85,7 @@ export async function testSiigoConnection() {
   const res = await guard(async () => {
     const siigo = getSiigoClient();
     const get = <T,>(path: string, query?: Record<string, string>) => siigo.request<T>('GET', path, { query });
-    const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups, voucherTypes, voucherPayments, supportTypes] = await Promise.all([
+    const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups, voucherTypes, voucherPayments, supportTypes, creditNoteTypes] = await Promise.all([
       get<Named[]>('/v1/document-types', { type: 'FV' }),
       get<Named[]>('/v1/document-types', { type: 'FC' }),
       get<{ results?: { id: number; first_name: string; last_name: string; active: boolean }[] }>('/v1/users'),
@@ -96,6 +96,7 @@ export async function testSiigoConnection() {
       get<Named[]>('/v1/document-types', { type: 'RC' }),
       get<(Named & { due_date?: boolean })[]>('/v1/payment-types', { document_type: 'RC' }),
       get<Named[]>('/v1/document-types', { type: 'DS' }),
+      get<Named[]>('/v1/document-types', { type: 'NC' }),
     ]);
     const active = <T extends { active?: boolean }>(xs: T[] | null | undefined) => (xs ?? []).filter((x) => x.active !== false);
     return {
@@ -110,6 +111,7 @@ export async function testSiigoConnection() {
         voucherTypes: active(voucherTypes).map((d) => ({ id: d.id, name: d.name })),
         voucherPayments: active(voucherPayments).map((p) => ({ id: p.id, name: p.name })),
         supportTypes: active(supportTypes).map((d) => ({ id: d.id, name: d.name })),
+        creditNoteTypes: active(creditNoteTypes).map((d) => ({ id: d.id, name: d.name })),
         retentions: active(taxes)
           .filter((t) => t.type === 'Retefuente')
           .map((t) => ({ id: t.id, name: t.name, percentage: t.percentage ?? null }))
@@ -127,7 +129,7 @@ export async function saveSiigoSettings(input: SiigoSettings) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
     const s = normalizeSiigoSettings(input);
-    for (const key of ['invoice_document_id', 'seller_id', 'payment_web_id', 'payment_cash_id', 'payment_transfer_id', 'payment_credit_id', 'sales_tax_id', 'product_account_group_id', 'purchase_document_id', 'purchase_payment_id', 'voucher_document_id', 'voucher_cash_id', 'voucher_transfer_id', 'voucher_web_id', 'support_document_id', 'support_payment_id'] as const) {
+    for (const key of ['invoice_document_id', 'seller_id', 'payment_web_id', 'payment_cash_id', 'payment_transfer_id', 'payment_credit_id', 'sales_tax_id', 'product_account_group_id', 'purchase_document_id', 'purchase_payment_id', 'voucher_document_id', 'voucher_cash_id', 'voucher_transfer_id', 'voucher_web_id', 'support_document_id', 'support_payment_id', 'credit_note_document_id'] as const) {
       const v = optId(s[key]);
       if (Number.isNaN(v)) throw new Error(`Valor inválido en ${key}.`);
       s[key] = v;

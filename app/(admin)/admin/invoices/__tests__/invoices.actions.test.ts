@@ -18,11 +18,15 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
       if (r === undefined) throw new Error(`unexpected Siigo call ${method} ${path}`);
       return r;
     },
+    listAll: async (path: string, query?: Record<string, unknown>) => {
+      h.calls.push({ method: "LIST", path, opts: { body: query } });
+      return (h.responses[`LIST ${path}`] as unknown[]) ?? [];
+    },
   };
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { annulInvoice, createInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo, stampInvoice } from "../actions";
+import { annulInvoice, createCreditNote, createInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo, stampInvoice } from "../actions";
 import { updateOrderStatus, deleteManualAdminOrder } from "../../../actions";
 
 const SETTINGS = {
@@ -180,5 +184,85 @@ describe("sending a draft invoice to the DIAN", () => {
     db.rows("invoice_payments").push({ id: "p1", invoice_id: invoice().id, amount: 1000, siigo_status: "enviado" });
     expect(await stampInvoice(invoice().id)).toMatchObject({ success: false, error: expect.stringContaining("recibos de caja") });
     expect(h.calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+});
+
+describe("credit notes", () => {
+  const NC_SETTINGS = { ...SETTINGS, credit_note_document_id: 27178, payment_credit_id: 5640 };
+  beforeEach(async () => {
+    db.rows("siigo_settings")[0].config = NC_SETTINGS;
+    db.byId("inventory", "inv1")!.category = "cafe";
+    await createInvoice(ORDER, { terms: "credito", termDays: 15 });
+    h.responses["POST /v1/invoices"] = { id: "sg-inv", name: "FV-2-720", stamp: { status: "Accepted", cufe: "c" } };
+    await sendPendingToSiigo();
+    h.calls = [];
+  });
+  const movementsOf = (kind: string) => db.rows("inventory_movements").filter((m) => m.type === kind);
+
+  it("a partial return sends the chosen units and puts back only those that came back fine", async () => {
+    h.responses["POST /v1/credit-notes"] = { id: "nc-1", name: "NC-2-41", stamp: { status: "Accepted", cude: "x" } };
+    const res = await createCreditNote(invoice().id, { reason: 1, items: [{ index: 0, quantity: 1, restock: true }] });
+    expect(res).toMatchObject({ success: true, name: "NC-2-41", annulled: false });
+    const body = h.calls.find((c) => c.path === "/v1/credit-notes")!.opts?.body;
+    expect(body).toMatchObject({ document: { id: 27178 }, invoice: "sg-inv", reason: 1, items: [{ code: "004", quantity: 1 }], payments: [{ id: 5640, value: 35000 }] });
+    expect(stock()).toBe(9); // 10 − 2 sold + 1 returned
+    expect(movementsOf("entrada")).toEqual([expect.objectContaining({ quantity: 1, credit_note_id: expect.any(String) })]);
+    expect(movementsOf("entrada")[0].order_id ?? null).toBeNull();
+    expect(db.rows("credit_notes")[0]).toMatchObject({ reason: 1, total: 35000, status: "enviada", siigo_name: "NC-2-41" });
+    // What the customer owes drops; more units than invoiced can't come back.
+    expect(await createCreditNote(invoice().id, { reason: 1, items: [{ index: 0, quantity: 2, restock: true }] })).toMatchObject({ success: false, error: expect.stringContaining("solo quedan 1") });
+    expect(await registerPayment(invoice().id, { date: "2026-10-15", amount: 35000, method: "transfer" })).toMatchObject({ success: true, fullyPaid: true, balance: 0 });
+  });
+
+  it("a discount only lowers what is owed; the inventory stays", async () => {
+    h.responses["POST /v1/credit-notes"] = { id: "nc-2", name: "NC-2-42", stamp: { status: "Accepted" } };
+    expect(await createCreditNote(invoice().id, { reason: 3, items: [{ index: 0, amount: 10000 }] })).toMatchObject({ success: true });
+    const body = h.calls.find((c) => c.path === "/v1/credit-notes")!.opts?.body as { items: { quantity: number }[]; payments: { value: number }[] };
+    expect(body.items[0].quantity).toBe(2);
+    expect(body.payments[0].value).toBe(10000);
+    expect(stock()).toBe(8);
+    expect(movementsOf("entrada")).toHaveLength(0);
+  });
+
+  it("an annulment voids the invoice and, if asked, cancels the order with all its stock back", async () => {
+    h.responses["POST /v1/credit-notes"] = { id: "nc-3", name: "NC-2-43", stamp: { status: "Accepted" } };
+    expect(await createCreditNote(invoice().id, { reason: 2, cancelOrder: true })).toMatchObject({ success: true, annulled: true });
+    expect((h.calls.find((c) => c.path === "/v1/credit-notes")!.opts?.body as { payments: { value: number }[] }).payments[0].value).toBe(70000);
+    expect(invoice()).toMatchObject({ status: "anulada" });
+    expect(db.byId("orders", ORDER)).toMatchObject({ status: "cancelled", siigo_invoice_id: null });
+    expect(stock()).toBe(10);
+  });
+
+  it("a draft that never reached the DIAN is annulled in Siigo instead", async () => {
+    db.rows("sales_invoices")[0].siigo_status = "Draft";
+    h.responses["GET /v1/invoices/sg-inv"] = { id: "sg-inv", stamp: { status: "Draft" } };
+    h.responses["POST /v1/invoices/sg-inv/annul"] = { id: "sg-inv", Annul: true };
+    expect(await createCreditNote(invoice().id, { reason: 2, cancelOrder: false })).toMatchObject({ success: true, annulled: true });
+    expect(h.calls.some((c) => c.path === "/v1/credit-notes")).toBe(false);
+    expect(invoice().status).toBe("anulada");
+    expect(stock()).toBe(10); // pending order without invoice: stock back
+  });
+
+  it("a Siigo rejection leaves nothing applied", async () => {
+    h.responses["POST /v1/credit-notes"] = new Error("El producto 004 no existe");
+    expect(await createCreditNote(invoice().id, { reason: 1, items: [{ index: 0, quantity: 1, restock: true }] })).toMatchObject({ success: false, error: "El producto 004 no existe" });
+    expect(db.rows("credit_notes")).toHaveLength(0);
+    expect(stock()).toBe(8);
+  });
+
+  it("refresh finds a credit note made in Siigo (like NC-2-40 annulling FV-2-720) and voids the invoice", async () => {
+    h.responses["GET /v1/invoices/sg-inv"] = { id: "sg-inv", name: "FV-2-720", stamp: { status: "Accepted", cufe: "c" } };
+    h.responses["LIST /v1/credit-notes"] = [
+      { id: "nc-40", name: "NC-2-40", reason: 2, total: 70000, invoice: { id: "sg-inv", name: "FV-2-720" }, stamp: { status: "Accepted" }, items: [{ code: "004", quantity: 2, price: 33333 }] },
+      { id: "other", name: "NC-2-39", reason: 2, total: 1, invoice: { id: "another" } },
+    ];
+    expect(await refreshInvoice(invoice().id)).toMatchObject({ success: true, annulled: true, creditNotes: ["NC-2-40"] });
+    expect(db.rows("credit_notes")).toEqual([expect.objectContaining({ siigo_id: "nc-40", origin: "siigo", reason: 2 })]);
+    expect(invoice().status).toBe("anulada");
+    expect(stock()).toBe(10);
+    // Read again: not duplicated.
+    db.rows("sales_invoices")[0].status = "emitida";
+    await refreshInvoice(invoice().id);
+    expect(db.rows("credit_notes")).toHaveLength(1);
   });
 });

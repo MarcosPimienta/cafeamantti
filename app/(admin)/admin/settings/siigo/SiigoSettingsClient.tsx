@@ -27,6 +27,7 @@ type Catalogs = {
   voucherTypes: Option[];
   voucherPayments: Option[];
   supportTypes: Option[];
+  creditNoteTypes: Option[];
   retentions: (Option & { percentage: number | null })[];
 };
 type Kind = "servicio" | "repuesto";
@@ -43,7 +44,7 @@ const labelCls = "block text-[10px] font-bold uppercase tracking-widest text-for
 const inputCls = "w-full px-3 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20";
 const card = "bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-4";
 
-const ENTITY_LABEL: Record<string, string> = { invoice: "Factura", customer: "Cliente", product: "Producto", purchase: "Compra", connection: "Conexión", voucher: "Recibo de caja", support_document: "Documento soporte" };
+const ENTITY_LABEL: Record<string, string> = { invoice: "Factura", customer: "Cliente", product: "Producto", purchase: "Compra", connection: "Conexión", voucher: "Recibo de caja", support_document: "Documento soporte", credit_note: "Nota crédito" };
 
 function IdSelect({ id, label, value, options, onChange, hint }: {
   id: string; label: string; value: number | null | undefined; options: Option[] | null; onChange: (v: number | null) => void; hint?: string;
@@ -266,6 +267,17 @@ export default function SiigoSettingsClient({
               <input type="checkbox" checked={!!settings.send_mail} onChange={(e) => set("send_mail", e.target.checked)} className="w-4 h-4 accent-[#C59F59]" />
               <span className="text-sm">{tr("Enviar la factura por correo al cliente")}</span>
             </label>
+          </div>
+        </section>
+
+        {/* Credit notes */}
+        <section className={card}>
+          <div>
+            <h2 className="text-lg font-serif">{tr("Notas crédito")}</h2>
+            <p className="text-xs text-foreground/50">{tr("Se hacen desde Facturas: anulación, devolución parcial o rebaja. Usa la electrónica para facturas enviadas a la DIAN.")}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <IdSelect id="sg-nc" label={tr("Tipo de nota crédito")} value={settings.credit_note_document_id} options={catalogs?.creditNoteTypes ?? null} onChange={(v) => set("credit_note_document_id", v)} />
           </div>
         </section>
 

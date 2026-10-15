@@ -135,3 +135,38 @@ export async function syncOrderStock(supabase: DB, opts: SyncOptions): Promise<"
   }
   return "deducted";
 }
+
+/**
+ * Puts returned units back into inventory for a credit note: one 'entrada'
+ * per product, linked to the note (never to the order, whose own movements
+ * keep meaning "what the sale took"). Services don't move stock.
+ */
+export async function restockCreditNote(
+  supabase: DB,
+  opts: { creditNoteId: string; lines: { inventory_id: string | null; quantity: number }[]; reason: string; userId: string | null }
+): Promise<number> {
+  const ids = [...new Set(opts.lines.map((l) => l.inventory_id).filter(Boolean) as string[])];
+  if (!ids.length) return 0;
+  const { data: products, error } = await supabase.from("inventory").select("id, category").in("id", ids);
+  if (error) throw new Error(error.message);
+  const tracked = new Set(((products ?? []) as { id: string; category?: string }[]).filter((p) => tracksStock(p.category)).map((p) => p.id));
+  let moved = 0;
+  for (const l of opts.lines) {
+    const qty = Number(l.quantity);
+    if (!l.inventory_id || !tracked.has(l.inventory_id) || !(qty > 0)) continue;
+    const { error: movErr } = await supabase.from("inventory_movements").insert({
+      inventory_id: l.inventory_id,
+      type: "entrada",
+      quantity: qty,
+      reason: opts.reason,
+      created_by: opts.userId,
+      movement_date: new Date().toISOString(),
+      tab_source: "entrada",
+      credit_note_id: opts.creditNoteId,
+    });
+    if (movErr) throw new Error(movErr.message);
+    await changeStock(supabase, l.inventory_id, qty, true);
+    moved++;
+  }
+  return moved;
+}

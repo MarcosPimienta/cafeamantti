@@ -3,9 +3,10 @@
 import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, ExternalLink, Landmark, Loader2, Plus, RefreshCw, Send, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, FileMinus, Landmark, Loader2, Plus, RefreshCw, Send, Trash2, X } from "lucide-react";
 import { annulInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo, stampInvoice } from "./actions";
-import { balanceDue, daysOverdue, paidAmount, paymentState, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
+import { CREDIT_REASONS, balanceDue, daysOverdue, paidAmount, paymentState, type CreditReason, type InvoiceLine, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
+import CreditNoteModal from "./CreditNoteModal";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
 type Payment = {
@@ -33,10 +34,17 @@ type Invoice = {
   siigo_name: string | null;
   siigo_status: string | null;
   siigo_public_url: string | null;
+  siigo_invoice_id: string | null;
   siigo_error: string | null;
   created_at: string;
   payments: Payment[];
+  lines: InvoiceLine[];
+  shipping: number;
+  credit_notes?: CreditNote[];
+  /** Sum of its credit notes (computed here). */
+  credited?: number;
 };
+type CreditNote = { id: string; reason: CreditReason; total: number; origin: "app" | "siigo"; siigo_name: string | null; siigo_status: string | null; lines: (InvoiceLine & { restock?: boolean })[]; created_at: string };
 type Filter = "siigo" | "cobrar" | "vencidas" | "pagadas" | "anuladas" | "todas";
 type Report = { invoicesSent: string[]; invoicesFailed: { customer: string; error: string }[]; vouchersSent: string[]; vouchersFailed: { error: string }[] };
 
@@ -50,7 +58,10 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
   /* eslint-enable @typescript-eslint/no-explicit-any */
   const tr = useTr();
   const router = useRouter();
-  const invoices = raw as Invoice[];
+  const invoices = useMemo(
+    () => (raw as Invoice[]).map((inv) => ({ ...inv, credited: (inv.credit_notes ?? []).reduce((s, n) => s + Number(n.total), 0) })),
+    [raw]
+  );
   const [filter, setFilter] = useState<Filter>("todas");
   const [error, setError] = useState("");
   const [report, setReport] = useState<Report | null>(null);
@@ -200,6 +211,7 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [paying, setPaying] = useState(false);
+  const [crediting, setCrediting] = useState(false);
 
   const run = (action: () => Promise<{ success: boolean; error?: string }>, confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -243,6 +255,7 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
         {credit && inv.due_date && <span className={overdue > 0 ? "font-bold text-red-600" : ""}>{tr("Vence {date}", { date: inv.due_date })}{overdue > 0 ? tr(" · vencida hace {n} días", { n: String(overdue) }) : ""}</span>}
         {credit && !inv.due_date && inv.status !== "anulada" && <span>{tr("Vence {n} días después de enviarla a Siigo", { n: String(inv.term_days) })}</span>}
         {inv.status !== "anulada" && credit && <span>{tr("Pagado {paid} · Saldo {balance}", { paid: cop(paid), balance: cop(balance) })}</span>}
+        {!!inv.credited && <span>{tr("Notas crédito {total}", { total: cop(inv.credited) })}</span>}
         {inv.status !== "anulada" && <span className="font-bold">{tr.msg(state === "pagada" ? "Pagada" : state === "parcial" ? "Pago parcial" : "Sin pagos")}</span>}
         {inv.siigo_status && <span>{tr.msg(DIAN_LABEL[inv.siigo_status] ?? inv.siigo_status)}</span>}
       </div>
@@ -273,6 +286,23 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
         </ul>
       )}
 
+      {(inv.credit_notes ?? []).length > 0 && (
+        <ul className="text-xs divide-y divide-foreground/5 rounded-xl bg-amber-50/40 px-3">
+          {[...(inv.credit_notes ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at)).map((n) => (
+            <li key={n.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span>
+                <strong>{n.siigo_name ?? tr("Nota crédito")}</strong> · {tr(CREDIT_REASONS[n.reason])}
+                {n.origin === "siigo" ? <span className="text-foreground/50"> · {tr("hecha en Siigo")}</span> : null}
+                {n.reason === 1 && n.lines.some((l) => l.restock) ? <span className="text-foreground/50"> · {tr("volvió al inventario")}</span> : null}
+              </span>
+              <span className="font-bold">−{cop(Number(n.total))}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {crediting && <CreditNoteModal invoice={inv} onClose={() => setCrediting(false)} onDone={() => { setCrediting(false); onChanged(); }} />}
+
       {paying && <PaymentForm invoiceId={inv.id} balance={balance} today={today} onDone={() => { setPaying(false); onChanged(); }} onCancel={() => setPaying(false)} />}
 
       <div className="flex flex-wrap gap-3">
@@ -290,6 +320,11 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
           <button type="button" disabled={isPending} onClick={() => run(() => stampInvoice(inv.id), tr("La factura {name} se enviará a la DIAN con fecha de hoy. Después solo se puede anular con una nota crédito. ¿Continuar?", { name: inv.siigo_name ?? "" }))}
             className="inline-flex items-center gap-1 text-xs font-bold text-[#C59F59] hover:underline disabled:opacity-50">
             {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Landmark className="w-3.5 h-3.5" />}{" "}{tr("Enviar a la DIAN")}
+          </button>
+        )}
+        {inv.status === "emitida" && inv.siigo_invoice_id && (
+          <button type="button" onClick={() => setCrediting(true)} className="inline-flex items-center gap-1 text-xs font-bold text-foreground/60 hover:text-foreground">
+            <FileMinus className="w-3.5 h-3.5" />{" "}{tr("Nota crédito")}
           </button>
         )}
         {inv.status === "emitida" && (
