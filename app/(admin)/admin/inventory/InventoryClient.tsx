@@ -79,6 +79,7 @@ import {
   createInventoryProduct,
 } from "../../actions";
 import { packagingFor, type PackagingRecipes } from "@/utils/costing/packaging";
+import EditBatchModal from "./EditBatchModal";
 import { isSellable } from "@/utils/inventory/sellable";
 import {
   INVENTORY_CATEGORIES,
@@ -1813,6 +1814,7 @@ function EntradasTab({
     startTransition(async () => {
       try {
         const res = await deleteMovement(record.id);
+        if ("error" in res) throw new Error(tr.msg(res.error));
         onStockUpdate(res.inventoryId as string, res.newStock);
         setDeletingId(null);
         loadHistory();
@@ -2159,6 +2161,7 @@ function TrillaTab({
     msg: string;
   } | null>(null);
   const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; date: string; inputQty: number; outputQty: number; notes: string | null } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
@@ -2261,6 +2264,7 @@ function TrillaTab({
     startTransition(async () => {
       try {
         const res = await deleteProductionBatch(batchId);
+        if ("error" in res) throw new Error(tr.msg(res.error));
         onStocksUpdate([
           { id: res.inputInventoryId, newStock: res.newInputStock },
           { id: res.outputInventoryId, newStock: res.newOutputStock },
@@ -2531,9 +2535,14 @@ function TrillaTab({
                           <button onClick={() => setDeletingBatchId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">{tr("No")}</button>
                         </div>
                       ) : (
-                        <button onClick={() => setDeletingBatchId(b.id)} title={tr("Eliminar")} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setEditing({ id: b.id, date: b.movement_date || b.created_at, inputQty: Number(b.input_quantity_kg), outputQty: Number(b.output_quantity_kg), notes: b.notes ?? null })} title={tr("Editar")} className="p-1.5 rounded-lg hover:bg-foreground/5 text-foreground/40 hover:text-[#C59F59]">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => setDeletingBatchId(b.id)} title={tr("Eliminar")} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -2549,6 +2558,10 @@ function TrillaTab({
         </>
         )}
       </div>
+      {editing && (
+        <EditBatchModal batch={editing} kind="trilla" onClose={() => setEditing(null)}
+          onSaved={(updates) => { onStocksUpdate(updates); setEditing(null); setFeedback({ type: "success", msg: tr("✓ Trilla corregida") }); loadHistory(); }} />
+      )}
     </div>
   );
 }
@@ -2584,6 +2597,7 @@ function TostionTab({
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; date: string; inputQty: number; outputQty: number; notes: string | null } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
@@ -2694,6 +2708,7 @@ function TostionTab({
     startTransition(async () => {
       try {
         const res = await deleteProductionBatch(batchId); 
+        if ("error" in res) throw new Error(tr.msg(res.error));
         onStocksUpdate([
           { id: res.inputInventoryId, newStock: res.newInputStock },
           { id: res.outputInventoryId, newStock: res.newOutputStock },
@@ -2865,9 +2880,14 @@ function TostionTab({
                             <button onClick={() => setDeletingId(null)} className="px-2 py-1 bg-foreground/10 text-[10px] font-bold rounded-lg">{tr("No")}</button>
                           </div>
                         ) : (
-                          <button onClick={() => setDeletingId(r.id)} title={tr("Eliminar")} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setEditing({ id: r.id, date: r.date, inputQty: r.inputQty, outputQty: r.outputQty, notes: r.notes ?? null })} title={tr("Editar")} className="p-1.5 rounded-lg hover:bg-foreground/5 text-foreground/40 hover:text-[#C59F59]">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setDeletingId(r.id)} title={tr("Eliminar")} className="p-1.5 rounded-lg hover:bg-red-50 text-foreground/40 hover:text-red-500">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )
                       ) : (
                         <span className="text-[9px] font-bold text-foreground/20 uppercase tracking-tighter">{tr("Legacy")}</span>
@@ -2881,6 +2901,11 @@ function TostionTab({
           </div>
         )}
       </div>
+
+      {editing && (
+        <EditBatchModal batch={editing} kind="tostion" onClose={() => setEditing(null)}
+          onSaved={(updates) => { onStocksUpdate(updates); setEditing(null); setFeedback({ type: "success", msg: tr("✓ Tostión corregida") }); loadHistory(); }} />
+      )}
 
 
     </div>
@@ -3033,6 +3058,7 @@ function ProdAltasTab({
     startTransition(async () => {
       try {
         const res = await deleteMovement(record.id);
+        if ("error" in res) throw new Error(tr.msg(res.error));
         onStocksUpdate([{ id: res.inventoryId as string, newStock: res.newStock }]);
         setDeletingId(null);
         loadHistory();
@@ -3475,6 +3501,7 @@ function ColdBrewTab({
     startTransition(async () => {
       try {
         const res = await deleteProductionBatch(batchId);
+        if ("error" in res) throw new Error(tr.msg(res.error));
         onStocksUpdate([
           { id: res.inputInventoryId, newStock: res.newInputStock },
           { id: res.outputInventoryId, newStock: res.newOutputStock },
@@ -3914,6 +3941,7 @@ function SalidasTab({
     startTransition(async () => {
       try {
         const res = await deleteMovement(record.id);
+        if ("error" in res) throw new Error(tr.msg(res.error));
         onStockUpdate(res.inventoryId as string, res.newStock);
         setDeletingId(null);
         loadHistory();
@@ -4317,6 +4345,7 @@ function ReempaqueTab({
     startTransition(async () => {
       try {
         const res = await deleteRepackBatch(batchId);
+        if ("error" in res) throw new Error(tr.msg(res.error));
         onStocksUpdate(res.updates);
         setDeletingId(null);
         loadHistory();

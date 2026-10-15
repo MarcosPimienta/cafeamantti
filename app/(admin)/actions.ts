@@ -160,6 +160,25 @@ export async function updateManualAdminOrder(...args: Parameters<typeof _updateM
  * the invoice has to be annulled first (an issued one, with a credit note in
  * Siigo). Throws a message saying so.
  */
+export async function deleteProductionBatch(batchId: string) {
+  return _asResult(() => _deleteProductionBatch(batchId));
+}
+
+export type ProductionBatchEdit = { inputQtyKg: number; outputQtyKg: number; date: string; notes?: string | null };
+
+/** Corrects a roast (tostión) or hulling (trilla) batch; stock moves by the difference. */
+export async function updateProductionBatch(batchId: string, edit: ProductionBatchEdit) {
+  return _asResult(() => _updateProductionBatch(batchId, edit));
+}
+
+export async function deleteMovement(id: string) {
+  return _asResult(() => _deleteMovement(id));
+}
+
+export async function deleteRepackBatch(batchId: string) {
+  return _asResult(() => _deleteRepackBatch(batchId));
+}
+
 async function _assertNotInvoiced(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string, change: "cancelar" | "eliminar" | "productos") {
   const { data, error } = await supabase
     .from('sales_invoices')
@@ -2270,7 +2289,7 @@ export async function getRepackBatches(era: 'v1' | 'v2' = 'v2') {
 }
 
 /** Reverts every movement of a repack batch and deletes it. */
-export async function deleteRepackBatch(batchId: string) {
+async function _deleteRepackBatch(batchId: string) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
@@ -2739,7 +2758,7 @@ export async function getKardexGeneral(
 // EDIT / DELETE ACTIONS
 // ============================================================
 
-export async function deleteMovement(id: string) {
+async function _deleteMovement(id: string) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
@@ -2837,7 +2856,104 @@ export async function updateMovement(
   return { success: true, inventoryId: mov.inventory_id as string, newStock };
 }
 
-export async function deleteProductionBatch(batchId: string) {
+/**
+ * A batch edit only moves the difference: if the roast gave 186.6 kg
+ * instead of 184.6, 2 kg more of tostado enter; nothing that was already
+ * packed or sold is touched. Its two movements (salida of the input,
+ * entrada of the output) are rewritten so the Kardex shows the real batch.
+ */
+async function _updateProductionBatch(batchId: string, edit: ProductionBatchEdit) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+  const supabase = await createClient();
+
+  const inputQty = Number(edit.inputQtyKg);
+  const outputQty = Number(edit.outputQtyKg);
+  if (!(inputQty > 0) || !(outputQty > 0)) throw new Error('Las cantidades deben ser mayores a cero.');
+  if (outputQty > inputQty) throw new Error('El café que sale no puede pesar más que el que entra.');
+  if (!/^\d{4}-\d{2}-\d{2}/.test(edit.date)) throw new Error('Fecha inválida');
+
+  const { data: batch, error: selErr } = await supabase
+    .from('production_batches')
+    .select('*')
+    .eq('id', batchId)
+    .single();
+  if (selErr || !batch) throw new Error('Lote no encontrado');
+  if (batch.process_type !== 'tostion' && batch.process_type !== 'trilla') throw new Error('Solo se pueden editar tostiones y trillas.');
+
+  const dIn = Math.round((inputQty - Number(batch.input_quantity_kg)) * 1000) / 1000;
+  const dOut = Math.round((outputQty - Number(batch.output_quantity_kg)) * 1000) / 1000;
+
+  // Check both sides before touching anything.
+  const { data: products, error: prodErr } = await supabase
+    .from('inventory')
+    .select('id, current_stock, product_name')
+    .in('id', [batch.input_inventory_id, batch.output_inventory_id]);
+  if (prodErr) throw new Error(prodErr.message);
+  const input = (products ?? []).find((p: { id: string }) => p.id === batch.input_inventory_id);
+  const output = (products ?? []).find((p: { id: string }) => p.id === batch.output_inventory_id);
+  if (!input || !output) throw new Error('Producto no encontrado');
+  if (Number(input.current_stock) - dIn < -1e-9) {
+    throw new Error(`No hay suficiente '${input.product_name}': quedan ${Number(input.current_stock)} kg y la corrección necesita ${dIn} kg más.`);
+  }
+  if (Number(output.current_stock) + dOut < -1e-9) {
+    throw new Error(`No se puede bajar el resultado: de '${output.product_name}' quedan ${Number(output.current_stock)} kg y la corrección resta ${-dOut} kg.`);
+  }
+
+  const rend = outputQty / inputQty;
+  const label = batch.process_type === 'trilla' ? 'Trilla' : 'Tostión';
+  const notes = edit.notes?.trim() || null;
+  const { error: updErr } = await supabase
+    .from('production_batches')
+    .update({
+      input_quantity_kg: inputQty,
+      output_quantity_kg: outputQty,
+      rendimiento_pct: rend,
+      weight_loss_pct: (1 - rend) * 100,
+      notes,
+      movement_date: edit.date,
+    })
+    .eq('id', batchId);
+  if (updErr) throw new Error(updErr.message);
+
+  // Its movements, so the Kardex matches the batch.
+  const { data: movs } = await supabase.from('inventory_movements').select('id, inventory_id, type').eq('production_batch_id', batchId);
+  for (const m of (movs ?? []) as { id: string; inventory_id: string; type: string }[]) {
+    const isInput = m.type === 'salida' && m.inventory_id === batch.input_inventory_id;
+    const isOutput = m.type === 'entrada' && m.inventory_id === batch.output_inventory_id;
+    if (!isInput && !isOutput) continue;
+    const { error: movErr } = await supabase
+      .from('inventory_movements')
+      .update({
+        quantity: isInput ? -inputQty : outputQty,
+        movement_date: edit.date,
+        reason: isInput
+          ? `${label} → ${batch.process_type === 'trilla' ? 'Café Verde' : 'Café Tostado'}${notes ? ` — ${notes}` : ''}`
+          : `${label} (rend. ${(rend * 100).toFixed(1)}%)${notes ? ` — ${notes}` : ''}`,
+      })
+      .eq('id', m.id);
+    if (movErr) throw new Error(movErr.message);
+  }
+
+  const newInputStock = dIn ? await _updateStockBy(supabase, batch.input_inventory_id, -dIn) : Number(input.current_stock);
+  const newOutputStock = dOut ? await _updateStockBy(supabase, batch.output_inventory_id, dOut) : Number(output.current_stock);
+
+  await logAuditAction("UPDATE", batch.process_type === 'trilla' ? 'TRILLA_BATCH' : 'TOSTION_BATCH', batchId, undefined, {
+    before: { input: Number(batch.input_quantity_kg), output: Number(batch.output_quantity_kg), date: batch.movement_date, notes: batch.notes },
+    after: { input: inputQty, output: outputQty, date: edit.date, notes },
+  });
+
+  revalidatePath('/admin/inventory');
+  return {
+    success: true,
+    inputInventoryId: batch.input_inventory_id as string,
+    newInputStock,
+    outputInventoryId: batch.output_inventory_id as string,
+    newOutputStock,
+  };
+}
+
+async function _deleteProductionBatch(batchId: string) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 

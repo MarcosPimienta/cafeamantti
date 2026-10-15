@@ -117,7 +117,7 @@ describe("deleteRepackBatch", () => {
   it("refuses when the packed product no longer has the units the repack added", async () => {
     await split();
     db.byId("inventory", "inv-250")!.current_stock = 5; // most 250 g bags were sold since
-    await expect(deleteRepackBatch(db.rows("repack_batches")[0].id)).rejects.toThrow(/Ya se usó parte de ese stock/);
+    expect(await deleteRepackBatch(db.rows("repack_batches")[0].id)).toMatchObject({ success: false, error: expect.stringMatching(/Ya se usó parte de ese stock/) });
     expect(stock("inv-2k5")).toBe(4);
   });
 });
