@@ -110,4 +110,9 @@ export const invoices: Record<string, string> = {
   "Sin elegir = productos sin IVA (excluidos).": "Not chosen = products without IVA (excluded).",
   "\"{name}\": no se conoce la tarifa de IVA para sumarla al precio.": "\"{name}\": the IVA rate to add to the price is unknown.",
   "No se encontró en Siigo la tarifa de IVA de \"{name}\".": "The IVA rate of \"{name}\" was not found in Siigo.",
+  "IVA (id {id})": "IVA (id {id})",
+  "Subtotal (sin IVA)": "Subtotal (before IVA)",
+  "IVA (incluido en los precios)": "IVA (included in the prices)",
+  "Total con IVA": "Total with IVA",
+  "No se pudieron traer las tarifas de IVA de Siigo: {error}": "Could not get the IVA rates from Siigo: {error}",
 };

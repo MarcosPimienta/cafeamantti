@@ -16,6 +16,8 @@ import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
 import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
 import { syncOrderStock, revertOrderStock } from "@/utils/orders/stock";
+import { orderTaxTotals } from "@/utils/orders/tax";
+import { loadSiigoSettings } from "@/utils/siigo/server";
 import { isSellable } from "@/utils/inventory/sellable";
 import { isInventoryCategory, type InventoryCategory, type EntryType } from "@/utils/inventory/categories";
 import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
@@ -483,10 +485,11 @@ export async function createManualAdminOrder(
     weight: item.weight || null,
     grind: item.grind || null,
     quantity: item.quantity,
-    price_at_time: item.price
+    price_at_time: item.price,
+    ..._itemTax(item),
   }));
 
-  const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsData);
+  const { error: itemsErr } = await _insertOrderItems(supabase, orderItemsData);
   if (itemsErr) {
     // Cleanup if order items fail
     await supabase.from('orders').delete().eq('id', order.id);
@@ -495,6 +498,7 @@ export async function createManualAdminOrder(
     }
     throw new Error(itemsErr.message);
   }
+  await _saveOrderTax(supabase, order.id, data.items);
 
   // Follow-up fields (later migrations): best-effort, reported back on failure.
   const now = new Date().toISOString();
@@ -562,7 +566,36 @@ export type OrderItemInput = {
   price: number;
   weight?: string;
   grind?: string;
+  /** Siigo IVA tax chosen for the line (0 = without IVA; undefined = the product's). */
+  tax_id?: number | null;
+  /** Its percentage (5, 19…). */
+  tax_rate?: number | null;
 };
+
+/**
+ * Inserts order lines with their IVA; before the order-item-tax migration
+ * the columns are missing, so they go without it.
+ */
+async function _insertOrderItems(supabase: Awaited<ReturnType<typeof createClient>>, rows: Record<string, unknown>[]) {
+  const { error } = await supabase.from('order_items').insert(rows);
+  if (error && /tax_id|tax_rate/.test(error.message)) {
+    return supabase.from('order_items').insert(rows.map(({ tax_id: _a, tax_rate: _b, ...r }) => r)); // eslint-disable-line @typescript-eslint/no-unused-vars
+  }
+  return { error };
+}
+
+/** The order's IVA (best-effort: the column comes with a migration). */
+async function _saveOrderTax(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string, items: OrderItemInput[]) {
+  const settings = await loadSiigoSettings(supabase);
+  const { iva } = orderTaxTotals(items.map((it) => ({ ...it, tax_rate: Number(it.tax_id) === 0 ? 0 : it.tax_rate })), settings.manual_prices_include_tax !== false);
+  const { error } = await supabase.from('orders').update({ tax_amount: iva }).eq('id', orderId);
+  if (error) console.warn('orders.tax_amount:', error.message);
+}
+
+const _itemTax = (item: OrderItemInput) =>
+  item.tax_id === undefined || item.tax_id === null
+    ? {}
+    : { tax_id: Number(item.tax_id), tax_rate: Number(item.tax_id) === 0 ? 0 : Number(item.tax_rate ?? 0) };
 
 /**
  * Edits any field of an order. `items` is only sent when the products
@@ -635,7 +668,8 @@ async function _updateManualAdminOrder(
     await revertOrderStock(supabase, orderId);
 
     await supabase.from('order_items').delete().eq('order_id', orderId);
-    const { error: itemsErr } = await supabase.from('order_items').insert(
+    const { error: itemsErr } = await _insertOrderItems(
+      supabase,
       data.items.map((item) => ({
         order_id: orderId,
         product_id: item.product_name,
@@ -644,9 +678,11 @@ async function _updateManualAdminOrder(
         grind: item.grind || null,
         quantity: item.quantity,
         price_at_time: item.price,
+        ..._itemTax(item),
       }))
     );
     if (itemsErr) throw new Error(itemsErr.message);
+    await _saveOrderTax(supabase, orderId, data.items);
     total_amount = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }
 

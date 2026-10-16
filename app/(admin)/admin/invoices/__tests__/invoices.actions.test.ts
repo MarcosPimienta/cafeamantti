@@ -287,6 +287,13 @@ describe("manual order prices before IVA", () => {
     expect(await registerPayment(invoice().id, { date: "2026-10-16", amount: 73500, method: "transfer" })).toMatchObject({ success: true, fullyPaid: true });
   });
 
+  it("the IVA chosen on the order line wins over the product's", async () => {
+    Object.assign(db.rows("order_items")[0], { tax_id: 9756, tax_rate: 19 });
+    await createInvoice(ORDER, { terms: "credito" });
+    expect(invoice().lines[0]).toMatchObject({ tax_id: 9756, tax_rate: 19, tax_included: false });
+    expect(invoice().total).toBe(83300); // 70.000 + 19%
+  });
+
   it("web store orders keep IVA included (the customer paid that price)", async () => {
     db.byId("orders", ORDER)!.source = "web";
     await createInvoice(ORDER, { terms: "credito" });

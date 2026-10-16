@@ -72,6 +72,9 @@ export type OrderItemForInvoice = {
   product_id?: string | null;
   quantity: number | string;
   price_at_time: number | string;
+  /** IVA chosen on the order line (0 = none); null/undefined = the product's. */
+  tax_id?: number | null;
+  tax_rate?: number | string | null;
   inventory?: { id?: string; product_code?: string; product_name?: string; siigo_code?: string | null; siigo_product_id?: string | null; sales_tax_id?: number | null } | null;
 };
 
@@ -85,7 +88,9 @@ export function invoiceLinesFromOrder(items: OrderItemForInvoice[]): InvoiceLine
       name: inv?.product_name ?? it.product_id ?? "Producto",
       quantity: num(it.quantity),
       unit_price: num(it.price_at_time),
-      tax_id: inv?.sales_tax_id ?? null,
+      // The IVA chosen on the order wins over the product's own.
+      tax_id: it.tax_id !== null && it.tax_id !== undefined ? Number(it.tax_id) : inv?.sales_tax_id ?? null,
+      ...(it.tax_id !== null && it.tax_id !== undefined ? { tax_rate: Number(it.tax_rate ?? 0) } : {}),
       linked: !!(inv && (inv.siigo_product_id || inv.siigo_code)),
     };
   });

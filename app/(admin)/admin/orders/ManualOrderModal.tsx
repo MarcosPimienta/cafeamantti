@@ -5,6 +5,8 @@ import { Plus, X, Trash2, UserRound, MapPin, CalendarClock, Package } from "luci
 import { createManualAdminOrder } from "../../actions";
 import { isSellable } from "@/utils/inventory/sellable";
 import { useTr } from "@/app/(admin)/AdminI18n";
+import { OrderTaxTotals, TaxSelect, useOrderTaxes } from "./OrderTaxFields";
+import { defaultTaxId, rateOf } from "@/utils/orders/tax";
 
 interface InventoryItem {
   id: string;
@@ -13,6 +15,8 @@ interface InventoryItem {
   current_stock: number;
   is_sellable?: boolean | null;
   category?: string | null;
+  /** The product's IVA in Siigo (0 = none, null = the general one). */
+  sales_tax_id?: number | null;
 }
 
 interface ManualOrderModalProps {
@@ -29,6 +33,9 @@ type ItemRow = {
   price: number;
   weight: string;
   grind: string;
+  /** IVA of the line: Siigo tax id (0 = without IVA) and its percentage. */
+  tax_id: number | null;
+  tax_rate: number;
 };
 
 const DOCUMENT_TYPES = ["CC", "NIT", "CE", "PP", "TI"];
@@ -86,6 +93,15 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
   const [notes, setNotes] = useState("");
 
   const [items, setItems] = useState<ItemRow[]>([]);
+  const taxSetup = useOrderTaxes();
+  // A line whose IVA wasn't picked yet shows the product's.
+  const lineTax = (item: ItemRow) => {
+    if (item.tax_id !== null) return { tax_id: item.tax_id, tax_rate: item.tax_rate };
+    if (!taxSetup || !item.inventory_id) return { tax_id: null, tax_rate: 0 };
+    const product = inventory.find((i) => i.id === item.inventory_id);
+    const id = defaultTaxId(product?.sales_tax_id, taxSetup.generalTaxId);
+    return { tax_id: id, tax_rate: rateOf(id, taxSetup.options) };
+  };
 
   const isNewClient = !selectedClientId;
   // Only what we sell — supplies (bolsas, pergamino, stickers…) stay out.
@@ -132,7 +148,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
   };
 
   const handleAddItem = () => {
-    setItems([...items, { inventory_id: "", product_code: "", product_name: "", quantity: 1, price: 0, weight: "", grind: "" }]);
+    setItems([...items, { inventory_id: "", product_code: "", product_name: "", quantity: 1, price: 0, weight: "", grind: "", tax_id: null, tax_rate: 0 }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -145,11 +161,14 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
     if (field === "inventory_id") {
       const invItem = inventory.find(i => i.id === value);
       if (invItem) {
+        // Starts with the product's IVA (5%, 19%, none…); it can be changed per line.
         newItems[index] = {
           ...newItems[index],
           inventory_id: value,
           product_code: invItem.product_code,
           product_name: invItem.product_name,
+          tax_id: null,
+          tax_rate: 0,
         };
         // Auto-assign weight based on common names if empty
         if (invItem.product_name.includes("250g")) newItems[index].weight = "250g";
@@ -194,7 +213,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
         status,
         delivery_due_date: dueDate || null,
         notes,
-        items
+        items: items.map((it) => ({ ...it, ...lineTax(it) })),
       });
       if (res.success) {
         if (res.warning) alert(tr.msg(res.warning));
@@ -209,7 +228,6 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
     }
   };
 
-  const totalAmount = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
   return (
     <>
@@ -366,7 +384,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
               <Section icon={<Package className="w-3.5 h-3.5" />} title={tr("Productos")}>
                 <div className="space-y-3">
                   {items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-2 sm:grid-cols-[1fr_80px_120px_90px_110px_auto] gap-3 items-end p-4 bg-[#f9f7f0] rounded-xl border border-foreground/5">
+                    <div key={index} className="grid grid-cols-2 sm:grid-cols-[1fr_70px_110px_100px_80px_100px_auto] gap-3 items-end p-4 bg-[#f9f7f0] rounded-xl border border-foreground/5">
                       <div className="col-span-2 sm:col-span-1">
                         <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Inventario")}</label>
                         <select
@@ -391,6 +409,12 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
                       <div>
                         <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Precio unitario")}</label>
                         <input type="number" inputMode="numeric" min="0" step="1" value={item.price} onChange={e => updateItem(index, 'price', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm" />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("IVA")}</label>
+                        <TaxSelect value={lineTax(item).tax_id} setup={taxSetup} disabled={!item.inventory_id}
+                          onChange={(taxId, rate) => { const next = [...items]; next[index] = { ...next[index], tax_id: taxId, tax_rate: rate }; setItems(next); }} />
                       </div>
 
                       <div>
@@ -425,12 +449,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
                   <Plus className="w-3.5 h-3.5" />{" "}{tr("Agregar producto")}
                 </button>
 
-                <div className="flex justify-between items-center pt-4 border-t border-foreground/5">
-                  <span className="font-medium text-sm">{tr("Total Orden")}</span>
-                  <span className="font-serif text-xl text-[#C59F59]">
-                    {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(totalAmount)}
-                  </span>
-                </div>
+                <OrderTaxTotals lines={items.map((it) => ({ ...it, ...lineTax(it) }))} setup={taxSetup} />
               </Section>
 
               <div className="pt-4 pb-[env(safe-area-inset-bottom)] sticky bottom-0 bg-white">

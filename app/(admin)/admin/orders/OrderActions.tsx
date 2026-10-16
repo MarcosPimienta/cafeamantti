@@ -5,6 +5,8 @@ import { Edit, Trash2, X, Plus, UserRound, MapPin, CalendarClock, Package } from
 import { deleteManualAdminOrder, updateManualAdminOrder } from "../../actions";
 import { isSellable } from "@/utils/inventory/sellable";
 import { useTr } from "@/app/(admin)/AdminI18n";
+import { OrderTaxTotals, TaxSelect, useOrderTaxes } from "./OrderTaxFields";
+import { defaultTaxId, rateOf } from "@/utils/orders/tax";
 
 interface InventoryItem {
   id: string;
@@ -13,6 +15,8 @@ interface InventoryItem {
   current_stock: number;
   is_sellable?: boolean | null;
   category?: string | null;
+  /** The product's IVA in Siigo (0 = none, null = the general one). */
+  sales_tax_id?: number | null;
 }
 
 type ItemRow = {
@@ -23,6 +27,9 @@ type ItemRow = {
   price: number;
   weight: string;
   grind: string;
+  /** IVA chosen for the line (Siigo tax id, 0 = without IVA); null = the product's. */
+  tax_id: number | null;
+  tax_rate: number | null;
 };
 
 const STATUS_OPTIONS = [
@@ -118,10 +125,21 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
         quantity: oi.quantity,
         price: Number(oi.price_at_time),
         weight: oi.weight || "",
-        grind: oi.grind || ""
+        grind: oi.grind || "",
+        tax_id: oi.tax_id ?? null,
+        tax_rate: oi.tax_rate == null ? null : Number(oi.tax_rate),
       };
     })
   );
+  const taxSetup = useOrderTaxes();
+  // A line without its own IVA (older orders) shows the product's.
+  const lineTax = (item: ItemRow) => {
+    if (item.tax_id !== null) return { tax_id: item.tax_id, tax_rate: item.tax_rate ?? rateOf(item.tax_id, taxSetup?.options ?? []) };
+    if (!taxSetup) return { tax_id: null, tax_rate: 0 };
+    const product = inventory.find((i) => i.id === item.inventory_id);
+    const id = defaultTaxId(product?.sales_tax_id, taxSetup.generalTaxId);
+    return { tax_id: id, tax_rate: rateOf(id, taxSetup.options) };
+  };
   // Products and stock are only rewritten when the products actually change.
   const [itemsDirty, setItemsDirty] = useState(false);
   const changeItems = (next: ItemRow[]) => {
@@ -146,7 +164,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
   };
 
   const handleAddItem = () => {
-    changeItems([...items, { inventory_id: "", product_code: "", product_name: "", quantity: 1, price: 0, weight: "", grind: "" }]);
+    changeItems([...items, { inventory_id: "", product_code: "", product_name: "", quantity: 1, price: 0, weight: "", grind: "", tax_id: null, tax_rate: null }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -163,6 +181,9 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
           inventory_id: value,
           product_code: invItem.product_code,
           product_name: invItem.product_name,
+          // A new product starts with its own IVA.
+          tax_id: null,
+          tax_rate: null,
         };
         // Auto-assign weight
         if (invItem.product_name.includes("250g")) newItems[index].weight = "250g";
@@ -205,7 +226,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
         status,
         delivery_due_date: dueDate || null,
         notes,
-        items: itemsDirty ? items : undefined,
+        items: itemsDirty ? items.map((it) => ({ ...it, ...lineTax(it) })) : undefined,
         client_update:
           syncClient && selectedClientId
             ? {
@@ -234,7 +255,6 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
     }
   };
 
-  const totalAmount = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
   // Products of online (paid through the store) orders stay locked so they
   // keep matching what the customer paid. Everything else is editable.
@@ -396,7 +416,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
 
                 <div className="space-y-3">
                   {items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-2 sm:grid-cols-[1fr_80px_120px_90px_110px_auto] gap-3 items-end p-4 bg-[#f9f7f0] rounded-xl border border-foreground/5">
+                    <div key={index} className="grid grid-cols-2 sm:grid-cols-[1fr_70px_110px_100px_80px_100px_auto] gap-3 items-end p-4 bg-[#f9f7f0] rounded-xl border border-foreground/5">
                       <div className="col-span-2 sm:col-span-1">
                         <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Inventario")}</label>
                         <select
@@ -429,6 +449,12 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                       </div>
 
                       <div>
+                        <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("IVA")}</label>
+                        <TaxSelect value={lineTax(item).tax_id} setup={taxSetup} disabled={!isManual || !item.inventory_id}
+                          onChange={(taxId, rate) => { const next = [...items]; next[index] = { ...next[index], tax_id: taxId, tax_rate: rate }; changeItems(next); }} />
+                      </div>
+
+                      <div>
                         <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Peso (opc)")}</label>
                         <input type="text" placeholder="250g" value={item.weight} onChange={e => updateItem(index, 'weight', e.target.value)} disabled={!isManual} className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg text-sm disabled:opacity-50" />
                       </div>
@@ -458,12 +484,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                   </button>
                 )}
 
-                <div className="flex justify-between items-center pt-4 border-t border-foreground/5">
-                  <span className="font-medium text-sm">{tr("Total Orden")}</span>
-                  <span className="font-serif text-xl text-[#C59F59]">
-                    {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(totalAmount)}
-                  </span>
-                </div>
+                <OrderTaxTotals lines={items.map((it) => ({ ...it, ...lineTax(it) }))} setup={taxSetup} />
                 {itemsDirty && (
                   <p className="text-[11px] text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
                     {tr("Cambiaste los productos: al guardar se recalcula el total y, si la orden está pagada, se ajusta el inventario.")}

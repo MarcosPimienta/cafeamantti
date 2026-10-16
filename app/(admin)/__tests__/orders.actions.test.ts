@@ -201,3 +201,28 @@ describe("other order actions", () => {
     expect(db.byId("inventory", "inv-cup")!.is_sellable).toBe(true);
   });
 });
+
+describe("IVA per order line", () => {
+  const taxed = [
+    { inventory_id: "inv-250", product_code: "CAFT-250G", product_name: "Café Tostado 250g", quantity: 2, price: 45000, tax_id: 9755, tax_rate: 5 },
+    { inventory_id: "inv-250", product_code: "CAFT-250G", product_name: "Café Tostado 250g", quantity: 1, price: 10000, tax_id: 0, tax_rate: 19 },
+  ];
+
+  it("saves each line's IVA (0 = without IVA) and the order's IVA on top of prices before IVA", async () => {
+    db.rows("siigo_settings").push({ id: 1, config: { manual_prices_include_tax: false } });
+    const { orderId } = await createManualAdminOrder(baseOrder("pending", taxed));
+    expect(db.rows("order_items").map((i) => [i.tax_id, i.tax_rate])).toEqual([[9755, 5], [0, 0]]);
+    expect(db.byId("orders", orderId)).toMatchObject({ total_amount: 100000, tax_amount: 4500 });
+  });
+
+  it("with prices that include IVA, the IVA is the part inside them", async () => {
+    const { orderId } = await createManualAdminOrder(baseOrder("pending", taxed.slice(0, 1)));
+    expect(db.byId("orders", orderId)!.tax_amount).toBeCloseTo(4285.71, 2);
+  });
+
+  it("editing the products keeps their IVA", async () => {
+    const { orderId } = await createManualAdminOrder(baseOrder("pending"));
+    expect(await updateManualAdminOrder(orderId, { ...baseOrder("pending"), items: [{ ...taxed[0], tax_id: 9756, tax_rate: 19 }] })).toMatchObject({ success: true });
+    expect(db.rows("order_items").filter((i) => i.order_id === orderId).map((i) => [i.tax_id, i.tax_rate])).toEqual([[9756, 19]]);
+  });
+});

@@ -45,6 +45,15 @@ async function updateOrderStatus(orderId: string, status: string) {
   if (!res.success) throw new Error('error' in res ? res.error : 'No se pudo actualizar el pedido.');
 }
 
+/** The order's lines with their IVA (without it before the order-item-tax migration). */
+async function orderItemsForInvoice(supabase: Supabase, orderId: string) {
+  const res = await supabase.from('order_items').select('product_id, quantity, price_at_time, tax_id, tax_rate, inventory:inventory_id ( * )').eq('order_id', orderId);
+  if (res.error && /tax_id|tax_rate/.test(res.error.message)) {
+    return supabase.from('order_items').select('product_id, quantity, price_at_time, inventory:inventory_id ( * )').eq('order_id', orderId);
+  }
+  return res;
+}
+
 /** IVA percentages by Siigo tax id. */
 async function taxRates(): Promise<Map<number, number>> {
   const taxes = await getSiigoClient().request<{ id: number; type?: string; percentage?: number }[]>('GET', '/v1/taxes');
@@ -164,7 +173,7 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
 
     const [{ data: order, error }, { data: items, error: itemsError }, { data: existing }] = await Promise.all([
       supabase.from('orders').select('id, status, total_amount, shipping_info, source, user_id, siigo_invoice_id, siigo_invoice, client:client_id ( id, name, document_number, siigo_customer_id )').eq('id', orderId).single(),
-      supabase.from('order_items').select('product_id, quantity, price_at_time, inventory:inventory_id ( * )').eq('order_id', orderId),
+      orderItemsForInvoice(supabase, orderId),
       supabase.from('sales_invoices').select('id').eq('order_id', orderId).neq('status', 'anulada').limit(1),
     ]);
     if (error || !order) throw error ?? new Error('Pedido no encontrado.');
@@ -180,7 +189,8 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
       const rates = await taxRates();
       lines = lines.map((l) => {
         const tax = itemTaxId(l.tax_id, settings);
-        return { ...l, tax_included: false, tax_rate: tax ? rates.get(tax) ?? null : null };
+        // The rate chosen on the order line, else Siigo's for that tax.
+        return { ...l, tax_included: false, tax_rate: tax ? l.tax_rate ?? rates.get(tax) ?? null : null };
       });
       const unknown = lines.find((l) => itemTaxId(l.tax_id, settings) && l.tax_rate == null);
       if (unknown) throw new Error(`No se encontró en Siigo la tarifa de IVA de "${unknown.name}".`);
