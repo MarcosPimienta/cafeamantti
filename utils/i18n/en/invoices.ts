@@ -115,4 +115,8 @@ export const invoices: Record<string, string> = {
   "IVA (incluido en los precios)": "IVA (included in the prices)",
   "Total con IVA": "Total with IVA",
   "No se pudieron traer las tarifas de IVA de Siigo: {error}": "Could not get the IVA rates from Siigo: {error}",
+  "Observaciones de la factura": "Invoice notes",
+  "Ej. Orden de compra 1234, entrega en bodega…": "E.g. Purchase order 1234, delivery at the warehouse…",
+  "Las ve el cliente en la factura. Viene con las notas del pedido: borra lo que sea interno.": "The customer sees them on the invoice. They start with the order's notes: delete anything internal.",
+  "Observaciones: {notes}": "Notes: {notes}",
 };

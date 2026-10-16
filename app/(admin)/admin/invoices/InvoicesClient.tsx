@@ -28,6 +28,7 @@ type Invoice = {
   term_days: number;
   payment_method: PaymentMethod | null;
   total: number;
+  notes: string | null;
   status: InvoiceStatus;
   issue_date: string | null;
   due_date: string | null;
@@ -260,6 +261,7 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
         {inv.siigo_status && <span>{tr.msg(DIAN_LABEL[inv.siigo_status] ?? inv.siigo_status)}</span>}
       </div>
 
+      {inv.notes && <p className="text-xs text-foreground/50 whitespace-pre-wrap">{tr("Observaciones: {notes}", { notes: inv.notes })}</p>}
       {inv.siigo_error && <p className="text-xs text-red-600 break-words">{tr.msg(inv.siigo_error)}</p>}
 
       {inv.payments.length > 0 && (

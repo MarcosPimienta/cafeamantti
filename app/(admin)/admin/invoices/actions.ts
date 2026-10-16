@@ -76,13 +76,14 @@ const toSiigoItem = (l: InvoiceLine) => ({ product_code: l.code, name: l.name, q
 /** The order's value before any IVA added on top (what the order total is). */
 const baseTotal = (lines: InvoiceLine[], shipping: number | string) => Math.round((lines.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0) + Number(shipping)) * 100) / 100;
 
-type InvoiceRow = { id: string; total: number; shipping: number; notes: string | null; payment_terms: string; payment_method: string | null; term_days: number; lines: unknown };
+type InvoiceRow = { id: string; order_id: string; total: number; shipping: number; notes: string | null; payment_terms: string; payment_method: string | null; term_days: number; lines: unknown };
 
 /** The Siigo invoice body for an app invoice, dated `today`. */
 function siigoPayload(inv: InvoiceRow, identification: string | null, settings: SiigoSettings, today: string) {
   const credit = inv.payment_terms === 'credito';
   return buildInvoicePayload(
-    { id: inv.id, total_amount: baseTotal(inv.lines as InvoiceLine[], inv.shipping), shipping_cost: Number(inv.shipping), notes: inv.notes, payment_method: credit ? 'credit' : ((inv.payment_method ?? 'transfer') as 'web' | 'cash' | 'transfer'), term_days: inv.term_days },
+    // The order's number goes in the observations ("Pedido Café Amantti #…").
+    { id: inv.order_id, total_amount: baseTotal(inv.lines as InvoiceLine[], inv.shipping), shipping_cost: Number(inv.shipping), notes: inv.notes, payment_method: credit ? 'credit' : ((inv.payment_method ?? 'transfer') as 'web' | 'cash' | 'transfer'), term_days: inv.term_days },
     (inv.lines as InvoiceLine[]).map(toSiigoItem),
     identification,
     settings,

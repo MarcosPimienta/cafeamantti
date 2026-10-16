@@ -301,3 +301,14 @@ describe("manual order prices before IVA", () => {
     expect(h.calls.some((c) => c.path === "/v1/taxes")).toBe(false);
   });
 });
+
+describe("invoice notes", () => {
+  it("go to Siigo as the invoice observations, after the order number", async () => {
+    await createInvoice(ORDER, { terms: "credito", notes: "  Orden de compra 1234  " });
+    expect(invoice().notes).toBe("Orden de compra 1234");
+    h.responses["POST /v1/invoices"] = { id: "sg-inv", name: "FV-2-725", stamp: { status: "Accepted" } };
+    await sendPendingToSiigo();
+    const body = h.calls.find((c) => c.path === "/v1/invoices")!.opts?.body as { observations: string };
+    expect(body.observations).toBe(`Pedido Café Amantti #${ORDER.split("-")[0]} · Orden de compra 1234`);
+  });
+});

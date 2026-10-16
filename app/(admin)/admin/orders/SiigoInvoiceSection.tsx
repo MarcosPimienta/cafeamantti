@@ -29,6 +29,8 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
   const [terms, setTerms] = useState<Terms>(PAID.has(order.status) ? "contado" : "credito");
   const [termDays, setTermDays] = useState("30");
   const [method, setMethod] = useState<PaymentMethod>(order.epayco_ref_payco ? "web" : "transfer");
+  // Starts with the order's notes; what stays here is what the customer sees on the invoice.
+  const [invoiceNotes, setInvoiceNotes] = useState<string>(order.notes ?? "");
   const [error, setError] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
@@ -69,7 +71,7 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
     startTransition(async () => {
       setError("");
       setProblems([]);
-      const res = await createInvoice(order.id, { terms, termDays: Number(termDays), method: terms === "contado" ? method : null });
+      const res = await createInvoice(order.id, { terms, termDays: Number(termDays), method: terms === "contado" ? method : null, notes: invoiceNotes });
       if (!res.success) return setError(res.error);
       setInvoice({ ...res.invoice, payments: [] });
       setProblems(res.problems);
@@ -113,6 +115,7 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
               : tr("Contado · pagada")}
             {invoice.due_date && invoice.payment_terms === "credito" ? tr(" · vence {date}", { date: invoice.due_date }) : ""}
           </p>
+          {invoice.notes && <p className="text-xs text-foreground/50 whitespace-pre-wrap">{tr("Observaciones: {notes}", { notes: invoice.notes })}</p>}
           {invoice.siigo_error && <p className="text-xs text-red-600 break-words">{tr.msg(invoice.siigo_error)}</p>}
         </div>
         <ProblemList problems={problems} />
@@ -172,6 +175,12 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
               </label>
             )}
           </div>
+          <label className="block text-xs text-foreground/60">
+            {tr("Observaciones de la factura")}
+            <textarea value={invoiceNotes} onChange={(e) => setInvoiceNotes(e.target.value)} rows={2} maxLength={3900}
+              placeholder={tr("Ej. Orden de compra 1234, entrega en bodega…")} className={`${field} block mt-1 w-full resize-y`} />
+            <span className="block mt-1 text-[11px] text-foreground/40">{tr("Las ve el cliente en la factura. Viene con las notas del pedido: borra lo que sea interno.")}</span>
+          </label>
           <p className="text-xs text-foreground/60">
             {tr("Queda como borrador y el inventario se descuenta. Se emite ante la DIAN cuando la envíes a Siigo desde Facturas.")}
           </p>
