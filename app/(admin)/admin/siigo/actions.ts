@@ -192,8 +192,10 @@ export async function refreshSiigoAccounts() {
       }
     }
     if (!accounts.size) throw new Error('Siigo no devolvió cuentas en el balance de prueba.');
-    const list = [...accounts].map(([code, name]) => ({ code, name })).sort((a, b) => a.code.localeCompare(b.code));
     const current = await loadSettings(supabase);
+    // Added to the accounts already known (e.g. a full chart of accounts loaded from Siigo's export).
+    for (const a of current.siigo_accounts ?? []) if (!accounts.has(a.code)) accounts.set(a.code, a.name);
+    const list = [...accounts].map(([code, name]) => ({ code, name })).sort((a, b) => a.code.localeCompare(b.code));
     const { error } = await supabase.from('siigo_settings').upsert({ id: 1, config: { ...current, siigo_accounts: list }, updated_at: new Date().toISOString(), updated_by: userId });
     if (error) throw error;
     revalidatePath('/admin/settings/siigo');
