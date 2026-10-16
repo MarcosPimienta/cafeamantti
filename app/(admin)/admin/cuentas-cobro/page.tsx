@@ -13,6 +13,7 @@ import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@
 import { downloadCuentaCobroPDF } from "@/utils/pdf/cuentasCobroPdf";
 import { DocLanguagePicker, useTr } from "@/app/(admin)/AdminI18n";
 import SupportDocumentSiigo from "./SupportDocumentSiigo";
+import { EXPENSE_CATEGORY_TYPE_MAP } from "../cashflow/types";
 import CuentaCobroPayments from "./CuentaCobroPayments";
 import { type Locale } from "@/utils/i18n/translate";
 
@@ -51,7 +52,7 @@ export default function CuentasCobroPage() {
 
   // Form: Register Expense/Income
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
-  const [expenseCategory, setExpenseCategory] = useState("Honorarios (Servicios profesionales)");
+  const [expenseCategory, setExpenseCategory] = useState("Honorarios Administrativos (Consultoría, capacitación)");
   const [expenseType, setExpenseType] = useState<'OPEX' | 'COGS' | 'CAPEX'>("OPEX");
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
 
@@ -232,7 +233,7 @@ export default function CuentasCobroPage() {
     if (cc.type === 'ingreso') {
       setExpenseCategory("Servicios");
     } else {
-      setExpenseCategory("Honorarios (Servicios profesionales)");
+      setExpenseCategory("Honorarios Administrativos (Consultoría, capacitación)");
       setExpenseType("OPEX");
     }
     setIsExpenseOpen(true);
@@ -858,20 +859,7 @@ export default function CuentasCobroPage() {
                     </>
                   ) : (
                     <>
-                      <option value="Honorarios (Servicios profesionales)">{tr("Honorarios (Servicios profesionales)")}</option>
-                      <option value="Costo de Ventas (Materia prima, insumos, empaques)">{tr("Costo de Ventas (Materia prima, insumos, empaques)")}</option>
-                      <option value="Costos de Producción (Maquila, Servicio de tostión)">{tr("Costos de Producción (Maquila, Servicio de tostión)")}</option>
-                      <option value="Gastos de Personal (Nómina, salud, pensión)">{tr("Gastos de Personal (Nómina, salud, pensión)")}</option>
-                      <option value="Impuestos (ICA, predial, etc.)">{tr("Impuestos (ICA, predial, etc.)")}</option>
-                      <option value="Arrendamientos (Local, equipos)">{tr("Arrendamientos (Local, equipos)")}</option>
-                      <option value="Servicios Públicos (Agua, luz, internet)">{tr("Servicios Públicos (Agua, luz, internet)")}</option>
-                      <option value="Software y Suscripciones (Hosting, licencias)">{tr("Software y Suscripciones (Hosting, licencias)")}</option>
-                      <option value="Gastos Legales (Cámara de comercio, notarías)">{tr("Gastos Legales (Cámara de comercio, notarías)")}</option>
-                      <option value="Mantenimiento y Reparaciones">{tr("Mantenimiento y Reparaciones")}</option>
-                      <option value="Adecuación e Instalaciones">{tr("Adecuación e Instalaciones")}</option>
-                      <option value="Gastos de Viaje y Transporte">{tr("Gastos de Viaje y Transporte")}</option>
-                      <option value="Diversos (Aseo, papelería, caja menor)">{tr("Diversos (Aseo, papelería, caja menor)")}</option>
-                      <option value="Gastos Financieros (Comisiones, intereses)">{tr("Gastos Financieros (Comisiones, intereses)")}</option>
+                      {Object.entries(EXPENSE_CATEGORY_TYPE_MAP).filter(([, t]) => t !== "CAPEX").map(([c]) => <option key={c} value={c}>{tr(c)}</option>)}
                     </>
                   )}
                 </select>

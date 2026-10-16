@@ -76,7 +76,9 @@ export const EXPENSE_CATEGORY_TYPE_MAP: Record<string, ExpenseType> = {
   'Costo de Ventas (Materia prima, insumos, empaques)': 'COGS',
   'Costos de Producción (Maquila, Servicio de tostión)':  'COGS',
   'Gastos de Personal (Nómina, salud, pensión)':          'OPEX',
-  'Honorarios (Servicios profesionales)':                 'OPEX',
+  'Honorarios Legales (Abogados, asesoría jurídica)':     'OPEX',
+  'Honorarios Contables (Contador, revisoría)':           'OPEX',
+  'Honorarios Administrativos (Consultoría, capacitación)': 'OPEX',
   'Impuestos (ICA, predial, etc.)':                       'OPEX',
   'Arrendamientos (Local, equipos)':                      'OPEX',
   'Servicios Públicos (Agua, luz, internet)':             'OPEX',
@@ -90,8 +92,29 @@ export const EXPENSE_CATEGORY_TYPE_MAP: Record<string, ExpenseType> = {
   'Mercancía para Reventa (Inventario PUC 1435)':         'COGS',
   'Gastos de Viaje y Transporte':                         'OPEX',
   'Diversos (Aseo, papelería, caja menor)':               'OPEX',
-  'Gastos Financieros (Comisiones, intereses)':           'OPEX',
+  'Comisiones Bancarias (Cuota de manejo, transacciones, pasarelas)': 'OPEX',
+  'Comisiones de Ventas (Vendedores, referidos)':          'OPEX',
+  'Intereses Bancarios (Créditos, tarjetas)':              'OPEX',
+  'Intereses Financieros (Préstamos de terceros)':         'OPEX',
 } as const;
+
+/**
+ * Categories replaced by more specific ones. Expenses already saved with
+ * them keep working (they are OPEX); new expenses use the ones above.
+ */
+export const RETIRED_EXPENSE_CATEGORIES: Record<string, string[]> = {
+  'Honorarios (Servicios profesionales)': [
+    'Honorarios Legales (Abogados, asesoría jurídica)',
+    'Honorarios Contables (Contador, revisoría)',
+    'Honorarios Administrativos (Consultoría, capacitación)',
+  ],
+  'Gastos Financieros (Comisiones, intereses)': [
+    'Comisiones Bancarias (Cuota de manejo, transacciones, pasarelas)',
+    'Comisiones de Ventas (Vendedores, referidos)',
+    'Intereses Bancarios (Créditos, tarjetas)',
+    'Intereses Financieros (Préstamos de terceros)',
+  ],
+};
 
 export type ExpenseCategory = keyof typeof EXPENSE_CATEGORY_TYPE_MAP;
 

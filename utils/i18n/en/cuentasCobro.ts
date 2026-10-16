@@ -113,4 +113,11 @@ export const cuentasCobro: Record<string, string> = {
   "Crear Solicitud": "Create statement",
   "Asocia esta cuenta de cobro firmada al flujo de caja contable como un ingreso.": "Link this signed billing statement to the cash flow as income.",
   "Asocia esta cuenta de cobro firmada al flujo de caja contable como un gasto.": "Link this signed billing statement to the cash flow as an expense.",
+  "Honorarios Legales (Abogados, asesoría jurídica)": "Legal fees (lawyers, legal advice)",
+  "Honorarios Contables (Contador, revisoría)": "Accounting fees (accountant, audit)",
+  "Honorarios Administrativos (Consultoría, capacitación)": "Administrative fees (consulting, training)",
+  "Comisiones Bancarias (Cuota de manejo, transacciones, pasarelas)": "Bank fees (account fees, transactions, payment gateways)",
+  "Comisiones de Ventas (Vendedores, referidos)": "Sales commissions (sellers, referrals)",
+  "Intereses Bancarios (Créditos, tarjetas)": "Bank interest (loans, cards)",
+  "Intereses Financieros (Préstamos de terceros)": "Financial interest (third-party loans)",
 };
