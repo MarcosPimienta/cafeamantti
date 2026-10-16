@@ -345,6 +345,9 @@ export default function SiigoSettingsClient({
                       aria-label={tr("Cuenta de {c}", { c: c })} className={inputCls}>
                       <option value="">{tr("— Sin elegir —")}</option>
                       {accounts.filter((a) => /^[56]/.test(a.code) || a.code === settings.expense_accounts?.[c]).map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                      {settings.expense_accounts?.[c] && !accounts.some((a) => a.code === settings.expense_accounts?.[c]) && (
+                        <option value={settings.expense_accounts[c]}>{tr("{code} · inactiva o no está en el PUC traído", { code: settings.expense_accounts[c] })}</option>
+                      )}
                     </select>
                   ) : (
                     <input value={settings.expense_accounts?.[c] ?? ""} onChange={(e) => set("expense_accounts", { ...settings.expense_accounts, [c]: e.target.value.replace(/\D/g, "") })}

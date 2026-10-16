@@ -100,4 +100,5 @@ export const purchases: Record<string, string> = {
   "Proveedor no encontrado.": "Supplier not found.",
   "Siigo no devolvió cuentas en el balance de prueba.": "Siigo returned no accounts in the trial balance.",
   "No se pudo descargar el balance de prueba {y}.": "Could not download the {y} trial balance.",
+  "{code} · inactiva o no está en el PUC traído": "{code} · inactive or not in the loaded PUC",
 };

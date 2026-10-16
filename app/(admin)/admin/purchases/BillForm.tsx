@@ -120,6 +120,7 @@ export default function BillForm({
                 <select value={l.account} onChange={(e) => setLine(i, { account: e.target.value })} className={small} aria-label={tr("Cuenta contable")}>
                   <option value="">{tr("— Cuenta —")}</option>
                   {accounts.filter((a) => /^(14|5|6)/.test(a.code) || a.code === l.account).map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                  {l.account && !accounts.some((a) => a.code === l.account) && <option value={l.account}>{tr("{code} · inactiva o no está en el PUC traído", { code: l.account })}</option>}
                 </select>
               ) : (
                 <input value={l.account} onChange={(e) => setLine(i, { account: e.target.value.replace(/\D/g, "") })} placeholder={tr("Cuenta PUC")} className={small} aria-label={tr("Cuenta contable")} />
