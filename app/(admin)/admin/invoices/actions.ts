@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin, updateOrderStatus as setOrderStatus } from '../../actions';
 import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
-import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, buildCreditNotePayload, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
+import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, buildCreditNotePayload, itemTaxId, lineGross, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
 import { ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
 import { restockCreditNote, syncOrderStock } from '@/utils/orders/stock';
 import { CREDIT_REASONS, balanceDue, creditNoteLines, invoiceLinesFromOrder, paymentProblems, paymentState, type CreditInput, type CreditNoteLine, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
@@ -45,6 +45,12 @@ async function updateOrderStatus(orderId: string, status: string) {
   if (!res.success) throw new Error('error' in res ? res.error : 'No se pudo actualizar el pedido.');
 }
 
+/** IVA percentages by Siigo tax id. */
+async function taxRates(): Promise<Map<number, number>> {
+  const taxes = await getSiigoClient().request<{ id: number; type?: string; percentage?: number }[]>('GET', '/v1/taxes');
+  return new Map((taxes ?? []).filter((t) => t.type === 'IVA').map((t) => [t.id, Number(t.percentage ?? 0)]));
+}
+
 const one = <T,>(x: T | T[] | null | undefined): T | null => (Array.isArray(x) ? x[0] ?? null : x ?? null);
 
 function refresh() {
@@ -57,14 +63,18 @@ async function updateRow(supabase: Supabase, table: 'sales_invoices' | 'orders',
   if (error) throw error;
 }
 
+const toSiigoItem = (l: InvoiceLine) => ({ product_code: l.code, name: l.name, quantity: l.quantity, unit_price: l.unit_price, linked: l.linked, tax_id: l.tax_id, tax_included: l.tax_included, tax_rate: l.tax_rate });
+/** The order's value before any IVA added on top (what the order total is). */
+const baseTotal = (lines: InvoiceLine[], shipping: number | string) => Math.round((lines.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0) + Number(shipping)) * 100) / 100;
+
 type InvoiceRow = { id: string; total: number; shipping: number; notes: string | null; payment_terms: string; payment_method: string | null; term_days: number; lines: unknown };
 
 /** The Siigo invoice body for an app invoice, dated `today`. */
 function siigoPayload(inv: InvoiceRow, identification: string | null, settings: SiigoSettings, today: string) {
   const credit = inv.payment_terms === 'credito';
   return buildInvoicePayload(
-    { id: inv.id, total_amount: Number(inv.total), shipping_cost: Number(inv.shipping), notes: inv.notes, payment_method: credit ? 'credit' : ((inv.payment_method ?? 'transfer') as 'web' | 'cash' | 'transfer'), term_days: inv.term_days },
-    (inv.lines as InvoiceLine[]).map((l) => ({ product_code: l.code, name: l.name, quantity: l.quantity, unit_price: l.unit_price, linked: l.linked, tax_id: l.tax_id })),
+    { id: inv.id, total_amount: baseTotal(inv.lines as InvoiceLine[], inv.shipping), shipping_cost: Number(inv.shipping), notes: inv.notes, payment_method: credit ? 'credit' : ((inv.payment_method ?? 'transfer') as 'web' | 'cash' | 'transfer'), term_days: inv.term_days },
+    (inv.lines as InvoiceLine[]).map(toSiigoItem),
     identification,
     settings,
     today
@@ -129,13 +139,13 @@ async function invoiceProblems(supabase: Supabase, invoice: { id: string; total:
   const { problems } = buildInvoicePayload(
     {
       id: invoice.id,
-      total_amount: Number(invoice.total),
+      total_amount: baseTotal(invoice.lines, invoice.shipping),
       shipping_cost: Number(invoice.shipping),
       notes: invoice.notes,
       payment_method: invoice.payment_terms === 'credito' ? 'credit' : ((invoice.payment_method ?? 'transfer') as 'web' | 'cash' | 'transfer'),
       term_days: invoice.term_days,
     },
-    invoice.lines.map((l) => ({ product_code: l.code, name: l.name, quantity: l.quantity, unit_price: l.unit_price, linked: l.linked, tax_id: l.tax_id })),
+    invoice.lines.map(toSiigoItem),
     invoice.customer_identification ?? settings.final_consumer_identification ?? null,
     settings,
     todayBogota()
@@ -153,7 +163,7 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
     if (!(Number.isInteger(termDays) && termDays >= 0 && termDays <= 365)) throw new Error('El plazo debe ser de 0 a 365 días.');
 
     const [{ data: order, error }, { data: items, error: itemsError }, { data: existing }] = await Promise.all([
-      supabase.from('orders').select('id, status, total_amount, shipping_info, siigo_invoice_id, siigo_invoice, client:client_id ( id, name, document_number, siigo_customer_id )').eq('id', orderId).single(),
+      supabase.from('orders').select('id, status, total_amount, shipping_info, source, user_id, siigo_invoice_id, siigo_invoice, client:client_id ( id, name, document_number, siigo_customer_id )').eq('id', orderId).single(),
       supabase.from('order_items').select('product_id, quantity, price_at_time, inventory:inventory_id ( * )').eq('order_id', orderId),
       supabase.from('sales_invoices').select('id').eq('order_id', orderId).neq('status', 'anulada').limit(1),
     ]);
@@ -162,8 +172,21 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
     if (existing?.length) throw new Error('Este pedido ya tiene factura.');
     if (order.status === 'cancelled') throw new Error('No se puede facturar un pedido cancelado.');
     if (order.siigo_invoice_id) throw new Error(`El pedido ya tiene la factura ${order.siigo_invoice ?? order.siigo_invoice_id} en Siigo.`);
-    const lines = invoiceLinesFromOrder((items ?? []) as never);
+    let lines = invoiceLinesFromOrder((items ?? []) as never);
     if (!lines.length) throw new Error('El pedido no tiene productos.');
+    // Web store prices are final (the customer paid them); manual orders follow Ajustes → Siigo.
+    const web = order.source === 'web' || !!order.user_id;
+    if (!web && settings.manual_prices_include_tax === false) {
+      const rates = await taxRates();
+      lines = lines.map((l) => {
+        const tax = itemTaxId(l.tax_id, settings);
+        return { ...l, tax_included: false, tax_rate: tax ? rates.get(tax) ?? null : null };
+      });
+      const unknown = lines.find((l) => itemTaxId(l.tax_id, settings) && l.tax_rate == null);
+      if (unknown) throw new Error(`No se encontró en Siigo la tarifa de IVA de "${unknown.name}".`);
+    }
+    const shippingCost = Number((order.shipping_info as { shipping_cost?: number } | null)?.shipping_cost ?? 0);
+    const invoiceTotal = Math.round((lines.reduce((s, l) => s + lineGross(l, !!itemTaxId(l.tax_id, settings)), 0) + shippingCost) * 100) / 100;
 
     const client = one(order.client as unknown as { id: string; name: string; document_number: string | null } | null);
     const identification = cleanIdentification(client?.document_number).identification || null;
@@ -176,8 +199,8 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
       term_days: termDays,
       payment_method: input.terms === 'contado' ? input.method : null,
       lines,
-      shipping: Number((order.shipping_info as { shipping_cost?: number } | null)?.shipping_cost ?? 0),
-      total: Number(order.total_amount),
+      shipping: shippingCost,
+      total: invoiceTotal,
       notes: input.notes?.trim() || null,
       status: 'borrador',
       created_by: userId,

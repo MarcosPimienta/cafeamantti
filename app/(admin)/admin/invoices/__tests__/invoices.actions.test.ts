@@ -266,3 +266,31 @@ describe("credit notes", () => {
     expect(db.rows("credit_notes")).toHaveLength(1);
   });
 });
+
+describe("manual order prices before IVA", () => {
+  beforeEach(() => {
+    db.rows("siigo_settings")[0].config = { ...SETTINGS, manual_prices_include_tax: false };
+    h.responses["GET /v1/taxes"] = [{ id: 13156, name: "IVA 5%", type: "IVA", percentage: 5 }, { id: 9757, name: "Retefuente 10%", type: "Retefuente", percentage: 10 }];
+  });
+
+  it("the invoice adds the IVA on top and Siigo gets the price before IVA", async () => {
+    expect(await createInvoice(ORDER, { terms: "credito", termDays: 15 })).toMatchObject({ success: true, problems: [] });
+    expect(invoice()).toMatchObject({ total: 73500 }); // 2 × 35.000 + 5%
+    expect(invoice().lines[0]).toMatchObject({ unit_price: 35000, tax_included: false, tax_rate: 5 });
+    h.responses["POST /v1/invoices"] = { id: "sg-inv", name: "FV-2-724", stamp: { status: "Accepted" } };
+    await sendPendingToSiigo();
+    const body = h.calls.find((c) => c.path === "/v1/invoices")!.opts?.body as { items: Record<string, unknown>[]; payments: { value: number }[] };
+    expect(body.items[0]).toMatchObject({ code: "004", quantity: 2, price: 35000, taxes: [{ id: 13156 }] });
+    expect(body.items[0]).not.toHaveProperty("taxed_price");
+    expect(body.payments[0].value).toBe(73500);
+    // What the customer owes includes the IVA.
+    expect(await registerPayment(invoice().id, { date: "2026-10-16", amount: 73500, method: "transfer" })).toMatchObject({ success: true, fullyPaid: true });
+  });
+
+  it("web store orders keep IVA included (the customer paid that price)", async () => {
+    db.byId("orders", ORDER)!.source = "web";
+    await createInvoice(ORDER, { terms: "credito" });
+    expect(invoice().total).toBe(70000);
+    expect(h.calls.some((c) => c.path === "/v1/taxes")).toBe(false);
+  });
+});

@@ -15,6 +15,9 @@ export type InvoiceLine = {
   tax_id: number | null;
   /** Linked to a Siigo product. */
   linked: boolean;
+  /** false = unit_price is before IVA, which the invoice adds on top at tax_rate. */
+  tax_included?: boolean;
+  tax_rate?: number | null;
 };
 
 export type LedgerInvoice = {
@@ -90,6 +93,12 @@ export function invoiceLinesFromOrder(items: OrderItemForInvoice[]): InvoiceLine
 
 // ── Credit notes ────────────────────────────────────────────
 
+/** A line's value as charged: plus IVA when its price was before IVA. */
+export function lineValue(l: { quantity: number; unit_price: number; tax_included?: boolean; tax_rate?: number | null }): number {
+  const base = round2(num(l.quantity) * num(l.unit_price));
+  return l.tax_included === false ? round2(base + (base * num(l.tax_rate)) / 100) : base;
+}
+
 export type CreditReason = 1 | 2 | 3 | 4;
 export const CREDIT_REASONS: Record<CreditReason, string> = {
   1: "Devolución parcial",
@@ -133,12 +142,13 @@ export function creditNoteLines(
       const amount = round2(num((it as { amount: number }).amount));
       if (!(amount > 0)) continue;
       if (amount > round2(line.quantity * line.unit_price) + 0.5) problems.push(`"${line.name}": la rebaja supera el valor de la línea.`);
+      // On a line before IVA the discount is before IVA too (the note adds it).
       // Same units, a lower price per unit: the note is the difference.
       lines.push({ ...line, unit_price: round2(amount / line.quantity), restock: false });
     }
   }
   if (!lines.length) problems.push("Indica qué productos o valores incluye la nota crédito.");
-  const total = round2(lines.reduce((s, l) => s + l.quantity * l.unit_price, 0));
+  const total = round2(lines.reduce((s, l) => s + lineValue(l), 0));
   if (total > round2(num(invoice.total) - num(invoice.credited)) + 0.5) problems.push("La nota crédito supera el valor pendiente de la factura.");
   return { lines, problems };
 }

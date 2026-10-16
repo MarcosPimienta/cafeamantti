@@ -105,4 +105,9 @@ export const invoices: Record<string, string> = {
   "La factura ya está en proceso de envío a la DIAN.": "The invoice is already being sent to the DIAN.",
   "Siigo no deja editar una factura con recibos de caja: elimínalos en Siigo, envíala a la DIAN y vuelve a enviar los pagos.": "Siigo doesn't allow editing an invoice with cash receipts: delete them in Siigo, send it to the DIAN and send the payments again.",
   "Enviando a la DIAN…": "Sending to the DIAN…",
+  "Los precios de los pedidos manuales ya incluyen IVA": "Manual order prices already include IVA",
+  "Desmarcado, el precio que escribes en el pedido es sin IVA y la factura le suma el IVA encima. Los pedidos de la tienda web siempre lo incluyen (el cliente pagó ese precio final).": "Unticked, the price you type in the order is before IVA and the invoice adds the IVA on top. Web store orders always include it (the customer paid that final price).",
+  "Sin elegir = productos sin IVA (excluidos).": "Not chosen = products without IVA (excluded).",
+  "\"{name}\": no se conoce la tarifa de IVA para sumarla al precio.": "\"{name}\": the IVA rate to add to the price is unknown.",
+  "No se encontró en Siigo la tarifa de IVA de \"{name}\".": "The IVA rate of \"{name}\" was not found in Siigo.",
 };

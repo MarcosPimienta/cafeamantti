@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useTransition } from "react";
 import { AlertTriangle, Loader2, X } from "lucide-react";
 import { createCreditNote } from "./actions";
-import { CREDIT_REASONS, creditNoteLines, type CreditInput, type CreditReason, type InvoiceLine } from "@/utils/invoices/ledger";
+import { CREDIT_REASONS, creditNoteLines, lineValue, type CreditInput, type CreditReason, type InvoiceLine } from "@/utils/invoices/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
@@ -59,7 +59,7 @@ export default function CreditNoteModal({ invoice, onClose, onDone }: { invoice:
         ? { reason, notes, items: invoice.lines.map((_, i) => ({ index: i, quantity: Number(qty[i] || 0), restock: restock[i] ?? true })) }
         : { reason, notes, items: invoice.lines.map((_, i) => ({ index: i, amount: Number(amount[i] || 0) })) };
   const { lines, problems } = creditNoteLines({ lines: invoice.lines, total: invoice.total, credited }, input, returned);
-  const total = reason === 2 ? Number(invoice.total) : lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
+  const total = reason === 2 ? Number(invoice.total) : lines.reduce((s, l) => s + lineValue(l), 0);
 
   const send = () => {
     const what =

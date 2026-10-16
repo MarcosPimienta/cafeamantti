@@ -253,7 +253,7 @@ export default function SiigoSettingsClient({
               <input id="sg-term" inputMode="numeric" value={settings.credit_term_days ?? ""} onChange={(e) => set("credit_term_days", e.target.value === "" ? null : Number(e.target.value.replace(/\D/g, "")))} placeholder="30" className={inputCls} />
             </div>
             <IdSelect id="sg-tax" label={tr("IVA de los productos")} value={settings.sales_tax_id} options={catalogs?.taxes.map((t) => ({ id: t.id, name: t.name })) ?? null} onChange={(v) => set("sales_tax_id", v)}
-              hint="Los precios de la app ya incluyen este IVA. Sin elegir = productos sin IVA (excluidos)." />
+              hint="Sin elegir = productos sin IVA (excluidos)." />
             <div>
               <label htmlFor="sg-ship" className={labelCls}>{tr("Código del servicio de envío en Siigo")}</label>
               <input id="sg-ship" value={settings.shipping_product_code ?? ""} onChange={(e) => set("shipping_product_code", e.target.value)} placeholder={tr("Ej. ENVIO")} className={inputCls} />
@@ -275,6 +275,13 @@ export default function SiigoSettingsClient({
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={!!settings.send_mail} onChange={(e) => set("send_mail", e.target.checked)} className="w-4 h-4 accent-[#C59F59]" />
               <span className="text-sm">{tr("Enviar la factura por correo al cliente")}</span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={settings.manual_prices_include_tax !== false} onChange={(e) => set("manual_prices_include_tax", e.target.checked)} className="mt-1 w-4 h-4 accent-[#C59F59]" />
+              <span>
+                <span className="text-sm">{tr("Los precios de los pedidos manuales ya incluyen IVA")}</span>
+                <span className="block text-xs text-foreground/50">{tr("Desmarcado, el precio que escribes en el pedido es sin IVA y la factura le suma el IVA encima. Los pedidos de la tienda web siempre lo incluyen (el cliente pagó ese precio final).")}</span>
+              </span>
             </label>
           </div>
         </section>

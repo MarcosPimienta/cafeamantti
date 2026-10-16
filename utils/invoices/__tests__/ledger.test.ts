@@ -137,3 +137,12 @@ describe("credit note lines", () => {
     ]);
   });
 });
+
+import { lineGross } from "@/utils/siigo/mapping";
+describe("IVA on top", () => {
+  it("a line before IVA charges its rate on top; one with IVA included charges its price", () => {
+    expect(lineGross({ quantity: 6, unit_price: 140400, tax_included: false, tax_rate: 5 }, true)).toBe(884520);
+    expect(lineGross({ quantity: 6, unit_price: 140400 }, true)).toBe(842400);
+    expect(lineGross({ quantity: 6, unit_price: 140400, tax_included: false, tax_rate: 5 }, false)).toBe(842400); // product without IVA
+  });
+});

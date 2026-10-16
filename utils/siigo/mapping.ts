@@ -27,12 +27,14 @@ export type SiigoSettings = {
   voucher_cash_id?: number | null;
   voucher_transfer_id?: number | null;
   voucher_web_id?: number | null;
-  /**
-   * IVA tax applied to products (GET /v1/taxes); null = products without
-   * IVA. App prices are final (IVA included), so they go as taxed_price and
-   * the Siigo total equals the order total.
-   */
+  /** IVA tax applied to products (GET /v1/taxes); null = products without IVA. */
   sales_tax_id?: number | null;
+  /**
+   * Prices of manual orders already include IVA (taxed_price). false = they
+   * are before IVA and the invoice adds it on top. Web store orders always
+   * include it: the customer paid that final price.
+   */
+  manual_prices_include_tax?: boolean;
   /** Send the invoice to the DIAN (electronic) and email it to the client. */
   stamp_dian?: boolean;
   send_mail?: boolean;
@@ -165,7 +167,21 @@ export type AppOrderItem = {
   linked?: boolean;
   /** The product's own IVA (inventory.sales_tax_id): undefined/null = general one, 0 = none. */
   tax_id?: number | null;
+  /** false = unit_price is before IVA and the IVA goes on top (needs tax_rate). Default: IVA included. */
+  tax_included?: boolean;
+  /** IVA percentage of the item's tax, for prices without IVA. */
+  tax_rate?: number | null;
 };
+
+/**
+ * What an invoice line charges with IVA: the price as is when it already
+ * includes IVA, or plus its rate when the IVA goes on top.
+ */
+export function lineGross(it: { quantity: number; unit_price: number; tax_included?: boolean; tax_rate?: number | null }, taxed: boolean): number {
+  const base = round2(num(it.quantity) * num(it.unit_price));
+  if (!taxed || it.tax_included !== false) return base;
+  return round2(base + (base * num(it.tax_rate)) / 100);
+}
 
 /** IVA tax id for an item: its own, else the general one; 0 means none. */
 export const itemTaxId = (own: number | null | undefined, settings: SiigoSettings): number | null =>
@@ -206,6 +222,7 @@ export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], cust
   if (!customerIdentification) problems.push("El pedido no tiene cliente con identificación y no hay consumidor final configurado.");
   if (items.length === 0) problems.push("El pedido no tiene productos.");
   for (const it of items) {
+    if (it.tax_included === false && itemTaxId(it.tax_id, settings) && it.tax_rate == null) problems.push(`"${it.name}": no se conoce la tarifa de IVA para sumarla al precio.`);
     if (!it.product_code) problems.push(`"${it.name}" no está vinculado a un producto del inventario (se necesita su código en Siigo).`);
     else if (it.linked === false) problems.push(`"${it.name}" (${it.product_code}) no está vinculado a un producto de Siigo: vincúlalo o créalo en Ajustes → Siigo → Productos.`);
     if (!(it.quantity > 0)) problems.push(`"${it.name}": cantidad inválida.`);
@@ -214,19 +231,22 @@ export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], cust
   if (shipping > 0 && !settings.shipping_product_code) problems.push("El pedido tiene envío: configura el código del servicio de envío en Ajustes → Siigo.");
 
   const lines = [
-    // Prices are final: an item with IVA goes as taxed_price (IVA included).
+    // IVA included → taxed_price; IVA on top → price (Siigo adds the tax).
     ...items.map((it) => {
       const tax = itemTaxId(it.tax_id, settings);
-      return { code: it.product_code ?? "", description: it.name.slice(0, 200), quantity: round2(it.quantity), [tax ? "taxed_price" : "price"]: round2(it.unit_price), taxes: tax ? [{ id: tax }] : [] };
+      const field = tax && it.tax_included !== false ? "taxed_price" : "price";
+      return { code: it.product_code ?? "", description: it.name.slice(0, 200), quantity: round2(it.quantity), [field]: round2(it.unit_price), taxes: tax ? [{ id: tax }] : [] };
     }),
     ...(shipping > 0 && settings.shipping_product_code
       ? [{ code: settings.shipping_product_code, description: "Envío", quantity: 1, price: round2(shipping), taxes: [] }]
       : []),
   ];
-  const total = round2(items.reduce((s, it) => s + it.quantity * it.unit_price, 0) + shipping);
-  if (Math.abs(total - num(order.total_amount)) > 1) {
-    problems.push(`La suma de los productos (${total}) no coincide con el total del pedido (${num(order.total_amount)}).`);
+  const base = round2(items.reduce((s, it) => s + it.quantity * it.unit_price, 0) + shipping);
+  if (Math.abs(base - num(order.total_amount)) > 1) {
+    problems.push(`La suma de los productos (${base}) no coincide con el total del pedido (${num(order.total_amount)}).`);
   }
+  // What the customer pays: with IVA on top where prices are before IVA.
+  const total = round2(items.reduce((s, it) => s + lineGross(it, !!itemTaxId(it.tax_id, settings)), 0) + shipping);
 
   const payload = {
     document: { id: settings.invoice_document_id ?? 0 },
@@ -237,10 +257,9 @@ export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], cust
     mail: { send: !!settings.send_mail },
     observations: [`Pedido Café Amantti #${order.id.split("-")[0]}`, order.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
     items: lines,
-    // Prices include IVA (taxed_price), so the invoice total is the order total.
     payments: [{ id: paymentId ?? 0, value: total, due_date: dueDate }],
   };
-  return { payload, problems };
+  return { payload, problems, total };
 }
 
 // ── Sales invoices (Siigo → app) ────────────────────────────
@@ -668,7 +687,7 @@ export function buildSupplierPayload(s: { name: string; document_number: string;
 
 /** DIAN reasons the app offers: 1 partial return, 2 annulment, 3 discount, 4 price adjustment. */
 export type CreditNoteReason = 1 | 2 | 3 | 4;
-export type CreditLine = { code: string | null; name: string; quantity: number; unit_price: number; tax_id: number | null };
+export type CreditLine = { code: string | null; name: string; quantity: number; unit_price: number; tax_id: number | null; tax_included?: boolean; tax_rate?: number | null };
 
 /**
  * POST /v1/credit-notes body against an invoice already in Siigo. Lines go
@@ -698,11 +717,12 @@ export function buildCreditNotePayload(
   const items = [
     ...lines.map((l) => {
       const tax = itemTaxId(l.tax_id, settings);
-      return { code: l.code ?? "", description: l.name.slice(0, 200), quantity: round2(l.quantity), [tax ? "taxed_price" : "price"]: round2(l.unit_price), taxes: tax ? [{ id: tax }] : [] };
+      const field = tax && l.tax_included !== false ? "taxed_price" : "price";
+      return { code: l.code ?? "", description: l.name.slice(0, 200), quantity: round2(l.quantity), [field]: round2(l.unit_price), taxes: tax ? [{ id: tax }] : [] };
     }),
     ...(shipping > 0 && settings.shipping_product_code ? [{ code: settings.shipping_product_code, description: "Envío", quantity: 1, price: shipping, taxes: [] }] : []),
   ];
-  const total = round2(lines.reduce((s, l) => s + round2(l.quantity * l.unit_price), 0) + shipping);
+  const total = round2(lines.reduce((s, l) => s + lineGross(l, !!itemTaxId(l.tax_id, settings)), 0) + shipping);
   const payload = {
     document: { id: settings.credit_note_document_id ?? 0 },
     date: today,
