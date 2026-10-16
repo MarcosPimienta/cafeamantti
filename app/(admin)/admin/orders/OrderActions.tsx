@@ -414,10 +414,10 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                   </p>
                 )}
 
-                <div className="space-y-3">
+                <div className="space-y-3 @container">
                   {items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-2 sm:grid-cols-[1fr_70px_110px_100px_80px_100px_auto] gap-3 items-end p-4 bg-[#f9f7f0] rounded-xl border border-foreground/5">
-                      <div className="col-span-2 sm:col-span-1">
+                    <div key={index} className="grid grid-cols-2 @2xl:grid-cols-[minmax(0,1fr)_70px_110px_100px_80px_100px_auto] gap-3 items-end p-4 bg-[#f9f7f0] rounded-xl border border-foreground/5 [&>*]:min-w-0">
+                      <div className="col-span-2 @2xl:col-span-1">
                         <label className="block text-[10px] font-medium text-foreground/50 mb-1">{tr("Inventario")}</label>
                         <select
                           value={item.inventory_id}
@@ -469,9 +469,9 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                       </div>
 
                       {isManual && (
-                        <button type="button" onClick={() => handleRemoveItem(index)} className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold" aria-label={tr("Quitar producto {v}", { v: index + 1 })}>
+                        <button type="button" onClick={() => handleRemoveItem(index)} className="col-span-2 @2xl:col-span-1 flex items-center justify-center gap-2 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold" aria-label={tr("Quitar producto {v}", { v: index + 1 })}>
                           <Trash2 className="w-4 h-4" />
-                          <span className="sm:hidden">{tr("Quitar")}</span>
+                          <span className="@2xl:hidden">{tr("Quitar")}</span>
                         </button>
                       )}
                     </div>

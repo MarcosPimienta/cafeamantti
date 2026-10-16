@@ -62,7 +62,7 @@ export default function PayablePaymentForm({
           </div>
           <button type="button" onClick={onClose} aria-label={tr("Cerrar")} className="p-1 text-foreground/40 hover:text-foreground"><X className="w-5 h-5" /></button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 [&>*]:min-w-0">
           <label className="text-xs font-bold text-foreground/60 space-y-1">
             <span>{tr("Fecha del pago")}</span>
             <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} className={field} />

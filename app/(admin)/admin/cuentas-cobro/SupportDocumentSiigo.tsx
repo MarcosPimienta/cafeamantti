@@ -131,7 +131,7 @@ function SendModal({ cc, onClose, onSent }: { cc: CC; onClose: () => void; onSen
           loading ? <p className="text-sm text-foreground/50 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{' '}{tr('Cargando…')}</p> : null
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 [&>*]:min-w-0">
               <label className="text-xs font-bold text-foreground/60 space-y-1">
                 <span>{tr('Fecha del documento')}</span>
                 <input type="date" value={input.date} onChange={(e) => change({ date: e.target.value })} className={field} />

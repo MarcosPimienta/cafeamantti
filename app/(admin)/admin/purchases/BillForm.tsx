@@ -76,7 +76,7 @@ export default function BillForm({
           <button type="button" onClick={onClose} aria-label={tr("Cerrar")} className="p-1 text-foreground/40 hover:text-foreground"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 [&>*]:min-w-0">
           <label className="md:col-span-2 text-xs font-bold text-foreground/60 space-y-1">
             <span>{tr("Proveedor")}</span>
             <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={field}>
@@ -106,12 +106,12 @@ export default function BillForm({
         </div>
         {supplier && !supplier.document_number && <p className="text-xs text-red-600">{tr("Este proveedor no tiene NIT: complétalo en Proveedores.")}</p>}
 
-        <div className="space-y-2">
-          <div className="hidden md:grid grid-cols-[1.3fr_1.4fr_1.2fr_0.8fr_0.8fr_0.8fr_auto] gap-2 text-[10px] font-bold uppercase tracking-widest text-foreground/40">
+        <div className="space-y-2 @container">
+          <div className="hidden @3xl:grid grid-cols-[1.3fr_1.4fr_1.2fr_0.8fr_0.8fr_0.8fr_auto] gap-2 text-[10px] font-bold uppercase tracking-widest text-foreground/40">
             <span>{tr("Categoría")}</span><span>{tr("Cuenta contable")}</span><span>{tr("Descripción")}</span><span>{tr("Valor sin IVA")}</span><span>{tr("IVA")}</span><span>{tr("Retención")}</span><span />
           </div>
           {lines.map((l, i) => (
-            <div key={i} className="grid grid-cols-1 md:grid-cols-[1.3fr_1.4fr_1.2fr_0.8fr_0.8fr_0.8fr_auto] gap-2 items-center rounded-xl md:rounded-none border md:border-0 border-foreground/10 p-2 md:p-0">
+            <div key={i} className="grid grid-cols-1 @3xl:grid-cols-[1.3fr_1.4fr_1.2fr_0.8fr_0.8fr_0.8fr_auto] gap-2 items-center rounded-xl @3xl:rounded-none border @3xl:border-0 border-foreground/10 p-2 @3xl:p-0 [&>*]:min-w-0">
               <select value={l.category} onChange={(e) => setLine(i, { category: e.target.value, account: defaultAccounts[e.target.value] ?? l.account })} className={small} aria-label={tr("Categoría")}>
                 <option value="">{tr("— Categoría —")}</option>
                 {categories.map((c) => <option key={c} value={c}>{tr(c)}</option>)}

@@ -58,8 +58,8 @@ export default function EditBatchModal({
           </div>
           <button type="button" onClick={onClose} aria-label={tr("Cerrar")} className="p-1 text-foreground/40 hover:text-foreground"><X className="w-5 h-5" /></button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="col-span-2 text-xs font-bold text-foreground/60 space-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 [&>*]:min-w-0">
+          <label className="sm:col-span-2 text-xs font-bold text-foreground/60 space-y-1">
             <span>{tr("Fecha")}</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
           </label>

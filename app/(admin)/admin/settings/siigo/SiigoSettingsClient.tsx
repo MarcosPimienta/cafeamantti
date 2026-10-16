@@ -338,7 +338,7 @@ export default function SiigoSettingsClient({
             <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">{tr("Cuenta contable (PUC) por categoría")}</summary>
             <div className="space-y-2 mt-3">
               {expenseCategories.map((c) => (
-                <div key={c} className={`grid ${accounts.length ? "grid-cols-1 md:grid-cols-[1fr_320px]" : "grid-cols-[1fr_140px]"} gap-2 items-center`}>
+                <div key={c} className={`grid ${accounts.length ? "grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px]" : "grid-cols-[minmax(0,1fr)_140px]"} gap-2 items-center [&>*]:min-w-0`}>
                   <span className="text-sm">{c}</span>
                   {accounts.length ? (
                     <select value={settings.expense_accounts?.[c] ?? ""} onChange={(e) => set("expense_accounts", { ...settings.expense_accounts, [c]: e.target.value })}
@@ -362,7 +362,7 @@ export default function SiigoSettingsClient({
             <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">{tr("Código de activo fijo en Siigo por clase")}</summary>
             <div className="space-y-2 mt-3">
               {assetCategories.map((c) => (
-                <div key={c} className="grid grid-cols-[1fr_140px] gap-2 items-center">
+                <div key={c} className="grid grid-cols-[minmax(0,1fr)_140px] gap-2 items-center [&>*]:min-w-0">
                   <span className="text-sm">{c}</span>
                   <input value={settings.fixed_asset_codes?.[c] ?? ""} onChange={(e) => set("fixed_asset_codes", { ...settings.fixed_asset_codes, [c]: e.target.value })}
                     aria-label={tr("Código de activo de {c}", { c: c })} className={inputCls} />
@@ -393,7 +393,7 @@ export default function SiigoSettingsClient({
             <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">{tr("Retención en la fuente por categoría")}</summary>
             <div className="space-y-2 mt-3">
               {expenseCategories.map((c) => (
-                <div key={c} className="grid grid-cols-[1fr_180px] gap-2 items-center">
+                <div key={c} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_180px] gap-2 items-center [&>*]:min-w-0">
                   <span className="text-sm">{c}</span>
                   {catalogs ? (
                     <select value={settings.support_retentions?.[c] ?? ""} aria-label={tr("Retención de {c}", { c: c })} className={inputCls}
@@ -445,7 +445,7 @@ export default function SiigoSettingsClient({
                     const value = links[row.id] ?? "";
                     const suggested = !row.linked && value && value === comparison.missingInSiigo.find((p) => p.id === row.id)?.suggestion;
                     return (
-                      <div key={row.id} className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_130px_auto] gap-2 items-center">
+                      <div key={row.id} className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_130px_auto] gap-2 items-center [&>*]:min-w-0">
                         <div className="text-sm min-w-0">
                           <span className="font-mono text-[11px] text-foreground/50">{row.code}</span> {row.name}
                           {row.category === "servicio" && <span className="ml-2 text-[10px] font-bold text-emerald-700">{tr("servicio")}</span>}
@@ -492,7 +492,7 @@ export default function SiigoSettingsClient({
                   </div>
                   <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
                     {comparison.missingInApp.map((p) => (
-                      <div key={p.code} className="grid grid-cols-1 md:grid-cols-[auto_1fr_130px_130px] gap-2 items-center">
+                      <div key={p.code} className="grid grid-cols-1 md:grid-cols-[auto_1fr_130px_130px] gap-2 items-center [&>*]:min-w-0">
                         <input type="checkbox" checked={picked.includes(p.code)} onChange={(e) => setPicked((s) => (e.target.checked ? [...s, p.code] : s.filter((x) => x !== p.code)))} aria-label={tr("Elegir {name}", { name: p.name })} className="w-4 h-4 accent-[#C59F59]" />
                         <div className="text-sm min-w-0">
                           <span className="font-mono text-[11px] text-foreground/50">{p.code}</span> {p.name}

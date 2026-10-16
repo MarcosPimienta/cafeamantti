@@ -111,7 +111,8 @@ export default function CreditNoteModal({ invoice, onClose, onDone }: { invoice:
         )}
 
         {reason !== 2 && (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-1 px-1">
+          <table className="w-full min-w-[26rem] text-sm">
             <thead>
               <tr className="text-left text-[10px] uppercase tracking-widest text-foreground/40">
                 <th className="py-1">{tr("Producto")}</th>
@@ -143,6 +144,7 @@ export default function CreditNoteModal({ invoice, onClose, onDone }: { invoice:
               ))}
             </tbody>
           </table>
+          </div>
         )}
         {reason === 1 && <p className="text-[11px] text-foreground/50">{tr("Desmarca «Al inventario» si lo devuelto no se puede vender (dañado o abierto).")}</p>}
 
