@@ -38,12 +38,14 @@ import {
   ArrowRight,
   type LucideIcon,
 } from "lucide-react";
-import { updateOrderStatus, updateOrderDueDate, sendPendingOrdersWhatsApp } from "../../actions";
+import { updateOrderStatus, updateOrderDueDate, sendPendingOrdersWhatsApp, setOrderPayment } from "../../actions";
 import ManualOrderModal from "./ManualOrderModal";
 import {
   type BoardOrder,
   UNDELIVERED,
   NEXT_STATUS,
+  boardColumn,
+  isPaid,
   DELIVERED_WINDOW_DAYS,
   bogotaToday,
   relDays,
@@ -64,11 +66,12 @@ import { useTr } from "@/app/(admin)/AdminI18n";
 type InventoryItem = { id: string; product_code: string; product_name: string; current_stock: number };
 
 const COLUMNS: { id: string; label: string; Icon: LucideIcon }[] = [
-  { id: "pending", label: "Pendiente de pago", Icon: Hourglass },
-  { id: "paid", label: "Pagado", Icon: BadgeDollarSign },
+  { id: "pending", label: "Pendiente", Icon: Hourglass },
   { id: "processing", label: "Preparando", Icon: Coffee },
   { id: "shipped", label: "Enviado", Icon: Truck },
   { id: "delivered", label: "Entregado", Icon: PackageCheck },
+  // Last: delivered and paid. Payment is apart from delivery.
+  { id: "paid", label: "Pagado", Icon: BadgeDollarSign },
   { id: "cancelled", label: "Cancelado", Icon: Ban },
 ];
 const ICON: Record<string, LucideIcon> = Object.fromEntries(COLUMNS.map((c) => [c.id, c.Icon]));
@@ -127,7 +130,7 @@ export default function OrdersBoard({
   const [selectedId, setSelectedId] = useState<string | null>(linkedOrder);
   // Mobile shows one status at a time; start on the first one with work in it.
   const [mobileCol, setMobileCol] = useState<string>(
-    () => COLUMNS.find((c) => UNDELIVERED.has(c.id) && initialOrders.some((o) => o.status === c.id))?.id ?? "pending"
+    () => COLUMNS.find((c) => UNDELIVERED.has(c.id) && initialOrders.some((o) => boardColumn(o) === c.id))?.id ?? "pending"
   );
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -176,26 +179,56 @@ export default function OrdersBoard({
   const selected = orders.find((o) => o.id === selectedId) ?? null;
   const dragging = orders.find((o) => o.id === draggingId) ?? null;
 
-  function moveOrder(orderId: string, status: string) {
+  /**
+   * Moves a card to a column. "Pagado" = delivered and paid; taking a card
+   * from "Pagado" back to "Entregado" marks it unpaid. Other moves only
+   * change the delivery stage, never the payment.
+   */
+  function moveOrder(orderId: string, column: string) {
     const prev = orders.find((o) => o.id === orderId);
-    if (!prev || prev.status === status) return;
-    if (status === "cancelled" && !confirm(tr("¿Cancelar la orden #{v}?", { v: orderId.split("-")[0] }))) return;
+    if (!prev || boardColumn(prev) === column) return;
+    if (column === "cancelled" && !confirm(tr("¿Cancelar la orden #{v}?", { v: orderId.split("-")[0] }))) return;
+    const unpay = boardColumn(prev) === "paid" && column === "delivered";
+    const status = column === "paid" ? "delivered" : column;
 
     const now = new Date().toISOString();
     setOrders((list) =>
       list.map((o) =>
         o.id === orderId
-          ? { ...o, status, status_changed_at: now, delivered_at: status === "delivered" ? now : null }
+          ? {
+              ...o,
+              status,
+              status_changed_at: o.status === status ? o.status_changed_at : now,
+              delivered_at: status === "delivered" ? (o.status === "delivered" ? o.delivered_at : now) : null,
+              ...(column === "paid" ? { payment_status: "paid", paid_at: (o.paid_at as string | null | undefined) ?? now } : unpay ? { payment_status: "pending", paid_at: null } : {}),
+            }
           : o
       )
     );
     startMoving(async () => {
       try {
-        const res = await updateOrderStatus(orderId, status);
-        if (!res.success) throw new Error(tr.msg("error" in res ? res.error : ""));
+        const res: { success: boolean; error?: unknown } = unpay ? await setOrderPayment(orderId, false) : await updateOrderStatus(orderId, column);
+        if (!res.success) throw new Error(tr.msg(String(res.error ?? "")));
       } catch (err) {
         setOrders((list) => list.map((o) => (o.id === orderId ? prev : o)));
         setNotice({ type: "error", msg: err instanceof Error ? err.message : tr("No se pudo mover la orden") });
+      }
+    });
+  }
+
+  /** Marks an order paid (today) or unpaid, without touching its delivery stage. */
+  function setPayment(orderId: string, paid: boolean) {
+    const prev = orders.find((o) => o.id === orderId);
+    if (!prev) return;
+    const now = new Date().toISOString();
+    setOrders((list) => list.map((o) => (o.id === orderId ? { ...o, payment_status: paid ? "paid" : "pending", paid_at: paid ? now : null } : o)));
+    startMoving(async () => {
+      try {
+        const res = await setOrderPayment(orderId, paid);
+        if (!res.success) throw new Error(tr.msg("error" in res ? res.error : ""));
+      } catch (err) {
+        setOrders((list) => list.map((o) => (o.id === orderId ? prev : o)));
+        setNotice({ type: "error", msg: err instanceof Error ? err.message : tr("No se pudo actualizar el pago") });
       }
     });
   }
@@ -389,6 +422,7 @@ export default function OrdersBoard({
           crmClients={crmClients}
           onClose={() => setSelectedId(null)}
           onStatus={(s) => moveOrder(selected.id, s)}
+          onPayment={(paid) => setPayment(selected.id, paid)}
           onDueDate={(d) => {
             const prev = selected.delivery_due_date ?? null;
             setOrders((list) => list.map((o) => (o.id === selected.id ? { ...o, delivery_due_date: d } : o)));
@@ -587,6 +621,11 @@ function Card({
       )}
       <p className="font-serif text-[#C59F59] font-bold mt-2">{cop(Number(order.total_amount || 0))}</p>
       <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[10px]">
+        {order.status !== "cancelled" && boardColumn(order) !== "paid" && (
+          isPaid(order)
+            ? <span className="font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">{tr("Pagado")}</span>
+            : <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">{tr("Por cobrar")}</span>
+        )}
         <span className="text-foreground/40">{relDays(order.created_at)}</span>
         {city && <span className="text-foreground/40">· {city}</span>}
         {due && order.delivery_due_date && (
@@ -622,7 +661,7 @@ function MobileCard({
   onAdvance: (id: string, status: string) => void;
 }) {
   const tr = useTr();
-  const next = NEXT_STATUS[order.status];
+  const next = NEXT_STATUS[boardColumn(order)];
   const NextIcon = next ? ICON[next] : null;
   return (
     <div className="rounded-xl overflow-hidden shadow-sm border border-foreground/5 bg-white">
@@ -652,6 +691,7 @@ function OrderPanel({
   crmClients,
   onClose,
   onStatus,
+  onPayment,
   onDueDate,
 }: {
   order: BoardOrder;
@@ -661,6 +701,7 @@ function OrderPanel({
   crmClients: any[];
   onClose: () => void;
   onStatus: (status: string) => void;
+  onPayment: (paid: boolean) => void;
   onDueDate: (date: string | null) => void;
 }) {
   const tr = useTr();
@@ -699,9 +740,9 @@ function OrderPanel({
           <dl className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-y-1 sm:gap-y-3 gap-x-4 text-sm sm:items-center [&>dt]:text-xs sm:[&>dt]:text-sm [&>dt]:pt-2 sm:[&>dt]:pt-0">
             <dt className="text-foreground/40">{tr("Estado")}</dt>
             <dd className="flex items-center gap-2">
-              <StatusIcon status={order.status} size="sm" />
+              <StatusIcon status={boardColumn(order)} size="sm" />
               <select
-                value={order.status}
+                value={boardColumn(order)}
                 onChange={(e) => onStatus(e.target.value)}
                 aria-label={tr("Estado de la orden")}
                 className="flex-1 sm:flex-none px-3 py-2.5 sm:py-1.5 rounded-lg border border-foreground/10 bg-white text-sm font-bold"
@@ -729,6 +770,23 @@ function OrderPanel({
               {due === "today" && <span className="text-xs font-bold text-amber-700">{tr("Es hoy")}</span>}
             </dd>
 
+            <dt className="text-foreground/40">{tr("Pago")}</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              {isPaid(order) ? (
+                <span className="text-sm font-bold text-green-700">
+                  {tr("Pagado")}{order.paid_at ? ` · ${new Date(order.paid_at).toLocaleDateString("es-CO", { dateStyle: "medium" })}` : ""}
+                </span>
+              ) : (
+                <span className="text-sm font-bold text-amber-800">{tr("Pendiente de pago")}</span>
+              )}
+              {order.status !== "cancelled" && (
+                <button type="button" onClick={() => onPayment(!isPaid(order))}
+                  className="px-2.5 py-1 rounded-lg border border-foreground/10 text-xs font-bold text-foreground/60 hover:bg-foreground/5">
+                  {isPaid(order) ? tr("Marcar sin pagar") : tr("Marcar pagado")}
+                </button>
+              )}
+            </dd>
+
             <dt className="text-foreground/40">{tr("Total")}</dt>
             <dd className="font-serif text-xl text-[#C59F59] font-bold">{cop(Number(order.total_amount || 0))}</dd>
 
@@ -740,7 +798,7 @@ function OrderPanel({
 
             {order.status_changed_at && (
               <>
-                <dt className="text-foreground/40">{tr("En «{v}»", { v: LABEL[order.status] ?? order.status })}</dt>
+                <dt className="text-foreground/40">{tr("En «{v}»", { v: LABEL[order.status === "paid" ? "pending" : order.status] ?? order.status })}</dt>
                 <dd>{tr("desde {relDays}", { relDays: relDays(order.status_changed_at) })}</dd>
               </>
             )}

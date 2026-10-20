@@ -6,6 +6,7 @@ import { AlertTriangle, ExternalLink, FileText, Landmark, Loader2, RefreshCw } f
 import { createInvoice, getOrderInvoice, refreshInvoice, stampInvoice } from "../invoices/actions";
 import { balanceDue, type PaymentMethod } from "@/utils/invoices/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
+import { isPaid } from "./boardUtils";
 
 type Terms = "credito" | "contado";
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -14,7 +15,6 @@ type Invoice = any;
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 const STATUS_LABEL: Record<string, string> = { borrador: "Por enviar a Siigo", error: "Error al enviar", emitida: "En Siigo" };
 const DIAN_LABEL: Record<string, string> = { Accepted: "Aceptada por la DIAN", Rejected: "Rechazada por la DIAN", Pending: "Enviada a la DIAN", Sending: "Enviando a la DIAN…", Draft: "Creada (sin enviar a la DIAN)" };
-const PAID = new Set(["paid", "processing", "shipped", "delivered"]);
 
 /**
  * Order panel section: create the order's sales invoice (a draft that the
@@ -26,7 +26,7 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
   const [invoice, setInvoice] = useState<Invoice | null | undefined>(undefined);
   const [available, setAvailable] = useState(true);
   const [open, setOpen] = useState(false);
-  const [terms, setTerms] = useState<Terms>(PAID.has(order.status) ? "contado" : "credito");
+  const [terms, setTerms] = useState<Terms>(isPaid(order) ? "contado" : "credito");
   const [termDays, setTermDays] = useState("30");
   const [method, setMethod] = useState<PaymentMethod>(order.epayco_ref_payco ? "web" : "transfer");
   // Starts with the order's notes; what stays here is what the customer sees on the invoice.

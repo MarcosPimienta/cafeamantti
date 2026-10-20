@@ -241,4 +241,8 @@ export const server: Record<string, string> = {
   "Orden Web #{v}": "Web order #{v}",
   "Cuenta de Cobro No. {number} - {name} - {concept}": "Billing statement No. {number} - {name} - {concept}",
   "Idioma del documento inválido.": "Invalid document language.",
+  "Orden no pagada ni entregada ({status})": "Order neither paid nor delivered ({status})",
+  "Orden cancelada": "Order cancelled",
+  "Falta aplicar la migración 20261027000000_order_payment_status.sql": "The 20261027000000_order_payment_status.sql migration has not been applied yet",
+  "No se pudo marcar el pedido como pagado.": "Could not mark the order as paid.",
 };

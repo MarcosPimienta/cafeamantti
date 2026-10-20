@@ -267,4 +267,9 @@ export const orders: Record<string, string> = {
   "Dirección del cliente": "Customer address",
   "Observaciones / Medio de Pago": "Remarks / payment method",
   "Notas o comentarios adicionales": "Additional notes or comments",
+  // Payment apart from delivery
+  "Pago": "Payment",
+  "No se pudo actualizar el pago": "Could not update the payment",
+  "Marcar sin pagar": "Mark unpaid",
+  "Marcar pagado": "Mark paid",
 };

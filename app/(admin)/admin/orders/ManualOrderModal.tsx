@@ -88,7 +88,9 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
   const [state, setState] = useState(EMPTY_CUSTOMER.state);
 
   // ── Seguimiento ──
-  const [status, setStatus] = useState("paid");
+  const [status, setStatus] = useState("pending");
+  // Payment is apart from delivery: an order can be delivered and still owed.
+  const [paymentStatus, setPaymentStatus] = useState<"pending" | "paid">("pending");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -140,7 +142,8 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
     setDetails(EMPTY_CUSTOMER.details);
     setCity(EMPTY_CUSTOMER.city);
     setState(EMPTY_CUSTOMER.state);
-    setStatus("paid");
+    setStatus("pending");
+    setPaymentStatus("pending");
     setDueDate("");
     setNotes("");
     setItems([]);
@@ -211,6 +214,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
         contact_phone: contactPhone || "0000000000",
         shipping_info: { address, details, city, state },
         status,
+        payment_status: paymentStatus,
         delivery_due_date: dueDate || null,
         notes,
         items: items.map((it) => ({ ...it, ...lineTax(it) })),
@@ -362,11 +366,17 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
                   <div>
                     <label className={labelCls}>{tr("Estado de la orden")}</label>
                     <select value={status} onChange={e => setStatus(e.target.value)} className={inputCls}>
-                      <option value="pending">{tr("Pendiente de pago")}</option>
-                      <option value="paid">{tr("Pagado")}</option>
+                      <option value="pending">{tr("Pendiente")}</option>
                       <option value="processing">{tr("Preparando")}</option>
                       <option value="shipped">{tr("Enviado")}</option>
                       <option value="delivered">{tr("Entregado")}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>{tr("Pago")}</label>
+                    <select value={paymentStatus} onChange={e => setPaymentStatus(e.target.value as "pending" | "paid")} className={inputCls}>
+                      <option value="pending">{tr("Pendiente de pago")}</option>
+                      <option value="paid">{tr("Pagado")}</option>
                     </select>
                   </div>
                   <div>

@@ -13,6 +13,7 @@ import {
   updateOrderStatus,
   updateOrderDueDate,
   setInventorySellable,
+  setOrderPayment,
 } from "../actions";
 
 let db: FakeDB;
@@ -38,7 +39,8 @@ describe("createManualAdminOrder", () => {
     const { orderId } = await createManualAdminOrder(baseOrder("paid"));
     expect(stock("inv-250")).toBe(18);
     expect(movementsOf(orderId)).toHaveLength(1);
-    expect(db.byId("orders", orderId)).toMatchObject({ total_amount: 90000, status: "paid" });
+    // The old "paid" stage = paid, not prepared yet.
+    expect(db.byId("orders", orderId)).toMatchObject({ total_amount: 90000, status: "pending", payment_status: "paid" });
     expect(db.rows("order_items")[0]).toMatchObject({ inventory_id: "inv-250", quantity: 2, price_at_time: 45000 });
   });
 
@@ -224,5 +226,29 @@ describe("IVA per order line", () => {
     const { orderId } = await createManualAdminOrder(baseOrder("pending"));
     expect(await updateManualAdminOrder(orderId, { ...baseOrder("pending"), items: [{ ...taxed[0], tax_id: 9756, tax_rate: 19 }] })).toMatchObject({ success: true });
     expect(db.rows("order_items").filter((i) => i.order_id === orderId).map((i) => [i.tax_id, i.tax_rate])).toEqual([[9756, 19]]);
+  });
+});
+
+describe("delivery and payment apart", () => {
+  it("delivered on credit takes the stock out but stays unpaid", async () => {
+    const { orderId } = await createManualAdminOrder({ ...baseOrder("pending"), payment_status: "pending" });
+    expect(stock("inv-250")).toBe(20);
+    expect(await updateOrderStatus(orderId, "delivered")).toMatchObject({ success: true });
+    expect(db.byId("orders", orderId)).toMatchObject({ status: "delivered", payment_status: "pending", paid_at: null });
+    expect(stock("inv-250")).toBe(18);
+  });
+
+  it("the board's last column (paid) = delivered and paid; paying keeps the delivery stage", async () => {
+    const { orderId } = await createManualAdminOrder(baseOrder("processing"));
+    expect(await setOrderPayment(orderId, true, "2026-10-16T12:00:00-05:00")).toMatchObject({ success: true });
+    expect(db.byId("orders", orderId)).toMatchObject({ status: "processing", payment_status: "paid", paid_at: "2026-10-16T12:00:00-05:00" });
+    expect(stock("inv-250")).toBe(18);
+    expect(await updateOrderStatus(orderId, "paid")).toMatchObject({ success: true });
+    expect(db.byId("orders", orderId)).toMatchObject({ status: "delivered", payment_status: "paid", paid_at: "2026-10-16T12:00:00-05:00" });
+    // Back to unpaid while still not dispatched gives the stock back.
+    const { orderId: other } = await createManualAdminOrder({ ...baseOrder("pending"), payment_status: "paid" });
+    expect(stock("inv-250")).toBe(16);
+    await setOrderPayment(other, false);
+    expect(stock("inv-250")).toBe(18);
   });
 });

@@ -188,7 +188,10 @@ export async function executeSiigoImportAction(
         shipping_info: shippingInfo,
         contact_email: parsedOrder.client_email || 'siigo@tienda.local',
         contact_phone: parsedOrder.client_phone || '0000000000',
-        status: options.defaultStatus,
+        // Imported sales already happened: "Pagado" = delivered and paid.
+        status: options.defaultStatus === 'paid' ? 'delivered' : options.defaultStatus,
+        payment_status: PAID_STATUSES.includes(options.defaultStatus) ? 'paid' : 'pending',
+        paid_at: PAID_STATUSES.includes(options.defaultStatus) ? orderTimestamp : null,
         created_at: orderTimestamp,
         updated_at: orderTimestamp,
       };
@@ -209,6 +212,10 @@ export async function executeSiigoImportAction(
         delete orderPayload.siigo_invoice;
         delete orderPayload.source;
         delete orderPayload.notes;
+        // Before the payment migration: the old status said it was paid.
+        delete orderPayload.payment_status;
+        delete orderPayload.paid_at;
+        orderPayload.status = options.defaultStatus;
         const secondAttempt = await supabase.from('orders').insert(orderPayload).select('id').single();
         orderRow = secondAttempt.data;
         orderErr = secondAttempt.error;

@@ -1,9 +1,11 @@
 'use server';
 
+
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { checkIsAdmin } from '../../actions';
 import { assertCanApply, kgByClient, statusAfter, type UnitStatus } from '@/utils/comodato';
+import { orderIsSold } from '@/utils/orders/stock';
 
 // Equipment lent to clients in comodato. An 'equipo' inventory item is the
 // model; each machine is an equipment_unit. Lending never moves stock (the
@@ -12,7 +14,6 @@ import { assertCanApply, kgByClient, statusAfter, type UnitStatus } from '@/util
 
 const today = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10); // Bogotá
 const isYmd = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
-const PAID = ['paid', 'processing', 'shipped', 'delivered'];
 const MIGRATION_HINT = 'Falta aplicar la migración 20261010010000_comodatos.sql';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,8 +75,8 @@ export async function getComodatosData() {
     supabase.from('clients').select('id, name, document_number, city').order('name'),
     supabase
       .from('orders')
-      .select('client_id, order_items ( inventory_id, quantity )')
-      .in('status', PAID)
+      .select('*, order_items ( inventory_id, quantity )')
+      .neq('status', 'cancelled')
       .gte('created_at', since)
       .not('client_id', 'is', null),
     supabase.from('inventory').select('id, product_code'),
@@ -83,7 +84,7 @@ export async function getComodatosData() {
 
   const migrated = !units.error;
   const codeOf = new Map(((inventory.data ?? []) as { id: string; product_code: string }[]).map((i) => [i.id, i.product_code]));
-  const lines = ((orders.data ?? []) as { client_id: string; order_items: { inventory_id: string | null; quantity: number }[] }[]).flatMap((o) =>
+  const lines = ((orders.data ?? []) as { client_id: string; status: string; payment_status?: string | null; order_items: { inventory_id: string | null; quantity: number }[] }[]).filter(orderIsSold).flatMap((o) =>
     (o.order_items ?? [])
       .filter((it) => it.inventory_id && codeOf.has(it.inventory_id))
       .map((it) => ({ client_id: o.client_id, product_code: codeOf.get(it.inventory_id!)!, quantity: Number(it.quantity) }))

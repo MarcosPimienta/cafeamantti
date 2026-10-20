@@ -1,11 +1,40 @@
 import { tracksStock } from "@/utils/inventory/categories";
 
-// Stock follows payment: an order deducts its products when it is paid and
-// gives them back if it returns to pending or is cancelled. Shared by the
-// admin actions (session client) and the ePayco webhook (service role).
+// An order takes its products out of stock once the sale is real — paid,
+// shipped/delivered, or invoiced — and gives them back if it is cancelled
+// or goes back to none of those. Shared by the admin actions (session
+// client) and the ePayco webhook (service role).
 
-/** Statuses in which an order counts as paid (same set Flujo de Caja uses). */
+/**
+ * Before payment and delivery were separate, these statuses meant "paid";
+ * still used where an order's payment column isn't there yet.
+ */
 export const PAID_ORDER_STATUSES = ["paid", "processing", "shipped", "delivered"];
+
+/** Statuses in which the goods already left. */
+export const DISPATCHED_STATUSES = ["shipped", "delivered"];
+
+/** Whether the order's sale takes its products out of stock. */
+export function saleIsReal(status: string, paid: boolean, invoiced: boolean): boolean {
+  if (status === "cancelled") return false;
+  return paid || invoiced || DISPATCHED_STATUSES.includes(status);
+}
+
+/**
+ * A sale that counts (volumes, costing, comodatos): paid or already shipped/
+ * delivered. Rows read before the payment migration have no payment_status.
+ */
+export function orderIsSold(o: { status: string; payment_status?: string | null }): boolean {
+  const paid = o.payment_status === undefined || o.payment_status === null ? PAID_ORDER_STATUSES.includes(o.status) : o.payment_status === "paid";
+  return saleIsReal(o.status, paid, false);
+}
+
+/** The order's payment (falls back to the old status rule before its migration). */
+export async function orderIsPaid(supabase: DB, orderId: string, status: string): Promise<boolean> {
+  const { data, error } = await supabase.from("orders").select("payment_status").eq("id", orderId).maybeSingle();
+  if (error || !data || data.payment_status === undefined) return PAID_ORDER_STATUSES.includes(status);
+  return data.payment_status === "paid";
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = any;
@@ -72,6 +101,8 @@ export type SyncOptions = {
    * goes negative, so the Kardex shows the shortfall instead of losing it.
    */
   allowNegative?: boolean;
+  /** The order's payment, if the caller knows it (otherwise it is read). */
+  paid?: boolean;
   /** Called per movement written or reverted (e.g. for the audit log). */
   onMovement?: (m: { id: string; inventory_id: string; quantity: number; reason: string; reverted: boolean }) => Promise<void> | void;
 };
@@ -84,8 +115,9 @@ export type SyncOptions = {
 export async function syncOrderStock(supabase: DB, opts: SyncOptions): Promise<"deducted" | "reverted" | "unchanged"> {
   const { orderId, status, userId, allowNegative = false, onMovement } = opts;
   const existing = await findOrderMovements(supabase, orderId);
-  // Paid, or invoiced (credit sale: the coffee leaves when it is invoiced).
-  const shouldDeduct = PAID_ORDER_STATUSES.includes(status) || (status !== "cancelled" && (await hasLiveInvoice(supabase, orderId)));
+  // Paid, shipped/delivered, or invoiced (a credit sale leaves when invoiced).
+  const paid = opts.paid ?? (await orderIsPaid(supabase, orderId, status));
+  const shouldDeduct = status !== "cancelled" && (saleIsReal(status, paid, false) || (await hasLiveInvoice(supabase, orderId)));
   if ((existing.length > 0) === shouldDeduct) return "unchanged";
 
   const { data: items, error: itemsErr } = await supabase
@@ -103,7 +135,7 @@ export async function syncOrderStock(supabase: DB, opts: SyncOptions): Promise<"
   if (!shouldDeduct) {
     if (!linked.length) return "unchanged"; // legacy order: could not re-apply later
     const reverted = await revertOrderStock(supabase, orderId);
-    for (const m of reverted) await onMovement?.({ ...m, reason: `Orden no pagada (${status})`, reverted: true });
+    for (const m of reverted) await onMovement?.({ ...m, reason: status === "cancelled" ? "Orden cancelada" : `Orden no pagada ni entregada (${status})`, reverted: true });
     return "reverted";
   }
 

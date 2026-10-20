@@ -70,12 +70,13 @@ describe("ePayco webhook — authenticity", () => {
   it("accepts a correctly signed confirmation (form-encoded, as ePayco sends it)", async () => {
     const res = await POST(asForm(payload()));
     expect(res.status).toBe(200);
-    expect(order()).toMatchObject({ status: "paid", epayco_ref_payco: "REF1", epayco_transaction_id: "TX1" });
+    expect(order()).toMatchObject({ status: "pending", payment_status: "paid", epayco_ref_payco: "REF1", epayco_transaction_id: "TX1" });
+    expect(order().paid_at).toBeTruthy();
   });
 
   it("also accepts JSON", async () => {
     expect((await POST(asJson(payload()))).status).toBe(200);
-    expect(order().status).toBe("paid");
+    expect(order().payment_status).toBe("paid");
   });
 
   it("rejects a wrong signature", async () => {
@@ -142,7 +143,7 @@ describe("ePayco webhook — subscriptions", () => {
     expect(Math.round(daysAhead)).toBe(14); // bi-weekly
 
     const renewal = h.db.rows("orders").find((o) => o.subscription_id === "sub-1")!;
-    expect(renewal).toMatchObject({ status: "paid", total_amount: 52000, is_subscription_renewal: true, user_id: "u1" });
+    expect(renewal).toMatchObject({ status: "pending", payment_status: "paid", total_amount: 52000, is_subscription_renewal: true, user_id: "u1" });
     expect(h.db.rows("order_items").find((i) => i.order_id === renewal.id)).toMatchObject({ product_id: "essential", inventory_id: "inv-500", quantity: 1, price_at_time: 52000 });
     expect(h.db.byId("inventory", "inv-500")!.current_stock).toBe(3); // the renewal bag left stock
   });
@@ -171,6 +172,6 @@ describe("ePayco webhook — stock follows payment", () => {
     h.db.failOn("inventory_movements", "insert", "db down");
     const res = await POST(asForm(payload()));
     expect(res.status).toBe(200);
-    expect(order().status).toBe("paid");
+    expect(order().payment_status).toBe("paid");
   });
 });

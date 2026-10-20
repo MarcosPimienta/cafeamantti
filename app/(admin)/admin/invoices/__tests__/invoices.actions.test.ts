@@ -73,7 +73,7 @@ describe("credit sales invoice", () => {
   it("a cash sale marks the order paid", async () => {
     expect(await createInvoice(ORDER, { terms: "contado" })).toMatchObject({ success: false, error: "Indica cómo pagó el cliente." });
     expect(await createInvoice(ORDER, { terms: "contado", method: "transfer" })).toMatchObject({ success: true });
-    expect(db.byId("orders", ORDER)!.status).toBe("paid");
+    expect(db.byId("orders", ORDER)).toMatchObject({ status: "pending", payment_status: "paid" });
     expect(stock()).toBe(8);
   });
 
@@ -114,7 +114,7 @@ describe("credit sales invoice", () => {
 
     // The rest of the payment: the order becomes paid.
     expect(await registerPayment(id, { date: "2026-10-20", amount: 40000, method: "cash" })).toMatchObject({ success: true, fullyPaid: true, balance: 0 });
-    expect(db.byId("orders", ORDER)!.status).toBe("paid");
+    expect(db.byId("orders", ORDER)).toMatchObject({ status: "pending", payment_status: "paid" });
     expect(stock()).toBe(8); // still deducted once
     expect(await registerPayment(id, { date: "2026-10-20", amount: 1000, method: "cash" })).toMatchObject({ success: false, error: "El pago supera el saldo de la factura." });
   });

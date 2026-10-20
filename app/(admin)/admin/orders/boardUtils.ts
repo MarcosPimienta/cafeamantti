@@ -26,13 +26,28 @@ export type BoardOrder = {
 
 export const UNDELIVERED = new Set(["pending", "paid", "processing", "shipped"]);
 
-/** One-tap "advance" on mobile, where there is no drag and drop. */
+/** One-tap "advance" on mobile, where there is no drag and drop. Delivered → paid. */
 export const NEXT_STATUS: Record<string, string> = {
-  pending: "paid",
-  paid: "processing",
+  pending: "processing",
   processing: "shipped",
   shipped: "delivered",
+  delivered: "paid",
 };
+
+export const isPaid = (o: { status: string; payment_status?: string | null }) =>
+  o.payment_status ? o.payment_status === "paid" : ["paid", "processing", "shipped", "delivered"].includes(o.status);
+
+/**
+ * The board column of an order. Delivery and payment are separate: the
+ * last column, "Pagado", holds what was delivered and paid; a delivered
+ * order still owed stays in "Entregado". The old 'paid' status meant
+ * "paid, not prepared yet", so it shows as pending.
+ */
+export function boardColumn(o: { status: string; payment_status?: string | null }): string {
+  if (o.status === "paid") return "pending";
+  if (o.status === "delivered" && isPaid(o)) return "paid";
+  return o.status;
+}
 
 /** The Entregado column only shows recent deliveries unless asked for all. */
 export const DELIVERED_WINDOW_DAYS = 30;
@@ -90,11 +105,13 @@ export function groupOrdersByStatus(
   const now = opts.now ?? Date.now();
   const map = new Map<string, BoardOrder[]>(columns.map((c) => [c, []]));
   for (const o of orders) {
-    if (o.status === "delivered" && !opts.allDelivered) {
+    const col = boardColumn(o);
+    // Delivered and paid columns only keep the recent ones.
+    if ((col === "delivered" || col === "paid") && !opts.allDelivered) {
       const when = o.delivered_at || o.status_changed_at || o.updated_at || o.created_at;
       if (daysBetween(when, now) > DELIVERED_WINDOW_DAYS) continue;
     }
-    (map.get(o.status) ?? map.get(columns[0]))!.push(o);
+    (map.get(col) ?? map.get(columns[0]))!.push(o);
   }
   for (const list of map.values()) {
     list.sort((a, b) => {

@@ -8,7 +8,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
-import { checkIsAdmin, updateOrderStatus as setOrderStatus } from '../../actions';
+import { checkIsAdmin, setOrderPayment, updateOrderStatus as setOrderStatus } from '../../actions';
 import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
 import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, buildCreditNotePayload, itemTaxId, lineGross, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
 import { ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
@@ -43,6 +43,12 @@ async function guard<T extends object>(run: () => Promise<T>): Promise<Result<T>
 async function updateOrderStatus(orderId: string, status: string) {
   const res = await setOrderStatus(orderId, status);
   if (!res.success) throw new Error('error' in res ? res.error : 'No se pudo actualizar el pedido.');
+}
+
+/** Marks the order paid on `date` (its stock and Flujo de Caja follow), failing loudly. */
+async function markOrderPaid(orderId: string, date?: string | null) {
+  const res = await setOrderPayment(orderId, true, date ? `${date}T12:00:00-05:00` : null);
+  if (!res.success) throw new Error('error' in res ? res.error : 'No se pudo marcar el pedido como pagado.');
 }
 
 /** The order's lines with their IVA (without it before the order-item-tax migration). */
@@ -220,7 +226,7 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
     if (insErr) throw insErr;
     // Cash sale: paid now. Credit: the coffee leaves now, paid later.
     try {
-      if (input.terms === 'contado' && order.status === 'pending') await updateOrderStatus(orderId, 'paid');
+      if (input.terms === 'contado') await markOrderPaid(orderId);
       else await syncOrderStock(supabase, { orderId, status: order.status, userId });
     } catch (err) {
       // Not enough stock (or similar): no invoice without its stock movement.
@@ -287,11 +293,9 @@ export async function registerPayment(invoiceId: string, input: PaymentInput) {
     if (insErr) throw insErr;
     const all = [...payments, { amount: Number(input.amount) }];
     const fullyPaid = paymentState(inv, all) === 'pagada';
-    // Fully paid: the order becomes paid (Cash flow counts it from there).
-    if (fullyPaid) {
-      const { data: order } = await supabase.from('orders').select('status').eq('id', inv.order_id).single();
-      if (order?.status === 'pending') await updateOrderStatus(inv.order_id, 'paid');
-    }
+    // Fully paid: the order is paid on that date (Flujo de Caja counts it then),
+    // whatever its delivery stage.
+    if (fullyPaid) await markOrderPaid(inv.order_id, input.date);
     refresh();
     return { problems: [] as string[], fullyPaid, balance: balanceDue(inv, all) };
   });

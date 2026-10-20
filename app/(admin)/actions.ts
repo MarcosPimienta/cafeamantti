@@ -15,7 +15,7 @@ import {
 import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
 import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
-import { syncOrderStock, revertOrderStock } from "@/utils/orders/stock";
+import { syncOrderStock, revertOrderStock, orderIsSold } from "@/utils/orders/stock";
 import { orderTaxTotals } from "@/utils/orders/tax";
 import { loadSiigoSettings } from "@/utils/siigo/server";
 import { isSellable } from "@/utils/inventory/sellable";
@@ -149,6 +149,47 @@ export async function updateOrderStatus(orderId: string, newStatus: string) {
   return _asResult(() => _updateOrderStatus(orderId, newStatus));
 }
 
+/** Marks an order paid (with today as its payment date) or back to unpaid. */
+export async function setOrderPayment(orderId: string, paid: boolean, paidAt?: string | null) {
+  return _asResult(async () => {
+    if (!(await checkIsAdmin())) throw new Error("Unauthorized");
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: order, error } = await supabase.from('orders').select('status').eq('id', orderId).single();
+    if (error || !order) throw new Error('Orden no encontrada');
+    if (paidAt && !/^\d{4}-\d{2}-\d{2}/.test(paidAt)) throw new Error('Fecha inválida');
+    if (!(await _writeOrderPayment(supabase, orderId, paid, paidAt))) throw new Error('Falta aplicar la migración 20261027000000_order_payment_status.sql');
+    await _syncManualOrderStock(supabase, user?.id ?? null, orderId, order.status);
+    revalidatePath('/admin');
+    revalidatePath('/admin/orders');
+    revalidatePath('/admin/cashflow');
+    revalidatePath('/admin/inventory');
+    return { success: true as const };
+  });
+}
+
+/**
+ * Writes an order's payment: paid keeps its first payment date (or today),
+ * unpaid clears it. false if the payment columns aren't there yet.
+ */
+async function _writeOrderPayment(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string, paid: boolean, paidAt?: string | null): Promise<boolean> {
+  const { data: current, error: readErr } = await supabase.from('orders').select('payment_status, paid_at').eq('id', orderId).maybeSingle();
+  if (readErr) {
+    console.warn('orders.payment_status:', readErr.message);
+    return false;
+  }
+  const already = current?.payment_status === 'paid';
+  const { error } = await supabase
+    .from('orders')
+    .update(paid ? { payment_status: 'paid', paid_at: paidAt ?? (already ? current?.paid_at : null) ?? new Date().toISOString() } : { payment_status: 'pending', paid_at: null })
+    .eq('id', orderId);
+  if (error) {
+    console.warn('orders.payment_status:', error.message);
+    return false;
+  }
+  return true;
+}
+
 export async function deleteManualAdminOrder(orderId: string) {
   return _asResult(() => _deleteManualAdminOrder(orderId));
 }
@@ -195,6 +236,11 @@ async function _assertNotInvoiced(supabase: Awaited<ReturnType<typeof createClie
   throw new Error('El pedido tiene una factura en borrador: anúlala en Facturas antes de cancelarlo o eliminarlo.');
 }
 
+/**
+ * Moves an order along its delivery (pending → processing → shipped →
+ * delivered, or cancelled). 'paid' is the board's last column: delivered
+ * and paid. Payment otherwise changes only through setOrderPayment.
+ */
 async function _updateOrderStatus(orderId: string, newStatus: string) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
@@ -202,10 +248,13 @@ async function _updateOrderStatus(orderId: string, newStatus: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (newStatus === 'cancelled') await _assertNotInvoiced(supabase, orderId, "cancelar");
-  
+  const markPaid = newStatus === 'paid';
+  const status = markPaid ? 'delivered' : newStatus;
+
+  const { data: before } = await supabase.from('orders').select('status').eq('id', orderId).maybeSingle();
   const { error } = await supabase
     .from('orders')
-    .update({ status: newStatus })
+    .update({ status })
     .eq('id', orderId);
 
   if (error) throw new Error(error.message);
@@ -213,16 +262,19 @@ async function _updateOrderStatus(orderId: string, newStatus: string) {
   // Follow-up timestamps for the orders board. Separate, best-effort update
   // so status changes keep working even before the tracking migration runs.
   const now = new Date().toISOString();
-  const { error: trackErr } = await supabase
-    .from('orders')
-    .update({
-      status_changed_at: now,
-      delivered_at: newStatus === 'delivered' ? now : null,
-    })
-    .eq('id', orderId);
-  if (trackErr) console.warn('updateOrderStatus tracking fields:', trackErr.message);
+  if (before?.status !== status) {
+    const { error: trackErr } = await supabase
+      .from('orders')
+      .update({
+        status_changed_at: now,
+        delivered_at: status === 'delivered' ? now : null,
+      })
+      .eq('id', orderId);
+    if (trackErr) console.warn('updateOrderStatus tracking fields:', trackErr.message);
+  }
+  if (markPaid) await _writeOrderPayment(supabase, orderId, true);
 
-  await _syncManualOrderStock(supabase, user?.id ?? null, orderId, newStatus);
+  await _syncManualOrderStock(supabase, user?.id ?? null, orderId, status);
 
   revalidatePath('/admin');
   revalidatePath('/admin/orders');
@@ -392,6 +444,8 @@ export async function createManualAdminOrder(
     contact_phone: string;
     shipping_info: { address: string; details?: string; city: string; state: string };
     status: string;
+    /** Whether it is already paid (default: pending). */
+    payment_status?: 'pending' | 'paid';
     items: {
       inventory_id: string;
       product_code: string;
@@ -472,7 +526,8 @@ export async function createManualAdminOrder(
     },
     contact_email: data.contact_email,
     contact_phone: data.contact_phone,
-    status: data.status
+    // 'paid' was a delivery stage before payment was separate: not prepared yet.
+    status: data.status === 'paid' ? 'pending' : data.status
   }).select('id').single();
 
   if (orderErr) throw new Error(orderErr.message);
@@ -512,8 +567,12 @@ export async function createManualAdminOrder(
     delivered_at: data.status === 'delivered' ? now : null,
   }).eq('id', order.id);
 
-  // Inventory moves only once the order is paid — same moment it enters Flujo de Caja.
-  await _syncManualOrderStock(supabase, user?.id ?? null, order.id, data.status);
+  const createdStatus = data.status === 'paid' ? 'pending' : data.status;
+  const paidNow = data.payment_status === 'paid' || data.status === 'paid';
+  if (paidNow) await _writeOrderPayment(supabase, order.id, true);
+
+  // Inventory moves once the sale is real: paid, shipped/delivered or invoiced.
+  await _syncManualOrderStock(supabase, user?.id ?? null, order.id, createdStatus);
 
   revalidatePath('/admin');
   revalidatePath('/admin/orders');
@@ -613,6 +672,8 @@ async function _updateManualAdminOrder(
     contact_phone: string;
     shipping_info: { address: string; details?: string; city: string; state: string };
     status: string;
+    /** Changes the payment too when given. */
+    payment_status?: 'pending' | 'paid';
     delivery_due_date?: string | null;
     notes?: string | null;
     items?: OrderItemInput[];
@@ -703,10 +764,11 @@ async function _updateManualAdminOrder(
     shipping_info,
     contact_email: data.contact_email,
     contact_phone: data.contact_phone,
-    status: data.status,
+    status: data.status === 'paid' ? 'pending' : data.status,
     ...(total_amount !== undefined ? { total_amount } : {}),
   }).eq('id', orderId);
   if (orderErr) throw new Error(orderErr.message);
+  if (data.payment_status || data.status === 'paid') await _writeOrderPayment(supabase, orderId, data.payment_status ? data.payment_status === 'paid' : true);
 
   // Follow-up fields live in later migrations; a failure here must not undo
   // the save above, but it is reported back instead of being swallowed.
@@ -720,8 +782,8 @@ async function _updateManualAdminOrder(
       : {}),
   }).eq('id', orderId);
 
-  // ── Stock follows payment state ─────────────────────────
-  await _syncManualOrderStock(supabase, user?.id ?? null, orderId, data.status);
+  // ── Stock follows the sale (paid, shipped/delivered or invoiced) ──
+  await _syncManualOrderStock(supabase, user?.id ?? null, orderId, data.status === 'paid' ? 'pending' : data.status);
 
   // ── CRM record ──────────────────────────────────────────
   if (data.client_id && data.client_update) {
@@ -2436,8 +2498,8 @@ export async function getCostingData() {
         .eq('era', 'v2'),
       supabase
         .from('orders')
-        .select('id, order_items ( inventory_id, quantity, price_at_time )')
-        .in('status', ['paid', 'processing', 'shipped', 'delivered'])
+        .select('*, order_items ( inventory_id, quantity, price_at_time )')
+        .neq('status', 'cancelled')
         .gte('created_at', since),
       _loadPackagingRecipes(supabase),
     ]);
@@ -2455,7 +2517,7 @@ export async function getCostingData() {
   }
 
   const soldLines: SoldLine[] = [];
-  for (const o of orders ?? []) {
+  for (const o of (orders ?? []).filter(orderIsSold)) {
     for (const it of (o.order_items ?? []) as { inventory_id: string | null; quantity: number; price_at_time: number }[]) {
       const code = it.inventory_id ? codeOf.get(it.inventory_id) : undefined;
       if (!code) continue;

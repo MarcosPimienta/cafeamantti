@@ -176,8 +176,9 @@ export default async function DashboardPage(props: {
                             <p className="text-xs text-white/50">
                               {new Date(order.created_at).toLocaleDateString(locale === "en" ? "en-US" : "es-CO")}
                             </p>
-                            <span className={`inline-block mt-3 px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider ${getStatusColor(order.status)}`}>
-                              {STATUS_LABELS[order.status] || order.status}
+                            {/* A paid order waiting to be prepared shows as paid. */}
+                            <span className={`inline-block mt-3 px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider ${getStatusColor(order.status === "pending" && order.payment_status === "paid" ? "paid" : order.status)}`}>
+                              {STATUS_LABELS[order.status === "pending" && order.payment_status === "paid" ? "paid" : order.status] || order.status}
                             </span>
                           </div>
                         </div>

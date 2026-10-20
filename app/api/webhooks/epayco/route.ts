@@ -108,9 +108,7 @@ export async function POST(req: Request) {
             .eq('id', subscriptionId);
 
           // Create fulfillment order for roastery
-          const { data: newOrder, error: orderErr } = await supabaseAdmin
-            .from('orders')
-            .insert({
+          const renewal = {
               user_id: sub.user_id,
               total_amount: parseFloat(x_amount || '0'),
               shipping_info: {
@@ -119,14 +117,20 @@ export async function POST(req: Request) {
                 state: sub.shipping_state,
                 details: sub.shipping_details,
               },
-              status: 'paid',
               epayco_ref_payco: x_ref_payco,
               epayco_transaction_id: x_transaction_id,
               is_subscription_renewal: true,
               subscription_id: sub.id,
-            })
+          };
+          // Paid, waiting to be prepared and delivered.
+          let { data: newOrder, error: orderErr } = await supabaseAdmin
+            .from('orders')
+            .insert({ ...renewal, status: 'pending', payment_status: 'paid', paid_at: new Date().toISOString() })
             .select('id')
             .single();
+          if (orderErr && /payment_status|paid_at/.test(orderErr.message)) {
+            ({ data: newOrder, error: orderErr } = await supabaseAdmin.from('orders').insert({ ...renewal, status: 'paid' }).select('id').single());
+          }
 
           if (!orderErr && newOrder) {
             // Link the bag to inventory so the renewal deducts stock.
@@ -145,7 +149,7 @@ export async function POST(req: Request) {
               quantity: 1,
               price_at_time: parseFloat(x_amount || '0'),
             });
-            await moveStock(supabaseAdmin, newOrder.id, 'paid');
+            await moveStock(supabaseAdmin, newOrder.id, 'pending');
           }
         } else if (state === 2 || state === 4 || state === 6) { // Rechazada / Fallida
           await supabaseAdmin
@@ -185,20 +189,23 @@ export async function POST(req: Request) {
     }
 
     if (newStatus !== 'pending') {
-      const { error } = await supabaseAdmin
-        .from('orders')
-        .update({ 
-          status: newStatus,
-          epayco_ref_payco: x_ref_payco,
-          epayco_transaction_id: x_transaction_id
-        })
-        .eq('id', orderId);
-        
+      const refs = { epayco_ref_payco: x_ref_payco, epayco_transaction_id: x_transaction_id };
+      // Paid: the payment is recorded; the order stays "pending" until it is
+      // prepared and delivered. Rejected: the order is cancelled.
+      let { error } = newStatus === 'paid'
+        ? await supabaseAdmin.from('orders').update({ ...refs, payment_status: 'paid', paid_at: new Date().toISOString() }).eq('id', orderId)
+        : await supabaseAdmin.from('orders').update({ ...refs, status: newStatus }).eq('id', orderId);
+      if (error && /payment_status|paid_at/.test(error.message)) {
+        // Before the payment migration: the old 'paid' status.
+        ({ error } = await supabaseAdmin.from('orders').update({ ...refs, status: 'paid' }).eq('id', orderId));
+      }
+
       if (error) {
         console.error('Error updating order:', error);
         return NextResponse.json({ error: 'Error interno al actualizar pedido' }, { status: 500 });
       }
-      await moveStock(supabaseAdmin, orderId, newStatus);
+      const { data: current } = await supabaseAdmin.from('orders').select('status').eq('id', orderId).maybeSingle();
+      await moveStock(supabaseAdmin, orderId, current?.status ?? newStatus);
     }
 
     return NextResponse.json({ success: true, message: 'Estado de pedido actualizado' });

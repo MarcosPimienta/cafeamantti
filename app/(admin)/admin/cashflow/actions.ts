@@ -1,5 +1,7 @@
 'use server';
 
+import { PAID_ORDER_STATUSES } from '@/utils/orders/stock';
+
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 import {
@@ -33,6 +35,20 @@ async function _saleLockError(supabase: any, incomeId: string): Promise<string |
   return data && data.length > 0
     ? 'Este ingreso proviene de una salida de inventario. Edítalo o elimínalo desde Inventario → Salidas.'
     : null;
+}
+
+/**
+ * Orders whose money came in (payment_status = paid), with paid_at — the
+ * day they count in Flujo de Caja. Before the payment migration: the old
+ * rule (paid-like statuses, on their creation date).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function selectPaidOrders(supabase: any, columns: string, scope: (q: any, dateCol: 'paid_at' | 'created_at') => any): Promise<{ data: any[] | null; error: any }> {
+  const res = await scope(supabase.from('orders').select(`${columns}, paid_at`).eq('payment_status', 'paid').neq('status', 'cancelled'), 'paid_at');
+  if (res.error && /payment_status|paid_at/.test(res.error.message)) {
+    return scope(supabase.from('orders').select(columns).in('status', PAID_ORDER_STATUSES), 'created_at');
+  }
+  return res;
 }
 
 export async function ensureCashflowDate(date: string) {
@@ -104,12 +120,9 @@ export async function getAllIncomes(era: 'v1' | 'v2' = 'v2') {
   // Only include web orders for v2 era (orders don't have an era column)
   let autoIncomes: any[] = [];
   if (era === 'v2') {
-    const { data: orders, error: ordErr } = await supabase
-      .from('orders')
-      .select('id, total_amount, created_at, status')
-      .in('status', ['paid', 'processing', 'shipped', 'delivered'])
-      .gte('created_at', '2026-09-01T00:00:00Z')
-      .order('created_at', { ascending: false });
+    const { data: orders, error: ordErr } = await selectPaidOrders(supabase, 'id, total_amount, created_at, status', (q) =>
+      q.gte('created_at', '2026-09-01T00:00:00Z').order('created_at', { ascending: false })
+    );
 
     if (ordErr) console.error('getAllIncomes: orders error', ordErr);
 
@@ -133,19 +146,16 @@ export async function getAllIncomes(era: 'v1' | 'v2' = 'v2') {
         shipping_cost: fields.shipping_cost,
         tax_amount:    fields.tax_amount,
         net_revenue:   fields.net_revenue,
-        // Fecha
-        date:          new Date(o.created_at).toISOString().split('T')[0],
-        created_at:    o.created_at,
+        // Fecha: cuando se pagó (antes de separar el pago, su creación)
+        date:          new Date(o.paid_at ?? o.created_at).toISOString().split('T')[0],
+        created_at:    o.paid_at ?? o.created_at,
       };
     });
   } else {
     // For v1 era, include orders before Sept 2026
-    const { data: orders, error: ordErr } = await supabase
-      .from('orders')
-      .select('id, total_amount, created_at, status')
-      .in('status', ['paid', 'processing', 'shipped', 'delivered'])
-      .lt('created_at', '2026-09-01T00:00:00Z')
-      .order('created_at', { ascending: false });
+    const { data: orders, error: ordErr } = await selectPaidOrders(supabase, 'id, total_amount, created_at, status', (q) =>
+      q.lt('created_at', '2026-09-01T00:00:00Z').order('created_at', { ascending: false })
+    );
 
     if (ordErr) console.error('getAllIncomes: orders error', ordErr);
 
@@ -167,8 +177,8 @@ export async function getAllIncomes(era: 'v1' | 'v2' = 'v2') {
         shipping_cost: fields.shipping_cost,
         tax_amount:    fields.tax_amount,
         net_revenue:   fields.net_revenue,
-        date:          new Date(o.created_at).toISOString().split('T')[0],
-        created_at:    o.created_at,
+        date:          new Date(o.paid_at ?? o.created_at).toISOString().split('T')[0],
+        created_at:    o.paid_at ?? o.created_at,
       };
     });
   }
@@ -579,13 +589,10 @@ export async function getMissingCashflowDays(): Promise<string[]> {
   });
 
   // Also consider orders (auto incomes) as "covered" days
-  const { data: orders } = await supabase
-    .from('orders')
-    .select('created_at')
-    .in('status', ['paid', 'processing', 'shipped', 'delivered']);
+  const { data: orders } = await selectPaidOrders(supabase, 'created_at', (q) => q);
 
   (orders || []).forEach((o: any) => {
-    const d = new Date(o.created_at).toISOString().split('T')[0];
+    const d = new Date(o.paid_at ?? o.created_at).toISOString().split('T')[0];
     datesWithRecords.add(d);
   });
 
@@ -658,12 +665,9 @@ export async function getMonthlyPLReport(
       .select('gross_amount, fee_amount, shipping_cost, tax_amount, net_revenue, amount, cashflow:cashflow_id!inner ( date )')
       .gte('cashflow.date', period_start)
       .lt('cashflow.date', period_end),
-    supabase
-      .from('orders')
-      .select('total_amount, created_at')
-      .in('status', ['paid', 'processing', 'shipped', 'delivered'])
-      .gte('created_at', `${period_start}T00:00:00Z`)
-      .lt('created_at', `${period_end}T00:00:00Z`),
+    selectPaidOrders(supabase, 'total_amount, created_at', (q, dateCol) =>
+      q.gte(dateCol, `${period_start}T00:00:00Z`).lt(dateCol, `${period_end}T00:00:00Z`)
+    ),
     supabase
       .from('cashflow_expenses')
       .select('net_amount, cashflow:cashflow_id!inner ( date )')

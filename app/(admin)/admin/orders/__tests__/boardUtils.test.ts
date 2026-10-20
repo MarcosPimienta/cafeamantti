@@ -14,7 +14,8 @@ import {
 const NOW = Date.parse("2026-10-08T15:00:00Z");
 const order = (over: Partial<BoardOrder>): BoardOrder => ({
   id: Math.random().toString(36).slice(2),
-  status: "paid",
+  status: "pending",
+  payment_status: "pending",
   total_amount: 0,
   created_at: "2026-10-01T15:00:00Z",
   ...over,
@@ -72,10 +73,10 @@ describe("relDays / fmtDay / siigoOf", () => {
 });
 
 describe("pipeline", () => {
-  it("advancing walks pending → paid → processing → shipped → delivered and stops", () => {
+  it("advancing walks pending → processing → shipped → delivered → paid and stops", () => {
     const path = ["pending"];
     while (NEXT_STATUS[path[path.length - 1]]) path.push(NEXT_STATUS[path[path.length - 1]]);
-    expect(path).toEqual(["pending", "paid", "processing", "shipped", "delivered"]);
+    expect(path).toEqual(["pending", "processing", "shipped", "delivered", "paid"]);
     expect(NEXT_STATUS.cancelled).toBeUndefined();
   });
   it("undelivered means still owed to the customer", () => {
@@ -84,17 +85,34 @@ describe("pipeline", () => {
 });
 
 describe("groupOrdersByStatus", () => {
-  const COLS = ["pending", "paid", "processing", "shipped", "delivered", "cancelled"];
+  const COLS = ["pending", "processing", "shipped", "delivered", "paid", "cancelled"];
 
   it("puts each order in its column, and unknown statuses in the first one", () => {
     const g = groupOrdersByStatus(
-      [order({ id: "a", status: "paid" }), order({ id: "b", status: "weird" }), order({ id: "c", status: "cancelled" })],
+      [order({ id: "a", status: "processing" }), order({ id: "b", status: "weird" }), order({ id: "c", status: "cancelled" })],
       COLS,
       { now: NOW }
     );
-    expect(g.get("paid")!.map((o) => o.id)).toEqual(["a"]);
+    expect(g.get("processing")!.map((o) => o.id)).toEqual(["a"]);
     expect(g.get("pending")!.map((o) => o.id)).toEqual(["b"]);
     expect(g.get("cancelled")!.map((o) => o.id)).toEqual(["c"]);
+  });
+
+  it("delivery and payment are apart: delivered and owed stays in Entregado, delivered and paid goes last", () => {
+    const g = groupOrdersByStatus(
+      [
+        order({ id: "owed", status: "delivered", payment_status: "pending", delivered_at: "2026-10-07T00:00:00Z" }),
+        order({ id: "done", status: "delivered", payment_status: "paid", delivered_at: "2026-10-07T00:00:00Z" }),
+        order({ id: "prepaid", status: "processing", payment_status: "paid" }),
+        order({ id: "legacy-paid", status: "paid", payment_status: undefined }),
+      ],
+      COLS,
+      { now: NOW }
+    );
+    expect(g.get("delivered")!.map((o) => o.id)).toEqual(["owed"]);
+    expect(g.get("paid")!.map((o) => o.id)).toEqual(["done"]);
+    expect(g.get("processing")!.map((o) => o.id)).toEqual(["prepaid"]);
+    expect(g.get("pending")!.map((o) => o.id)).toEqual(["legacy-paid"]);
   });
 
   it("hides deliveries older than 30 days unless asked for all", () => {
@@ -118,6 +136,6 @@ describe("groupOrdersByStatus", () => {
       COLS,
       { now: NOW }
     );
-    expect(g.get("paid")!.map((o) => o.id)).toEqual(["overdue", "due-later", "no-date-old", "no-date-new"]);
+    expect(g.get("pending")!.map((o) => o.id)).toEqual(["overdue", "due-later", "no-date-old", "no-date-new"]);
   });
 });

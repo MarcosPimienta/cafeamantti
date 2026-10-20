@@ -72,7 +72,7 @@ const DEFAULTS: Record<string, () => Row> = {
   cashflow_incomes: () => ({ era: "v2" }),
   cashflow_expenses: () => ({ era: "v2" }),
   repack_batches: () => ({ era: "v2" }),
-  orders: () => ({ status: "pending" }),
+  orders: () => ({ status: "pending", payment_status: "pending", paid_at: null }),
   sales_invoices: () => ({ status: "borrador", siigo_invoice_id: null, siigo_name: null, issue_date: null, due_date: null }),
   invoice_payments: () => ({ siigo_status: "pendiente", siigo_voucher_id: null }),
   purchase_bills: () => ({ status: "borrador", siigo_id: null, siigo_name: null }),

@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({ client: null as unknown }));
 vi.mock("@/utils/supabase/server", () => ({ createClient: async () => h.client }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-import { createIncomeDirect, updateIncomeDirect, deleteIncomeDirect, ensureCashflowDate } from "../actions";
+import { createIncomeDirect, updateIncomeDirect, deleteIncomeDirect, ensureCashflowDate, getAllIncomes } from "../actions";
 import { createSalida } from "../../../actions";
 
 let db: FakeDB;
@@ -77,5 +77,17 @@ describe("Flujo de Caja no longer moves inventory", () => {
   it("errors from the database are returned, not thrown", async () => {
     db.failOn("cashflow_incomes", "insert", "constraint");
     expect(await createIncomeDirect("2026-10-05", { concept: "x", category: "Otros Ingresos", amount: 1 })).toEqual({ error: "constraint" });
+  });
+});
+
+describe("orders in Flujo de Caja", () => {
+  it("count when paid, on the payment date — a delivered order still owed doesn't", async () => {
+    db.rows("orders").push(
+      { id: "a1111111-0000-0000-0000-000000000000", status: "delivered", payment_status: "pending", paid_at: null, total_amount: 500000, created_at: "2026-10-01T15:00:00Z" },
+      { id: "b2222222-0000-0000-0000-000000000000", status: "delivered", payment_status: "paid", paid_at: "2026-10-16T17:00:00Z", total_amount: 300000, created_at: "2026-10-01T15:00:00Z" },
+      { id: "c3333333-0000-0000-0000-000000000000", status: "cancelled", payment_status: "paid", paid_at: "2026-10-02T17:00:00Z", total_amount: 99, created_at: "2026-10-01T15:00:00Z" },
+    );
+    const incomes = (await getAllIncomes("v2")).filter((i: { type: string }) => i.type === "auto");
+    expect(incomes.map((i: { amount: number; date: string }) => [i.amount, i.date])).toEqual([[300000, "2026-10-16"]]);
   });
 });
