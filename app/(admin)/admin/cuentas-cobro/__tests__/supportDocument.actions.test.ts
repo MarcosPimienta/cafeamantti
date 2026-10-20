@@ -22,7 +22,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { markSupportDocumentManual, previewSupportDocument, sendSupportDocument } from "../siigoActions";
+import { markSupportDocumentManual, previewSupportDocument, sendSupportDocument, stampSupportDocument } from "../siigoActions";
 
 const CC = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 const SETTINGS = {
@@ -88,5 +88,36 @@ describe("signed cuenta de cobro → Siigo support document", () => {
   it("unsigned or income cuentas de cobro don't go", async () => {
     db.byId("cuentas_cobro", CC)!.status = "pendiente";
     expect(await previewSupportDocument(CC)).toMatchObject({ success: false, error: "La cuenta de cobro debe estar firmada." });
+  });
+});
+
+describe("sending a draft support document to the DIAN", () => {
+  const DS = {
+    id: "ds-45", name: "DS-1-45", document: { id: 25846 }, date: "2026-10-20", supplier: { id: "x", identification: "8404243", branch_office: 0 },
+    supplier_receipt_number: { prefix: "CC", number: "32" }, observations: "Cuenta de cobro No. 32",
+    items: [{ id: "1", type: "Account", code: "52355001", quantity: 1, price: 559000, discount: 0, description: "Transportes", total: 553410, taxes: [{ id: 9774, name: "Retefuente 1%", percentage: 1, value: 5590 }] }],
+    payments: [{ id: 4184, name: "Otras cuentas por pagar", value: 553410, due_date: "2026-10-20" }], stamp: { status: "Draft" },
+  };
+  beforeEach(() => Object.assign(db.byId("cuentas_cobro", CC)!, { siigo_ds_id: "ds-45", siigo_ds_name: "DS-1-45", siigo_ds_status: "Draft" }));
+
+  it("updates the same document in Siigo with stamp.send, keeping its lines, and keeps the DIAN's answer", async () => {
+    h.responses["GET /v1/purchase-support-documents/ds-45"] = DS;
+    h.responses["PUT /v1/purchase-support-documents/ds-45"] = { ...DS, stamp: { status: "Accepted", cuds: "abc" } };
+    expect(await stampSupportDocument(CC)).toMatchObject({ success: true, status: "Accepted" });
+    const put = h.calls.find((c) => c.method === "PUT")!;
+    expect(put.opts?.body).toEqual({
+      document: { id: 25846 }, date: "2026-10-20", supplier: { identification: "8404243", branch_office: 0 },
+      supplier_receipt_number: { prefix: "CC", number: "32" }, observations: "Cuenta de cobro No. 32",
+      items: [{ type: "Account", code: "52355001", description: "Transportes", quantity: 1, price: 559000, taxes: [{ id: 9774 }] }],
+      payments: [{ id: 4184, value: 553410, due_date: "2026-10-20" }],
+      stamp: { send: true },
+    });
+    expect(db.byId("cuentas_cobro", CC)).toMatchObject({ siigo_ds_status: "Accepted", siigo_ds_error: null });
+  });
+
+  it("refuses one the DIAN already accepted", async () => {
+    h.responses["GET /v1/purchase-support-documents/ds-45"] = { ...DS, stamp: { status: "Accepted" } };
+    expect(await stampSupportDocument(CC)).toMatchObject({ success: false, error: "El documento soporte ya fue aceptado por la DIAN." });
+    expect(h.calls.some((c) => c.method === "PUT")).toBe(false);
   });
 });

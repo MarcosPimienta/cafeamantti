@@ -57,4 +57,8 @@ export const supportDocuments: Record<string, string> = {
   "Ya fue enviada a Siigo desde la app.": "It was already sent to Siigo from the app.",
   "Retención inválida para \"{c}\".": "Invalid withholding for \"{c}\".",
   "La cuenta de la retención asumida debe ser un código PUC de 4 a 10 dígitos.": "The assumed withholding account must be a PUC code of 4 to 10 digits.",
+  "El documento soporte {name} se transmitirá a la DIAN. Después solo se puede anular con una nota de ajuste en Siigo. ¿Continuar?": "Support document {name} will be transmitted to the DIAN. Afterwards it can only be voided with an adjustment note in Siigo. Continue?",
+  "Primero envía la cuenta de cobro a Siigo.": "Send the billing statement to Siigo first.",
+  "El documento soporte ya fue aceptado por la DIAN.": "The support document was already accepted by the DIAN.",
+  "El documento soporte ya está en proceso de envío a la DIAN.": "The support document is already being sent to the DIAN.",
 };

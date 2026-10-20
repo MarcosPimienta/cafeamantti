@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useEffect, useState, useTransition } from 'react';
-import { AlertTriangle, Loader2, Send, X } from 'lucide-react';
-import { markSupportDocumentManual, previewSupportDocument, sendSupportDocument, type SupportInput } from './siigoActions';
+import { AlertTriangle, Landmark, Loader2, RefreshCw, Send, X } from 'lucide-react';
+import { markSupportDocumentManual, previewSupportDocument, refreshSupportDocument, sendSupportDocument, stampSupportDocument, type SupportInput } from './siigoActions';
 import { useTr } from '@/app/(admin)/AdminI18n';
 
 const cop = (n: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
-const DIAN_LABEL: Record<string, string> = { Accepted: 'Aceptado por la DIAN', Rejected: 'Rechazado por la DIAN', Pending: 'Enviado a la DIAN', Draft: 'Creado (sin enviar a la DIAN)' };
+const DIAN_LABEL: Record<string, string> = { Accepted: 'Aceptado por la DIAN', Rejected: 'Rechazado por la DIAN', Pending: 'Enviado a la DIAN', Sending: 'Enviando a la DIAN…', Draft: 'Creado (sin enviar a la DIAN)' };
 
 type Preview = Extract<Awaited<ReturnType<typeof previewSupportDocument>>, { success: true }>;
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -22,10 +22,37 @@ export default function SupportDocumentSiigo({ cc, onChanged }: { cc: CC; onChan
   if (cc.type !== 'gasto' || cc.status !== 'firmada') return null;
 
   if (cc.siigo_ds_id) {
+    const stampable = !cc.siigo_ds_status || cc.siigo_ds_status === 'Draft' || cc.siigo_ds_status === 'Rejected' || cc.siigo_ds_status === 'error';
+    const run = (action: () => Promise<{ success: boolean; error?: string }>, confirmText?: string) => {
+      if (confirmText && !window.confirm(confirmText)) return;
+      startTransition(async () => {
+        const res = await action();
+        if (!res.success) alert(tr.msg(res.error ?? ''));
+        onChanged();
+      });
+    };
     return (
-      <span className="block mt-1 text-[11px] text-green-700">
-        {tr('Siigo: {name}', { name: cc.siigo_ds_name ?? tr('documento soporte') })}
-        {cc.siigo_ds_status && <span className="text-foreground/50"> · {tr.msg(DIAN_LABEL[cc.siigo_ds_status] ?? cc.siigo_ds_status)}</span>}
+      <span className="block mt-1 text-[11px] space-y-1">
+        <span className="block text-green-700">
+          {tr('Siigo: {name}', { name: cc.siigo_ds_name ?? tr('documento soporte') })}
+          {cc.siigo_ds_status && <span className="text-foreground/50"> · {tr.msg(DIAN_LABEL[cc.siigo_ds_status] ?? cc.siigo_ds_status)}</span>}
+        </span>
+        {cc.siigo_ds_error && <span className="block text-red-600 max-w-[16rem] break-words">{tr.msg(cc.siigo_ds_error)}</span>}
+        <span className="flex flex-wrap gap-3">
+          {stampable && (
+            <button type="button" disabled={busy}
+              onClick={() => run(() => stampSupportDocument(cc.id), tr('El documento soporte {name} se transmitirá a la DIAN. Después solo se puede anular con una nota de ajuste en Siigo. ¿Continuar?', { name: cc.siigo_ds_name ?? '' }))}
+              className="inline-flex items-center gap-1 font-bold text-[#C59F59] hover:underline disabled:opacity-50">
+              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Landmark className="w-3 h-3" />}{' '}{tr('Enviar a la DIAN')}
+            </button>
+          )}
+          {cc.siigo_ds_status !== 'Accepted' && (
+            <button type="button" disabled={busy} onClick={() => run(() => refreshSupportDocument(cc.id))}
+              className="inline-flex items-center gap-1 font-bold text-foreground/50 hover:text-foreground disabled:opacity-50">
+              <RefreshCw className="w-3 h-3" />{' '}{tr('Actualizar estado')}
+            </button>
+          )}
+        </span>
       </span>
     );
   }

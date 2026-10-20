@@ -811,3 +811,42 @@ export function buildPaymentReceiptPayload(
   };
   return { payload, problems };
 }
+
+/** A support document as Siigo returns it (GET /v1/purchase-support-documents/{id}). */
+export type SiigoSupportDocument = {
+  id: string;
+  name?: string;
+  document?: { id: number };
+  date?: string;
+  supplier?: { identification?: string; branch_office?: number };
+  supplier_receipt_number?: { prefix?: string; number?: string };
+  observations?: string;
+  items?: { type?: string; code?: string; description?: string; quantity?: number; price?: number; discount?: number; taxes?: { id: number }[] }[];
+  payments?: { id: number; value: number; due_date?: string }[];
+  stamp?: { status?: string; cuds?: string; errors?: string };
+};
+
+/**
+ * PUT body that sends to the DIAN a support document that is in Siigo as a
+ * draft (or was rejected): the same document, unchanged, with stamp.send.
+ */
+export function buildSupportDocumentStampPayload(ds: SiigoSupportDocument) {
+  return {
+    document: { id: ds.document?.id ?? 0 },
+    date: ds.date,
+    supplier: { identification: ds.supplier?.identification ?? "", branch_office: ds.supplier?.branch_office ?? 0 },
+    supplier_receipt_number: ds.supplier_receipt_number,
+    observations: ds.observations ?? "",
+    items: (ds.items ?? []).map((i) => ({
+      type: i.type,
+      code: i.code,
+      description: i.description,
+      quantity: i.quantity,
+      price: i.price,
+      ...(i.discount ? { discount: i.discount } : {}),
+      ...(i.taxes?.length ? { taxes: i.taxes.map((t) => ({ id: t.id })) } : {}),
+    })),
+    payments: (ds.payments ?? []).map((p) => ({ id: p.id, value: p.value, ...(p.due_date ? { due_date: p.due_date } : {}) })),
+    stamp: { send: true },
+  };
+}

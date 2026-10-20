@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin } from '../../actions';
 import { getSiigoClient, siigoConfigFromEnv } from '@/utils/siigo/api';
-import { buildSupportDocumentPayload, cleanIdentification, type AppCuentaCobro, type Retention, type SupportOptions } from '@/utils/siigo/mapping';
+import { buildSupportDocumentPayload, buildSupportDocumentStampPayload, type SiigoSupportDocument, cleanIdentification, type AppCuentaCobro, type Retention, type SupportOptions } from '@/utils/siigo/mapping';
 import { daneCodeFor } from '@/utils/siigo/daneCities';
 import { ensureSiigoSupplier, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
 
@@ -178,6 +178,63 @@ export async function markSupportDocumentManual(id: string, manual: boolean) {
     if (upErr) throw upErr;
     revalidatePath('/admin/cuentas-cobro');
     return { success: true as const };
+  } catch (err) {
+    return { success: false as const, error: message(err) };
+  }
+}
+
+const IN_PROGRESS = new Set(['Sending', 'Pending']);
+const STAMP_POLLS = 4;
+const STAMP_POLL_MS = process.env.VITEST ? 0 : 2500;
+
+/**
+ * Sends to the DIAN a support document that is in Siigo as a draft (sent
+ * with "Enviar a la DIAN" off) or that the DIAN rejected: the same document
+ * is updated in Siigo with stamp.send, keeping its number.
+ */
+export async function stampSupportDocument(id: string) {
+  const { supabase, userId } = await requireAdmin();
+  try {
+    if (!siigoConfigFromEnv()) throw new Error('Siigo no está configurado en el servidor.');
+    const { data: cc, error } = await supabase.from('cuentas_cobro').select('id, siigo_ds_id, siigo_ds_name').eq('id', id).single();
+    if (error || !cc) throw error ?? new Error('Cuenta de cobro no encontrada.');
+    if (!cc.siigo_ds_id) throw new Error('Primero envía la cuenta de cobro a Siigo.');
+    const siigo = getSiigoClient();
+    const path = `/v1/purchase-support-documents/${cc.siigo_ds_id}`;
+    const current = await siigo.request<SiigoSupportDocument>('GET', path);
+    const status = current.stamp?.status ?? 'Draft';
+    if (status === 'Accepted') throw new Error('El documento soporte ya fue aceptado por la DIAN.');
+    if (IN_PROGRESS.has(status)) throw new Error('El documento soporte ya está en proceso de envío a la DIAN.');
+
+    let out = await siigo.request<SiigoSupportDocument>('PUT', path, { body: buildSupportDocumentStampPayload(current) });
+    // The DIAN answers in a few seconds: read it again while Siigo says it is sending.
+    for (let i = 0; i < STAMP_POLLS && IN_PROGRESS.has(out.stamp?.status ?? ''); i++) {
+      await new Promise((r) => setTimeout(r, STAMP_POLL_MS));
+      out = { ...out, ...(await siigo.request<SiigoSupportDocument>('GET', path)) };
+    }
+    const newStatus = out.stamp?.status ?? 'Pending';
+    await supabase.from('cuentas_cobro').update({ siigo_ds_status: newStatus, siigo_ds_error: out.stamp?.errors || null }).eq('id', id);
+    await siigoLog(supabase, userId, { entity: 'support_document', local_id: id, siigo_id: cc.siigo_ds_id, siigo_name: cc.siigo_ds_name, status: 'ok', message: `Enviado a la DIAN: ${newStatus}` });
+    revalidatePath('/admin/cuentas-cobro');
+    return { success: true as const, status: newStatus };
+  } catch (err) {
+    const msg = message(err);
+    await siigoLog(supabase, userId, { entity: 'support_document', local_id: id, status: 'error', message: msg });
+    return { success: false as const, error: msg };
+  }
+}
+
+/** Re-reads the support document's DIAN status from Siigo. */
+export async function refreshSupportDocument(id: string) {
+  const { supabase } = await requireAdmin();
+  try {
+    const { data: cc, error } = await supabase.from('cuentas_cobro').select('siigo_ds_id').eq('id', id).single();
+    if (error || !cc?.siigo_ds_id) throw error ?? new Error('Primero envía la cuenta de cobro a Siigo.');
+    const out = await getSiigoClient().request<SiigoSupportDocument>('GET', `/v1/purchase-support-documents/${cc.siigo_ds_id}`);
+    const status = out.stamp?.status ?? null;
+    await supabase.from('cuentas_cobro').update({ siigo_ds_status: status, siigo_ds_error: out.stamp?.errors || null }).eq('id', id);
+    revalidatePath('/admin/cuentas-cobro');
+    return { success: true as const, status };
   } catch (err) {
     return { success: false as const, error: message(err) };
   }
