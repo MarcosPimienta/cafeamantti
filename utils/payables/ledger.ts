@@ -12,6 +12,10 @@ export type BillLine = {
   tax_rate: number;
   retention_id: number | null;
   retention_rate: number;
+  /** Inventory product this line brings in (e.g. Café Verde), if any. */
+  inventory_id?: string | null;
+  /** How much of it came in, in the product's unit (kg, units…). */
+  inventory_qty?: number | null;
 };
 
 export type PayableMethod = "bank" | "cash";
@@ -46,6 +50,7 @@ export function billProblems(bill: { supplier_identification: string; provider_n
     else if (capexCategories.includes(l.category)) p.push(`Línea ${n}: los activos fijos se registran en Flujo de Caja, no aquí.`);
     if (!/^\d{4,10}$/.test(l.account ?? "")) p.push(`Línea ${n}: elige la cuenta contable.`);
     if (!(num(l.base) > 0)) p.push(`Línea ${n}: el valor debe ser mayor a cero.`);
+    if (l.inventory_id && !(num(l.inventory_qty) > 0)) p.push(`Línea ${n}: indica cuánto entra al inventario.`);
   });
   return p;
 }

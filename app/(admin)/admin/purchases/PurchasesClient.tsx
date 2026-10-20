@@ -50,6 +50,7 @@ export default function PurchasesClient(props: {
   suppliers: { id: string; name: string; document_type: string | null; document_number: string | null }[];
   cuentasCobro: { id: string; number: number; issuer_name: string; total: number; paid: number; date: string | null }[];
   categories: string[];
+  inventory: { id: string; product_code: string; product_name: string; unit: string | null }[];
   accounts: { code: string; name: string }[];
   defaultAccounts: Record<string, string>;
   configured: boolean;
@@ -128,7 +129,7 @@ export default function PurchasesClient(props: {
       )}
 
       {creating && (
-        <BillForm suppliers={props.suppliers} categories={props.categories} accounts={props.accounts} defaultAccounts={props.defaultAccounts} today={props.today}
+        <BillForm suppliers={props.suppliers} categories={props.categories} inventory={props.inventory} accounts={props.accounts} defaultAccounts={props.defaultAccounts} today={props.today}
           onClose={() => setCreating(false)} onDone={(msg) => { setCreating(false); done(msg); }} />
       )}
     </div>
@@ -181,6 +182,11 @@ function BillCard({ b, balance, overdue, today, onDone }: { b: Bill; balance: nu
         <span>{tr("Pagado {paid}", { paid: cop(paidOf(b.payments)) })}</span>
       </div>
       {b.siigo_error && !b.siigo_name && <p className="text-xs text-red-600 break-words">{tr.msg(b.siigo_error)}</p>}
+      {b.lines.some((l) => l.inventory_id) && (
+        <p className="text-xs text-foreground/50">
+          {tr("Entró al inventario: {items}.", { items: b.lines.filter((l) => l.inventory_id).map((l) => `${l.inventory_qty} · ${l.description}`).join(", ") })}
+        </p>
+      )}
       <PaymentList payments={b.payments} onDone={onDone} />
       <div className="flex flex-wrap gap-3">
         {balance > 0.5 && (

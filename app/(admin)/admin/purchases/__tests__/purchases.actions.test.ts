@@ -22,7 +22,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { createBill, deletePayablePayment, registerPayablePayment, retryPayablePayment } from "../actions";
+import { annulBill, createBill, deletePayablePayment, registerPayablePayment, retryPayablePayment } from "../actions";
 
 const SETTINGS = { purchase_document_id: 18133, purchase_payment_id: 4183, payment_receipt_document_id: 18132, payout_bank_id: 4182, payout_cash_id: 4177, expense_accounts: {}, fixed_asset_codes: {} };
 const CC = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
@@ -114,5 +114,45 @@ describe("paying a signed cuenta de cobro", () => {
   it("one already registered as an expense the old way is paid", async () => {
     db.byId("cuentas_cobro", CC)!.expense_id = "old";
     expect(await registerPayablePayment({ cuentaCobroId: CC }, { date: "2026-10-16", amount: 1, method: "bank" })).toMatchObject({ success: false, error: expect.stringContaining("ya se registró como gasto") });
+  });
+});
+
+describe("purchase invoices that bring stock in", () => {
+  beforeEach(() => {
+    db.rows("inventory").push(
+      { id: "verde", product_code: "CAFV-001", product_name: "Café Verde", unit: "kg", category: "cafe", current_stock: 10 },
+      { id: "srv", product_code: "SRV-001", product_name: "Mantenimiento", unit: "servicio", category: "servicio", current_stock: 0 },
+    );
+  });
+  const coffee = { ...input, providerNumber: "77", lines: [{ ...input.lines[0], description: "Café verde excelso", base: 1000000, tax_id: null, tax_rate: 0, inventory_id: "verde", inventory_qty: 598 }] };
+
+  it("the line's product enters stock, linked to the invoice, on the invoice date", async () => {
+    h.responses["POST /v1/purchases"] = { id: "fc-9", name: "FC-1-250" };
+    expect(await createBill(coffee)).toMatchObject({ success: true, stocked: ["598 kg Café Verde"] });
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(608);
+    expect(db.rows("inventory_movements")).toEqual([expect.objectContaining({ inventory_id: "verde", type: "entrada", quantity: 598, entry_type: "MP", tab_source: "entrada", movement_date: "2026-10-15", purchase_bill_id: bill().id, reason: "Compra · Todo Empaques SAS FETD77" })]);
+  });
+
+  it("stays in stock even if Siigo rejects the invoice (the purchase happened)", async () => {
+    h.responses["POST /v1/purchases"] = new Error("Siigo caído");
+    expect(await createBill(coffee)).toMatchObject({ success: true, sent: false });
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(608);
+  });
+
+  it("annulling takes it back out — unless it was already used", async () => {
+    h.responses["POST /v1/purchases"] = new Error("Siigo caído"); // not in Siigo: can be annulled here
+    await createBill(coffee);
+    db.byId("inventory", "verde")!.current_stock = 100; // part of it was roasted
+    expect(await annulBill(bill().id)).toMatchObject({ success: false, error: expect.stringContaining("ya se usó parte") });
+    db.byId("inventory", "verde")!.current_stock = 700;
+    expect(await annulBill(bill().id)).toMatchObject({ success: true });
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(102);
+    expect(db.rows("inventory_movements")).toHaveLength(0);
+  });
+
+  it("services don't take stock; a product without quantity is asked for", async () => {
+    expect(await createBill({ ...coffee, lines: [{ ...coffee.lines[0], inventory_id: "srv", inventory_qty: 1 }] })).toMatchObject({ success: false, error: expect.stringContaining("es un servicio") });
+    expect(db.rows("purchase_bills")).toHaveLength(0);
+    expect(await createBill({ ...coffee, lines: [{ ...coffee.lines[0], inventory_qty: 0 }] })).toMatchObject({ success: false, error: expect.stringContaining("indica cuánto entra") });
   });
 });

@@ -16,9 +16,12 @@ import { getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siig
 import { buildPaymentReceiptPayload, buildPurchaseBillPayload, cleanIdentification } from '@/utils/siigo/mapping';
 import { daneCodeFor } from '@/utils/siigo/daneCities';
 import { ensureSiigoSupplier, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
+import { entryTypeFor, tracksStock } from '@/utils/inventory/categories';
+import { isGrindTracked } from '@/app/(admin)/coffeeProfiles';
 import { allocatePayment, billProblems, billTotals, payableBalance, payablePaymentProblems, type BillLine, type PayableMethod } from '@/utils/payables/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261025000000_purchases_payables.sql';
+const MIGRATION_INVENTORY_HINT = 'Falta aplicar la migración 20261028000000_purchase_bill_inventory.sql';
 const CAPEX = Object.entries(EXPENSE_CATEGORY_TYPE_MAP).filter(([, t]) => t === 'CAPEX').map(([c]) => c);
 
 async function requireAdmin() {
@@ -54,10 +57,11 @@ function refresh() {
 export async function getPurchases() {
   const { supabase } = await requireAdmin();
   const settings = await loadSiigoSettings(supabase);
-  const [{ data: bills, error }, { data: suppliers }, { data: ccs }] = await Promise.all([
+  const [{ data: bills, error }, { data: suppliers }, { data: ccs }, { data: inventory }] = await Promise.all([
     supabase.from('purchase_bills').select('*, payments:payable_payments ( * )').order('issue_date', { ascending: false }),
     supabase.from('suppliers').select('id, name, document_type, document_number').order('name'),
     supabase.from('cuentas_cobro').select('*, payments:payable_payments ( * )').eq('type', 'gasto').eq('status', 'firmada'),
+    supabase.from('inventory').select('id, product_code, product_name, unit, category').order('product_name'),
   ]);
   const categories = Object.keys(EXPENSE_CATEGORY_TYPE_MAP).filter((c) => !CAPEX.includes(c));
   return {
@@ -69,6 +73,8 @@ export async function getPurchases() {
       .filter((c) => !c.expense_id)
       .map((c) => ({ id: c.id, number: c.number, issuer_name: c.issuer_name, total: Number(c.siigo_ds_owed ?? c.total_amount), paid: (c.payments ?? []).reduce((s: number, p: { amount: number }) => s + Number(p.amount), 0), date: c.siigo_ds_date ?? c.issue_date })),
     categories,
+    // Products a purchase can bring in (services have no stock).
+    inventory: (inventory ?? []).filter((p) => tracksStock(p.category)),
     accounts: settings.siigo_accounts ?? [],
     defaultAccounts: settings.expense_accounts ?? {},
     configured: !!siigoConfigFromEnv(),
@@ -106,7 +112,15 @@ export async function createBill(input: BillInput) {
     const { data: supplier, error: supErr } = await supabase.from('suppliers').select('*').eq('id', input.supplierId).single();
     if (supErr || !supplier) throw supErr ?? new Error('Proveedor no encontrado.');
     const identification = cleanIdentification(supplier.document_number).identification;
-    const lines = input.lines.map((l) => ({ ...l, base: Number(l.base), tax_rate: Number(l.tax_rate) || 0, retention_rate: Number(l.retention_rate) || 0, description: (l.description || l.category).trim() }));
+    const lines = input.lines.map((l) => ({
+      ...l,
+      base: Number(l.base),
+      tax_rate: Number(l.tax_rate) || 0,
+      retention_rate: Number(l.retention_rate) || 0,
+      description: (l.description || l.category).trim(),
+      inventory_id: l.inventory_id || null,
+      inventory_qty: l.inventory_id ? Number(l.inventory_qty) || 0 : null,
+    }));
     const bill = { supplier_identification: identification, provider_number: input.providerNumber.trim(), issue_date: input.issueDate, due_date: input.dueDate, lines };
     const problems = billProblems(bill, CAPEX);
     if (problems.length) throw new Error(problems.join(' · '));
@@ -133,10 +147,102 @@ export async function createBill(input: BillInput) {
       .select('id')
       .single();
     if (error) throw error;
+    // What the invoice brought in goes into stock now (the purchase happened,
+    // whether or not Siigo accepts it right away).
+    let stocked: string[];
+    try {
+      stocked = await stockBillLines(supabase, userId, created.id, {
+        lines,
+        date: input.issueDate,
+        label: `Compra · ${supplier.name} ${input.providerPrefix.trim().toUpperCase()}${bill.provider_number}`,
+        supplier: supplier.name,
+      });
+    } catch (err) {
+      await supabase.from('purchase_bills').delete().eq('id', created.id);
+      throw err;
+    }
     const sent = await sendBillToSiigo(supabase, userId, created.id);
     refresh();
-    return { id: created.id, ...sent };
+    revalidatePath('/admin/inventory');
+    return { id: created.id, stocked, ...sent };
   });
+}
+
+/**
+ * Inventory 'entradas' for the lines that bring stock in, linked to the
+ * invoice. All or nothing: a failure undoes the ones already written.
+ * Returns "598 kg Café Verde"-style descriptions.
+ */
+async function stockBillLines(
+  supabase: Supabase,
+  userId: string | null,
+  billId: string,
+  opts: { lines: BillLine[]; date: string; label: string; supplier: string }
+): Promise<string[]> {
+  const wanted = opts.lines.filter((l) => l.inventory_id && Number(l.inventory_qty) > 0);
+  if (!wanted.length) return [];
+  const { data: products, error } = await supabase
+    .from('inventory')
+    .select('id, product_code, product_name, category, unit, current_stock')
+    .in('id', wanted.map((l) => l.inventory_id as string));
+  if (error) throw error;
+  const done: { movementId: string; inventoryId: string; qty: number }[] = [];
+  const stocked: string[] = [];
+  try {
+    for (const l of wanted) {
+      const p = (products ?? []).find((x) => x.id === l.inventory_id);
+      if (!p) throw new Error('Producto del inventario no encontrado.');
+      if (!tracksStock(p.category)) throw new Error(`"${p.product_name}" es un servicio: no lleva inventario.`);
+      const qty = Number(l.inventory_qty);
+      const row = {
+        inventory_id: p.id,
+        type: 'entrada',
+        quantity: qty,
+        reason: opts.label,
+        responsable: opts.supplier,
+        entry_type: entryTypeFor(p.category ?? ''),
+        tab_source: 'entrada',
+        movement_date: opts.date,
+        molienda: isGrindTracked(p.product_code) ? 'grano' : null,
+        created_by: userId,
+        purchase_bill_id: billId,
+      };
+      const { data: mov, error: movErr } = await supabase.from('inventory_movements').insert(row).select('id').single();
+      if (movErr && /purchase_bill_id/.test(movErr.message)) throw new Error(MIGRATION_INVENTORY_HINT);
+      if (movErr || !mov) throw movErr ?? new Error('No se pudo registrar la entrada.');
+      const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', p.id).single();
+      const { error: stockErr } = await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) + qty }).eq('id', p.id);
+      if (stockErr) throw stockErr;
+      done.push({ movementId: mov.id, inventoryId: p.id, qty });
+      stocked.push(`${qty} ${p.unit ?? ''} ${p.product_name}`.replace(/\s+/g, ' ').trim());
+    }
+  } catch (err) {
+    for (const d of done.reverse()) {
+      await supabase.from('inventory_movements').delete().eq('id', d.movementId);
+      const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', d.inventoryId).single();
+      await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) - d.qty }).eq('id', d.inventoryId);
+    }
+    throw err;
+  }
+  return stocked;
+}
+
+/** Takes back out the stock an invoice brought in (on annulment), if it is still there. */
+async function unstockBill(supabase: Supabase, billId: string) {
+  const { data: movs, error } = await supabase.from('inventory_movements').select('id, inventory_id, quantity').eq('purchase_bill_id', billId);
+  if (error || !movs?.length) return;
+  const { data: products } = await supabase.from('inventory').select('id, product_name, current_stock').in('id', movs.map((m) => m.inventory_id));
+  for (const m of movs) {
+    const p = (products ?? []).find((x) => x.id === m.inventory_id);
+    if (p && Number(p.current_stock) < Number(m.quantity) - 1e-9) {
+      throw new Error(`No se puede anular: ya se usó parte de lo que entró de "${p.product_name}" (quedan ${Number(p.current_stock)}).`);
+    }
+  }
+  for (const m of movs) {
+    const p = (products ?? []).find((x) => x.id === m.inventory_id);
+    await supabase.from('inventory').update({ current_stock: Number(p?.current_stock ?? 0) - Number(m.quantity) }).eq('id', m.inventory_id);
+    await supabase.from('inventory_movements').delete().eq('id', m.id);
+  }
 }
 
 /** Sends (or retries) a purchase invoice; a failure stays on the invoice. */
@@ -192,9 +298,11 @@ export async function annulBill(billId: string) {
     if (bill.siigo_id) throw new Error('La factura ya está en Siigo: anúlala allá.');
     const { count } = await supabase.from('payable_payments').select('id', { count: 'exact', head: true }).eq('bill_id', billId);
     if (count) throw new Error('La factura tiene pagos registrados: elimínalos primero.');
+    await unstockBill(supabase, billId);
     const { error: upErr } = await supabase.from('purchase_bills').update({ status: 'anulada', updated_at: new Date().toISOString() }).eq('id', billId);
     if (upErr) throw upErr;
     refresh();
+    revalidatePath('/admin/inventory');
     return {};
   });
 }

@@ -17,9 +17,11 @@ const addDays = (ymd: string, days: number) => {
 
 /** A supplier's invoice (company): saved and sent to Siigo as a purchase invoice owed to them. */
 export default function BillForm({
-  suppliers, categories, accounts, defaultAccounts, today, onClose, onDone,
+  suppliers, categories, accounts, defaultAccounts, inventory, today, onClose, onDone,
 }: {
   suppliers: Supplier[];
+  /** Products a line can bring into stock. */
+  inventory: { id: string; product_code: string; product_name: string; unit: string | null }[];
   categories: string[];
   accounts: { code: string; name: string }[];
   defaultAccounts: Record<string, string>;
@@ -34,7 +36,7 @@ export default function BillForm({
   const [issueDate, setIssueDate] = useState(today);
   const [term, setTerm] = useState(30);
   const [notes, setNotes] = useState("");
-  const blank = (): BillLine => ({ category: "", account: "", description: "", base: 0, tax_id: null, tax_rate: 0, retention_id: null, retention_rate: 0 });
+  const blank = (): BillLine => ({ category: "", account: "", description: "", base: 0, tax_id: null, tax_rate: 0, retention_id: null, retention_rate: 0, inventory_id: null, inventory_qty: null });
   const [lines, setLines] = useState<BillLine[]>([blank()]);
   const [taxes, setTaxes] = useState<{ iva: Tax[]; retentions: Tax[] } | null>(null);
   const [error, setError] = useState("");
@@ -60,7 +62,8 @@ export default function BillForm({
       setError("");
       const res = await createBill({ supplierId, providerPrefix: prefix, providerNumber: number, issueDate, dueDate, notes, lines });
       if (!res.success) return setError(res.error);
-      onDone(res.sent ? tr("Factura de compra registrada en Siigo como {name}.", { name: res.siigoName ?? "" }) : tr("Factura guardada, pero Siigo no la recibió: {error}", { error: tr.msg(res.siigoError ?? "") }));
+      const stock = res.stocked?.length ? " " + tr("Entró al inventario: {items}.", { items: res.stocked.join(", ") }) : "";
+      onDone((res.sent ? tr("Factura de compra registrada en Siigo como {name}.", { name: res.siigoName ?? "" }) : tr("Factura guardada, pero Siigo no la recibió: {error}", { error: tr.msg(res.siigoError ?? "") })) + stock);
     });
 
   const field = "w-full px-3 py-2 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm";
@@ -111,7 +114,8 @@ export default function BillForm({
             <span>{tr("Categoría")}</span><span>{tr("Cuenta contable")}</span><span>{tr("Descripción")}</span><span>{tr("Valor sin IVA")}</span><span>{tr("IVA")}</span><span>{tr("Retención")}</span><span />
           </div>
           {lines.map((l, i) => (
-            <div key={i} className="grid grid-cols-1 @3xl:grid-cols-[1.3fr_1.4fr_1.2fr_0.8fr_0.8fr_0.8fr_auto] gap-2 items-center rounded-xl @3xl:rounded-none border @3xl:border-0 border-foreground/10 p-2 @3xl:p-0 [&>*]:min-w-0">
+            <div key={i} className="space-y-1.5 rounded-xl @3xl:rounded-none border @3xl:border-0 border-foreground/10 p-2 @3xl:p-0 @3xl:pb-2 @3xl:border-b @3xl:border-foreground/5">
+            <div className="grid grid-cols-1 @3xl:grid-cols-[1.3fr_1.4fr_1.2fr_0.8fr_0.8fr_0.8fr_auto] gap-2 items-center [&>*]:min-w-0">
               <select value={l.category} onChange={(e) => setLine(i, { category: e.target.value, account: defaultAccounts[e.target.value] ?? l.account })} className={small} aria-label={tr("Categoría")}>
                 <option value="">{tr("— Categoría —")}</option>
                 {categories.map((c) => <option key={c} value={c}>{tr(c)}</option>)}
@@ -138,6 +142,23 @@ export default function BillForm({
               <button type="button" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} disabled={lines.length === 1} aria-label={tr("Quitar línea")} className="p-1 text-foreground/40 hover:text-red-600 disabled:opacity-30 justify-self-end">
                 <Trash2 className="w-4 h-4" />
               </button>
+            </div>
+            {/* What this line brings into stock (materia prima, empaques…). */}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-foreground/60">
+              <span>{tr("Entra al inventario:")}</span>
+              <select value={l.inventory_id ?? ""} onChange={(e) => setLine(i, { inventory_id: e.target.value || null, inventory_qty: e.target.value ? l.inventory_qty ?? null : null })}
+                className={`${small} w-auto max-w-full`} aria-label={tr("Producto que entra al inventario")}>
+                <option value="">{tr("— No mueve inventario —")}</option>
+                {inventory.map((p) => <option key={p.id} value={p.id}>{p.product_name} ({p.product_code})</option>)}
+              </select>
+              {l.inventory_id && (
+                <>
+                  <input type="number" min={0} step="any" value={l.inventory_qty ?? ""} onChange={(e) => setLine(i, { inventory_qty: e.target.value === "" ? null : Number(e.target.value) })}
+                    placeholder={tr("Cantidad")} className={`${small} w-28`} aria-label={tr("Cantidad que entra")} />
+                  <span>{inventory.find((p) => p.id === l.inventory_id)?.unit ?? ""}</span>
+                </>
+              )}
+            </div>
             </div>
           ))}
           <button type="button" onClick={() => setLines((ls) => [...ls, blank()])} className="inline-flex items-center gap-1 text-xs font-bold text-[#C59F59] hover:underline">
