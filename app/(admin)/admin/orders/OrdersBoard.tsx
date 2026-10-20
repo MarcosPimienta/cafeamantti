@@ -30,7 +30,7 @@ import {
   Clock,
   CheckCircle2,
   Hourglass,
-  BadgeDollarSign,
+  Wallet,
   Coffee,
   Truck,
   PackageCheck,
@@ -66,12 +66,10 @@ import { useTr } from "@/app/(admin)/AdminI18n";
 type InventoryItem = { id: string; product_code: string; product_name: string; current_stock: number };
 
 const COLUMNS: { id: string; label: string; Icon: LucideIcon }[] = [
-  { id: "pending", label: "Pendiente", Icon: Hourglass },
+  // Payment is not a column: every card says whether it is paid.
   { id: "processing", label: "Preparando", Icon: Coffee },
   { id: "shipped", label: "Enviado", Icon: Truck },
   { id: "delivered", label: "Entregado", Icon: PackageCheck },
-  // Last: delivered and paid. Payment is apart from delivery.
-  { id: "paid", label: "Pagado", Icon: BadgeDollarSign },
   { id: "cancelled", label: "Cancelado", Icon: Ban },
 ];
 const ICON: Record<string, LucideIcon> = Object.fromEntries(COLUMNS.map((c) => [c.id, c.Icon]));
@@ -123,6 +121,7 @@ export default function OrdersBoard({
 
   const [search, setSearch] = useState("");
   const [onlyOverdue, setOnlyOverdue] = useState(false);
+  const [onlyUnpaid, setOnlyUnpaid] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
   const [allDelivered, setAllDelivered] = useState(false);
   // ?order=<id> opens that order's panel (links from Facturas).
@@ -130,7 +129,7 @@ export default function OrdersBoard({
   const [selectedId, setSelectedId] = useState<string | null>(linkedOrder);
   // Mobile shows one status at a time; start on the first one with work in it.
   const [mobileCol, setMobileCol] = useState<string>(
-    () => COLUMNS.find((c) => UNDELIVERED.has(c.id) && initialOrders.some((o) => boardColumn(o) === c.id))?.id ?? "pending"
+    () => COLUMNS.find((c) => UNDELIVERED.has(c.id) && initialOrders.some((o) => boardColumn(o) === c.id))?.id ?? "processing"
   );
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -148,6 +147,7 @@ export default function OrdersBoard({
     const term = search.trim().toLowerCase();
     return orders.filter((o) => {
       if (onlyOverdue && dueState(o, today) !== "overdue") return false;
+      if (onlyUnpaid && (isPaid(o) || o.status === "cancelled")) return false;
       if (!term) return true;
       const hay = [
         o.id,
@@ -162,7 +162,7 @@ export default function OrdersBoard({
         .toLowerCase();
       return hay.includes(term);
     });
-  }, [orders, search, onlyOverdue, today]);
+  }, [orders, search, onlyOverdue, onlyUnpaid, today]);
 
   const byColumn = useMemo(
     () => groupOrdersByStatus(filtered, COLUMNS.map((c) => c.id), { allDelivered }),
@@ -172,6 +172,9 @@ export default function OrdersBoard({
   const pending = orders.filter((o) => UNDELIVERED.has(o.status));
   const overdueCount = pending.filter((o) => dueState(o, today) === "overdue").length;
   const pendingValue = pending.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+  // Owed: not paid yet, whatever the delivery stage (with IVA when it goes on top).
+  const unpaid = orders.filter((o) => o.status !== "cancelled" && !isPaid(o));
+  const unpaidValue = unpaid.reduce((s, o) => s + Number(o.total_amount || 0) + Number(o.tax_amount || 0), 0);
   const visibleColumns = COLUMNS.filter((c) => c.id !== "cancelled" || showCancelled);
   const activeMobileCol = visibleColumns.some((c) => c.id === mobileCol) ? mobileCol : visibleColumns[0].id;
   const mobileOrders = byColumn.get(activeMobileCol) ?? [];
@@ -179,17 +182,12 @@ export default function OrdersBoard({
   const selected = orders.find((o) => o.id === selectedId) ?? null;
   const dragging = orders.find((o) => o.id === draggingId) ?? null;
 
-  /**
-   * Moves a card to a column. "Pagado" = delivered and paid; taking a card
-   * from "Pagado" back to "Entregado" marks it unpaid. Other moves only
-   * change the delivery stage, never the payment.
-   */
+  /** Moves a card to a delivery column; the payment never changes here. */
   function moveOrder(orderId: string, column: string) {
     const prev = orders.find((o) => o.id === orderId);
     if (!prev || boardColumn(prev) === column) return;
     if (column === "cancelled" && !confirm(tr("¿Cancelar la orden #{v}?", { v: orderId.split("-")[0] }))) return;
-    const unpay = boardColumn(prev) === "paid" && column === "delivered";
-    const status = column === "paid" ? "delivered" : column;
+    const status = column;
 
     const now = new Date().toISOString();
     setOrders((list) =>
@@ -200,14 +198,13 @@ export default function OrdersBoard({
               status,
               status_changed_at: o.status === status ? o.status_changed_at : now,
               delivered_at: status === "delivered" ? (o.status === "delivered" ? o.delivered_at : now) : null,
-              ...(column === "paid" ? { payment_status: "paid", paid_at: (o.paid_at as string | null | undefined) ?? now } : unpay ? { payment_status: "pending", paid_at: null } : {}),
             }
           : o
       )
     );
     startMoving(async () => {
       try {
-        const res: { success: boolean; error?: unknown } = unpay ? await setOrderPayment(orderId, false) : await updateOrderStatus(orderId, column);
+        const res: { success: boolean; error?: unknown } = await updateOrderStatus(orderId, column);
         if (!res.success) throw new Error(tr.msg(String(res.error ?? "")));
       } catch (err) {
         setOrders((list) => list.map((o) => (o.id === orderId ? prev : o)));
@@ -295,7 +292,7 @@ export default function OrdersBoard({
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat label={tr("Por entregar")} value={String(pending.length)} icon={<Package className="w-4 h-4" />} />
         <Stat
           label={tr("Atrasadas")}
@@ -306,6 +303,13 @@ export default function OrdersBoard({
           active={onlyOverdue}
         />
         <Stat label={tr("Valor por entregar")} value={cop(pendingValue)} icon={<Clock className="w-4 h-4" />} />
+        <Stat
+          label={tr("Por cobrar ({n})", { n: String(unpaid.length) })}
+          value={cop(unpaidValue)}
+          icon={<Wallet className="w-4 h-4" />}
+          onClick={unpaid.length ? () => setOnlyUnpaid(!onlyUnpaid) : undefined}
+          active={onlyUnpaid}
+        />
         <Stat
           label={tr("Último aviso WhatsApp")}
           value={lastNotification ? relDays(lastNotification.created_at) : "—"}
@@ -349,6 +353,7 @@ export default function OrdersBoard({
         </div>
         <div className="flex gap-2 text-xs overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap pb-1 md:pb-0">
           <Toggle checked={onlyOverdue} onChange={setOnlyOverdue} label={tr("Solo atrasadas")} />
+          <Toggle checked={onlyUnpaid} onChange={setOnlyUnpaid} label={tr("Solo por cobrar")} />
           <Toggle checked={showCancelled} onChange={setShowCancelled} label={tr("Mostrar canceladas")} />
           <Toggle checked={allDelivered} onChange={setAllDelivered} label={tr("Todas las entregadas (no solo {DELIVERED_WINDOW_DAYS} días)", { DELIVERED_WINDOW_DAYS: DELIVERED_WINDOW_DAYS })} />
         </div>
@@ -621,7 +626,7 @@ function Card({
       )}
       <p className="font-serif text-[#C59F59] font-bold mt-2">{cop(Number(order.total_amount || 0))}</p>
       <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[10px]">
-        {order.status !== "cancelled" && boardColumn(order) !== "paid" && (
+        {order.status !== "cancelled" && (
           isPaid(order)
             ? <span className="font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">{tr("Pagado")}</span>
             : <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">{tr("Por cobrar")}</span>

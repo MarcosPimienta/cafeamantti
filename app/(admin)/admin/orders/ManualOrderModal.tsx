@@ -88,7 +88,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
   const [state, setState] = useState(EMPTY_CUSTOMER.state);
 
   // ── Seguimiento ──
-  const [status, setStatus] = useState("pending");
+  const [status, setStatus] = useState("processing");
   // Payment is apart from delivery: an order can be delivered and still owed.
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "paid">("pending");
   const [dueDate, setDueDate] = useState("");
@@ -142,7 +142,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
     setDetails(EMPTY_CUSTOMER.details);
     setCity(EMPTY_CUSTOMER.city);
     setState(EMPTY_CUSTOMER.state);
-    setStatus("pending");
+    setStatus("processing");
     setPaymentStatus("pending");
     setDueDate("");
     setNotes("");
@@ -366,7 +366,6 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
                   <div>
                     <label className={labelCls}>{tr("Estado de la orden")}</label>
                     <select value={status} onChange={e => setStatus(e.target.value)} className={inputCls}>
-                      <option value="pending">{tr("Pendiente")}</option>
                       <option value="processing">{tr("Preparando")}</option>
                       <option value="shipped">{tr("Enviado")}</option>
                       <option value="delivered">{tr("Entregado")}</option>

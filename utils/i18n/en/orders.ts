@@ -272,4 +272,6 @@ export const orders: Record<string, string> = {
   "No se pudo actualizar el pago": "Could not update the payment",
   "Marcar sin pagar": "Mark unpaid",
   "Marcar pagado": "Mark paid",
+  "Por cobrar ({n})": "To collect ({n})",
+  "Solo por cobrar": "Only unpaid",
 };

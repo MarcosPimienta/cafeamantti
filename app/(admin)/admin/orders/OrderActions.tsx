@@ -33,7 +33,6 @@ type ItemRow = {
 };
 
 const STATUS_OPTIONS = [
-  { id: "pending", label: "Pendiente" },
   { id: "processing", label: "Preparando" },
   { id: "shipped", label: "Enviado" },
   { id: "delivered", label: "Entregado" },
@@ -89,8 +88,8 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
   const [state, setState] = useState(order.shipping_info?.state || order.shipping_info?.department || "");
 
   // ── Seguimiento ──
-  // The old "paid" stage meant "paid, not prepared yet".
-  const [status, setStatus] = useState(order.status === "paid" ? "pending" : order.status || "pending");
+  // New orders ('pending', and the old 'paid' stage) are being prepared.
+  const [status, setStatus] = useState(["pending", "paid", ""].includes(order.status ?? "") ? "processing" : order.status);
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "paid">(
     order.payment_status ? order.payment_status : ["paid", "processing", "shipped", "delivered"].includes(order.status) ? "paid" : "pending"
   );

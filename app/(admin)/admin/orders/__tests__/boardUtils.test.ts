@@ -6,6 +6,7 @@ import {
   fmtDay,
   siigoOf,
   groupOrdersByStatus,
+  isPaid,
   NEXT_STATUS,
   UNDELIVERED,
   type BoardOrder,
@@ -73,10 +74,10 @@ describe("relDays / fmtDay / siigoOf", () => {
 });
 
 describe("pipeline", () => {
-  it("advancing walks pending → processing → shipped → delivered → paid and stops", () => {
-    const path = ["pending"];
+  it("advancing walks Preparando → Enviado → Entregado and stops", () => {
+    const path = ["processing"];
     while (NEXT_STATUS[path[path.length - 1]]) path.push(NEXT_STATUS[path[path.length - 1]]);
-    expect(path).toEqual(["pending", "processing", "shipped", "delivered", "paid"]);
+    expect(path).toEqual(["processing", "shipped", "delivered"]);
     expect(NEXT_STATUS.cancelled).toBeUndefined();
   });
   it("undelivered means still owed to the customer", () => {
@@ -85,34 +86,34 @@ describe("pipeline", () => {
 });
 
 describe("groupOrdersByStatus", () => {
-  const COLS = ["pending", "processing", "shipped", "delivered", "paid", "cancelled"];
+  const COLS = ["processing", "shipped", "delivered", "cancelled"];
 
   it("puts each order in its column, and unknown statuses in the first one", () => {
     const g = groupOrdersByStatus(
-      [order({ id: "a", status: "processing" }), order({ id: "b", status: "weird" }), order({ id: "c", status: "cancelled" })],
+      [order({ id: "a", status: "shipped" }), order({ id: "b", status: "weird" }), order({ id: "c", status: "cancelled" })],
       COLS,
       { now: NOW }
     );
-    expect(g.get("processing")!.map((o) => o.id)).toEqual(["a"]);
-    expect(g.get("pending")!.map((o) => o.id)).toEqual(["b"]);
+    expect(g.get("shipped")!.map((o) => o.id)).toEqual(["a"]);
+    expect(g.get("processing")!.map((o) => o.id)).toEqual(["b"]);
     expect(g.get("cancelled")!.map((o) => o.id)).toEqual(["c"]);
   });
 
-  it("delivery and payment are apart: delivered and owed stays in Entregado, delivered and paid goes last", () => {
+  it("payment is not a column: new and old-'paid' orders are in Preparando, delivered ones in Entregado paid or not", () => {
     const g = groupOrdersByStatus(
       [
-        order({ id: "owed", status: "delivered", payment_status: "pending", delivered_at: "2026-10-07T00:00:00Z" }),
-        order({ id: "done", status: "delivered", payment_status: "paid", delivered_at: "2026-10-07T00:00:00Z" }),
-        order({ id: "prepaid", status: "processing", payment_status: "paid" }),
-        order({ id: "legacy-paid", status: "paid", payment_status: undefined }),
+        order({ id: "owed", status: "delivered", payment_status: "pending", delivered_at: "2026-10-07T00:00:00Z", created_at: "2026-10-02T00:00:00Z" }),
+        order({ id: "done", status: "delivered", payment_status: "paid", delivered_at: "2026-10-07T00:00:00Z", created_at: "2026-10-03T00:00:00Z" }),
+        order({ id: "new", status: "pending", created_at: "2026-10-02T00:00:00Z" }),
+        order({ id: "legacy-paid", status: "paid", payment_status: undefined, created_at: "2026-10-03T00:00:00Z" }),
       ],
       COLS,
       { now: NOW }
     );
-    expect(g.get("delivered")!.map((o) => o.id)).toEqual(["owed"]);
-    expect(g.get("paid")!.map((o) => o.id)).toEqual(["done"]);
-    expect(g.get("processing")!.map((o) => o.id)).toEqual(["prepaid"]);
-    expect(g.get("pending")!.map((o) => o.id)).toEqual(["legacy-paid"]);
+    expect(g.get("delivered")!.map((o) => o.id)).toEqual(["owed", "done"]);
+    expect(g.get("processing")!.map((o) => o.id)).toEqual(["new", "legacy-paid"]);
+    expect(isPaid({ status: "delivered", payment_status: "pending" })).toBe(false);
+    expect(isPaid({ status: "delivered" })).toBe(true); // before the payment migration
   });
 
   it("hides deliveries older than 30 days unless asked for all", () => {
@@ -136,6 +137,6 @@ describe("groupOrdersByStatus", () => {
       COLS,
       { now: NOW }
     );
-    expect(g.get("pending")!.map((o) => o.id)).toEqual(["overdue", "due-later", "no-date-old", "no-date-new"]);
+    expect(g.get("processing")!.map((o) => o.id)).toEqual(["overdue", "due-later", "no-date-old", "no-date-new"]);
   });
 });

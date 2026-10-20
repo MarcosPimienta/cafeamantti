@@ -26,26 +26,23 @@ export type BoardOrder = {
 
 export const UNDELIVERED = new Set(["pending", "paid", "processing", "shipped"]);
 
-/** One-tap "advance" on mobile, where there is no drag and drop. Delivered → paid. */
+/** One-tap "advance" on mobile (by board column), where there is no drag and drop. */
 export const NEXT_STATUS: Record<string, string> = {
-  pending: "processing",
   processing: "shipped",
   shipped: "delivered",
-  delivered: "paid",
 };
 
 export const isPaid = (o: { status: string; payment_status?: string | null }) =>
   o.payment_status ? o.payment_status === "paid" : ["paid", "processing", "shipped", "delivered"].includes(o.status);
 
 /**
- * The board column of an order. Delivery and payment are separate: the
- * last column, "Pagado", holds what was delivered and paid; a delivered
- * order still owed stays in "Entregado". The old 'paid' status meant
- * "paid, not prepared yet", so it shows as pending.
+ * The board column of an order: Preparando, Enviado, Entregado (and
+ * Cancelado, hidden by default). Payment is not a column: each card shows
+ * whether it is paid. New orders ('pending', and the old 'paid' stage)
+ * start in Preparando.
  */
 export function boardColumn(o: { status: string; payment_status?: string | null }): string {
-  if (o.status === "paid") return "pending";
-  if (o.status === "delivered" && isPaid(o)) return "paid";
+  if (o.status === "pending" || o.status === "paid") return "processing";
   return o.status;
 }
 
@@ -106,8 +103,8 @@ export function groupOrdersByStatus(
   const map = new Map<string, BoardOrder[]>(columns.map((c) => [c, []]));
   for (const o of orders) {
     const col = boardColumn(o);
-    // Delivered and paid columns only keep the recent ones.
-    if ((col === "delivered" || col === "paid") && !opts.allDelivered) {
+    // The delivered column only keeps the recent ones.
+    if (col === "delivered" && !opts.allDelivered) {
       const when = o.delivered_at || o.status_changed_at || o.updated_at || o.created_at;
       if (daysBetween(when, now) > DELIVERED_WINDOW_DAYS) continue;
     }
