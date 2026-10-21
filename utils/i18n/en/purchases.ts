@@ -113,4 +113,9 @@ export const purchases: Record<string, string> = {
   "No se pudo registrar la entrada.": "Could not record the entry.",
   "Falta aplicar la migración 20261028000000_purchase_bill_inventory.sql": "The 20261028000000_purchase_bill_inventory.sql migration has not been applied yet",
   "Si la factura no trae prefijo, queda como FC.": "If the invoice has no prefix, it goes as FC.",
+  "Editar factura de compra": "Edit purchase invoice",
+  "Aún no está en Siigo: corrige lo que haga falta y se envía de nuevo. Si cambias lo que entró al inventario, solo se mueve la diferencia.": "It isn't in Siigo yet: fix what's needed and it is sent again. If you change what went into inventory, only the difference moves.",
+  "La factura ya está en Siigo: corrígela o anúlala allá.": "The invoice is already in Siigo: fix or void it there.",
+  "El nuevo total queda por debajo de lo que ya se pagó.": "The new total is below what was already paid.",
+  "No se puede bajar la cantidad: ya se usó parte de lo que entró de \"{name}\" (quedan {stock}).": "The quantity can't be lowered: part of the \"{name}\" that came in was already used ({stock} left).",
 };

@@ -22,7 +22,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { annulBill, createBill, deletePayablePayment, registerPayablePayment, retryBill, retryPayablePayment } from "../actions";
+import { annulBill, createBill, deletePayablePayment, registerPayablePayment, retryBill, retryPayablePayment, updateBill } from "../actions";
 
 const SETTINGS = { purchase_document_id: 18133, purchase_payment_id: 4183, payment_receipt_document_id: 18132, payout_bank_id: 4182, payout_cash_id: 4177, expense_accounts: {}, fixed_asset_codes: {} };
 const CC = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
@@ -172,5 +172,35 @@ describe("supplier invoices without a prefix", () => {
     h.responses["POST /v1/purchases"] = { id: "fc-389", name: "FC-1-252" };
     expect(await retryBill(bill().id)).toMatchObject({ success: true, siigoName: "FC-1-252" });
     expect(bill().provider_prefix).toBe("FC");
+  });
+});
+
+describe("editing a purchase invoice not yet in Siigo", () => {
+  beforeEach(() => {
+    db.rows("inventory").push({ id: "verde", product_code: "CAFV-001", product_name: "Café Verde", unit: "kg", category: "cafe", current_stock: 10 });
+  });
+  const coffee = { ...input, providerPrefix: "", providerNumber: "388", lines: [{ ...input.lines[0], base: 765000, tax_id: null, tax_rate: 0, inventory_id: "verde", inventory_qty: 9 }] };
+
+  it("fixes what was wrong, moves only the stock difference and sends it again", async () => {
+    h.responses["POST /v1/purchases"] = new Error("The field provider_invoice.prefix is required");
+    await createBill(coffee);
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(19);
+    h.responses["POST /v1/purchases"] = { id: "fc-388", name: "FC-1-260" };
+    const res = await updateBill(bill().id, { ...coffee, providerPrefix: "FE", lines: [{ ...coffee.lines[0], base: 800000, inventory_qty: 12 }] });
+    expect(res).toMatchObject({ success: true, sent: true, siigoName: "FC-1-260", stocked: ["12 kg Café Verde"] });
+    expect(bill()).toMatchObject({ provider_prefix: "FE", total: 800000, status: "registrada", siigo_error: null });
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(22); // 10 + 12
+    expect(db.rows("inventory_movements")).toEqual([expect.objectContaining({ quantity: 12, purchase_bill_id: bill().id })]);
+  });
+
+  it("can't lower what entered once it was used, nor edit one already in Siigo", async () => {
+    h.responses["POST /v1/purchases"] = new Error("boom");
+    await createBill(coffee);
+    db.byId("inventory", "verde")!.current_stock = 2; // 9 entered, 8 used meanwhile... only 2 left
+    expect(await updateBill(bill().id, { ...coffee, lines: [{ ...coffee.lines[0], inventory_qty: 5 }] })).toMatchObject({ success: false, error: expect.stringContaining("ya se usó parte") });
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(2);
+    expect(bill().provider_number).toBe("388");
+    db.rows("purchase_bills")[0].siigo_id = "fc-x";
+    expect(await updateBill(bill().id, coffee)).toMatchObject({ success: false, error: expect.stringContaining("ya está en Siigo") });
   });
 });

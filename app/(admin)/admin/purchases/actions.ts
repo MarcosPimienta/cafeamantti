@@ -116,15 +116,7 @@ export async function createBill(input: BillInput) {
     const { data: supplier, error: supErr } = await supabase.from('suppliers').select('*').eq('id', input.supplierId).single();
     if (supErr || !supplier) throw supErr ?? new Error('Proveedor no encontrado.');
     const identification = cleanIdentification(supplier.document_number).identification;
-    const lines = input.lines.map((l) => ({
-      ...l,
-      base: Number(l.base),
-      tax_rate: Number(l.tax_rate) || 0,
-      retention_rate: Number(l.retention_rate) || 0,
-      description: (l.description || l.category).trim(),
-      inventory_id: l.inventory_id || null,
-      inventory_qty: l.inventory_id ? Number(l.inventory_qty) || 0 : null,
-    }));
+    const lines = normalizeLines(input.lines);
     const bill = { supplier_identification: identification, provider_number: input.providerNumber.trim(), issue_date: input.issueDate, due_date: input.dueDate, lines };
     const problems = billProblems(bill, CAPEX);
     if (problems.length) throw new Error(problems.join(' · '));
@@ -171,6 +163,99 @@ export async function createBill(input: BillInput) {
     return { id: created.id, stocked, ...sent };
   });
 }
+
+/**
+ * Corrects a purchase invoice that hasn't reached Siigo (saved, or failed),
+ * then sends it. Its stock follows the new lines: only the difference
+ * moves, and it can't take out what was already used.
+ */
+export async function updateBill(billId: string, input: BillInput) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    const { data: current, error: curErr } = await supabase.from('purchase_bills').select('*, payments:payable_payments ( amount )').eq('id', billId).single();
+    if (curErr || !current) throw curErr ?? new Error('Factura de compra no encontrada.');
+    if (current.siigo_id) throw new Error('La factura ya está en Siigo: corrígela o anúlala allá.');
+    if (current.status === 'anulada') throw new Error('La factura está anulada.');
+
+    const { data: supplier, error: supErr } = await supabase.from('suppliers').select('*').eq('id', input.supplierId).single();
+    if (supErr || !supplier) throw supErr ?? new Error('Proveedor no encontrado.');
+    const identification = cleanIdentification(supplier.document_number).identification;
+    const lines = normalizeLines(input.lines);
+    const bill = { supplier_identification: identification, provider_number: input.providerNumber.trim(), issue_date: input.issueDate, due_date: input.dueDate, lines };
+    const problems = billProblems(bill, CAPEX);
+    if (problems.length) throw new Error(problems.join(' · '));
+    const totals = billTotals(lines);
+    const paid = ((current.payments ?? []) as { amount: number }[]).reduce((sum, p) => sum + Number(p.amount), 0);
+    if (totals.total + 0.5 < paid) throw new Error('El nuevo total queda por debajo de lo que ya se pagó.');
+
+    // Stock: check what would leave before touching anything.
+    const { data: oldMovs } = await supabase.from('inventory_movements').select('id, inventory_id, quantity').eq('purchase_bill_id', billId);
+    const delta = new Map<string, number>();
+    for (const m of oldMovs ?? []) delta.set(m.inventory_id, (delta.get(m.inventory_id) ?? 0) - Number(m.quantity));
+    for (const l of lines) if (l.inventory_id && Number(l.inventory_qty) > 0) delta.set(l.inventory_id, (delta.get(l.inventory_id) ?? 0) + Number(l.inventory_qty));
+    if (delta.size) {
+      const { data: products } = await supabase.from('inventory').select('id, product_name, category, current_stock').in('id', [...delta.keys()]);
+      for (const [id, d] of delta) {
+        const p = (products ?? []).find((x) => x.id === id);
+        if (!p) throw new Error('Producto del inventario no encontrado.');
+        if (d > 0 && !tracksStock(p.category)) throw new Error(`"${p.product_name}" es un servicio: no lleva inventario.`);
+        if (d < 0 && Number(p.current_stock) + d < -1e-9) throw new Error(`No se puede bajar la cantidad: ya se usó parte de lo que entró de "${p.product_name}" (quedan ${Number(p.current_stock)}).`);
+      }
+    }
+
+    const prefix = providerPrefix(input.providerPrefix);
+    const { error: upErr } = await supabase
+      .from('purchase_bills')
+      .update({
+        supplier_id: supplier.id,
+        supplier_name: supplier.name,
+        supplier_identification: identification,
+        provider_prefix: prefix,
+        provider_number: bill.provider_number,
+        issue_date: input.issueDate,
+        due_date: input.dueDate,
+        lines,
+        subtotal: totals.subtotal,
+        iva: totals.iva,
+        withheld: totals.withheld,
+        total: totals.total,
+        notes: input.notes?.trim() || null,
+        status: 'borrador',
+        siigo_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', billId);
+    if (upErr) throw upErr;
+
+    // Old entradas out, new ones in: the net change is the difference checked above.
+    for (const m of oldMovs ?? []) {
+      const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', m.inventory_id).single();
+      await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) - Number(m.quantity) }).eq('id', m.inventory_id);
+      await supabase.from('inventory_movements').delete().eq('id', m.id);
+    }
+    const stocked = await stockBillLines(supabase, userId, billId, {
+      lines,
+      date: input.issueDate,
+      label: `Compra · ${supplier.name} ${prefix}${bill.provider_number}`,
+      supplier: supplier.name,
+    });
+    const sent = await sendBillToSiigo(supabase, userId, billId);
+    refresh();
+    revalidatePath('/admin/inventory');
+    return { id: billId, stocked, ...sent };
+  });
+}
+
+const normalizeLines = (lines: BillLine[]): BillLine[] =>
+  lines.map((l) => ({
+    ...l,
+    base: Number(l.base),
+    tax_rate: Number(l.tax_rate) || 0,
+    retention_rate: Number(l.retention_rate) || 0,
+    description: (l.description || l.category).trim(),
+    inventory_id: l.inventory_id || null,
+    inventory_qty: l.inventory_id ? Number(l.inventory_qty) || 0 : null,
+  }));
 
 /**
  * Inventory 'entradas' for the lines that bring stock in, linked to the

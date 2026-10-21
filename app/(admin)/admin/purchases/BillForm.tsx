@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, Loader2, Plus, Trash2, X } from "lucide-react";
-import { createBill, getPurchaseTaxes } from "./actions";
+import { createBill, getPurchaseTaxes, updateBill } from "./actions";
 import { billProblems, billTotals, type BillLine } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
@@ -16,9 +16,25 @@ const addDays = (ymd: string, days: number) => {
 };
 
 /** A supplier's invoice (company): saved and sent to Siigo as a purchase invoice owed to them. */
+/** A saved invoice being corrected (only before it reaches Siigo). */
+export type EditableBill = {
+  id: string;
+  supplier_id: string | null;
+  provider_prefix: string;
+  provider_number: string;
+  issue_date: string;
+  due_date: string;
+  notes?: string | null;
+  lines: BillLine[];
+};
+
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
 export default function BillForm({
-  suppliers, categories, accounts, defaultAccounts, inventory, today, onClose, onDone,
+  suppliers, categories, accounts, defaultAccounts, inventory, today, onClose, onDone, bill,
 }: {
+  /** Given: edit this invoice instead of creating one. */
+  bill?: EditableBill;
   suppliers: Supplier[];
   /** Products a line can bring into stock. */
   inventory: { id: string; product_code: string; product_name: string; unit: string | null }[];
@@ -30,14 +46,14 @@ export default function BillForm({
   onDone: (notice: string) => void;
 }) {
   const tr = useTr();
-  const [supplierId, setSupplierId] = useState("");
-  const [prefix, setPrefix] = useState("");
-  const [number, setNumber] = useState("");
-  const [issueDate, setIssueDate] = useState(today);
-  const [term, setTerm] = useState(30);
-  const [notes, setNotes] = useState("");
+  const [supplierId, setSupplierId] = useState(bill?.supplier_id ?? "");
+  const [prefix, setPrefix] = useState(bill?.provider_prefix ?? "");
+  const [number, setNumber] = useState(bill?.provider_number ?? "");
+  const [issueDate, setIssueDate] = useState(bill?.issue_date ?? today);
+  const [term, setTerm] = useState(bill ? Math.max(0, daysBetween(bill.issue_date, bill.due_date)) : 30);
+  const [notes, setNotes] = useState(bill?.notes ?? "");
   const blank = (): BillLine => ({ category: "", account: "", description: "", base: 0, tax_id: null, tax_rate: 0, retention_id: null, retention_rate: 0, inventory_id: null, inventory_qty: null });
-  const [lines, setLines] = useState<BillLine[]>([blank()]);
+  const [lines, setLines] = useState<BillLine[]>(bill?.lines?.length ? bill.lines.map((l) => ({ ...blank(), ...l })) : [blank()]);
   const [taxes, setTaxes] = useState<{ iva: Tax[]; retentions: Tax[] } | null>(null);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -60,7 +76,8 @@ export default function BillForm({
   const save = () =>
     startTransition(async () => {
       setError("");
-      const res = await createBill({ supplierId, providerPrefix: prefix, providerNumber: number, issueDate, dueDate, notes, lines });
+      const input = { supplierId, providerPrefix: prefix, providerNumber: number, issueDate, dueDate, notes, lines };
+      const res = bill ? await updateBill(bill.id, input) : await createBill(input);
       if (!res.success) return setError(res.error);
       const stock = res.stocked?.length ? " " + tr("Entró al inventario: {items}.", { items: res.stocked.join(", ") }) : "";
       onDone((res.sent ? tr("Factura de compra registrada en Siigo como {name}.", { name: res.siigoName ?? "" }) : tr("Factura guardada, pero Siigo no la recibió: {error}", { error: tr.msg(res.siigoError ?? "") })) + stock);
@@ -74,8 +91,12 @@ export default function BillForm({
       <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] overflow-y-auto border border-foreground/5 shadow-2xl p-6 space-y-5">
         <div className="flex justify-between items-start gap-3">
           <div>
-            <h2 className="text-xl font-serif font-bold">{tr("Nueva factura de compra")}</h2>
-            <p className="text-xs text-foreground/50">{tr("Factura recibida de una empresa: va a Siigo como factura de compra (no documento soporte) y queda por pagar.")}</p>
+            <h2 className="text-xl font-serif font-bold">{bill ? tr("Editar factura de compra") : tr("Nueva factura de compra")}</h2>
+            <p className="text-xs text-foreground/50">
+              {bill
+                ? tr("Aún no está en Siigo: corrige lo que haga falta y se envía de nuevo. Si cambias lo que entró al inventario, solo se mueve la diferencia.")
+                : tr("Factura recibida de una empresa: va a Siigo como factura de compra (no documento soporte) y queda por pagar.")}
+            </p>
           </div>
           <button type="button" onClick={onClose} aria-label={tr("Cerrar")} className="p-1 text-foreground/40 hover:text-foreground"><X className="w-5 h-5" /></button>
         </div>
@@ -104,7 +125,7 @@ export default function BillForm({
           <label className="text-xs font-bold text-foreground/60 space-y-1">
             <span>{tr("Plazo de pago")}</span>
             <select value={term} onChange={(e) => setTerm(Number(e.target.value))} className={field}>
-              {[0, 8, 15, 30, 45, 60, 90].map((d) => <option key={d} value={d}>{d === 0 ? tr("De contado") : tr("{n} días", { n: String(d) })}</option>)}
+              {[...new Set([0, 8, 15, 30, 45, 60, 90, term])].sort((a, b) => a - b).map((d) => <option key={d} value={d}>{d === 0 ? tr("De contado") : tr("{n} días", { n: String(d) })}</option>)}
             </select>
           </label>
           <div className="text-xs text-foreground/60 md:col-span-2 self-end pb-2">{tr("Vence el {date}", { date: dueDate })}</div>

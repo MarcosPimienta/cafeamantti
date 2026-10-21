@@ -3,9 +3,9 @@
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Loader2, Plus, RefreshCw, Trash2, Wallet, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Pencil, Plus, RefreshCw, Trash2, Wallet, X } from "lucide-react";
 import { annulBill, deletePayablePayment, retryBill, retryPayablePayment } from "./actions";
-import BillForm from "./BillForm";
+import BillForm, { type EditableBill } from "./BillForm";
 import PayablePaymentForm from "./PayablePaymentForm";
 import { payableBalance, paidOf, type BillLine, type PayableMethod } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
@@ -24,6 +24,8 @@ export type PayablePayment = {
 };
 type Bill = {
   id: string;
+  supplier_id: string | null;
+  notes: string | null;
   supplier_name: string;
   supplier_identification: string;
   provider_prefix: string;
@@ -62,6 +64,7 @@ export default function PurchasesClient(props: {
   const bills = (props.bills as Bill[]).filter((b) => b.status !== "anulada");
   const [filter, setFilter] = useState<Filter>("pendientes");
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<EditableBill | null>(null);
   const [notice, setNotice] = useState("");
 
   if (!props.migrationApplied) {
@@ -124,8 +127,13 @@ export default function PurchasesClient(props: {
         <p className="text-sm text-foreground/50">{bills.length === 0 ? tr("Aún no hay facturas de compra. Registra la primera con «Nueva factura de compra».") : tr("No hay facturas en este filtro.")}</p>
       ) : (
         <div className="space-y-3">
-          {shown.map((r) => <BillCard key={r.b.id} {...r} today={props.today} inventory={props.inventory} onDone={done} />)}
+          {shown.map((r) => <BillCard key={r.b.id} {...r} today={props.today} inventory={props.inventory} onDone={done} onEdit={() => setEditing(r.b)} />)}
         </div>
+      )}
+
+      {editing && (
+        <BillForm bill={editing} suppliers={props.suppliers} categories={props.categories} inventory={props.inventory} accounts={props.accounts} defaultAccounts={props.defaultAccounts} today={props.today}
+          onClose={() => setEditing(null)} onDone={(msg) => { setEditing(null); done(msg); }} />
       )}
 
       {creating && (
@@ -145,7 +153,7 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
   );
 }
 
-function BillCard({ b, balance, overdue, today, inventory, onDone }: { b: Bill; balance: number; overdue: boolean; today: string; inventory: { id: string; product_name: string; unit: string | null }[]; onDone: (msg: string) => void }) {
+function BillCard({ b, balance, overdue, today, inventory, onDone, onEdit }: { b: Bill; balance: number; overdue: boolean; today: string; inventory: { id: string; product_name: string; unit: string | null }[]; onDone: (msg: string) => void; onEdit: () => void }) {
   const tr = useTr();
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
@@ -204,6 +212,9 @@ function BillCard({ b, balance, overdue, today, inventory, onDone }: { b: Bill; 
         )}
         {!b.siigo_name && (
           <>
+            <button type="button" disabled={isPending} onClick={onEdit} className="inline-flex items-center gap-1 text-xs font-bold text-foreground/60 hover:text-foreground disabled:opacity-50">
+              <Pencil className="w-3.5 h-3.5" />{" "}{tr("Editar")}
+            </button>
             <button type="button" disabled={isPending} onClick={() => run(() => retryBill(b.id), tr("Factura enviada a Siigo."))} className="inline-flex items-center gap-1 text-xs font-bold text-foreground/60 hover:text-foreground disabled:opacity-50">
               {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}{" "}{tr("Enviar a Siigo")}
             </button>
