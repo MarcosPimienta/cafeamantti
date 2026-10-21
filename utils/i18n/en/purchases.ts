@@ -112,4 +112,5 @@ export const purchases: Record<string, string> = {
   "Producto del inventario no encontrado.": "Inventory product not found.",
   "No se pudo registrar la entrada.": "Could not record the entry.",
   "Falta aplicar la migración 20261028000000_purchase_bill_inventory.sql": "The 20261028000000_purchase_bill_inventory.sql migration has not been applied yet",
+  "Si la factura no trae prefijo, queda como FC.": "If the invoice has no prefix, it goes as FC.",
 };

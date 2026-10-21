@@ -22,7 +22,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { annulBill, createBill, deletePayablePayment, registerPayablePayment, retryPayablePayment } from "../actions";
+import { annulBill, createBill, deletePayablePayment, registerPayablePayment, retryBill, retryPayablePayment } from "../actions";
 
 const SETTINGS = { purchase_document_id: 18133, purchase_payment_id: 4183, payment_receipt_document_id: 18132, payout_bank_id: 4182, payout_cash_id: 4177, expense_accounts: {}, fixed_asset_codes: {} };
 const CC = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
@@ -154,5 +154,23 @@ describe("purchase invoices that bring stock in", () => {
     expect(await createBill({ ...coffee, lines: [{ ...coffee.lines[0], inventory_id: "srv", inventory_qty: 1 }] })).toMatchObject({ success: false, error: expect.stringContaining("es un servicio") });
     expect(db.rows("purchase_bills")).toHaveLength(0);
     expect(await createBill({ ...coffee, lines: [{ ...coffee.lines[0], inventory_qty: 0 }] })).toMatchObject({ success: false, error: expect.stringContaining("indica cuánto entra") });
+  });
+});
+
+describe("supplier invoices without a prefix", () => {
+  it("go as FC (Siigo requires a prefix), so payments find them too", async () => {
+    h.responses["POST /v1/purchases"] = { id: "fc-388", name: "FC-1-251" };
+    expect(await createBill({ ...input, providerPrefix: "  ", providerNumber: "388" })).toMatchObject({ success: true, sent: true });
+    expect(bill()).toMatchObject({ provider_prefix: "FC", provider_number: "388" });
+    expect(h.calls.find((c) => c.path === "/v1/purchases")!.opts?.body).toMatchObject({ provider_invoice: { prefix: "FC", number: "388" } });
+  });
+
+  it("one saved without prefix before is fixed when it is sent again", async () => {
+    h.responses["POST /v1/purchases"] = new Error("The field provider_invoice.prefix is required");
+    await createBill({ ...input, providerNumber: "389" });
+    db.rows("purchase_bills")[0].provider_prefix = "";
+    h.responses["POST /v1/purchases"] = { id: "fc-389", name: "FC-1-252" };
+    expect(await retryBill(bill().id)).toMatchObject({ success: true, siigoName: "FC-1-252" });
+    expect(bill().provider_prefix).toBe("FC");
   });
 });

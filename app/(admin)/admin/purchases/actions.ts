@@ -21,6 +21,10 @@ import { isGrindTracked } from '@/app/(admin)/coffeeProfiles';
 import { allocatePayment, billProblems, billTotals, payableBalance, payablePaymentProblems, type BillLine, type PayableMethod } from '@/utils/payables/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261025000000_purchases_payables.sql';
+/** Siigo requires the supplier invoice's prefix; without one the accountant uses "FC". */
+const NO_PREFIX = 'FC';
+const providerPrefix = (raw: string | null | undefined) => (raw ?? '').trim().toUpperCase() || NO_PREFIX;
+
 const MIGRATION_INVENTORY_HINT = 'Falta aplicar la migración 20261028000000_purchase_bill_inventory.sql';
 const CAPEX = Object.entries(EXPENSE_CATEGORY_TYPE_MAP).filter(([, t]) => t === 'CAPEX').map(([c]) => c);
 
@@ -131,7 +135,7 @@ export async function createBill(input: BillInput) {
         supplier_id: supplier.id,
         supplier_name: supplier.name,
         supplier_identification: identification,
-        provider_prefix: input.providerPrefix.trim().toUpperCase(),
+        provider_prefix: providerPrefix(input.providerPrefix),
         provider_number: bill.provider_number,
         issue_date: input.issueDate,
         due_date: input.dueDate,
@@ -154,7 +158,7 @@ export async function createBill(input: BillInput) {
       stocked = await stockBillLines(supabase, userId, created.id, {
         lines,
         date: input.issueDate,
-        label: `Compra · ${supplier.name} ${input.providerPrefix.trim().toUpperCase()}${bill.provider_number}`,
+        label: `Compra · ${supplier.name} ${providerPrefix(input.providerPrefix)}${bill.provider_number}`,
         supplier: supplier.name,
       });
     } catch (err) {
@@ -250,6 +254,11 @@ async function sendBillToSiigo(supabase: Supabase, userId: string | null, billId
   const { data: bill, error } = await supabase.from('purchase_bills').select('*').eq('id', billId).single();
   if (error || !bill) throw error ?? new Error('Factura de compra no encontrada.');
   if (bill.siigo_id) return { sent: true, siigoName: bill.siigo_name, siigoError: null };
+  // Saved before the prefix was required: the same "FC" here, so payments find it.
+  if (!bill.provider_prefix?.trim()) {
+    bill.provider_prefix = NO_PREFIX;
+    await supabase.from('purchase_bills').update({ provider_prefix: NO_PREFIX }).eq('id', billId);
+  }
   try {
     if (!siigoConfigFromEnv()) throw new Error('Siigo no está configurado en el servidor.');
     const settings = await loadSiigoSettings(supabase);

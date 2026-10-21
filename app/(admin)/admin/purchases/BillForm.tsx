@@ -91,6 +91,7 @@ export default function BillForm({
           <label className="text-xs font-bold text-foreground/60 space-y-1">
             <span>{tr("Prefijo factura")}</span>
             <input value={prefix} onChange={(e) => setPrefix(e.target.value.toUpperCase())} placeholder={tr("Ej. FETD")} maxLength={6} className={field} />
+            <span className="block text-[11px] font-normal text-foreground/40">{tr("Si la factura no trae prefijo, queda como FC.")}</span>
           </label>
           <label className="text-xs font-bold text-foreground/60 space-y-1">
             <span>{tr("Número factura")}</span>
