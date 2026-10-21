@@ -124,7 +124,7 @@ export default function PurchasesClient(props: {
         <p className="text-sm text-foreground/50">{bills.length === 0 ? tr("Aún no hay facturas de compra. Registra la primera con «Nueva factura de compra».") : tr("No hay facturas en este filtro.")}</p>
       ) : (
         <div className="space-y-3">
-          {shown.map((r) => <BillCard key={r.b.id} {...r} today={props.today} onDone={done} />)}
+          {shown.map((r) => <BillCard key={r.b.id} {...r} today={props.today} inventory={props.inventory} onDone={done} />)}
         </div>
       )}
 
@@ -145,7 +145,7 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
   );
 }
 
-function BillCard({ b, balance, overdue, today, onDone }: { b: Bill; balance: number; overdue: boolean; today: string; onDone: (msg: string) => void }) {
+function BillCard({ b, balance, overdue, today, inventory, onDone }: { b: Bill; balance: number; overdue: boolean; today: string; inventory: { id: string; product_name: string; unit: string | null }[]; onDone: (msg: string) => void }) {
   const tr = useTr();
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
@@ -184,7 +184,15 @@ function BillCard({ b, balance, overdue, today, onDone }: { b: Bill; balance: nu
       {b.siigo_error && !b.siigo_name && <p className="text-xs text-red-600 break-words">{tr.msg(b.siigo_error)}</p>}
       {b.lines.some((l) => l.inventory_id) && (
         <p className="text-xs text-foreground/50">
-          {tr("Entró al inventario: {items}.", { items: b.lines.filter((l) => l.inventory_id).map((l) => `${l.inventory_qty} · ${l.description}`).join(", ") })}
+          {tr("Entró al inventario: {items}.", {
+            items: b.lines
+              .filter((l) => l.inventory_id)
+              .map((l) => {
+                const p = inventory.find((x) => x.id === l.inventory_id);
+                return p ? `${l.inventory_qty} ${p.unit ?? ""} ${p.product_name}`.replace(/\s+/g, " ") : `${l.inventory_qty} · ${l.description}`;
+              })
+              .join(", "),
+          })}
         </p>
       )}
       <PaymentList payments={b.payments} onDone={onDone} />

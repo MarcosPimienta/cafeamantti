@@ -68,6 +68,7 @@ export default function BillForm({
 
   const field = "w-full px-3 py-2 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm";
   const small = "w-full px-2 py-1.5 bg-white border border-foreground/10 rounded-lg text-xs";
+  const inline = "px-2 py-1.5 bg-white border border-foreground/10 rounded-lg text-xs";
   return (
     <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] overflow-y-auto border border-foreground/5 shadow-2xl p-6 space-y-5">
@@ -147,14 +148,14 @@ export default function BillForm({
             <div className="flex flex-wrap items-center gap-2 text-xs text-foreground/60">
               <span>{tr("Entra al inventario:")}</span>
               <select value={l.inventory_id ?? ""} onChange={(e) => setLine(i, { inventory_id: e.target.value || null, inventory_qty: e.target.value ? l.inventory_qty ?? null : null })}
-                className={`${small} w-auto max-w-full`} aria-label={tr("Producto que entra al inventario")}>
+                className={`${inline} w-full sm:w-72`} aria-label={tr("Producto que entra al inventario")}>
                 <option value="">{tr("— No mueve inventario —")}</option>
                 {inventory.map((p) => <option key={p.id} value={p.id}>{p.product_name} ({p.product_code})</option>)}
               </select>
               {l.inventory_id && (
                 <>
                   <input type="number" min={0} step="any" value={l.inventory_qty ?? ""} onChange={(e) => setLine(i, { inventory_qty: e.target.value === "" ? null : Number(e.target.value) })}
-                    placeholder={tr("Cantidad")} className={`${small} w-28`} aria-label={tr("Cantidad que entra")} />
+                    placeholder={tr("Cantidad")} className={`${inline} w-28`} aria-label={tr("Cantidad que entra")} />
                   <span>{inventory.find((p) => p.id === l.inventory_id)?.unit ?? ""}</span>
                 </>
               )}
