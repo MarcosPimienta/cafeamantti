@@ -96,6 +96,25 @@ export function invoiceLinesFromOrder(items: OrderItemForInvoice[]): InvoiceLine
   });
 }
 
+/**
+ * The lines with each product's current Siigo link: a product linked after
+ * the invoice was created goes with its Siigo code. Same array if nothing changed.
+ */
+export function relinkLines(lines: InvoiceLine[], inventory: { id: string; product_code: string | null; siigo_code?: string | null; siigo_product_id?: string | null }[]): InvoiceLine[] {
+  const byId = new Map(inventory.map((i) => [i.id, i]));
+  let changed = false;
+  const next = lines.map((l) => {
+    const inv = l.inventory_id ? byId.get(l.inventory_id) : undefined;
+    if (!inv) return l;
+    const code = inv.siigo_code?.trim() || inv.product_code || null;
+    const linked = !!(inv.siigo_product_id || inv.siigo_code);
+    if (code === l.code && linked === l.linked) return l;
+    changed = true;
+    return { ...l, code, linked };
+  });
+  return changed ? next : lines;
+}
+
 // ── Credit notes ────────────────────────────────────────────
 
 /** A line's value as charged: plus IVA when its price was before IVA. */

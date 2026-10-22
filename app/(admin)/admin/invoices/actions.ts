@@ -13,7 +13,7 @@ import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '
 import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, buildCreditNotePayload, itemTaxId, lineGross, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
 import { ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
 import { restockCreditNote, syncOrderStock } from '@/utils/orders/stock';
-import { CREDIT_REASONS, balanceDue, creditNoteLines, invoiceLinesFromOrder, paymentProblems, paymentState, type CreditInput, type CreditNoteLine, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
+import { CREDIT_REASONS, balanceDue, creditNoteLines, invoiceLinesFromOrder, paymentProblems, relinkLines, paymentState, type CreditInput, type CreditNoteLine, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261019000000_sales_invoices.sql';
 
@@ -98,6 +98,19 @@ function siigoPayload(inv: InvoiceRow, identification: string | null, settings: 
 }
 
 type SiigoInvoiceOut = { id: string; name?: string; prefix?: string; number?: number; public_url?: string; stamp?: { status?: string; cufe?: string; errors?: string } };
+
+/** An unsent invoice with its products' current Siigo links, saved when they changed. */
+async function withCurrentLinks<T extends { id: string; lines: unknown }>(supabase: Supabase, inv: T): Promise<T> {
+  const lines = inv.lines as InvoiceLine[];
+  const ids = lines.map((l) => l.inventory_id).filter((id): id is string => !!id);
+  if (!ids.length) return inv;
+  const { data, error } = await supabase.from('inventory').select('id, product_code, siigo_code, siigo_product_id').in('id', ids);
+  if (error) return inv;
+  const next = relinkLines(lines, data ?? []);
+  if (next === lines) return inv;
+  await supabase.from('sales_invoices').update({ lines: next }).eq('id', inv.id);
+  return { ...inv, lines: next };
+}
 
 /** Sum of an invoice's credit notes (0 before their migration). */
 async function creditedOf(supabase: Supabase, invoiceId: string): Promise<number> {
@@ -264,7 +277,8 @@ export async function checkInvoice(invoiceId: string) {
   return guard(async () => {
     const { data: inv, error } = await supabase.from('sales_invoices').select('*').eq('id', invoiceId).single();
     if (error || !inv) throw error ?? new Error('Factura no encontrada.');
-    return { problems: await invoiceProblems(supabase, inv) };
+    const current = inv.status === 'borrador' || inv.status === 'error' ? await withCurrentLinks(supabase, inv) : inv;
+    return { problems: await invoiceProblems(supabase, current) };
   });
 }
 
@@ -341,7 +355,8 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
     const { data: pending, error } = await query.order('created_at', { ascending: true });
     if (error) throw error;
 
-    for (const inv of pending ?? []) {
+    for (const pendingInv of pending ?? []) {
+      const inv = await withCurrentLinks(supabase, pendingInv);
       try {
         const client = one(inv.client as AppClient | AppClient[] | null);
         const identification = client && cleanIdentification(client.document_number).identification

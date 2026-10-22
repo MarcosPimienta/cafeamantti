@@ -146,3 +146,17 @@ describe("IVA on top", () => {
     expect(lineGross({ quantity: 6, unit_price: 140400, tax_included: false, tax_rate: 5 }, false)).toBe(842400); // product without IVA
   });
 });
+
+import { relinkLines } from "../ledger";
+describe("relinking invoice lines", () => {
+  const line = { inventory_id: "a", code: "AROM-SURT", name: "Aromáticas", quantity: 1, unit_price: 1000, tax_id: null, linked: false };
+  it("takes the Siigo code of a product linked after the invoice", () => {
+    const next = relinkLines([line], [{ id: "a", product_code: "AROM-SURT", siigo_code: "0038", siigo_product_id: "x" }]);
+    expect(next[0]).toMatchObject({ code: "0038", linked: true });
+  });
+  it("keeps the same lines when nothing changed or the product is gone", () => {
+    const lines = [line];
+    expect(relinkLines(lines, [{ id: "a", product_code: "AROM-SURT" }])).toBe(lines);
+    expect(relinkLines(lines, [])).toBe(lines);
+  });
+});
