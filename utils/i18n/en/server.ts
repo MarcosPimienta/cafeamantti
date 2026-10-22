@@ -3,6 +3,9 @@
 // and are translated where they are shown (tr.msg), so templates with
 // {placeholders} match the finished message.
 export const server: Record<string, string> = {
+  // Customers
+  "El cliente tiene pedidos, facturas, cotizaciones o comodatos: no se puede eliminar.": "The customer has orders, invoices, quotes or loaned machines: it cannot be deleted.",
+  "No autorizado.": "Not authorized.",
   // Siigo payloads
   "{name}: falta la cédula o NIT.": "{name}: missing ID number or NIT.",
   "{name}: falta el código DANE de la ciudad (5 dígitos, ej. 05001 Medellín).": "{name}: missing the city DANE code (5 digits, e.g. 05001 Medellín).",

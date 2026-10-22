@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Users, Phone, MapPin, Search, Mail, CreditCard, Calendar, Building2, Handshake } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import CreateCRMClientModal from "./CreateCRMClientModal";
+import DeleteClientButton from "./DeleteClientButton";
 import { getTr } from "@/utils/i18n/server";
 
 export default async function AdminCRMCustomersPage() {
@@ -85,6 +86,7 @@ export default async function AdminCRMCustomersPage() {
                         <div className="flex items-center gap-1">
                           <p className="font-bold text-foreground">{client.name}</p>
                           <CreateCRMClientModal client={client} />
+                          <DeleteClientButton client={client} />
                         </div>
                       </div>
                     </td>

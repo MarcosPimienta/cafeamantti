@@ -18,6 +18,7 @@ import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/ord
 import { syncOrderStock, revertOrderStock, orderIsSold } from "@/utils/orders/stock";
 import { orderTaxTotals } from "@/utils/orders/tax";
 import { loadSiigoSettings } from "@/utils/siigo/server";
+import { cleanIdentification } from "@/utils/siigo/mapping";
 import { isSellable } from "@/utils/inventory/sellable";
 import { isInventoryCategory, type InventoryCategory, type EntryType } from "@/utils/inventory/categories";
 import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
@@ -932,7 +933,13 @@ export async function updateClientCRM(id: string, data: any) {
   if (!isAdmin) throw new Error("Unauthorized");
 
   const supabase = await createClient();
-  const { error } = await supabase.from('clients').update(data).eq('id', id);
+  const { data: before } = await supabase.from('clients').select('document_type, document_number').eq('id', id).maybeSingle();
+  // Another document is another Siigo customer: the next invoice finds it by the new one.
+  const docChanged = before && (
+    (data.document_number !== undefined && cleanIdentification(data.document_number).identification !== cleanIdentification(before.document_number).identification) ||
+    (data.document_type !== undefined && (data.document_type ?? '') !== (before.document_type ?? ''))
+  );
+  const { error } = await supabase.from('clients').update(docChanged ? { ...data, siigo_customer_id: null } : data).eq('id', id);
 
   if (error) throw new Error(error.message);
 
@@ -941,14 +948,20 @@ export async function updateClientCRM(id: string, data: any) {
   return { success: true };
 }
 
-export async function deleteClientCRM(id: string) {
-  const isAdmin = await checkIsAdmin();
-  if (!isAdmin) throw new Error("Unauthorized");
+/** Tables whose rows would lose (or take with them) the client on delete. */
+const CLIENT_REFERENCES = ['orders', 'sales_invoices', 'quotes', 'proposals', 'comodato_assignments', 'equipment_events', 'maquila_proposals'] as const;
 
+/** Deletes a client only when nothing refers to it (orders, invoices, quotes, comodatos…). */
+export async function deleteClientCRM(id: string): Promise<{ success: true } | { success: false; error: string }> {
+  if (!(await checkIsAdmin())) return { success: false, error: 'No autorizado.' };
   const supabase = await createClient();
+  for (const table of CLIENT_REFERENCES) {
+    const { count, error } = await supabase.from(table).select('id', { count: 'exact', head: true }).eq('client_id', id);
+    if (error) return { success: false, error: error.message };
+    if (count) return { success: false, error: 'El cliente tiene pedidos, facturas, cotizaciones o comodatos: no se puede eliminar.' };
+  }
   const { error } = await supabase.from('clients').delete().eq('id', id);
-
-  if (error) throw new Error(error.message);
+  if (error) return { success: false, error: error.message };
 
   revalidatePath('/admin/customers');
   revalidatePath('/admin/orders');

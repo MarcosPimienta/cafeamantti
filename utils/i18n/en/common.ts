@@ -144,6 +144,8 @@ export const common: Record<string, string> = {
   "Cliente registrado exitosamente.": "Customer registered.",
   "Editar {name}": "Edit {name}",
   "Editar Cliente": "Edit customer",
+  "Eliminar {name}": "Delete {name}",
+  "¿Eliminar el cliente {name}? No se puede deshacer.": "Delete the customer {name}? This cannot be undone.",
   "Registrar Cliente Manual": "Register manual customer",
   "Guardar cambios": "Save changes",
   "Guardar Cliente": "Save customer",
