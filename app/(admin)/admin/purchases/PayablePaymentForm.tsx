@@ -65,7 +65,18 @@ export default function PayablePaymentForm({
             ? " " + tr("El excedente de {amount} quedó como saldo a favor; regístralo también en Siigo.", { amount: cop(res.advance.amount) })
             : " " + tr("El excedente de {amount} quedó como saldo a favor, pero su anticipo no llegó a Siigo: {error}", { amount: cop(res.advance.amount), error: tr.msg(res.advance.error ?? "") })
         : "";
-      if ("crossed" in res) return onDone(tr("Pagado con saldo a favor ({amount}). Haz el cruce del anticipo en Siigo.", { amount: cop(Number(res.crossed)) }));
+      if ("crossed" in res) {
+        const amountText = cop(Number(res.crossed));
+        return onDone(
+          res.siigo?.sent
+            ? tr("Pagado con saldo a favor ({amount}): cruce {name} en Siigo.", { amount: amountText, name: res.siigo.name ?? "" })
+            : res.siigo
+              ? tr("Pagado con saldo a favor ({amount}), pero Siigo no recibió el cruce: {error}", { amount: amountText, error: tr.msg(res.siigo.error ?? "") })
+              : res.waitingForDocument
+                ? tr("Pagado con saldo a favor ({amount}). El cruce irá a Siigo cuando el documento esté allá.", { amount: amountText })
+                : tr("Pagado con saldo a favor ({amount}). Haz el cruce del anticipo en Siigo.", { amount: amountText })
+        );
+      }
       if (!res.paymentId) return onDone(advance.trim());
       onDone(
         (res.siigo?.sent
@@ -126,7 +137,7 @@ export default function PayablePaymentForm({
         )}
         <p className="text-[11px] text-foreground/50">
           {method === "advance"
-            ? tr("No sale plata: el gasto entra en Flujo de Caja con esta fecha y el saldo a favor baja. En Siigo, cruza el anticipo contra el documento.")
+            ? tr("No sale plata: el gasto entra en Flujo de Caja con esta fecha y el saldo a favor baja. A Siigo va un comprobante que cruza el anticipo contra el documento.")
             : tr("Se crea el egreso en Siigo contra el documento y la salida en Flujo de Caja con esta fecha, por el valor pagado.")}
         </p>
         {error && <p className="text-xs text-red-600 break-words">{tr.msg(error)}</p>}

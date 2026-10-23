@@ -13,12 +13,12 @@ import { checkIsAdmin } from '../../actions';
 import { createExpenseDirect } from '../cashflow/actions';
 import { ADVANCE_CATEGORY, EXPENSE_CATEGORY_TYPE_MAP } from '../cashflow/types';
 import { getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
-import { buildAdvancePaymentPayload, buildPaymentReceiptPayload, buildPurchaseBillPayload, cleanIdentification } from '@/utils/siigo/mapping';
+import { buildAdvanceCrossPayload, buildAdvancePaymentPayload, buildAdvanceRefundPayload, buildPaymentReceiptPayload, buildPurchaseBillPayload, cleanIdentification, splitDocumentName } from '@/utils/siigo/mapping';
 import { daneCodeFor } from '@/utils/siigo/daneCities';
 import { ensureSiigoSupplier, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
 import { entryTypeFor, tracksStock } from '@/utils/inventory/categories';
 import { isGrindTracked } from '@/app/(admin)/coffeeProfiles';
-import { advanceBalance, advanceUseProblems, allocatePayment, billProblems, billTotals, payableBalance, payablePaymentProblems, splitPayment, type BillLine, type PayableMethod } from '@/utils/payables/ledger';
+import { advanceBalance, advanceUseProblems, allocateAdvances, allocatePayment, billProblems, billTotals, payableBalance, payablePaymentProblems, splitPayment, type BillLine, type PayableMethod } from '@/utils/payables/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261025000000_purchases_payables.sql';
 /** Siigo requires the supplier invoice's prefix; without one the accountant uses "FC". */
@@ -27,6 +27,7 @@ const providerPrefix = (raw: string | null | undefined) => (raw ?? '').trim().to
 
 const MIGRATION_INVENTORY_HINT = 'Falta aplicar la migración 20261028000000_purchase_bill_inventory.sql';
 const MIGRATION_ADVANCES_HINT = 'Falta aplicar la migración 20261029000000_supplier_advances.sql';
+const MIGRATION_JOURNALS_HINT = 'Falta aplicar la migración 20261030000000_supplier_advance_journals.sql';
 const CAPEX = Object.entries(EXPENSE_CATEGORY_TYPE_MAP).filter(([, t]) => t === 'CAPEX').map(([c]) => c);
 
 async function requireAdmin() {
@@ -38,6 +39,7 @@ async function requireAdmin() {
 
 function message(err: unknown) {
   const m = errorText(err);
+  if (/applied/.test(m) && /column|schema/i.test(m)) return MIGRATION_JOURNALS_HINT;
   if (/supplier_advances|ANTICIPO|payable_payments_method_check|cashflow_expenses_expense_type_check/.test(m)) return MIGRATION_ADVANCES_HINT;
   if (/purchase_bills|payable_payments|siigo_ds_owed/.test(m) && /exist|relation|schema|column/i.test(m)) return MIGRATION_HINT;
   if (/purchase_bills_provider_invoice_key/.test(m)) return 'Esa factura del proveedor ya está registrada.';
@@ -583,13 +585,15 @@ async function paymentExpenses(doc: Document, date: string, amount: number, conc
 // ── Saldo a favor (anticipos) ───────────────────────────────
 
 type AdvanceResult = { id: string; amount: number; sent: boolean; name: string | null; error: string | null; manual: boolean };
+type SiigoResult = { sent: boolean; name: string | null; error: string | null };
 type Supplier = { supplierId: string | null; supplierName: string; supplierIdentification: string };
+type AdvanceMoveRow = { id: string; kind: string; amount: number; move_date: string; siigo_name: string | null; siigo_status: string; applied: { advance_id: string; amount: number }[] | null };
 
-/** The supplier's movements and balance (by identification). */
-async function supplierAdvanceBalance(supabase: Supabase, identification: string): Promise<number> {
-  const { data, error } = await supabase.from('supplier_advances').select('kind, amount').eq('supplier_identification', identification);
+/** Every movement of a supplier's saldo a favor (by identification). */
+async function supplierMoves(supabase: Supabase, identification: string): Promise<AdvanceMoveRow[]> {
+  const { data, error } = await supabase.from('supplier_advances').select('id, kind, amount, move_date, siigo_name, siigo_status, applied').eq('supplier_identification', identification);
   if (error) throw error;
-  return advanceBalance(data ?? []);
+  return (data ?? []) as AdvanceMoveRow[];
 }
 
 /** A Flujo de Caja ANTICIPO row: + money that left to the supplier, − money that came back or was crossed. */
@@ -607,11 +611,15 @@ async function advanceCashRow(s: Supplier, date: string, amount: number, concept
   return (res as { data?: { id: string } }).data?.id ?? null;
 }
 
-/** Money given to a supplier as saldo a favor: Flujo de Caja row, the movement, and its Siigo egreso. */
+/**
+ * Money given to a supplier as saldo a favor: Flujo de Caja row, the
+ * movement, and its Siigo egreso. One already in Siigo (manual) keeps the
+ * number of its egreso there, so cruces and devoluciones can point to it.
+ */
 async function createAdvance(
   supabase: Supabase,
   userId: string | null,
-  a: Supplier & { date: string; amount: number; method: 'bank' | 'cash'; notes: string | null; paymentId: string | null; manual: boolean }
+  a: Supplier & { date: string; amount: number; method: 'bank' | 'cash'; notes: string | null; paymentId: string | null; manual: boolean; receipt?: string | null }
 ): Promise<AdvanceResult> {
   const expenseId = await advanceCashRow(a, a.date, a.amount, 'Anticipo (saldo a favor)');
   const { data: move, error } = await supabase
@@ -628,6 +636,7 @@ async function createAdvance(
       expense_id: expenseId,
       notes: a.notes || null,
       siigo_status: a.manual ? 'no_aplica' : 'pendiente',
+      siigo_name: a.manual ? a.receipt ?? null : null,
       created_by: userId,
     })
     .select('id')
@@ -636,31 +645,70 @@ async function createAdvance(
     if (expenseId) await supabase.from('cashflow_expenses').delete().eq('id', expenseId);
     throw error ?? new Error('No se pudo guardar el anticipo.');
   }
-  if (a.manual) return { id: move.id, amount: a.amount, sent: false, name: null, error: null, manual: true };
+  if (a.manual) return { id: move.id, amount: a.amount, sent: false, name: a.receipt ?? null, error: null, manual: true };
   return { id: move.id, amount: a.amount, manual: false, ...(await sendAdvance(supabase, userId, move.id)) };
 }
 
-/** Sends an anticipo's AdvancePayment egreso to Siigo; a failure stays on the movement. */
-async function sendAdvance(supabase: Supabase, userId: string | null, moveId: string): Promise<{ sent: boolean; name: string | null; error: string | null }> {
-  const { data: m, error } = await supabase.from('supplier_advances').select('*').eq('id', moveId).single();
-  if (error || !m) throw error ?? new Error('Anticipo no encontrado.');
-  if (m.siigo_id) return { sent: true, name: m.siigo_name, error: null };
-  try {
-    if (m.kind !== 'anticipo') throw new Error('Solo los anticipos van a Siigo desde la app.');
-    if (!siigoConfigFromEnv()) throw new Error('Siigo no está configurado en el servidor.');
-    const settings = await loadSiigoSettings(supabase);
+/** The Siigo body of a movement: AdvancePayment egreso (anticipo) or journal (cruce, devolución). */
+type AdvanceRow = AdvanceMoveRow & { method: 'bank' | 'cash'; supplier_identification: string; notes: string | null; payment_id: string | null };
+
+async function advancePayload(supabase: Supabase, m: AdvanceRow) {
+  const settings = await loadSiigoSettings(supabase);
+  if (m.kind === 'anticipo') {
     const { payload, problems } = buildAdvancePaymentPayload(
       { date: m.move_date, amount: Number(m.amount), method: m.method, supplier_identification: m.supplier_identification, notes: m.notes },
       settings
     );
+    return { path: '/v1/payment-receipts', key: 'ANT', payload, problems };
+  }
+  // Which anticipo egresos (RP-1-…) it takes, with their current numbers.
+  const moves = await supplierMoves(supabase, m.supplier_identification);
+  const allocations = ((m.applied ?? []) as { advance_id: string; amount: number }[]).map((a) => {
+    const from = moves.find((x) => x.id === a.advance_id);
+    return { receipt: from?.siigo_name ?? null, date: from?.move_date ?? m.move_date, amount: Number(a.amount) };
+  });
+  if (m.kind === 'devolucion') {
+    const { payload, problems } = buildAdvanceRefundPayload(
+      { date: m.move_date, method: m.method, supplier_identification: m.supplier_identification, allocations, notes: m.notes },
+      settings
+    );
+    return { path: '/v1/journals', key: 'DEV', payload, problems };
+  }
+  const { data: p, error } = await supabase.from('payable_payments').select('bill_id, cuenta_cobro_id').eq('id', m.payment_id).single();
+  if (error || !p) throw error ?? new Error('Pago no encontrado.');
+  const doc = await loadDocument(supabase, p.bill_id ? { billId: p.bill_id } : { cuentaCobroId: p.cuenta_cobro_id }, 'pago');
+  if (!doc.due) throw new Error('El documento aún no está en Siigo: envíalo primero.');
+  const { payload, problems } = buildAdvanceCrossPayload(
+    { date: m.move_date, supplier_identification: m.supplier_identification, due: doc.due, label: doc.label, allocations },
+    settings
+  );
+  return { path: '/v1/journals', key: 'CRU', payload, problems };
+}
+
+/**
+ * Sends a saldo a favor movement to Siigo — an anticipo as an AdvancePayment
+ * egreso, a cruce or devolución as a journal against the anticipo egresos.
+ * A failure stays on the movement (and on the payment of a cruce).
+ */
+async function sendAdvance(supabase: Supabase, userId: string | null, moveId: string): Promise<SiigoResult> {
+  const { data: m, error } = await supabase.from('supplier_advances').select('*').eq('id', moveId).single();
+  if (error || !m) throw error ?? new Error('Movimiento no encontrado.');
+  if (m.siigo_id) return { sent: true, name: m.siigo_name, error: null };
+  const mirror = async (fields: Record<string, unknown>) => {
+    await supabase.from('supplier_advances').update(fields).eq('id', moveId);
+    if (m.kind === 'cruce' && m.payment_id) await supabase.from('payable_payments').update(fields).eq('id', m.payment_id);
+  };
+  try {
+    if (!siigoConfigFromEnv()) throw new Error('Siigo no está configurado en el servidor.');
+    const { path, key, payload, problems } = await advancePayload(supabase, m);
     if (problems.length) throw new Error(problems.join(' · '));
-    const out = await getSiigoClient().request<{ id: string; name?: string }>('POST', '/v1/payment-receipts', { body: payload, idempotencyKey: idempotencyKey('ANT', m.id) });
-    await supabase.from('supplier_advances').update({ siigo_status: 'enviado', siigo_id: out.id, siigo_name: out.name ?? null, siigo_error: null }).eq('id', moveId);
-    await siigoLog(supabase, userId, { entity: 'supplier_advance', local_id: moveId, siigo_id: out.id, siigo_name: out.name ?? null, status: 'ok', message: `Anticipo ${m.supplier_name}` });
+    const out = await getSiigoClient().request<{ id: string; name?: string }>('POST', path, { body: payload, idempotencyKey: idempotencyKey(key, m.id) });
+    await mirror({ siigo_status: 'enviado', siigo_id: out.id, siigo_name: out.name ?? null, siigo_error: null });
+    await siigoLog(supabase, userId, { entity: 'supplier_advance', local_id: moveId, siigo_id: out.id, siigo_name: out.name ?? null, status: 'ok', message: `${m.kind} ${m.supplier_name}` });
     return { sent: true, name: out.name ?? null, error: null };
   } catch (err) {
     const msg = message(err);
-    await supabase.from('supplier_advances').update({ siigo_status: 'error', siigo_error: msg }).eq('id', moveId);
+    await mirror({ siigo_status: 'error', siigo_error: msg });
     await siigoLog(supabase, userId, { entity: 'supplier_advance', local_id: moveId, status: 'error', message: msg });
     return { sent: false, name: null, error: msg };
   }
@@ -670,16 +718,18 @@ async function sendAdvance(supabase: Supabase, userId: string | null, moveId: st
  * Pays (part of) a document with the supplier's saldo a favor: the
  * document's expenses go into Flujo de Caja on that date and an ANTICIPO
  * row takes the same amount back out, so the day's cash doesn't move. In
- * Siigo the advance is crossed by hand (no egreso is sent).
+ * Siigo a journal crosses the anticipo egresos against the document.
  */
 async function payWithAdvance(supabase: Supabase, userId: string | null, target: PayableTarget, doc: Document, balance: number, input: PayableInput) {
   const amount = Number(input.amount);
-  const available = await supplierAdvanceBalance(supabase, doc.supplierIdentification);
-  const problems = advanceUseProblems(balance, available, amount);
+  const moves = await supplierMoves(supabase, doc.supplierIdentification);
+  const problems = advanceUseProblems(balance, advanceBalance(moves), amount);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) problems.push('Fecha del pago inválida.');
   if (problems.length) throw new Error(problems.join(' · '));
+  const applied = allocateAdvances(moves, amount).map((a) => ({ advance_id: a.advance_id, amount: a.amount }));
 
   const expenseIds: string[] = [];
+  let paymentId: string | null = null;
   try {
     expenseIds.push(...(await paymentExpenses(doc, input.date, amount, `Pago con saldo a favor ${doc.label} · ${doc.supplierName}`)));
     const back = await advanceCashRow(doc, input.date, -amount, `Saldo a favor aplicado a ${doc.label}`);
@@ -693,31 +743,37 @@ async function payWithAdvance(supabase: Supabase, userId: string | null, target:
         method: 'advance',
         notes: input.notes?.trim() || null,
         expense_ids: expenseIds,
-        siigo_status: 'no_aplica',
+        siigo_status: doc.manual ? 'no_aplica' : 'pendiente',
         created_by: userId,
       })
       .select('id')
       .single();
     if (error || !payment) throw error ?? new Error('No se pudo guardar el pago.');
-    const { error: moveErr } = await supabase.from('supplier_advances').insert({
-      supplier_id: doc.supplierId,
-      supplier_name: doc.supplierName,
-      supplier_identification: doc.supplierIdentification,
-      kind: 'cruce',
-      move_date: input.date,
-      amount,
-      payment_id: payment.id,
-      notes: `Aplicado a ${doc.label}`,
-      siigo_status: 'no_aplica',
-      created_by: userId,
-    });
-    if (moveErr) {
-      await supabase.from('payable_payments').delete().eq('id', payment.id);
-      throw moveErr;
-    }
+    paymentId = payment.id;
+    const { data: move, error: moveErr } = await supabase
+      .from('supplier_advances')
+      .insert({
+        supplier_id: doc.supplierId,
+        supplier_name: doc.supplierName,
+        supplier_identification: doc.supplierIdentification,
+        kind: 'cruce',
+        move_date: input.date,
+        amount,
+        payment_id: payment.id,
+        applied,
+        notes: `Aplicado a ${doc.label}`,
+        siigo_status: doc.manual ? 'no_aplica' : 'pendiente',
+        created_by: userId,
+      })
+      .select('id')
+      .single();
+    if (moveErr || !move) throw moveErr ?? new Error('No se pudo guardar el cruce.');
+    // A document made by hand in Siigo is crossed there too; one not there yet waits for it.
+    const siigo = doc.manual || !doc.due ? null : await sendAdvance(supabase, userId, move.id);
     refresh();
-    return { paymentId: payment.id, siigo: null, waitingForDocument: false, advance: null, crossed: amount };
+    return { paymentId: payment.id, siigo, waitingForDocument: !doc.manual && !doc.due, advance: null, crossed: amount };
   } catch (err) {
+    if (paymentId) await supabase.from('payable_payments').delete().eq('id', paymentId);
     if (expenseIds.length) await supabase.from('cashflow_expenses').delete().in('id', expenseIds);
     throw err;
   }
@@ -742,7 +798,16 @@ async function supplierById(supabase: Supabase, supplierId: string): Promise<Sup
   return { supplierId: data.id, supplierName: data.name, supplierIdentification: identification };
 }
 
-export type AdvanceInput = { supplierId: string; date: string; amount: number; method: 'bank' | 'cash'; notes?: string | null; alreadyInSiigo?: boolean };
+export type AdvanceInput = {
+  supplierId: string;
+  date: string;
+  amount: number;
+  method: 'bank' | 'cash';
+  notes?: string | null;
+  alreadyInSiigo?: boolean;
+  /** Its egreso in Siigo when it was made there by hand (e.g. RP-1-48). */
+  siigoReceipt?: string | null;
+};
 
 const advanceInputProblems = (input: AdvanceInput) => {
   const p: string[] = [];
@@ -757,18 +822,20 @@ export async function registerAdvance(input: AdvanceInput) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
     const problems = advanceInputProblems(input);
+    const receipt = (input.siigoReceipt ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    if (input.alreadyInSiigo && !splitDocumentName(receipt)) problems.push('Escribe el número del egreso de anticipo en Siigo (por ejemplo RP-1-48).');
     if (problems.length) throw new Error(problems.join(' · '));
     const supplier = await supplierById(supabase, input.supplierId);
     const advance = await createAdvance(supabase, userId, {
       ...supplier, date: input.date, amount: Number(input.amount), method: input.method,
-      notes: input.notes?.trim() || null, paymentId: null, manual: !!input.alreadyInSiigo,
+      notes: input.notes?.trim() || null, paymentId: null, manual: !!input.alreadyInSiigo, receipt: input.alreadyInSiigo ? receipt : null,
     });
     refresh();
     return { advance };
   });
 }
 
-/** The supplier gave (part of) the saldo a favor back: it comes back into Flujo de Caja. */
+/** The supplier gave (part of) the saldo a favor back: it comes into Flujo de Caja and Siigo gets the journal. */
 export async function registerAdvanceRefund(input: AdvanceInput) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
@@ -776,27 +843,34 @@ export async function registerAdvanceRefund(input: AdvanceInput) {
     if (problems.length) throw new Error(problems.join(' · '));
     const supplier = await supplierById(supabase, input.supplierId);
     const amount = Number(input.amount);
-    if (amount > (await supplierAdvanceBalance(supabase, supplier.supplierIdentification)) + 0.5) throw new Error('La devolución supera el saldo a favor del proveedor.');
+    const moves = await supplierMoves(supabase, supplier.supplierIdentification);
+    if (amount > advanceBalance(moves) + 0.5) throw new Error('La devolución supera el saldo a favor del proveedor.');
     const expenseId = await advanceCashRow(supplier, input.date, -amount, 'Devolución de saldo a favor');
-    const { error } = await supabase.from('supplier_advances').insert({
-      supplier_id: supplier.supplierId,
-      supplier_name: supplier.supplierName,
-      supplier_identification: supplier.supplierIdentification,
-      kind: 'devolucion',
-      move_date: input.date,
-      amount,
-      method: input.method,
-      expense_id: expenseId,
-      notes: input.notes?.trim() || null,
-      siigo_status: 'no_aplica',
-      created_by: userId,
-    });
-    if (error) {
+    const { data: move, error } = await supabase
+      .from('supplier_advances')
+      .insert({
+        supplier_id: supplier.supplierId,
+        supplier_name: supplier.supplierName,
+        supplier_identification: supplier.supplierIdentification,
+        kind: 'devolucion',
+        move_date: input.date,
+        amount,
+        method: input.method,
+        expense_id: expenseId,
+        applied: allocateAdvances(moves, amount).map((a) => ({ advance_id: a.advance_id, amount: a.amount })),
+        notes: input.notes?.trim() || null,
+        siigo_status: 'pendiente',
+        created_by: userId,
+      })
+      .select('id')
+      .single();
+    if (error || !move) {
       if (expenseId) await supabase.from('cashflow_expenses').delete().eq('id', expenseId);
-      throw error;
+      throw error ?? new Error('No se pudo guardar la devolución.');
     }
+    const siigo = await sendAdvance(supabase, userId, move.id);
     refresh();
-    return {};
+    return { siigo };
   });
 }
 
@@ -810,12 +884,13 @@ export async function retryAdvance(moveId: string) {
   });
 }
 
-/** Checks that removing these anticipo movements doesn't leave the balance below what was already used. */
-async function canRemoveAdvances(supabase: Supabase, moves: { kind: string; amount: number; siigo_status: string; supplier_identification: string }[]) {
+/** Checks that these movements can go: not in Siigo, and no anticipo that a cruce or devolución already took from. */
+async function canRemoveAdvances(supabase: Supabase, moves: { id: string; kind: string; amount: number; siigo_status: string; supplier_identification: string }[]) {
   for (const m of moves) {
+    if (m.siigo_status === 'enviado') throw new Error(m.kind === 'anticipo' ? 'El anticipo ya está en Siigo: anúlalo allá primero.' : 'Ya está en Siigo: anula allá el comprobante primero.');
     if (m.kind !== 'anticipo') continue;
-    if (m.siigo_status === 'enviado') throw new Error('El anticipo ya está en Siigo: anúlalo allá primero.');
-    if ((await supplierAdvanceBalance(supabase, m.supplier_identification)) - Number(m.amount) < -0.5) {
+    const all = await supplierMoves(supabase, m.supplier_identification);
+    if (all.some((x) => (x.applied ?? []).some((a) => a.advance_id === m.id)) || advanceBalance(all) - Number(m.amount) < -0.5) {
       throw new Error('Ese saldo a favor ya se usó en otro pago o devolución: elimina eso primero.');
     }
   }
@@ -871,7 +946,9 @@ async function sendPaymentReceipt(supabase: Supabase, userId: string | null, pay
 export async function retryPayablePayment(paymentId: string) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
-    const res = await sendPaymentReceipt(supabase, userId, paymentId);
+    // A payment made with the saldo a favor goes to Siigo as its cruce journal.
+    const { data: cruce } = await supabase.from('supplier_advances').select('id').eq('payment_id', paymentId).eq('kind', 'cruce').maybeSingle();
+    const res = cruce ? await sendAdvance(supabase, userId, cruce.id) : await sendPaymentReceipt(supabase, userId, paymentId);
     refresh();
     if (!res.sent) throw new Error(res.error ?? 'No se pudo enviar a Siigo.');
     return { name: res.name };
@@ -887,7 +964,7 @@ export async function deletePayablePayment(paymentId: string) {
     if (p.siigo_status === 'enviado') throw new Error('El egreso ya está en Siigo: anúlalo allá primero.');
     // The excess it left as saldo a favor goes with it (the cruce rows go by cascade).
     const { data: moves } = await supabase.from('supplier_advances').select('id, kind, amount, siigo_status, supplier_identification, expense_id').eq('payment_id', paymentId);
-    await canRemoveAdvances(supabase, moves ?? []);
+    await canRemoveAdvances(supabase, (moves ?? []).filter((m) => m.kind === 'anticipo'));
     const advanceRows = (moves ?? []).map((m) => m.expense_id).filter((id): id is string => !!id);
     if (advanceRows.length) {
       const { error: delAdv } = await supabase.from('cashflow_expenses').delete().in('id', advanceRows);

@@ -30,6 +30,7 @@ type Catalogs = {
   supportTypes: Option[];
   creditNoteTypes: Option[];
   receiptTypes: Option[];
+  journalTypes?: Option[];
   retentions: (Option & { percentage: number | null })[];
 };
 type Kind = "servicio" | "repuesto";
@@ -414,6 +415,31 @@ export default function SiigoSettingsClient({
             </div>
             <p className="text-[11px] text-foreground/40 mt-3">{tr("Tu contadora define la tarifa de cada categoría. Al enviar cada cuenta de cobro puedes cambiarla.")}</p>
           </details>
+        </section>
+
+        {/* Supplier advances → journals */}
+        <section className={card}>
+          <div>
+            <h2 className="text-lg font-serif">{tr("Saldos a favor con proveedores (anticipos)")}</h2>
+            <p className="text-xs text-foreground/50">{tr("El anticipo va como egreso de anticipo (tipo de recibo de pago de arriba). Al usarlo en un pago o cuando el proveedor lo devuelve, va un comprobante contable que cruza la cuenta de anticipos contra el egreso del anticipo (RP).")}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <IdSelect id="sg-adv-cc" label={tr("Comprobante contable de cruces y devoluciones")} value={settings.advance_journal_document_id} options={catalogs?.journalTypes ?? null} onChange={(v) => set("advance_journal_document_id", v)}
+              hint="Tu contadora usa «Egreso» (CC-3) para los cruces." />
+            {([
+              ["advance_account", "Cuenta de anticipos a proveedores", "13300501"],
+              ["payable_account", "Cuenta de proveedores por pagar", "22050501"],
+              ["refund_bank_account", "Devoluciones · cuenta de banco", "11200501"],
+              ["refund_cash_account", "Devoluciones · cuenta de caja", "11050501"],
+            ] as const).map(([key, label, example]) => (
+              <div key={key}>
+                <label htmlFor={`sg-${key}`} className={labelCls}>{tr(label)}</label>
+                <input id={`sg-${key}`} list="sg-accounts" value={settings[key] ?? ""} onChange={(e) => set(key, e.target.value.replace(/\D/g, ""))} placeholder={example} className={inputCls} />
+                {settings[key] && accounts.find((a) => a.code === settings[key]) && <p className="text-[11px] text-foreground/40 mt-1">{accounts.find((a) => a.code === settings[key])!.name}</p>}
+              </div>
+            ))}
+          </div>
+          <datalist id="sg-accounts">{accounts.map((a) => <option key={a.code} value={a.code}>{a.name}</option>)}</datalist>
         </section>
 
         <div className="flex justify-end">

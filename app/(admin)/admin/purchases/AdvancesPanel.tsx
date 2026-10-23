@@ -25,7 +25,7 @@ export type AdvanceMove = {
 };
 type Supplier = { id: string; name: string; document_number: string | null };
 
-const KIND_LABEL: Record<AdvanceKind, string> = { anticipo: "Anticipo", cruce: "Aplicado a un pago", devolucion: "Devolución" };
+const KIND_LABEL: Record<AdvanceKind, string> = { anticipo: "Anticipo", cruce: "Aplicado a un pago", devolucion: "Devolución de anticipo" };
 
 /**
  * Saldo a favor with suppliers: money paid beyond what a document owed (or
@@ -114,15 +114,15 @@ function MoveList({ moves, onDone }: { moves: AdvanceMove[]; onDone: (msg: strin
             <span className="flex items-center gap-2">
               <span className={m.siigo_status === "enviado" ? "text-green-700" : m.siigo_status === "error" ? "text-red-600" : "text-foreground/50"}>
                 {m.siigo_status === "enviado"
-                  ? tr("Anticipo {name}", { name: m.siigo_name ?? "" })
+                  ? tr("En Siigo: {name}", { name: m.siigo_name ?? "" })
                   : m.siigo_status === "error"
                     ? tr("Error al enviar")
                     : m.siigo_status === "pendiente"
-                      ? tr("Anticipo pendiente")
-                      : m.kind === "anticipo" ? tr("Registrado a mano en Siigo") : m.kind === "cruce" ? tr("Cruce a mano en Siigo") : tr("Devolución a mano en Siigo")}
+                      ? tr("Por enviar a Siigo")
+                      : m.kind === "anticipo" ? tr("Ya estaba en Siigo: {name}", { name: m.siigo_name ?? "" }) : tr("A mano en Siigo")}
               </span>
               {(m.siigo_status === "error" || m.siigo_status === "pendiente") && (
-                <button type="button" disabled={isPending} onClick={() => run(() => retryAdvance(m.id), tr("Anticipo enviado a Siigo."))} aria-label={tr("Reintentar")} className="text-foreground/50 hover:text-foreground disabled:opacity-40">
+                <button type="button" disabled={isPending} onClick={() => run(() => retryAdvance(m.id), tr("Enviado a Siigo."))} aria-label={tr("Reintentar")} className="text-foreground/50 hover:text-foreground disabled:opacity-40">
                   {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                 </button>
               )}
@@ -157,6 +157,7 @@ function AdvanceForm({ kind, suppliers, balances, today, onClose, onDone }: {
   const [method, setMethod] = useState<"bank" | "cash">("bank");
   const [notes, setNotes] = useState("");
   const [alreadyInSiigo, setAlreadyInSiigo] = useState(false);
+  const [siigoReceipt, setSiigoReceipt] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const balance = balances.get(supplierId) ?? 0;
@@ -165,11 +166,15 @@ function AdvanceForm({ kind, suppliers, balances, today, onClose, onDone }: {
     startTransition(async () => {
       setError("");
       if (!supplierId) return setError(tr("Elige el proveedor."));
-      const input = { supplierId, date, amount: Number(amount), method, notes, alreadyInSiigo };
+      const input = { supplierId, date, amount: Number(amount), method, notes, alreadyInSiigo, siigoReceipt };
       if (kind === "devolucion") {
         const res = await registerAdvanceRefund(input);
         if (!res.success) return setError(res.error);
-        return onDone(tr("Devolución registrada: entró a Flujo de Caja y bajó el saldo a favor. Regístrala también en Siigo."));
+        return onDone(
+          res.siigo.sent
+            ? tr("Devolución registrada: comprobante {name} en Siigo y entrada en Flujo de Caja.", { name: res.siigo.name ?? "" })
+            : tr("Devolución registrada en Flujo de Caja, pero Siigo no la recibió: {error}", { error: tr.msg(res.siigo.error ?? "") })
+        );
       }
       const res = await registerAdvance(input);
       if (!res.success) return setError(res.error);
@@ -178,7 +183,7 @@ function AdvanceForm({ kind, suppliers, balances, today, onClose, onDone }: {
         a.sent
           ? tr("Anticipo registrado: egreso {name} en Siigo y salida en Flujo de Caja.", { name: a.name ?? "" })
           : a.manual
-            ? tr("Anticipo registrado en la app y en Flujo de Caja (ya estaba en Siigo).")
+            ? tr("Anticipo registrado en la app y en Flujo de Caja (ya estaba en Siigo como {name}).", { name: a.name ?? "" })
             : tr("Anticipo registrado en Flujo de Caja, pero Siigo no lo recibió: {error}", { error: tr.msg(a.error ?? "") })
       );
     });
@@ -230,10 +235,17 @@ function AdvanceForm({ kind, suppliers, balances, today, onClose, onDone }: {
             <span>{tr("Ya está registrado en Siigo (no enviar el egreso de anticipo).")}</span>
           </label>
         )}
+        {kind === "anticipo" && alreadyInSiigo && (
+          <label className="block text-xs font-bold text-foreground/60 space-y-1">
+            <span>{tr("Número del egreso de anticipo en Siigo")}</span>
+            <input value={siigoReceipt} onChange={(e) => setSiigoReceipt(e.target.value.toUpperCase())} placeholder="RP-1-48" className={field} />
+            <span className="block font-normal text-foreground/50">{tr("Con él, los cruces y devoluciones de este anticipo se envían a Siigo.")}</span>
+          </label>
+        )}
         <p className="text-[11px] text-foreground/50">
           {kind === "anticipo"
             ? tr("Sale en Flujo de Caja como anticipo (no es gasto) y va a Siigo como egreso de anticipo (cuenta 13300501).")
-            : tr("Entra en Flujo de Caja como devolución del anticipo (no es ingreso por ventas). En Siigo regístrala con un recibo de caja contra la cuenta 13300501.")}
+            : tr("Entra en Flujo de Caja como devolución del anticipo (no es ingreso por ventas). En Siigo va un comprobante contable: banco contra la cuenta 13300501, cruzando el egreso del anticipo.")}
         </p>
         {error && <p className="text-xs text-red-600 break-words">{tr.msg(error)}</p>}
         <div className="flex justify-end gap-2">

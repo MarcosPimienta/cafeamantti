@@ -118,3 +118,27 @@ export function advanceUseProblems(documentBalance: number, available: number, a
   else if (amount > available + 0.5) p.push("El proveedor no tiene saldo a favor suficiente.");
   return p;
 }
+
+/**
+ * Which anticipos a cruce or devolución of `amount` takes, oldest first:
+ * each anticipo has what it was minus what earlier moves already took.
+ */
+export function allocateAdvances(
+  moves: { id: string; kind: AdvanceKind | string; amount: number | string; move_date: string; siigo_name?: string | null; applied?: { advance_id: string; amount: number }[] | null }[],
+  amount: number
+): { advance_id: string; receipt: string | null; date: string; amount: number }[] {
+  const taken = new Map<string, number>();
+  for (const m of moves) for (const a of m.applied ?? []) taken.set(a.advance_id, (taken.get(a.advance_id) ?? 0) + num(a.amount));
+  const out: { advance_id: string; receipt: string | null; date: string; amount: number }[] = [];
+  let left = round2(amount);
+  const anticipos = moves.filter((m) => m.kind === "anticipo").sort((a, b) => a.move_date.localeCompare(b.move_date));
+  for (const a of anticipos) {
+    if (left <= 0) break;
+    const free = round2(num(a.amount) - (taken.get(a.id) ?? 0));
+    if (free <= 0) continue;
+    const use = round2(Math.min(free, left));
+    out.push({ advance_id: a.id, receipt: a.siigo_name ?? null, date: a.move_date, amount: use });
+    left = round2(left - use);
+  }
+  return out;
+}

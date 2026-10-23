@@ -263,10 +263,10 @@ export function PaymentList({ payments, onDone }: { payments: PayablePayment[]; 
             <span>{p.payment_date} · {tr(METHOD_LABEL[p.method])} · <strong>{cop(Number(p.amount))}</strong>{p.notes ? ` · ${p.notes}` : ""}</span>
             <span className="flex items-center gap-2">
               <span className={p.siigo_status === "enviado" ? "text-green-700" : p.siigo_status === "error" ? "text-red-600" : "text-foreground/50"}>
-                {p.method === "advance" ? tr("Cruce del anticipo a mano en Siigo") : p.siigo_status === "enviado" ? tr("Egreso {name}", { name: p.siigo_name ?? "" }) : p.siigo_status === "no_aplica" ? tr("Egreso a mano en Siigo") : p.siigo_status === "error" ? tr("Error al enviar") : tr("Egreso pendiente")}
+                {p.method === "advance" && p.siigo_status === "enviado" ? tr("Cruce {name}", { name: p.siigo_name ?? "" }) : p.method === "advance" && p.siigo_status === "pendiente" ? tr("Cruce pendiente") : p.siigo_status === "enviado" ? tr("Egreso {name}", { name: p.siigo_name ?? "" }) : p.siigo_status === "no_aplica" ? tr("Egreso a mano en Siigo") : p.siigo_status === "error" ? tr("Error al enviar") : tr("Egreso pendiente")}
               </span>
               {(p.siigo_status === "error" || p.siigo_status === "pendiente") && (
-                <button type="button" disabled={isPending} onClick={() => run(() => retryPayablePayment(p.id), tr("Egreso enviado a Siigo."))} aria-label={tr("Reintentar")} className="text-foreground/50 hover:text-foreground disabled:opacity-40">
+                <button type="button" disabled={isPending} onClick={() => run(() => retryPayablePayment(p.id), tr("Enviado a Siigo."))} aria-label={tr("Reintentar")} className="text-foreground/50 hover:text-foreground disabled:opacity-40">
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               )}

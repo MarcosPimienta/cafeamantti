@@ -77,7 +77,7 @@ const DEFAULTS: Record<string, () => Row> = {
   invoice_payments: () => ({ siigo_status: "pendiente", siigo_voucher_id: null }),
   purchase_bills: () => ({ status: "borrador", siigo_id: null, siigo_name: null }),
   payable_payments: () => ({ siigo_status: "pendiente", siigo_id: null, expense_ids: [] }),
-  supplier_advances: () => ({ siigo_status: "pendiente", siigo_id: null, siigo_name: null, payment_id: null, expense_id: null }),
+  supplier_advances: () => ({ siigo_status: "pendiente", siigo_id: null, siigo_name: null, payment_id: null, expense_id: null, applied: [] }),
 };
 
 export type FakeError = { message: string; code?: string };

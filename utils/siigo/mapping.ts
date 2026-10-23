@@ -69,6 +69,13 @@ export type SiigoSettings = {
   support_retentions?: Record<string, number>;
   /** Ledger account of a withholding the business assumes (e.g. 53152002 Otros impuestos asumidos). */
   support_assumed_account?: string | null;
+  /** Journal (comprobante contable) type that crosses and returns supplier advances (GET /v1/document-types?type=CC). */
+  advance_journal_document_id?: number | null;
+  /** Ledger accounts of those journals: advances (13300501), suppliers owed (22050501), and where a refund comes in. */
+  advance_account?: string | null;
+  payable_account?: string | null;
+  refund_bank_account?: string | null;
+  refund_cash_account?: string | null;
 };
 
 export const DEFAULT_SIIGO_SETTINGS: SiigoSettings = {
@@ -78,6 +85,10 @@ export const DEFAULT_SIIGO_SETTINGS: SiigoSettings = {
   expense_accounts: {},
   fixed_asset_codes: {},
   support_retentions: {},
+  advance_account: "13300501",
+  payable_account: "22050501",
+  refund_bank_account: "11200501",
+  refund_cash_account: "11050501",
 };
 
 export function normalizeSiigoSettings(raw: unknown): SiigoSettings {
@@ -835,6 +846,88 @@ export function buildAdvancePaymentPayload(
     supplier: { identification, branch_office: 0 },
     payment: { id: paymentId ?? 0, value },
     observations: ["Anticipo · saldo a favor de Café Amantti", a.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+  };
+  return { payload, problems };
+}
+
+/** What a cruce or devolución takes from one anticipo (its Siigo egreso, e.g. RP-1-73). */
+export type AdvanceAllocation = { receipt: string | null; date: string; amount: number };
+
+function advanceJournalProblems(allocations: AdvanceAllocation[], settings: SiigoSettings, identification: string): string[] {
+  const problems: string[] = [];
+  if (!settings.advance_journal_document_id) problems.push("Elige el comprobante contable de los anticipos en Ajustes → Siigo.");
+  if (!settings.advance_account) problems.push("Configura la cuenta de anticipos en Ajustes → Siigo.");
+  if (!identification) problems.push("El proveedor no tiene identificación.");
+  if (!allocations.length) problems.push("No hay anticipo que cruzar.");
+  for (const a of allocations) {
+    if (!splitDocumentName(a.receipt)) problems.push(`El anticipo del ${a.date} no tiene su egreso de Siigo (RP): envíalo o anota su número.`);
+  }
+  return problems;
+}
+
+const advanceCredits = (allocations: AdvanceAllocation[], account: string, identification: string) =>
+  allocations.map((a) => {
+    const rp = splitDocumentName(a.receipt) ?? { prefix: "", consecutive: 0 };
+    return {
+      account: { code: account, movement: "Credit" },
+      customer: { identification, branch_office: 0 },
+      due: { prefix: rp.prefix, consecutive: rp.consecutive, quote: 1, date: a.date },
+      description: "A proveedores",
+      value: round2(a.amount),
+    };
+  });
+
+/**
+ * POST /v1/journals body that crosses a supplier's advance against what a
+ * document owes them (as the accountant does by hand): debit the payable
+ * against the document, credit 13300501 against each anticipo egreso.
+ */
+export function buildAdvanceCrossPayload(
+  c: { date: string; supplier_identification: string; due: { prefix: string; consecutive: string | number; date: string }; label: string; allocations: AdvanceAllocation[] },
+  settings: SiigoSettings
+) {
+  const { identification } = cleanIdentification(c.supplier_identification);
+  const problems = advanceJournalProblems(c.allocations, settings, identification);
+  if (!settings.payable_account) problems.push("Configura la cuenta de proveedores por pagar en Ajustes → Siigo.");
+  const consecutive = Number(String(c.due.consecutive).replace(/\D/g, ""));
+  if (!consecutive) problems.push("El documento no tiene número para cruzar el pago.");
+  const total = round2(c.allocations.reduce((s, a) => s + a.amount, 0));
+  const payload = {
+    document: { id: settings.advance_journal_document_id ?? 0 },
+    date: c.date,
+    items: [
+      {
+        account: { code: settings.payable_account ?? "", movement: "Debit" },
+        customer: { identification, branch_office: 0 },
+        due: { prefix: c.due.prefix, consecutive, quote: 1, date: c.due.date },
+        description: "Proveedores nacionales",
+        value: total,
+      },
+      ...advanceCredits(c.allocations, settings.advance_account ?? "", identification),
+    ],
+    observations: `Cruce de anticipo con ${c.label} · Café Amantti`.slice(0, 4000),
+  };
+  return { payload, problems };
+}
+
+/** POST /v1/journals body for money a supplier gave back: debit the bank (or cash), credit 13300501 against each anticipo. */
+export function buildAdvanceRefundPayload(
+  r: { date: string; method: "bank" | "cash"; supplier_identification: string; allocations: AdvanceAllocation[]; notes?: string | null },
+  settings: SiigoSettings
+) {
+  const { identification } = cleanIdentification(r.supplier_identification);
+  const problems = advanceJournalProblems(r.allocations, settings, identification);
+  const into = r.method === "cash" ? settings.refund_cash_account : settings.refund_bank_account;
+  if (!into) problems.push(r.method === "cash" ? "Configura la cuenta de caja para devoluciones en Ajustes → Siigo." : "Configura la cuenta de banco para devoluciones en Ajustes → Siigo.");
+  const total = round2(r.allocations.reduce((s, a) => s + a.amount, 0));
+  const payload = {
+    document: { id: settings.advance_journal_document_id ?? 0 },
+    date: r.date,
+    items: [
+      { account: { code: into ?? "", movement: "Debit" }, customer: { identification, branch_office: 0 }, description: "Devolución de anticipo", value: total },
+      ...advanceCredits(r.allocations, settings.advance_account ?? "", identification),
+    ],
+    observations: ["Devolución de anticipo · Café Amantti", r.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
   };
   return { payload, problems };
 }

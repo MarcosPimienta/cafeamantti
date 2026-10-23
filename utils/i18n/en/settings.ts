@@ -120,4 +120,12 @@ export const settings: Record<string, string> = {
   "Producto en Siigo para {name}": "Siigo product for {name}",
   "Elegir {name}": "Choose {name}",
   "Tipo de {name}": "Type of {name}",
+  "Saldos a favor con proveedores (anticipos)": "Credit balances with suppliers (advances)",
+  "El anticipo va como egreso de anticipo (tipo de recibo de pago de arriba). Al usarlo en un pago o cuando el proveedor lo devuelve, va un comprobante contable que cruza la cuenta de anticipos contra el egreso del anticipo (RP).": "The advance goes as an advance payment (the payment receipt type above). When it is used in a payment or the supplier returns it, a journal offsets the advances account against the advance payment (RP).",
+  "Comprobante contable de cruces y devoluciones": "Journal type for offsets and refunds",
+  "Tu contadora usa «Egreso» (CC-3) para los cruces.": "Your accountant uses “Egreso” (CC-3) for offsets.",
+  "Cuenta de anticipos a proveedores": "Supplier advances account",
+  "Cuenta de proveedores por pagar": "Suppliers payable account",
+  "Devoluciones · cuenta de banco": "Refunds · bank account",
+  "Devoluciones · cuenta de caja": "Refunds · cash account",
 };
