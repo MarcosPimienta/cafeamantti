@@ -23,7 +23,14 @@
  *          "Mantenimiento y Reparaciones" (según criterio contable)
  *  OPEX → Todo lo demás
  */
-export type ExpenseType = 'OPEX' | 'CAPEX' | 'COGS';
+export type ExpenseType = 'OPEX' | 'CAPEX' | 'COGS' | 'ANTICIPO';
+
+/**
+ * Salidas que no son gasto: plata entregada a un proveedor como saldo a
+ * favor (PUC 13300501). Mueven la caja pero nunca el P&L; se manejan desde
+ * Compras (+ al salir, − al cruzarse o devolverse).
+ */
+export const ADVANCE_CATEGORY = 'Anticipos a proveedores';
 
 /**
  * Tipo de movimiento de inventario financiero.

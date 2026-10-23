@@ -22,7 +22,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { annulBill, createBill, deletePayablePayment, registerPayablePayment, retryBill, retryPayablePayment, updateBill } from "../actions";
+import { annulBill, createBill, deleteAdvance, deletePayablePayment, getAdvanceBalance, registerAdvance, registerAdvanceRefund, registerPayablePayment, retryBill, retryPayablePayment, updateBill } from "../actions";
 
 const SETTINGS = { purchase_document_id: 18133, purchase_payment_id: 4183, payment_receipt_document_id: 18132, payout_bank_id: 4182, payout_cash_id: 4177, expense_accounts: {}, fixed_asset_codes: {} };
 const CC = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
@@ -202,5 +202,79 @@ describe("editing a purchase invoice not yet in Siigo", () => {
     expect(bill().provider_number).toBe("388");
     db.rows("purchase_bills")[0].siigo_id = "fc-x";
     expect(await updateBill(bill().id, coffee)).toMatchObject({ success: false, error: expect.stringContaining("ya está en Siigo") });
+  });
+});
+
+describe("saldo a favor (supplier advances)", () => {
+  const receipts = (type: string) => h.calls.filter((c) => c.path === "/v1/payment-receipts" && (c.opts?.body as { type?: string })?.type === type);
+  const moves = () => db.rows("supplier_advances");
+  const anticipoRows = () => expenses().filter((e) => e.expense_type === "ANTICIPO");
+  const balance = async () => ((await getAdvanceBalance({ billId: bill().id })) as { balance: number }).balance;
+
+  beforeEach(async () => {
+    h.responses["POST /v1/purchases"] = { id: "fc-1", name: "FC-1-240" };
+    h.responses["POST /v1/payment-receipts"] = { id: "rp-1", name: "RP-1-90" };
+    await createBill(input); // owes 386.750
+  });
+
+  it("an overpayment is refused unless the excess is kept as saldo a favor", async () => {
+    expect(await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 400000, method: "bank" })).toMatchObject({ success: false, error: "El pago supera el saldo por pagar." });
+    expect(db.rows("payable_payments")).toHaveLength(0);
+    expect(expenses()).toHaveLength(0);
+  });
+
+  it("the excess becomes an advance: its own Siigo egreso and an ANTICIPO outflow that is not an expense", async () => {
+    const res = await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 400000, method: "bank", keepExcess: true });
+    expect(res).toMatchObject({ success: true, siigo: { sent: true }, advance: { amount: 13250, sent: true, name: "RP-1-90" } });
+    expect(db.rows("payable_payments")[0]).toMatchObject({ amount: 386750, method: "bank" });
+    expect(receipts("DebtPayment")[0].opts?.body).toMatchObject({ payment: { value: 386750 } });
+    expect(receipts("AdvancePayment")[0].opts).toMatchObject({ body: { supplier: { identification: "901980434" }, payment: { id: 4182, value: 13250 } }, idempotencyKey: expect.stringContaining("ANT") });
+    expect(moves()[0]).toMatchObject({ kind: "anticipo", amount: 13250, siigo_status: "enviado", payment_id: db.rows("payable_payments")[0].id });
+    expect(anticipoRows()).toEqual([expect.objectContaining({ amount: 13250, category: "Anticipos a proveedores", supplier_id: "sup1" })]);
+    expect(await balance()).toBe(13250);
+  });
+
+  it("the balance pays the next invoice: no Siigo egreso, the expense goes in and the ANTICIPO comes back out", async () => {
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 500000, method: "bank", keepExcess: true });
+    h.responses["POST /v1/purchases"] = { id: "fc-2", name: "FC-1-241" };
+    await createBill({ ...input, providerNumber: "1970" });
+    const next = db.rows("purchase_bills")[1];
+    h.calls = [];
+    expect(await registerPayablePayment({ billId: next.id }, { date: "2026-10-25", amount: 200000, method: "advance" })).toMatchObject({ success: false, error: "El proveedor no tiene saldo a favor suficiente." });
+    const res = await registerPayablePayment({ billId: next.id }, { date: "2026-10-25", amount: 100000, method: "advance" });
+    expect(res).toMatchObject({ success: true, crossed: 100000 });
+    expect(h.calls).toHaveLength(0);
+    const pay = db.rows("payable_payments").find((p) => p.method === "advance")!;
+    expect(pay).toMatchObject({ amount: 100000, siigo_status: "no_aplica" });
+    const day = expenses().filter((e) => pay.expense_ids.includes(e.id));
+    expect(day.reduce((s, e) => s + Number(e.amount), 0)).toBe(0); // cash doesn't move that day
+    expect(day).toEqual(expect.arrayContaining([expect.objectContaining({ category: EMPAQUES, amount: 100000 }), expect.objectContaining({ expense_type: "ANTICIPO", amount: -100000 })]));
+    expect(moves().find((m) => m.kind === "cruce")).toMatchObject({ amount: 100000, payment_id: pay.id });
+    expect(await balance()).toBe(13250);
+
+    // The overpayment can't go while its balance is in use; the cruce can.
+    db.rows("supplier_advances")[0].siigo_status = "error";
+    db.rows("payable_payments")[0].siigo_status = "error";
+    expect(await deletePayablePayment(db.rows("payable_payments")[0].id)).toMatchObject({ success: false, error: expect.stringContaining("ya se usó") });
+    expect(await deletePayablePayment(pay.id)).toMatchObject({ success: true });
+    db.rows("supplier_advances").splice(db.rows("supplier_advances").findIndex((m) => m.kind === "cruce"), 1); // ON DELETE CASCADE
+    expect(expenses().filter((e) => pay.expense_ids.includes(e.id))).toHaveLength(0);
+    expect(await deletePayablePayment(db.rows("payable_payments")[0].id)).toMatchObject({ success: true });
+    expect(anticipoRows()).toHaveLength(0);
+  });
+
+  it("a past advance already in Siigo is recorded without sending; a refund lowers the balance and comes back into cash", async () => {
+    h.calls = [];
+    expect(await registerAdvance({ supplierId: "sup1", date: "2026-10-10", amount: 50000, method: "bank", alreadyInSiigo: true })).toMatchObject({ success: true, advance: { manual: true, sent: false } });
+    expect(h.calls).toHaveLength(0);
+    expect(await registerAdvanceRefund({ supplierId: "sup1", date: "2026-10-22", amount: 60000, method: "bank" })).toMatchObject({ success: false, error: expect.stringContaining("supera el saldo") });
+    expect(await registerAdvanceRefund({ supplierId: "sup1", date: "2026-10-22", amount: 20000, method: "bank" })).toMatchObject({ success: true });
+    expect(anticipoRows().map((e) => Number(e.amount)).sort((a, b) => a - b)).toEqual([-20000, 50000]);
+    expect(await balance()).toBe(30000);
+    const anticipo = moves().find((m) => m.kind === "anticipo")!;
+    expect(await deleteAdvance(anticipo.id)).toMatchObject({ success: false, error: expect.stringContaining("ya se usó") });
+    expect(await deleteAdvance(moves().find((m) => m.kind === "devolucion")!.id)).toMatchObject({ success: true });
+    expect(await deleteAdvance(anticipo.id)).toMatchObject({ success: true });
+    expect(anticipoRows()).toHaveLength(0);
   });
 });

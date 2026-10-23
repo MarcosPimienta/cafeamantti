@@ -812,6 +812,33 @@ export function buildPaymentReceiptPayload(
   return { payload, problems };
 }
 
+/**
+ * POST /v1/payment-receipts body: an "AdvancePayment" egreso — money given
+ * to a supplier with no document to cross. Siigo books it in the advances
+ * account set on the receipt type (13300501 "A proveedores").
+ */
+export function buildAdvancePaymentPayload(
+  a: { date: string; amount: number; method: "bank" | "cash"; supplier_identification: string; notes?: string | null },
+  settings: SiigoSettings
+) {
+  const problems: string[] = [];
+  if (!settings.payment_receipt_document_id) problems.push("Elige el tipo de recibo de pago/egreso en Ajustes → Siigo.");
+  const paymentId = a.method === "cash" ? settings.payout_cash_id : settings.payout_bank_id;
+  if (!paymentId) problems.push("Elige la forma de pago de los egresos para este medio en Ajustes → Siigo.");
+  const { identification } = cleanIdentification(a.supplier_identification);
+  if (!identification) problems.push("El proveedor no tiene identificación.");
+  const value = round2(num(a.amount));
+  const payload = {
+    document: { id: settings.payment_receipt_document_id ?? 0 },
+    date: a.date,
+    type: "AdvancePayment",
+    supplier: { identification, branch_office: 0 },
+    payment: { id: paymentId ?? 0, value },
+    observations: ["Anticipo · saldo a favor de Café Amantti", a.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+  };
+  return { payload, problems };
+}
+
 /** A support document as Siigo returns it (GET /v1/purchase-support-documents/{id}). */
 export type SiigoSupportDocument = {
   id: string;

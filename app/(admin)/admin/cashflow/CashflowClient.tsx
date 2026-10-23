@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useTransition, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import {
   ArrowDownCircle, ArrowUpCircle, BarChart2, History, Plus, Upload,
   Image as ImageIcon, Trash2, X, Loader2, Check, Calendar, AlertTriangle,
@@ -61,6 +62,7 @@ const EXPENSE_TYPE_META: Record<ExpenseType, { label: string; color: string; bg:
   OPEX:  { label: "OPEX",  color: "text-blue-700",   bg: "bg-blue-100",   desc: "Gasto operativo corriente" },
   COGS:  { label: "COGS",  color: "text-orange-700", bg: "bg-orange-100", desc: "Costo directo de ventas" },
   CAPEX: { label: "CAPEX", color: "text-purple-700", bg: "bg-purple-100", desc: "Activo fijo / inversión" },
+  ANTICIPO: { label: "Anticipo", color: "text-teal-700", bg: "bg-teal-100", desc: "Saldo a favor con un proveedor (no es gasto)" },
 };
 
 const fmt = (val: number) =>
@@ -2018,7 +2020,9 @@ export default function CashflowClient() {
                                 : <span className="text-foreground/30">—</span>}
                             </td>
                             <td className="px-5 py-4 text-center">
-                              {era === 'v2' ? (
+                              {exp.expense_type === 'ANTICIPO' ? (
+                                <Link href="/admin/purchases" className="text-xs font-bold text-[#C59F59] hover:underline">{tr("Se maneja en Compras")}</Link>
+                              ) : era === 'v2' ? (
                                 <div className="flex items-center justify-center gap-1">
                                   <button
                                     onClick={() => {

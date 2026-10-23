@@ -7,6 +7,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Pencil, Plus, RefreshCw, Trash2, 
 import { annulBill, deletePayablePayment, retryBill, retryPayablePayment } from "./actions";
 import BillForm, { type EditableBill } from "./BillForm";
 import PayablePaymentForm from "./PayablePaymentForm";
+import AdvancesPanel, { type AdvanceMove } from "./AdvancesPanel";
 import { payableBalance, paidOf, type BillLine, type PayableMethod } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
@@ -43,7 +44,7 @@ type Bill = {
   payments: PayablePayment[];
 };
 type Filter = "pendientes" | "vencidas" | "pagadas" | "todas";
-const METHOD_LABEL: Record<PayableMethod, string> = { bank: "Banco", cash: "Efectivo" };
+const METHOD_LABEL: Record<PayableMethod, string> = { bank: "Banco", cash: "Efectivo", advance: "Saldo a favor" };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export default function PurchasesClient(props: {
@@ -52,6 +53,7 @@ export default function PurchasesClient(props: {
   suppliers: { id: string; name: string; document_type: string | null; document_number: string | null }[];
   cuentasCobro: { id: string; number: number; issuer_name: string; total: number; paid: number; date: string | null }[];
   categories: string[];
+  advances: AdvanceMove[] | null;
   inventory: { id: string; product_code: string; product_name: string; unit: string | null }[];
   accounts: { code: string; name: string }[];
   defaultAccounts: Record<string, string>;
@@ -107,6 +109,8 @@ export default function PurchasesClient(props: {
         </div>
       )}
 
+      <AdvancesPanel moves={props.advances} suppliers={props.suppliers} today={props.today} onDone={done} />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {([["pendientes", "Por pagar"], ["vencidas", "Vencidas"], ["pagadas", "Pagadas"], ["todas", "Todas"]] as [Filter, string][]).map(([f, label]) => (
@@ -122,6 +126,7 @@ export default function PurchasesClient(props: {
         </button>
       </div>
       {!props.configured && <p className="text-xs text-red-600">{tr("Siigo no está configurado en el servidor.")}</p>}
+
 
       {shown.length === 0 ? (
         <p className="text-sm text-foreground/50">{bills.length === 0 ? tr("Aún no hay facturas de compra. Registra la primera con «Nueva factura de compra».") : tr("No hay facturas en este filtro.")}</p>
@@ -258,7 +263,7 @@ export function PaymentList({ payments, onDone }: { payments: PayablePayment[]; 
             <span>{p.payment_date} · {tr(METHOD_LABEL[p.method])} · <strong>{cop(Number(p.amount))}</strong>{p.notes ? ` · ${p.notes}` : ""}</span>
             <span className="flex items-center gap-2">
               <span className={p.siigo_status === "enviado" ? "text-green-700" : p.siigo_status === "error" ? "text-red-600" : "text-foreground/50"}>
-                {p.siigo_status === "enviado" ? tr("Egreso {name}", { name: p.siigo_name ?? "" }) : p.siigo_status === "no_aplica" ? tr("Egreso a mano en Siigo") : p.siigo_status === "error" ? tr("Error al enviar") : tr("Egreso pendiente")}
+                {p.method === "advance" ? tr("Cruce del anticipo a mano en Siigo") : p.siigo_status === "enviado" ? tr("Egreso {name}", { name: p.siigo_name ?? "" }) : p.siigo_status === "no_aplica" ? tr("Egreso a mano en Siigo") : p.siigo_status === "error" ? tr("Error al enviar") : tr("Egreso pendiente")}
               </span>
               {(p.siigo_status === "error" || p.siigo_status === "pendiente") && (
                 <button type="button" disabled={isPending} onClick={() => run(() => retryPayablePayment(p.id), tr("Egreso enviado a Siigo."))} aria-label={tr("Reintentar")} className="text-foreground/50 hover:text-foreground disabled:opacity-40">

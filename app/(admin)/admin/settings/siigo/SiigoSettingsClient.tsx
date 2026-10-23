@@ -46,7 +46,7 @@ const labelCls = "block text-[10px] font-bold uppercase tracking-widest text-for
 const inputCls = "w-full px-3 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20";
 const card = "bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-4";
 
-const ENTITY_LABEL: Record<string, string> = { invoice: "Factura", customer: "Cliente", product: "Producto", purchase: "Compra", connection: "Conexión", voucher: "Recibo de caja", support_document: "Documento soporte", credit_note: "Nota crédito", payment_receipt: "Egreso" };
+const ENTITY_LABEL: Record<string, string> = { invoice: "Factura", customer: "Cliente", product: "Producto", purchase: "Compra", connection: "Conexión", voucher: "Recibo de caja", support_document: "Documento soporte", credit_note: "Nota crédito", payment_receipt: "Egreso", supplier_advance: "Anticipo" };
 
 function IdSelect({ id, label, value, options, onChange, hint }: {
   id: string; label: string; value: number | null | undefined; options: Option[] | null; onChange: (v: number | null) => void; hint?: string;

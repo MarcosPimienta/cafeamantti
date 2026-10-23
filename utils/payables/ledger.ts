@@ -18,7 +18,8 @@ export type BillLine = {
   inventory_qty?: number | null;
 };
 
-export type PayableMethod = "bank" | "cash";
+/** "advance" = paid with the supplier's balance (saldo a favor), no money moves. */
+export type PayableMethod = "bank" | "cash" | "advance";
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -92,4 +93,28 @@ export function allocatePayment(lines: BillLine[], amount: number): { category: 
   const diff = round2(amount - parts.reduce((s, x) => s + x.amount, 0));
   if (diff !== 0 && parts.length) parts.sort((a, b) => b.amount - a.amount)[0].amount = round2(parts[0].amount + diff);
   return parts;
+}
+
+// ── Saldo a favor (anticipos) ───────────────────────────────
+
+export type AdvanceKind = "anticipo" | "cruce" | "devolucion";
+
+/** The supplier's balance: what was advanced minus what was crossed or returned. */
+export function advanceBalance(moves: { kind: AdvanceKind | string; amount: number | string }[]): number {
+  return round2(moves.reduce((s, m) => s + (m.kind === "anticipo" ? num(m.amount) : -num(m.amount)), 0));
+}
+
+/** A transfer against a document: what pays it and what is left over as an advance. */
+export function splitPayment(balance: number, amount: number): { toDocument: number; excess: number } {
+  const toDocument = round2(Math.min(Math.max(0, balance), amount));
+  return { toDocument, excess: round2(amount - toDocument) };
+}
+
+/** What stops paying a document with the supplier's balance. */
+export function advanceUseProblems(documentBalance: number, available: number, amount: number): string[] {
+  const p: string[] = [];
+  if (!(Number.isFinite(amount) && amount > 0)) p.push("El valor debe ser mayor a cero.");
+  else if (amount > documentBalance + 0.5) p.push("El pago supera el saldo por pagar.");
+  else if (amount > available + 0.5) p.push("El proveedor no tiene saldo a favor suficiente.");
+  return p;
 }
