@@ -88,15 +88,23 @@ describe("createPendingOrder — the server sets the price", () => {
 
 describe("createPendingOrder — the KRUPS combo", () => {
   const combo = { id: "krups-coffee-crush", nameKey: "krups.comboName", price: 1, quantity: 1, weight: "combo", grind: "whole" };
+  // Machines are sold on demand (IMUSA ships them): no stock, only the 20-combo limit.
+  const sell = (n: number, paid = true) => {
+    for (let i = 0; i < n; i++) {
+      db.rows("orders").push({ id: `sold-${db.rows("orders").length}`, status: "pending", payment_status: paid ? "paid" : "pending" });
+      db.rows("order_items").push({ id: `si-${db.rows("order_items").length}`, order_id: db.rows("orders").at(-1)!.id, product_id: "krups-coffee-crush", quantity: 1 });
+    }
+  };
   beforeEach(() => {
-    db.rows("inventory").push({ id: "inv-krups", product_code: "EQP-KRUPS-CC", current_stock: 20 }, { id: "inv-500", product_code: "CAFT-500G", current_stock: 30 });
+    db.rows("inventory").push({ id: "inv-krups", product_code: "EQP-KRUPS-CC", current_stock: 0 }, { id: "inv-500", product_code: "CAFT-500G", current_stock: 30 });
     h.admin = createFakeClient(db, null);
   });
 
   it("charges $1.588.000 with free shipping and goes into the order as the machine and the 500 g bag", async () => {
     const res = await createPendingOrder([combo], 0, bello);
     expect(res).toMatchObject({ success: true, totalAmount: 1588000, shippingCost: 0 });
-    expect(db.rows("order_items").map((i) => [i.product_id, i.inventory_id, i.weight, i.grind, i.price_at_time])).toEqual([
+    const order = res.orderId!;
+    expect(db.rows("order_items").filter((i) => i.order_id === order).map((i) => [i.product_id, i.inventory_id, i.weight, i.grind, i.price_at_time])).toEqual([
       ["krups-coffee-crush", "inv-krups", "unidad", null, 1535000],
       ["firma", "inv-500", "500g", "whole", 53000],
     ]);
@@ -107,12 +115,14 @@ describe("createPendingOrder — the KRUPS combo", () => {
     expect(res).toMatchObject({ success: true, totalAmount: 1588000 + 2 * 25000, shippingCost: 0 });
   });
 
-  it("only sells while machines are in stock", async () => {
-    db.rows("inventory").find((r) => r.product_code === "EQP-KRUPS-CC")!.current_stock = 1;
+  it("sells with no machines in stock, up to 20 paid combos", async () => {
+    sell(18);
+    sell(5, false); // unpaid orders don't use up the limit
+    expect(await createPendingOrder([{ ...combo, quantity: 2 }], 0, bello)).toMatchObject({ success: true });
+    sell(1);
     expect(await createPendingOrder([{ ...combo, quantity: 2 }], 0, bello)).toMatchObject({ success: false, error: expect.stringContaining("solo quedan 1") });
-    db.rows("inventory").find((r) => r.product_code === "EQP-KRUPS-CC")!.current_stock = 0;
+    sell(1);
     expect(await createPendingOrder([combo], 0, bello)).toMatchObject({ success: false, error: expect.stringContaining("agotado") });
-    expect(db.rows("orders")).toHaveLength(0);
   });
 
   it("a combo line with a bag size is not sold", async () => {

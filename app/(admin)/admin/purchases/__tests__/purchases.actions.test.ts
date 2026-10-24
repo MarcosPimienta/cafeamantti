@@ -151,7 +151,10 @@ describe("purchase invoices that bring stock in", () => {
   });
 
   it("services don't take stock; a product without quantity is asked for", async () => {
-    expect(await createBill({ ...coffee, lines: [{ ...coffee.lines[0], inventory_id: "srv", inventory_qty: 1 }] })).toMatchObject({ success: false, error: expect.stringContaining("es un servicio") });
+    expect(await createBill({ ...coffee, lines: [{ ...coffee.lines[0], inventory_id: "srv", inventory_qty: 1 }] })).toMatchObject({ success: false, error: expect.stringContaining("no lleva inventario") });
+    // Nor the KRUPS machine: IMUSA ships each one sold, it is never stocked.
+    db.rows("inventory").push({ id: "krups", product_code: "EQP-KRUPS-CC", product_name: "Cafetera KRUPS", unit: "unidad", category: "equipo", current_stock: 0 });
+    expect(await createBill({ ...coffee, lines: [{ ...coffee.lines[0], inventory_id: "krups", inventory_qty: 1 }] })).toMatchObject({ success: false, error: expect.stringContaining("venta por pedido") });
     expect(db.rows("purchase_bills")).toHaveLength(0);
     expect(await createBill({ ...coffee, lines: [{ ...coffee.lines[0], inventory_qty: 0 }] })).toMatchObject({ success: false, error: expect.stringContaining("indica cuánto entra") });
   });

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { Check, Cog, Gauge, Ruler, ShieldCheck, ShoppingCart, Sparkles, Truck } from "lucide-react";
+import { Check, Cog, Gauge, Info, Ruler, ShieldCheck, ShoppingCart, Sparkles, Truck, X } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useCart } from "@/app/context/CartContext";
 import { getComboUnitsLeft } from "@/app/actions/combo";
@@ -52,10 +52,24 @@ export function KrupsSection({ onAdded }: { onAdded: () => void }) {
   const { addItem } = useCart();
   const [added, setAdded] = useState(false);
   const [unitsLeft, setUnitsLeft] = useState<number | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   useEffect(() => {
     getComboUnitsLeft(COMBO_ID).then(setUnitsLeft).catch(() => {});
   }, []);
+
+  // The details pop-up: Esc closes it, and the page behind doesn't scroll.
+  useEffect(() => {
+    if (!infoOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setInfoOpen(false);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [infoOpen]);
 
   const soldOut = unitsLeft === 0;
   const spec = (v: TranslationKey | string) => (v.startsWith("krups.") ? t(v as TranslationKey) : v);
@@ -63,6 +77,7 @@ export function KrupsSection({ onAdded }: { onAdded: () => void }) {
   const addToCart = () => {
     addItem({ id: COMBO_ID, nameKey: "krups.comboName", price: COMBO.price, weight: COMBO_WEIGHT, grind: "whole", image: IMAGE });
     setAdded(true);
+    setInfoOpen(false);
     onAdded();
     setTimeout(() => setAdded(false), 2000);
   };
@@ -73,16 +88,26 @@ export function KrupsSection({ onAdded }: { onAdded: () => void }) {
       <p style={{ margin: 0, fontSize: 12, letterSpacing: ".18em", textTransform: "uppercase", color: soldOut ? "#f87171" : GOLD }}>
         {soldOut ? t("krups.soldOut") : unitsLeft !== null ? t("krups.unitsLeft").replace("{n}", String(unitsLeft)) : t("krups.limited")}
       </p>
-      <button
-        type="button"
-        onClick={addToCart}
-        disabled={soldOut}
-        className="inline-flex items-center justify-center gap-3 rounded-sm px-10 py-4 text-[11px] font-bold uppercase tracking-[0.2em] transition-colors disabled:opacity-40"
-        style={{ background: GOLD, color: "#0B0B0B" }}
-      >
-        {added ? <Check size={16} /> : <ShoppingCart size={16} />}
-        {soldOut ? t("krups.soldOut") : added ? t("krups.added") : t("krups.addToCart")}
-      </button>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: compact ? "center" : "flex-start" }}>
+        <button
+          type="button"
+          onClick={addToCart}
+          disabled={soldOut}
+          className="inline-flex items-center justify-center gap-3 rounded-sm px-10 py-4 text-[11px] font-bold uppercase tracking-[0.2em] transition-colors disabled:opacity-40"
+          style={{ background: GOLD, color: "#0B0B0B" }}
+        >
+          {added ? <Check size={16} /> : <ShoppingCart size={16} />}
+          {soldOut ? t("krups.soldOut") : added ? t("krups.added") : t("krups.addToCart")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setInfoOpen(true)}
+          className="inline-flex items-center justify-center gap-3 rounded-sm px-8 py-4 text-[11px] font-bold uppercase tracking-[0.2em] transition-colors hover:bg-[#C2A878]/10"
+          style={{ border: `1px solid ${GOLD}`, color: GOLD }}
+        >
+          <Info size={16} /> {t("krups.moreInfo")}
+        </button>
+      </div>
     </div>
   );
 
@@ -122,10 +147,29 @@ export function KrupsSection({ onAdded }: { onAdded: () => void }) {
             </div>
           </section>
 
-          {/* Specs + what's included */}
-          <section className="grid gap-12 lg:grid-cols-[3fr_2fr]">
-            <div className="min-w-0">
-              <h2 className="heading-section" style={{ marginTop: 0, marginBottom: 32 }}>{t("krups.specsTitle")}</h2>
+          {/* Closing */}
+          <section className="flex flex-col items-center gap-8 text-center" style={{ borderTop: "1px solid rgba(194,168,120,.25)", paddingTop: 72 }}>
+            <h2 style={{ margin: 0, fontFamily: serif, fontStyle: "italic", fontSize: "clamp(26px, 4vw, 38px)", maxWidth: 720 }}>{t("krups.closingTitle")}</h2>
+            <p style={{ margin: 0, maxWidth: 680, lineHeight: 1.8, color: "rgba(244,241,237,.7)" }}>{t("krups.closingText")}</p>
+            {buyBox(true)}
+          </section>
+        </div>
+
+        {infoOpen && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setInfoOpen(false)}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="krups-info-title"
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-sm p-6 sm:p-10"
+              style={{ background: "#0B0B0B", border: "1px solid rgba(194,168,120,.25)" }}
+            >
+              <button type="button" onClick={() => setInfoOpen(false)} aria-label={t("krups.close")} className="absolute right-4 top-4 p-2 text-[#F4F1ED]/40 hover:text-[#F4F1ED]">
+                <X size={20} />
+              </button>
+              <p style={{ margin: 0, paddingRight: 40, fontSize: 11, letterSpacing: ".3em", textTransform: "uppercase", color: GOLD }}>KRUPS Coffee Crush Experience</p>
+              <h3 id="krups-info-title" style={{ margin: "10px 0 28px", fontFamily: serif, fontSize: "clamp(26px, 4vw, 36px)" }}>{t("krups.specsTitle")}</h3>
               <dl style={{ margin: 0 }}>
                 {SPECS.map(([label, value]) => (
                   <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-4 py-3 text-sm" style={{ borderBottom: "1px solid rgba(244,241,237,.08)" }}>
@@ -134,26 +178,29 @@ export function KrupsSection({ onAdded }: { onAdded: () => void }) {
                   </div>
                 ))}
               </dl>
-            </div>
-            <div className="min-w-0">
-              <h2 className="heading-section" style={{ marginTop: 0, marginBottom: 32 }}>{t("krups.includesTitle")}</h2>
-              <ul className="flex flex-col gap-4" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              <h3 style={{ margin: "40px 0 20px", fontFamily: serif, fontSize: "clamp(22px, 3vw, 28px)" }}>{t("krups.includesTitle")}</h3>
+              <ul className="flex flex-col gap-3" style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {(["krups.inc1", "krups.inc2", "krups.inc3", "krups.inc4"] as TranslationKey[]).map((k) => (
                   <li key={k} className="flex gap-3 text-sm leading-relaxed" style={{ color: "rgba(244,241,237,.8)" }}>
                     <Check size={16} color={GOLD} className="shrink-0 mt-0.5" /> {t(k)}
                   </li>
                 ))}
               </ul>
+              <div className="mt-10 flex flex-wrap items-center justify-between gap-4" style={{ borderTop: "1px solid rgba(194,168,120,.2)", paddingTop: 24 }}>
+                <p style={{ margin: 0, fontFamily: serif, fontSize: 30 }}>{cop(COMBO.price)}</p>
+                <button
+                  type="button"
+                  onClick={addToCart}
+                  disabled={soldOut}
+                  className="inline-flex items-center justify-center gap-3 rounded-sm px-10 py-4 text-[11px] font-bold uppercase tracking-[0.2em] disabled:opacity-40"
+                  style={{ background: GOLD, color: "#0B0B0B" }}
+                >
+                  <ShoppingCart size={16} /> {soldOut ? t("krups.soldOut") : t("krups.addToCart")}
+                </button>
+              </div>
             </div>
-          </section>
-
-          {/* Closing */}
-          <section className="flex flex-col items-center gap-8 text-center" style={{ borderTop: "1px solid rgba(194,168,120,.25)", paddingTop: 72 }}>
-            <h2 style={{ margin: 0, fontFamily: serif, fontStyle: "italic", fontSize: "clamp(26px, 4vw, 38px)", maxWidth: 720 }}>{t("krups.closingTitle")}</h2>
-            <p style={{ margin: 0, maxWidth: 680, lineHeight: 1.8, color: "rgba(244,241,237,.7)" }}>{t("krups.closingText")}</p>
-            {buyBox(true)}
-          </section>
-        </div>
+          </div>
+        )}
     </section>
   );
 }

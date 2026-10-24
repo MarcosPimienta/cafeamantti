@@ -107,7 +107,7 @@ export const purchases: Record<string, string> = {
   "— No mueve inventario —": "— Doesn't move inventory —",
   "Cantidad que entra": "Quantity in",
   "Línea {n}: indica cuánto entra al inventario.": "Line {n}: say how much goes into inventory.",
-  "\"{name}\" es un servicio: no lleva inventario.": "\"{name}\" is a service: it has no inventory.",
+  "\"{name}\" no lleva inventario (servicio o venta por pedido).": "\"{name}\" has no inventory (a service or sold on demand).",
   "No se puede anular: ya se usó parte de lo que entró de \"{name}\" (quedan {stock}).": "Can't void: part of the \"{name}\" that came in was already used ({stock} left).",
   "Producto del inventario no encontrado.": "Inventory product not found.",
   "No se pudo registrar la entrada.": "Could not record the entry.",

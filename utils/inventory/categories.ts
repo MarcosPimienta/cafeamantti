@@ -3,6 +3,8 @@
 // CHECK (inventory_category_check) must list the same ids. "servicio" is
 // the only category without stock (see tracksStock).
 
+import { ON_DEMAND_CODES } from "@/utils/pricing";
+
 export type EntryType = "MP" | "MAT" | "EQP" | "ENS";
 
 export const ENTRY_TYPE_LABELS: Record<EntryType, string> = {
@@ -56,9 +58,12 @@ export function categoryInfo(id: string) {
   return INVENTORY_CATEGORIES.find((c) => c.id === id);
 }
 
-/** Services have no stock: orders never deduct them and there are no entradas. */
-export function tracksStock(category: string | null | undefined): boolean {
-  return category !== "servicio";
+/**
+ * Services have no stock, nor products sold on demand (the supplier ships
+ * each sale): orders never deduct them and there are no entradas.
+ */
+export function tracksStock(category: string | null | undefined, productCode?: string | null): boolean {
+  return category !== "servicio" && !(productCode && ON_DEMAND_CODES.has(productCode));
 }
 
 /** Entradas entry type for a product's category (coffee = MP, equipo = EQP, enseres = ENS, rest = MAT). */

@@ -40,10 +40,14 @@ export type StoreCombo = {
   name: string;
   /** What the customer pays (COP, IVA included, shipping free). */
   price: number;
-  /** Price before the launch offer, to show crossed out. */
-  listPrice: number;
-  /** What the order carries, one line per inventory product, adding up to `price`. */
-  units: { code: string; product_id: string; weight: string; grind: string | null; price: number }[];
+  /** Most combos the store sells (the offer's "only 20 units"); counted on paid orders. */
+  maxUnits: number;
+  /**
+   * What the order carries, one line per inventory product, adding up to
+   * `price`. An `onDemand` product isn't stocked: the supplier ships each
+   * sale (IMUSA for the KRUPS machine), so orders never move its stock.
+   */
+  units: { code: string; product_id: string; weight: string; grind: string | null; price: number; onDemand?: boolean }[];
 };
 
 /**
@@ -55,14 +59,17 @@ export const STORE_COMBOS: Record<string, StoreCombo> = {
   "krups-coffee-crush": {
     name: "Combo KRUPS Coffee Crush Experience",
     price: 1588000,
-    listPrice: 1950000,
+    maxUnits: 20,
     units: [
-      { code: "EQP-KRUPS-CC", product_id: "krups-coffee-crush", weight: "unidad", grind: null, price: 1535000 },
+      { code: "EQP-KRUPS-CC", product_id: "krups-coffee-crush", weight: "unidad", grind: null, price: 1535000, onDemand: true },
       // The 500 g Premium bag, at its price without the base shipping (the combo ships free).
       { code: "CAFT-500G", product_id: "firma", weight: "500g", grind: "whole", price: 53000 },
     ],
   },
 };
+
+/** Products sold without stock: the supplier ships each sale. */
+export const ON_DEMAND_CODES: ReadonlySet<string> = new Set(Object.values(STORE_COMBOS).flatMap((c) => c.units.filter((u) => u.onDemand).map((u) => u.code)));
 
 export function storeCombo(id: string | null | undefined): StoreCombo | null {
   return (id && STORE_COMBOS[id]) || null;

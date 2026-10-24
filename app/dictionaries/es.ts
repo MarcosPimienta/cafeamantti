@@ -326,4 +326,6 @@ export const es: Record<TranslationKey, string> = {
   "krups.inc4": "Garantía de 2 años otorgada por el fabricante.",
   "krups.closingTitle": "Una experiencia que continúa después de la primera taza",
   "krups.closingText": "En Café Amantti creemos que preparar café es mucho más que una rutina: es una oportunidad para disfrutar sin prisa. Por eso, unimos la tecnología de KRUPS con nuestro café colombiano para que puedas llevar esa experiencia a tu hogar.",
+  "krups.moreInfo": "Más información",
+  "krups.close": "Cerrar",
 };

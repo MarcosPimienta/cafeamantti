@@ -324,6 +324,8 @@ export const en = {
   "krups.inc4": "2-year warranty from the manufacturer.",
   "krups.closingTitle": "An experience that continues after the first cup",
   "krups.closingText": "At Café Amantti we believe making coffee is much more than a routine: it's a chance to enjoy without rush. That's why we bring KRUPS technology together with our Colombian coffee, so you can take that experience home.",
+  "krups.moreInfo": "More info",
+  "krups.close": "Close",
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -85,7 +85,7 @@ export async function getPurchases() {
     // Saldo a favor: every movement (null before its migration).
     advances: advErr ? null : advances ?? [],
     // Products a purchase can bring in (services have no stock).
-    inventory: (inventory ?? []).filter((p) => tracksStock(p.category)),
+    inventory: (inventory ?? []).filter((p) => tracksStock(p.category, p.product_code)),
     accounts: settings.siigo_accounts ?? [],
     defaultAccounts: settings.expense_accounts ?? {},
     configured: !!siigoConfigFromEnv(),
@@ -201,11 +201,11 @@ export async function updateBill(billId: string, input: BillInput) {
     for (const m of oldMovs ?? []) delta.set(m.inventory_id, (delta.get(m.inventory_id) ?? 0) - Number(m.quantity));
     for (const l of lines) if (l.inventory_id && Number(l.inventory_qty) > 0) delta.set(l.inventory_id, (delta.get(l.inventory_id) ?? 0) + Number(l.inventory_qty));
     if (delta.size) {
-      const { data: products } = await supabase.from('inventory').select('id, product_name, category, current_stock').in('id', [...delta.keys()]);
+      const { data: products } = await supabase.from('inventory').select('id, product_code, product_name, category, current_stock').in('id', [...delta.keys()]);
       for (const [id, d] of delta) {
         const p = (products ?? []).find((x) => x.id === id);
         if (!p) throw new Error('Producto del inventario no encontrado.');
-        if (d > 0 && !tracksStock(p.category)) throw new Error(`"${p.product_name}" es un servicio: no lleva inventario.`);
+        if (d > 0 && !tracksStock(p.category, p.product_code)) throw new Error(`"${p.product_name}" no lleva inventario (servicio o venta por pedido).`);
         if (d < 0 && Number(p.current_stock) + d < -1e-9) throw new Error(`No se puede bajar la cantidad: ya se usó parte de lo que entró de "${p.product_name}" (quedan ${Number(p.current_stock)}).`);
       }
     }
@@ -288,7 +288,7 @@ async function stockBillLines(
     for (const l of wanted) {
       const p = (products ?? []).find((x) => x.id === l.inventory_id);
       if (!p) throw new Error('Producto del inventario no encontrado.');
-      if (!tracksStock(p.category)) throw new Error(`"${p.product_name}" es un servicio: no lleva inventario.`);
+      if (!tracksStock(p.category, p.product_code)) throw new Error(`"${p.product_name}" no lleva inventario (servicio o venta por pedido).`);
       const qty = Number(l.inventory_qty);
       const row = {
         inventory_id: p.id,

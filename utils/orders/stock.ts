@@ -122,14 +122,15 @@ export async function syncOrderStock(supabase: DB, opts: SyncOptions): Promise<"
 
   const { data: items, error: itemsErr } = await supabase
     .from("order_items")
-    .select("inventory_id, quantity, inventory:inventory_id ( category )")
+    .select("inventory_id, quantity, inventory:inventory_id ( category, product_code )")
     .eq("order_id", orderId)
     .not("inventory_id", "is", null);
   if (itemsErr) throw new Error(itemsErr.message);
-  // Services (labor) are sold without stock: they never move inventory.
-  const linked = ((items ?? []) as { inventory_id: string; quantity: number; inventory?: { category?: string } | { category?: string }[] | null }[]).filter((it) => {
+  // Services (labor) and on-demand products are sold without stock: they never move inventory.
+  type Inv = { category?: string; product_code?: string };
+  const linked = ((items ?? []) as { inventory_id: string; quantity: number; inventory?: Inv | Inv[] | null }[]).filter((it) => {
     const inv = Array.isArray(it.inventory) ? it.inventory[0] : it.inventory;
-    return tracksStock(inv?.category);
+    return tracksStock(inv?.category, inv?.product_code);
   });
 
   if (!shouldDeduct) {
@@ -179,9 +180,9 @@ export async function restockCreditNote(
 ): Promise<number> {
   const ids = [...new Set(opts.lines.map((l) => l.inventory_id).filter(Boolean) as string[])];
   if (!ids.length) return 0;
-  const { data: products, error } = await supabase.from("inventory").select("id, category").in("id", ids);
+  const { data: products, error } = await supabase.from("inventory").select("id, category, product_code").in("id", ids);
   if (error) throw new Error(error.message);
-  const tracked = new Set(((products ?? []) as { id: string; category?: string }[]).filter((p) => tracksStock(p.category)).map((p) => p.id));
+  const tracked = new Set(((products ?? []) as { id: string; category?: string; product_code?: string }[]).filter((p) => tracksStock(p.category, p.product_code)).map((p) => p.id));
   let moved = 0;
   for (const l of opts.lines) {
     const qty = Number(l.quantity);

@@ -47,6 +47,14 @@ describe("syncOrderStock", () => {
     expect(db.rows("inventory_movements").map((m) => m.inventory_id).sort()).toEqual(["inv-250", "rep"]);
   });
 
+  it("the KRUPS machine is sold on demand (IMUSA ships it): only the combo's coffee bag moves", async () => {
+    db.rows("inventory").push({ id: "krups", product_code: "EQP-KRUPS-CC", category: "equipo", current_stock: 0 });
+    db.rows("order_items").push({ id: "i4", order_id: "web-0001", inventory_id: "krups", quantity: 1 });
+    expect(await syncOrderStock(sb, { orderId: "web-0001", status: "paid", userId: null })).toBe("deducted");
+    expect(db.byId("inventory", "krups")!.current_stock).toBe(0);
+    expect(db.rows("inventory_movements").map((m) => m.inventory_id)).toEqual(["inv-250"]);
+  });
+
   it("an order with only a service does not touch stock", async () => {
     db.rows("inventory").push({ id: "srv", product_code: "SRV-0034", category: "servicio", current_stock: 0 });
     db.tables.order_items = [{ id: "i9", order_id: "web-0001", inventory_id: "srv", quantity: 1 }];

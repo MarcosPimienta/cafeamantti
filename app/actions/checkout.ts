@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { storePrice, storeCombo, inventoryCodeFor, MAX_UNITS_PER_LINE } from "@/utils/pricing";
 import { calculateOrderShippingAndTotal } from "@/utils/shipping";
+import { comboUnitsLeft } from "@/utils/orders/comboSales";
 
 type Line = { id: string; weight: string; grind: string | null; grindLevel: string | null; quantity: number; price: number };
 type Address = { address: string; city: string; state: string; details?: string };
@@ -27,17 +28,16 @@ function priceLines(cartItems: any[]): { lines: Line[] } | { error: string } {
   return { lines };
 }
 
-/** Combos only sell while their products are in stock. */
-async function comboStockProblem(lines: Line[]): Promise<string | null> {
-  const need = new Map<string, number>();
-  for (const l of lines) for (const u of storeCombo(l.id)?.units ?? []) need.set(u.code, (need.get(u.code) ?? 0) + l.quantity);
-  if (!need.size) return null;
+/** Combos sell up to their limit (the on-demand machine has no stock to check). */
+async function comboLimitProblem(lines: Line[]): Promise<string | null> {
+  const wanted = new Map<string, number>();
+  for (const l of lines) if (storeCombo(l.id)) wanted.set(l.id, (wanted.get(l.id) ?? 0) + l.quantity);
+  if (!wanted.size) return null;
   const admin = createAdminClient();
-  if (!admin) return null; // can't check: never block the sale for it
-  const { data } = await admin.from("inventory").select("product_code, current_stock").in("product_code", [...need.keys()]);
-  for (const [code, qty] of need) {
-    const stock = Number((data ?? []).find((r) => r.product_code === code)?.current_stock ?? 0);
-    if (stock < qty) return stock > 0 ? `Del combo solo quedan ${Math.floor(stock)} unidad(es).` : "El combo está agotado por ahora.";
+  if (!admin) return null; // can't count: never block the sale for it
+  for (const [id, qty] of wanted) {
+    const left = await comboUnitsLeft(admin, id);
+    if (left < qty) return left > 0 ? `Del combo solo quedan ${left} unidad(es).` : "El combo está agotado.";
   }
   return null;
 }
@@ -65,7 +65,7 @@ export async function createPendingOrder(
 
   const priced = priceLines(cartItems);
   if ("error" in priced) return { success: false, error: priced.error };
-  const stockProblem = await comboStockProblem(priced.lines);
+  const stockProblem = await comboLimitProblem(priced.lines);
   if (stockProblem) return { success: false, error: stockProblem };
 
   let contact_email = "guest@example.com";
