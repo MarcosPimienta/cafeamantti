@@ -1,3 +1,5 @@
+import { storeCombo } from "./pricing";
+
 export interface MetropolitanShippingZone {
   zoneName: string;
   radiusLabel: string;
@@ -75,7 +77,7 @@ export function calculateMetropolitanShipping(state?: string, city?: string): Me
 }
 
 export function calculateOrderShippingAndTotal(
-  items: { price: number; quantity: number }[],
+  items: { id?: string; price: number; quantity: number }[],
   state?: string,
   city?: string
 ) {
@@ -90,13 +92,17 @@ export function calculateOrderShippingAndTotal(
     };
   }
 
+  // Bag prices include $10.000 of base shipping; a combo's price doesn't (it ships free).
   let netItemsTotal = 0;
+  let freeShipping = false;
   for (const item of items) {
-    const netUnitPrice = Math.max(0, item.price - 10000);
+    const combo = storeCombo(item.id);
+    if (combo) freeShipping = true;
+    const netUnitPrice = combo ? item.price : Math.max(0, item.price - 10000);
     netItemsTotal += netUnitPrice * item.quantity;
   }
 
-  const shippingCost = shippingZone.isAvailable ? shippingZone.rate : 10000;
+  const shippingCost = freeShipping ? 0 : shippingZone.isAvailable ? shippingZone.rate : 10000;
   const totalAmount = netItemsTotal + shippingCost;
 
   return {
@@ -106,4 +112,3 @@ export function calculateOrderShippingAndTotal(
     shippingZone,
   };
 }
-

@@ -8,6 +8,7 @@ import { useCart } from "@/app/context/CartContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { TermsModal } from "@/app/components/TermsModal";
 import { CheckoutModal } from "@/app/components/CheckoutModal";
+import { COMBO_WEIGHT } from "@/utils/pricing";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -98,7 +99,9 @@ export function CartDrawer({ isOpen, onClose, profile, epaycoKey }: CartDrawerPr
                       </button>
                     </div>
                     <p className="text-[10px] text-white/40 font-medium uppercase tracking-wider mt-1">
-                      {item.weight} • {item.grind === "ground" ? `${t("products.ground")} (${t(`products.grind.${item.grindLevel}` as any)})` : t("products.wholeBean")}
+                      {item.weight === COMBO_WEIGHT
+                        ? t("krups.cartDetail")
+                        : <>{item.weight} • {item.grind === "ground" ? `${t("products.ground")} (${t(`products.grind.${item.grindLevel}` as any)})` : t("products.wholeBean")}</>}
                     </p>
                   </div>
                   

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createFakeClient, FakeDB } from "@/test/fakeSupabase";
 
-const h = vi.hoisted(() => ({ client: null as unknown }));
+const h = vi.hoisted(() => ({ client: null as unknown, admin: null as unknown }));
 vi.mock("@/utils/supabase/server", () => ({ createClient: async () => h.client }));
+vi.mock("@/utils/supabase/admin", () => ({ createAdminClient: () => h.admin }));
 
 import { createPendingOrder } from "../checkout";
 
@@ -82,5 +83,39 @@ describe("createPendingOrder — the server sets the price", () => {
     db.failOn("order_items", "insert", "bad item");
     expect(await createPendingOrder(cart, 0, bello)).toEqual({ success: false, error: "Error guardando los productos del carrito." });
     expect(db.rows("orders")).toHaveLength(0);
+  });
+});
+
+describe("createPendingOrder — the KRUPS combo", () => {
+  const combo = { id: "krups-coffee-crush", nameKey: "krups.comboName", price: 1, quantity: 1, weight: "combo", grind: "whole" };
+  beforeEach(() => {
+    db.rows("inventory").push({ id: "inv-krups", product_code: "EQP-KRUPS-CC", current_stock: 20 }, { id: "inv-500", product_code: "CAFT-500G", current_stock: 30 });
+    h.admin = createFakeClient(db, null);
+  });
+
+  it("charges $1.588.000 with free shipping and goes into the order as the machine and the 500 g bag", async () => {
+    const res = await createPendingOrder([combo], 0, bello);
+    expect(res).toMatchObject({ success: true, totalAmount: 1588000, shippingCost: 0 });
+    expect(db.rows("order_items").map((i) => [i.product_id, i.inventory_id, i.weight, i.grind, i.price_at_time])).toEqual([
+      ["krups-coffee-crush", "inv-krups", "unidad", null, 1535000],
+      ["firma", "inv-500", "500g", "whole", 53000],
+    ]);
+  });
+
+  it("with coffee in the same order, the whole order ships free", async () => {
+    const res = await createPendingOrder([combo, cart[0]], 0, bello);
+    expect(res).toMatchObject({ success: true, totalAmount: 1588000 + 2 * 25000, shippingCost: 0 });
+  });
+
+  it("only sells while machines are in stock", async () => {
+    db.rows("inventory").find((r) => r.product_code === "EQP-KRUPS-CC")!.current_stock = 1;
+    expect(await createPendingOrder([{ ...combo, quantity: 2 }], 0, bello)).toMatchObject({ success: false, error: expect.stringContaining("solo quedan 1") });
+    db.rows("inventory").find((r) => r.product_code === "EQP-KRUPS-CC")!.current_stock = 0;
+    expect(await createPendingOrder([combo], 0, bello)).toMatchObject({ success: false, error: expect.stringContaining("agotado") });
+    expect(db.rows("orders")).toHaveLength(0);
+  });
+
+  it("a combo line with a bag size is not sold", async () => {
+    expect(await createPendingOrder([{ ...combo, weight: "500g" }], 0, bello)).toMatchObject({ success: false, error: expect.stringMatching(/ya no está disponible/) });
   });
 });

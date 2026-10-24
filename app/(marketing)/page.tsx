@@ -12,6 +12,7 @@ import { HeroCarousel } from "@/app/components/HeroCarousel";
 import { sendContactEmail } from "@/app/actions/contact";
 import "./homepage.css";
 import { ProductCarousel, ProductDef } from "@/app/components/ProductCarousel";
+import { KrupsSection } from "@/app/components/KrupsSection";
 
 /* ────────────────────────────────────────────────
    Product data
@@ -814,6 +815,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ── Combo KRUPS Coffee Crush ─────────── */}
+      <KrupsSection onAdded={() => setIsCartOpen(true)} />
 
       {/* ── Contacto (Cream) ─────────────────── */}
       <section id="contacto" className="section-cream">

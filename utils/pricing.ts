@@ -31,6 +31,43 @@ export const STORE_AVAILABLE: Record<StoreProfile, StoreWeight[]> = {
   chiroso: ["250g", "500g"],
 };
 
+// ── Combos (equipment + coffee) ─────────────────────────────
+
+/** Weight a combo line carries in the cart (it has no bag size of its own). */
+export const COMBO_WEIGHT = "combo";
+
+export type StoreCombo = {
+  name: string;
+  /** What the customer pays (COP, IVA included, shipping free). */
+  price: number;
+  /** Price before the launch offer, to show crossed out. */
+  listPrice: number;
+  /** What the order carries, one line per inventory product, adding up to `price`. */
+  units: { code: string; product_id: string; weight: string; grind: string | null; price: number }[];
+};
+
+/**
+ * Combos the store sells. Each one is charged as one cart line but goes
+ * into the order as its products, so stock moves for each one and each is
+ * invoiced with its own IVA (machine 19 %, coffee 5 %).
+ */
+export const STORE_COMBOS: Record<string, StoreCombo> = {
+  "krups-coffee-crush": {
+    name: "Combo KRUPS Coffee Crush Experience",
+    price: 1588000,
+    listPrice: 1950000,
+    units: [
+      { code: "EQP-KRUPS-CC", product_id: "krups-coffee-crush", weight: "unidad", grind: null, price: 1535000 },
+      // The 500 g Premium bag, at its price without the base shipping (the combo ships free).
+      { code: "CAFT-500G", product_id: "firma", weight: "500g", grind: "whole", price: 53000 },
+    ],
+  },
+};
+
+export function storeCombo(id: string | null | undefined): StoreCombo | null {
+  return (id && STORE_COMBOS[id]) || null;
+}
+
 export function storeProfileOf(id: string | null | undefined): StoreProfile | null {
   return (id && PROFILE_BY_ID[id]) || null;
 }
@@ -44,6 +81,8 @@ function isWeight(w: string | null | undefined): w is StoreWeight {
  * it. This is what the server charges.
  */
 export function storePrice(id: string | null | undefined, weight: string | null | undefined): number | null {
+  const combo = storeCombo(id);
+  if (combo) return weight === COMBO_WEIGHT ? combo.price : null;
   const profile = storeProfileOf(id);
   if (!profile || !isWeight(weight) || !STORE_AVAILABLE[profile].includes(weight)) return null;
   return STORE_PRICES[profile][weight];

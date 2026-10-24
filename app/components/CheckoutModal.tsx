@@ -224,7 +224,7 @@ export function CheckoutModal({
               <div className="flex items-center justify-between text-xs text-white/60">
                 <span>Costo de Envío ({shippingZone.zoneName} — {shippingZone.radiusLabel}):</span>
                 <span className="font-medium text-[#F4F1ED]">
-                  {shippingZone.isAvailable ? formatPrice(finalShippingCost) : "No disponible"}
+                  {!shippingZone.isAvailable ? "No disponible" : finalShippingCost === 0 ? "Gratis" : formatPrice(finalShippingCost)}
                 </span>
               </div>
               <div className="pt-3 border-t border-white/10 flex items-center justify-between">
