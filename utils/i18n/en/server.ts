@@ -274,4 +274,6 @@ export const server: Record<string, string> = {
   "No se pudo guardar el cruce.": "The offset could not be saved.",
   "No se pudo guardar la devolución.": "The refund could not be saved.",
   "La cuenta de {label} debe ser un código PUC de 4 a 10 dígitos.": "The {label} account must be a PUC code of 4 to 10 digits.",
+  "La cuenta debe ser un código PUC de 4 a 10 dígitos.": "The account must be a PUC code of 4 to 10 digits.",
+  "Escribe el nombre de la cuenta.": "Type the account name.",
 };

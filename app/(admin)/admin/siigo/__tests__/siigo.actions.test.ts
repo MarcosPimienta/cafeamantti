@@ -29,7 +29,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => (h.configured ? { username: "u", accessKey: "k", partnerId: "CafeAmantti" } : null) };
 });
 
-import { createSiigoInvoice, previewSiigoInvoice, refreshSiigoInvoice, saveSiigoSettings, compareSiigoProducts, createSiigoProducts, createSiigoPurchase, pullSiigoInvoices, linkSiigoProducts, importSiigoItems, markSiigoItemsAsService, saveProductTaxes } from "../actions";
+import { createSiigoInvoice, previewSiigoInvoice, refreshSiigoInvoice, saveSiigoSettings, compareSiigoProducts, createSiigoProducts, createSiigoPurchase, pullSiigoInvoices, linkSiigoProducts, importSiigoItems, markSiigoItemsAsService, saveProductTaxes, addSiigoAccount } from "../actions";
 import { SiigoError } from "@/utils/siigo/api";
 
 const SETTINGS = {
@@ -130,6 +130,20 @@ describe("settings", () => {
     const ok = await saveSiigoSettings({ seller_id: 629, final_consumer_identification: "222.222.222.222", expense_accounts: { Diversos: "519595", Vacía: "" } });
     expect(ok).toMatchObject({ success: true, settings: { seller_id: 629, final_consumer_identification: "222222222222", expense_accounts: { Diversos: "519595" } } });
     expect(db.byId("siigo_settings", 1 as never)?.config).toBeDefined();
+  });
+
+  it("adds an account by hand (one just activated has no movements for the trial balance), or renames it", async () => {
+    db.byId("siigo_settings", 1 as never)!.config = { ...SETTINGS, siigo_accounts: [{ code: "51952501", name: "Aseo" }, { code: "53052001", name: "X" }] };
+    expect(await addSiigoAccount("51x", "Honorarios")).toMatchObject({ success: false, error: expect.stringMatching(/4 a 10/) });
+    expect(await addSiigoAccount("51103501", " ")).toMatchObject({ success: false, error: expect.stringMatching(/nombre/) });
+    expect(await addSiigoAccount("51103501", " Honorarios administrativos ")).toMatchObject({ success: true });
+    await addSiigoAccount("53052001", "Intereses");
+    expect(db.byId("siigo_settings", 1 as never)!.config.siigo_accounts).toEqual([
+      { code: "51103501", name: "Honorarios administrativos" },
+      { code: "51952501", name: "Aseo" },
+      { code: "53052001", name: "Intereses" },
+    ]);
+    expect(db.byId("siigo_settings", 1 as never)!.config.seller_id).toBe(SETTINGS.seller_id); // the rest of the settings stay
   });
 });
 

@@ -209,6 +209,26 @@ export async function refreshSiigoAccounts() {
   });
 }
 
+/**
+ * Adds (or renames) a ledger account by hand: one just activated in Siigo
+ * has no movements yet, so the trial balance doesn't bring it.
+ */
+export async function addSiigoAccount(code: string, name: string) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    const c = String(code ?? '').replace(/\D/g, '');
+    const n = String(name ?? '').trim();
+    if (!/^\d{4,10}$/.test(c)) throw new Error('La cuenta debe ser un código PUC de 4 a 10 dígitos.');
+    if (!n) throw new Error('Escribe el nombre de la cuenta.');
+    const current = await loadSettings(supabase);
+    const list = [...(current.siigo_accounts ?? []).filter((a) => a.code !== c), { code: c, name: n.slice(0, 120) }].sort((a, b) => a.code.localeCompare(b.code));
+    const { error } = await supabase.from('siigo_settings').upsert({ id: 1, config: { ...current, siigo_accounts: list }, updated_at: new Date().toISOString(), updated_by: userId });
+    if (error) throw error;
+    revalidatePath('/admin/settings/siigo');
+    return { accounts: list };
+  });
+}
+
 // ── Products ────────────────────────────────────────────────
 
 export async function compareSiigoProducts() {

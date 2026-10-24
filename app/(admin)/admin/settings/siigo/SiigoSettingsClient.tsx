@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, PlugZap, RefreshCw, Save, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, PlugZap, Plus, RefreshCw, Save, Upload } from "lucide-react";
 import {
   compareSiigoProducts,
   createSiigoProducts,
@@ -9,6 +9,7 @@ import {
   linkSiigoProducts,
   markSiigoItemsAsService,
   refreshSiigoAccounts,
+  addSiigoAccount,
   saveProductTaxes,
   saveSiigoSettings,
   testSiigoConnection,
@@ -140,6 +141,14 @@ export default function SiigoSettingsClient({
     if (!res.success) return setError(res.error);
     set("siigo_accounts", res.accounts);
     setNotice(tr("✓ {n} cuentas traídas de Siigo", { n: String(res.accounts.length) }));
+  });
+  const [newAccount, setNewAccount] = useState({ code: "", name: "" });
+  const addAccount = () => run("add-account", async () => {
+    const res = await addSiigoAccount(newAccount.code, newAccount.name);
+    if (!res.success) return setError(res.error);
+    set("siigo_accounts", res.accounts);
+    setNotice(tr("✓ Cuenta {code} agregada", { code: newAccount.code }));
+    setNewAccount({ code: "", name: "" });
   });
   const accounts = settings.siigo_accounts ?? [];
   const save = () => run("save", async () => {
@@ -335,6 +344,20 @@ export default function SiigoSettingsClient({
               {accounts.length ? tr("{n} cuentas disponibles para elegir.", { n: String(accounts.length) }) : tr("Trae las cuentas para elegirlas por nombre en vez de escribir el código.")}
             </span>
           </div>
+          <details className="rounded-2xl bg-[#fdfbf7] border border-foreground/5 p-4">
+            <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">{tr("Agregar una cuenta a mano")}</summary>
+            <p className="text-[11px] text-foreground/50 mt-2">{tr("Para una cuenta recién activada en Siigo: como aún no tiene movimientos, «Traer cuentas» no la trae. Escribe el código y el nombre tal como están en Siigo.")}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-[160px_minmax(0,1fr)_auto] gap-2 mt-3 items-center [&>*]:min-w-0">
+              <input value={newAccount.code} onChange={(e) => setNewAccount((a) => ({ ...a, code: e.target.value.replace(/\D/g, "") }))} placeholder={tr("Ej. 51103501")} aria-label={tr("Código de la cuenta")} className={inputCls} />
+              <input value={newAccount.name} onChange={(e) => setNewAccount((a) => ({ ...a, name: e.target.value }))} placeholder={tr("Ej. Honorarios administrativos")} aria-label={tr("Nombre de la cuenta")} className={inputCls} />
+              <button type="button" onClick={addAccount} disabled={!newAccount.code || !newAccount.name.trim() || !!busy} className={`${btn} border border-foreground/15 text-foreground/70 hover:bg-foreground/5`}>
+                <Spinner k="add-account" icon={<Plus className="w-4 h-4" />} />{" "}{tr("Agregar")}
+              </button>
+            </div>
+            {newAccount.code.length >= 4 && accounts.some((a) => a.code === newAccount.code) && (
+              <p className="text-[11px] text-amber-700 mt-2">{tr("Esa cuenta ya está: se cambia su nombre.")}</p>
+            )}
+          </details>
           <details className="rounded-2xl bg-[#fdfbf7] border border-foreground/5 p-4">
             <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[#C59F59]">{tr("Cuenta contable (PUC) por categoría")}</summary>
             <div className="space-y-2 mt-3">

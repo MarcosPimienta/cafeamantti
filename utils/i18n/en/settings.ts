@@ -128,4 +128,12 @@ export const settings: Record<string, string> = {
   "Cuenta de proveedores por pagar": "Suppliers payable account",
   "Devoluciones · cuenta de banco": "Refunds · bank account",
   "Devoluciones · cuenta de caja": "Refunds · cash account",
+  "✓ Cuenta {code} agregada": "✓ Account {code} added",
+  "Agregar una cuenta a mano": "Add an account by hand",
+  "Para una cuenta recién activada en Siigo: como aún no tiene movimientos, «Traer cuentas» no la trae. Escribe el código y el nombre tal como están en Siigo.": "For an account just activated in Siigo: it has no movements yet, so “Bring accounts” doesn't bring it. Type the code and name as they are in Siigo.",
+  "Ej. 51103501": "E.g. 51103501",
+  "Código de la cuenta": "Account code",
+  "Ej. Honorarios administrativos": "E.g. Administrative fees",
+  "Nombre de la cuenta": "Account name",
+  "Esa cuenta ya está: se cambia su nombre.": "That account is already there: its name is changed.",
 };
