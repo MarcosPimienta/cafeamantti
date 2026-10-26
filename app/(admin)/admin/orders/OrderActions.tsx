@@ -5,7 +5,7 @@ import { Edit, Trash2, X, Plus, UserRound, MapPin, CalendarClock, Package } from
 import { deleteManualAdminOrder, updateManualAdminOrder } from "../../actions";
 import { isSellable } from "@/utils/inventory/sellable";
 import { useTr } from "@/app/(admin)/AdminI18n";
-import { OrderTaxTotals, TaxSelect, useOrderTaxes } from "./OrderTaxFields";
+import { OrderTaxTotals, PricesIncludeTaxToggle, TaxSelect, useOrderTaxes } from "./OrderTaxFields";
 import { defaultTaxId, rateOf } from "@/utils/orders/tax";
 
 interface InventoryItem {
@@ -134,6 +134,9 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
     })
   );
   const taxSetup = useOrderTaxes();
+  // The order's own choice; older orders follow Ajustes → Siigo.
+  const [pricesIncluded, setPricesIncluded] = useState<boolean | null>(order.prices_include_tax ?? null);
+  const included = pricesIncluded ?? taxSetup?.pricesIncludeTax ?? false;
   // A line without its own IVA (older orders) shows the product's.
   const lineTax = (item: ItemRow) => {
     if (item.tax_id !== null) return { tax_id: item.tax_id, tax_rate: item.tax_rate ?? rateOf(item.tax_id, taxSetup?.options ?? []) };
@@ -227,6 +230,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
         shipping_info: { address, details, city, state },
         status,
         payment_status: paymentStatus,
+        ...(pricesIncluded !== null && pricesIncluded !== (order.prices_include_tax ?? null) ? { prices_include_tax: pricesIncluded } : {}),
         delivery_due_date: dueDate || null,
         notes,
         items: itemsDirty ? items.map((it) => ({ ...it, ...lineTax(it) })) : undefined,
@@ -494,7 +498,8 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                   </button>
                 )}
 
-                <OrderTaxTotals lines={items.map((it) => ({ ...it, ...lineTax(it) }))} setup={taxSetup} />
+                <PricesIncludeTaxToggle checked={included} onChange={setPricesIncluded} disabled={!isManual} />
+                <OrderTaxTotals lines={items.map((it) => ({ ...it, ...lineTax(it) }))} setup={taxSetup} included={included} />
                 {itemsDirty && (
                   <p className="text-[11px] text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
                     {tr("Cambiaste los productos: al guardar se recalcula el total y, si la orden está pagada, se ajusta el inventario.")}

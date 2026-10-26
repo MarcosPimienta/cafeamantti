@@ -274,4 +274,7 @@ export const orders: Record<string, string> = {
   "Marcar pagado": "Mark paid",
   "Por cobrar ({n})": "To collect ({n})",
   "Solo por cobrar": "Only unpaid",
+  "Precio con IVA incluido": "Price includes IVA",
+  "El precio que escribes es el final: la factura sale por ese valor y el IVA va por dentro.": "The price you type is final: the invoice is for that amount, with the IVA inside it.",
+  "El IVA se suma encima del precio que escribes.": "IVA is added on top of the price you type.",
 };

@@ -43,3 +43,8 @@ export function orderTaxTotals(lines: TaxedLine[], pricesIncludeTax: boolean) {
   iva = round2(iva);
   return { subtotal, iva, total: round2(subtotal + iva) };
 }
+
+/** Whether an order's prices include IVA: its own choice, else Ajustes → Siigo (manual orders). */
+export function pricesIncludeTax(orderChoice: boolean | null | undefined, manualPricesIncludeTax: boolean | null | undefined): boolean {
+  return orderChoice ?? manualPricesIncludeTax !== false;
+}

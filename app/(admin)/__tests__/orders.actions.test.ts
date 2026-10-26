@@ -217,9 +217,18 @@ describe("IVA per order line", () => {
     expect(db.byId("orders", orderId)).toMatchObject({ total_amount: 100000, tax_amount: 4500 });
   });
 
-  it("with prices that include IVA, the IVA is the part inside them", async () => {
+  it("with prices that include IVA, nothing goes on top (the IVA is inside the total)", async () => {
     const { orderId } = await createManualAdminOrder(baseOrder("pending", taxed.slice(0, 1)));
-    expect(db.byId("orders", orderId)!.tax_amount).toBeCloseTo(4285.71, 2);
+    expect(db.byId("orders", orderId)).toMatchObject({ total_amount: 90000, tax_amount: 0 });
+  });
+
+  it("each order can say its prices include IVA (a final price), whatever Ajustes → Siigo says", async () => {
+    db.rows("siigo_settings").push({ id: 1, config: { manual_prices_include_tax: false } });
+    const { orderId } = await createManualAdminOrder({ ...baseOrder("pending", taxed.slice(0, 1)), prices_include_tax: true });
+    expect(db.byId("orders", orderId)).toMatchObject({ prices_include_tax: true, total_amount: 90000, tax_amount: 0 });
+    // Unticking it later puts the IVA back on top, from the saved lines.
+    expect(await updateManualAdminOrder(orderId, { ...baseOrder("pending"), items: undefined, prices_include_tax: false })).toMatchObject({ success: true });
+    expect(db.byId("orders", orderId)).toMatchObject({ prices_include_tax: false, tax_amount: 4500 });
   });
 
   it("editing the products keeps their IVA", async () => {

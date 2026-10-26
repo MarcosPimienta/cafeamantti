@@ -13,6 +13,7 @@ import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '
 import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, buildCreditNotePayload, itemTaxId, lineGross, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
 import { ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
 import { restockCreditNote, syncOrderStock } from '@/utils/orders/stock';
+import { pricesIncludeTax } from '@/utils/orders/tax';
 import { CREDIT_REASONS, balanceDue, creditNoteLines, invoiceLinesFromOrder, paymentProblems, relinkLines, paymentState, type CreditInput, type CreditNoteLine, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261019000000_sales_invoices.sql';
@@ -205,7 +206,9 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
     if (!lines.length) throw new Error('El pedido no tiene productos.');
     // Web store prices are final (the customer paid them); manual orders follow Ajustes → Siigo.
     const web = order.source === 'web' || !!order.user_id;
-    if (!web && settings.manual_prices_include_tax === false) {
+    // Before its migration the order has no IVA choice: Ajustes → Siigo decides.
+    const { data: choice } = await supabase.from('orders').select('prices_include_tax').eq('id', orderId).maybeSingle();
+    if (!web && !pricesIncludeTax((choice as { prices_include_tax?: boolean | null } | null)?.prices_include_tax, settings.manual_prices_include_tax)) {
       const rates = await taxRates();
       lines = lines.map((l) => {
         const tax = itemTaxId(l.tax_id, settings);

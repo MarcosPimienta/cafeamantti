@@ -47,10 +47,29 @@ export function TaxSelect({ value, setup, onChange, disabled }: { value: number 
   );
 }
 
-/** Subtotal, IVA and total of the order, as the invoice will charge them. */
-export function OrderTaxTotals({ lines, setup }: { lines: TaxedLine[]; setup: OrderTaxSetup | null }) {
+/**
+ * "Precio con IVA incluido": the customer was quoted a final price, so the
+ * IVA is taken out of it instead of added on top.
+ */
+export function PricesIncludeTaxToggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   const tr = useTr();
-  const included = setup?.pricesIncludeTax ?? true;
+  return (
+    <label className={`flex items-start gap-2 rounded-lg bg-[#fdfbf7] border border-foreground/5 px-3 py-2 text-sm ${disabled ? "opacity-50" : "cursor-pointer"}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#C59F59] shrink-0" />
+      <span>
+        <span className="font-medium">{tr("Precio con IVA incluido")}</span>
+        <span className="block text-[11px] text-foreground/50">
+          {checked ? tr("El precio que escribes es el final: la factura sale por ese valor y el IVA va por dentro.") : tr("El IVA se suma encima del precio que escribes.")}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+/** Subtotal, IVA and total of the order, as the invoice will charge them. */
+export function OrderTaxTotals({ lines, setup, included: includedProp }: { lines: TaxedLine[]; setup: OrderTaxSetup | null; included?: boolean }) {
+  const tr = useTr();
+  const included = includedProp ?? setup?.pricesIncludeTax ?? true;
   const { subtotal, iva, total } = orderTaxTotals(lines, included);
   return (
     <div className="pt-4 border-t border-foreground/5 space-y-1 text-sm">

@@ -16,7 +16,7 @@ import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
 import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
 import { syncOrderStock, revertOrderStock, orderIsSold } from "@/utils/orders/stock";
-import { orderTaxTotals } from "@/utils/orders/tax";
+import { orderTaxTotals, pricesIncludeTax } from "@/utils/orders/tax";
 import { loadSiigoSettings } from "@/utils/siigo/server";
 import { cleanIdentification } from "@/utils/siigo/mapping";
 import { isSellable } from "@/utils/inventory/sellable";
@@ -447,6 +447,8 @@ export async function createManualAdminOrder(
     status: string;
     /** Whether it is already paid (default: pending). */
     payment_status?: 'pending' | 'paid';
+    /** Prices already include IVA (a final price); default: Ajustes → Siigo. */
+    prices_include_tax?: boolean;
     items: {
       inventory_id: string;
       product_code: string;
@@ -554,7 +556,7 @@ export async function createManualAdminOrder(
     }
     throw new Error(itemsErr.message);
   }
-  await _saveOrderTax(supabase, order.id, data.items);
+  await _saveOrderTax(supabase, order.id, data.items, data.prices_include_tax);
 
   // Follow-up fields (later migrations): best-effort, reported back on failure.
   const now = new Date().toISOString();
@@ -644,11 +646,26 @@ async function _insertOrderItems(supabase: Awaited<ReturnType<typeof createClien
   return { error };
 }
 
-/** The order's IVA (best-effort: the column comes with a migration). */
-async function _saveOrderTax(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string, items: OrderItemInput[]) {
+/**
+ * The order's IVA choice and the IVA added on top of its total (0 when the
+ * prices include it). Best-effort: the columns come with migrations.
+ * `choice` undefined keeps what the order has.
+ */
+async function _saveOrderTax(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string, items: { price: number; quantity: number; tax_id?: number | null; tax_rate?: number | null }[] | null, choice?: boolean) {
   const settings = await loadSiigoSettings(supabase);
-  const { iva } = orderTaxTotals(items.map((it) => ({ ...it, tax_rate: Number(it.tax_id) === 0 ? 0 : it.tax_rate })), settings.manual_prices_include_tax !== false);
-  const { error } = await supabase.from('orders').update({ tax_amount: iva }).eq('id', orderId);
+  if (choice !== undefined) {
+    const { error } = await supabase.from('orders').update({ prices_include_tax: choice }).eq('id', orderId);
+    if (error) console.warn('orders.prices_include_tax:', error.message);
+  }
+  const { data: order } = await supabase.from('orders').select('prices_include_tax').eq('id', orderId).maybeSingle();
+  const included = pricesIncludeTax(choice ?? (order as { prices_include_tax?: boolean | null } | null)?.prices_include_tax, settings.manual_prices_include_tax);
+  let lines = items;
+  if (!lines) {
+    const { data } = await supabase.from('order_items').select('price_at_time, quantity, tax_id, tax_rate').eq('order_id', orderId);
+    lines = (data ?? []).map((r) => ({ price: Number(r.price_at_time), quantity: Number(r.quantity), tax_id: r.tax_id, tax_rate: r.tax_rate }));
+  }
+  const { iva } = orderTaxTotals(lines.map((it) => ({ ...it, tax_rate: Number(it.tax_id) === 0 ? 0 : it.tax_rate })), included);
+  const { error } = await supabase.from('orders').update({ tax_amount: included ? 0 : iva }).eq('id', orderId);
   if (error) console.warn('orders.tax_amount:', error.message);
 }
 
@@ -675,6 +692,8 @@ async function _updateManualAdminOrder(
     status: string;
     /** Changes the payment too when given. */
     payment_status?: 'pending' | 'paid';
+    /** Prices already include IVA (a final price); undefined keeps the order's. */
+    prices_include_tax?: boolean;
     delivery_due_date?: string | null;
     notes?: string | null;
     items?: OrderItemInput[];
@@ -744,9 +763,12 @@ async function _updateManualAdminOrder(
       }))
     );
     if (itemsErr) throw new Error(itemsErr.message);
-    await _saveOrderTax(supabase, orderId, data.items);
+    await _saveOrderTax(supabase, orderId, data.items, data.prices_include_tax);
     total_amount = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }
+
+  // Only the IVA choice changed: its IVA is recomputed from the saved lines.
+  if (!data.items && data.prices_include_tax !== undefined) await _saveOrderTax(supabase, orderId, null, data.prices_include_tax);
 
   // ── Order fields ────────────────────────────────────────
   // Merge, so fields this form does not show (siigo_invoice, source…) survive.

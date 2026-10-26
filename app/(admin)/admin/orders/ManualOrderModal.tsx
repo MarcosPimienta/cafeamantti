@@ -5,7 +5,7 @@ import { Plus, X, Trash2, UserRound, MapPin, CalendarClock, Package } from "luci
 import { createManualAdminOrder } from "../../actions";
 import { isSellable } from "@/utils/inventory/sellable";
 import { useTr } from "@/app/(admin)/AdminI18n";
-import { OrderTaxTotals, TaxSelect, useOrderTaxes } from "./OrderTaxFields";
+import { OrderTaxTotals, PricesIncludeTaxToggle, TaxSelect, useOrderTaxes } from "./OrderTaxFields";
 import { defaultTaxId, rateOf } from "@/utils/orders/tax";
 
 interface InventoryItem {
@@ -96,6 +96,9 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
 
   const [items, setItems] = useState<ItemRow[]>([]);
   const taxSetup = useOrderTaxes();
+  // null = not chosen yet: Ajustes → Siigo's default for manual orders.
+  const [pricesIncluded, setPricesIncluded] = useState<boolean | null>(null);
+  const included = pricesIncluded ?? taxSetup?.pricesIncludeTax ?? false;
   // A line whose IVA wasn't picked yet shows the product's.
   const lineTax = (item: ItemRow) => {
     if (item.tax_id !== null) return { tax_id: item.tax_id, tax_rate: item.tax_rate };
@@ -215,6 +218,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
         shipping_info: { address, details, city, state },
         status,
         payment_status: paymentStatus,
+        prices_include_tax: included,
         delivery_due_date: dueDate || null,
         notes,
         items: items.map((it) => ({ ...it, ...lineTax(it) })),
@@ -458,7 +462,8 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
                   <Plus className="w-3.5 h-3.5" />{" "}{tr("Agregar producto")}
                 </button>
 
-                <OrderTaxTotals lines={items.map((it) => ({ ...it, ...lineTax(it) }))} setup={taxSetup} />
+                <PricesIncludeTaxToggle checked={included} onChange={setPricesIncluded} />
+                <OrderTaxTotals lines={items.map((it) => ({ ...it, ...lineTax(it) }))} setup={taxSetup} included={included} />
               </Section>
 
               <div className="pt-4 pb-[env(safe-area-inset-bottom)] sticky bottom-0 bg-white">

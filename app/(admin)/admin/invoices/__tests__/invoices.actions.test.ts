@@ -294,6 +294,13 @@ describe("manual order prices before IVA", () => {
     expect(invoice().total).toBe(83300); // 70.000 + 19%
   });
 
+  it("an order marked «Precio con IVA incluido» is invoiced for exactly its price, IVA inside", async () => {
+    db.byId("orders", ORDER)!.prices_include_tax = true;
+    await createInvoice(ORDER, { terms: "credito" });
+    expect(invoice().total).toBe(70000);
+    expect(invoice().lines[0].tax_included).not.toBe(false);
+  });
+
   it("web store orders keep IVA included (the customer paid that price)", async () => {
     db.byId("orders", ORDER)!.source = "web";
     await createInvoice(ORDER, { terms: "credito" });
