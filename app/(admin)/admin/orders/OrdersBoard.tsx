@@ -152,6 +152,7 @@ export default function OrdersBoard({
       const hay = [
         o.id,
         customerOf(o),
+        o.site_name,
         o.contact_email,
         o.contact_phone,
         o.shipping_info?.city,
@@ -615,6 +616,7 @@ function Card({
         )}
       </div>
       <p className="font-bold text-sm mt-1 leading-snug line-clamp-2">{customerOf(order)}</p>
+      {order.site_name && <p className="text-[11px] font-bold text-[#9a7a3c] mt-0.5">{order.site_name}</p>}
       {items.length > 0 && (
         <p className="text-xs text-foreground/50 mt-1 line-clamp-2">
           {items
@@ -730,6 +732,7 @@ function OrderPanel({
                 {siigo ? tr(" · Siigo #{siigo}", { siigo: siigo }) : ""}
               </p>
               <h2 className="text-xl sm:text-2xl font-serif mt-1 break-words">{customerOf(order)}</h2>
+              {order.site_name && <p className="text-sm font-bold text-[#9a7a3c]">{tr("Sede: {name}", { name: order.site_name })}</p>}
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <OrderActions order={order} inventory={inventory} crmClients={crmClients} />

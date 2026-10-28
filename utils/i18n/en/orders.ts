@@ -277,4 +277,8 @@ export const orders: Record<string, string> = {
   "Precio con IVA incluido": "Price includes IVA",
   "El precio que escribes es el final: la factura sale por ese valor y el IVA va por dentro.": "The price you type is final: the invoice is for that amount, with the IVA inside it.",
   "El IVA se suma encima del precio que escribes.": "IVA is added on top of the price you type.",
+  "Sede: {name}": "Location: {name}",
+  "Elige la sede del cliente.": "Choose the client's location.",
+  "Sede": "Location",
+  "— Elige la sede —": "— Choose the location —",
 };

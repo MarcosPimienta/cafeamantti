@@ -39,3 +39,23 @@ describe("deleteClientCRM", () => {
     expect(db.byId("clients", "cl-2")).toBeDefined();
   });
 });
+
+describe("sedes of a client", () => {
+  it("are saved (DANE code from the city), and a used or Siigo-synced one can't be deleted", async () => {
+    const { saveClientSite, deleteClientSite, syncClientSite } = await import("../admin/customers/siteActions");
+    const res = await saveClientSite({ client_id: "cl-2", name: " Smart Fit Fabricato ", address: "Carrera 50 # 38 A-185", city: "Bello" });
+    expect(res).toMatchObject({ success: true, site: { name: "Smart Fit Fabricato", city_code: "05088" } });
+    expect(await saveClientSite({ client_id: "cl-2", name: "" })).toMatchObject({ success: false, error: expect.stringContaining("nombre") });
+    const id = (res as { site: { id: string } }).site.id;
+    db.rows("orders").push({ id: "o-s", client_id: "cl-2", site_id: id });
+    expect(await deleteClientSite(id)).toMatchObject({ success: false, error: expect.stringContaining("desactívala") });
+    db.tables.orders = db.rows("orders").filter((o) => o.id !== "o-s");
+    db.byId("client_sites", id)!.siigo_branch_office = 1;
+    expect(await deleteClientSite(id)).toMatchObject({ success: false, error: expect.stringContaining("Siigo") });
+    db.byId("client_sites", id)!.siigo_branch_office = null;
+    expect(await deleteClientSite(id)).toMatchObject({ success: true });
+    // A client without NIT can't have its sedes in Siigo.
+    const other = await saveClientSite({ client_id: "cl-2", name: "Otra" });
+    expect(await syncClientSite((other as { site: { id: string } }).site.id)).toMatchObject({ success: false });
+  });
+});

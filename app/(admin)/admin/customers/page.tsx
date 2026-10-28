@@ -6,6 +6,7 @@ import { Users, Phone, MapPin, Search, Mail, CreditCard, Calendar, Building2, Ha
 import { createClient } from "@/utils/supabase/server";
 import CreateCRMClientModal from "./CreateCRMClientModal";
 import DeleteClientButton from "./DeleteClientButton";
+import ClientSitesButton from "./ClientSitesButton";
 import { getTr } from "@/utils/i18n/server";
 
 export default async function AdminCRMCustomersPage() {
@@ -87,6 +88,7 @@ export default async function AdminCRMCustomersPage() {
                           <p className="font-bold text-foreground">{client.name}</p>
                           <CreateCRMClientModal client={client} />
                           <DeleteClientButton client={client} />
+                          <ClientSitesButton client={client} sites={client.sites ?? []} />
                         </div>
                       </div>
                     </td>

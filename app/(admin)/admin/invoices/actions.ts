@@ -11,7 +11,8 @@ import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin, setOrderPayment, updateOrderStatus as setOrderStatus } from '../../actions';
 import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
 import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, buildCreditNotePayload, itemTaxId, lineGross, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
-import { ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
+import { ensureSiigoBranch, ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
+import { siteLabel, type ClientSite } from '@/utils/clients/sites';
 import { restockCreditNote, syncOrderStock } from '@/utils/orders/stock';
 import { pricesIncludeTax } from '@/utils/orders/tax';
 import { CREDIT_REASONS, balanceDue, creditNoteLines, invoiceLinesFromOrder, paymentProblems, relinkLines, paymentState, type CreditInput, type CreditNoteLine, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
@@ -85,8 +86,8 @@ const baseTotal = (lines: InvoiceLine[], shipping: number | string) => Math.roun
 
 type InvoiceRow = { id: string; order_id: string; total: number; shipping: number; notes: string | null; payment_terms: string; payment_method: string | null; term_days: number; lines: unknown };
 
-/** The Siigo invoice body for an app invoice, dated `today`. */
-function siigoPayload(inv: InvoiceRow, identification: string | null, settings: SiigoSettings, today: string) {
+/** The Siigo invoice body for an app invoice, dated `today` (to its sede's branch, if any). */
+function siigoPayload(inv: InvoiceRow, identification: string | null, settings: SiigoSettings, today: string, site?: { branchOffice?: number | null; label?: string | null }) {
   const credit = inv.payment_terms === 'credito';
   return buildInvoicePayload(
     // The order's number goes in the observations ("Pedido Café Amantti #…").
@@ -94,8 +95,16 @@ function siigoPayload(inv: InvoiceRow, identification: string | null, settings: 
     (inv.lines as InvoiceLine[]).map(toSiigoItem),
     identification,
     settings,
-    today
+    today,
+    site
   );
+}
+
+/** A sede of a client (null when missing). */
+async function siteOf(supabase: Supabase, siteId: string | null | undefined): Promise<ClientSite | null> {
+  if (!siteId) return null;
+  const { data } = await supabase.from('client_sites').select('*').eq('id', siteId).maybeSingle();
+  return (data as ClientSite | null) ?? null;
 }
 
 type SiigoInvoiceOut = { id: string; name?: string; prefix?: string; number?: number; public_url?: string; stamp?: { status?: string; cufe?: string; errors?: string } };
@@ -136,7 +145,11 @@ export async function getInvoices() {
     console.error('getInvoices:', error.message);
     return { invoices: [], migrationApplied: !/sales_invoices/.test(error.message), today: todayBogota() };
   }
-  return { invoices: data ?? [], migrationApplied: true, today: todayBogota() };
+  // Each invoice shows its sede (none before the sedes migration).
+  const { data: sites } = await supabase.from('client_sites').select('id, name');
+  const siteNames = new Map(((sites ?? []) as { id: string; name: string }[]).map((x) => [x.id, x.name]));
+  const invoices = ((data ?? []) as unknown as Record<string, unknown>[]).map((inv) => ({ ...inv, site_name: typeof inv.site_id === 'string' ? siteNames.get(inv.site_id) ?? null : null }));
+  return { invoices, migrationApplied: true, today: todayBogota() };
 }
 
 /** The live invoice of an order, with its payments (null if none). */
@@ -193,7 +206,7 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
     if (!(Number.isInteger(termDays) && termDays >= 0 && termDays <= 365)) throw new Error('El plazo debe ser de 0 a 365 días.');
 
     const [{ data: order, error }, { data: items, error: itemsError }, { data: existing }] = await Promise.all([
-      supabase.from('orders').select('id, status, total_amount, shipping_info, source, user_id, siigo_invoice_id, siigo_invoice, client:client_id ( id, name, document_number, siigo_customer_id )').eq('id', orderId).single(),
+      supabase.from('orders').select('id, status, total_amount, shipping_info, source, user_id, site_id, siigo_invoice_id, siigo_invoice, client:client_id ( id, name, document_number, siigo_customer_id )').eq('id', orderId).single(),
       orderItemsForInvoice(supabase, orderId),
       supabase.from('sales_invoices').select('id').eq('order_id', orderId).neq('status', 'anulada').limit(1),
     ]);
@@ -226,6 +239,7 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
     const row = {
       order_id: orderId,
       client_id: client?.id ?? null,
+      site_id: order.site_id ?? null,
       customer_name: client?.name ?? 'Consumidor final',
       customer_identification: identification,
       payment_terms: input.terms,
@@ -366,7 +380,11 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
           ? await ensureSiigoCustomer(supabase, userId, client)
           : settings.final_consumer_identification ?? null;
         const credit = inv.payment_terms === 'credito';
-        const { payload, problems } = siigoPayload(inv, identification, settings, today);
+        // A sede goes to its branch of the NIT in Siigo (made the first time it is invoiced).
+        const site = await siteOf(supabase, inv.site_id);
+        const named = !!client && identification !== (settings.final_consumer_identification ?? null);
+        const branchOffice = site && client && named ? await ensureSiigoBranch(supabase, userId, client, site) : 0;
+        const { payload, problems } = siigoPayload(inv, identification, settings, today, { branchOffice, label: site ? siteLabel(site) : null });
         if (problems.length) throw new Error(problems.join(' · '));
         const out = await siigo.request<SiigoInvoiceOut>('POST', '/v1/invoices', {
           body: payload,
@@ -381,7 +399,7 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
           siigo_public_url: out.public_url ?? null,
           siigo_error: out.stamp?.errors || null,
         };
-        await updateRow(supabase, 'sales_invoices', inv.id, { ...siigoFields, siigo_name: out.name ?? null, status: 'emitida', issue_date: today, due_date: dueDate, customer_identification: identification, updated_at: new Date().toISOString() });
+        await updateRow(supabase, 'sales_invoices', inv.id, { ...siigoFields, siigo_name: out.name ?? null, status: 'emitida', issue_date: today, due_date: dueDate, customer_identification: identification, branch_office: branchOffice, updated_at: new Date().toISOString() });
         // The order shows its invoice as before.
         await updateRow(supabase, 'orders', inv.order_id, { ...siigoFields, siigo_invoice: out.name ?? null }).catch((e) => console.error('order siigo fields:', errorText(e)));
         await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: out.id, siigo_name: out.name ?? null, status: 'ok', message: out.stamp?.status ?? null });
@@ -397,12 +415,12 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
     // Payments of issued invoices → cash receipts.
     const { data: payments, error: payErr } = await supabase
       .from('invoice_payments')
-      .select('*, invoice:invoice_id ( id, status, siigo_name, due_date, customer_identification )')
+      .select('*, invoice:invoice_id ( id, status, siigo_name, due_date, customer_identification, branch_office )')
       .in('siigo_status', ['pendiente', 'error'])
       .order('payment_date', { ascending: true });
     if (payErr) throw payErr;
     for (const p of payments ?? []) {
-      const inv = one(p.invoice as { status: string; siigo_name: string | null; due_date: string | null; customer_identification: string | null } | null);
+      const inv = one(p.invoice as { status: string; siigo_name: string | null; due_date: string | null; customer_identification: string | null; branch_office: number | null } | null);
       if (!inv || inv.status !== 'emitida') continue; // goes once its invoice is in Siigo
       try {
         const { payload, problems } = buildVoucherPayload(p, inv, settings);
@@ -558,7 +576,8 @@ export async function stampInvoice(invoiceId: string) {
 
     const settings = await loadSiigoSettings(supabase);
     const today = todayBogota();
-    const { payload, problems } = siigoPayload(inv, inv.customer_identification, { ...settings, stamp_dian: true }, today);
+    const site = await siteOf(supabase, inv.site_id);
+    const { payload, problems } = siigoPayload(inv, inv.customer_identification, { ...settings, stamp_dian: true }, today, { branchOffice: inv.branch_office ?? 0, label: site ? siteLabel(site) : null });
     if (problems.length) throw new Error(problems.join(' · '));
     let out = await siigo.request<SiigoInvoiceOut>('PUT', `/v1/invoices/${inv.siigo_invoice_id}`, { body: payload });
     // The DIAN answers in a few seconds: read it again while Siigo says it is sending.

@@ -6,6 +6,7 @@ import { deleteManualAdminOrder, updateManualAdminOrder } from "../../actions";
 import { isSellable } from "@/utils/inventory/sellable";
 import { useTr } from "@/app/(admin)/AdminI18n";
 import { OrderTaxTotals, PricesIncludeTaxToggle, TaxSelect, useOrderTaxes } from "./OrderTaxFields";
+import { SiteSelect } from "./SiteSelect";
 import { defaultTaxId, rateOf } from "@/utils/orders/tax";
 
 interface InventoryItem {
@@ -96,8 +97,18 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
   const [dueDate, setDueDate] = useState<string>(order.delivery_due_date || "");
   const [notes, setNotes] = useState<string>(order.notes || "");
 
+  const [siteId, setSiteId] = useState<string>(order.site_id || "");
+  // The chosen client's sedes (inactive ones only if the order already uses them).
+  const sites = (crmClients.find((c) => c.id === selectedClientId)?.sites ?? []) as import("@/utils/clients/sites").ClientSite[];
+  const pickSite = (site: { id: string; address?: string | null; city?: string | null } | null) => {
+    setSiteId(site?.id ?? "");
+    if (site?.address) setAddress(site.address);
+    if (site?.city) setCity(site.city);
+  };
+
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
+    setSiteId("");
     const client = crmClients.find((c) => c.id === clientId);
     if (client) {
       setCustomerName(client.name || "");
@@ -224,6 +235,7 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
     try {
       const res = await updateManualAdminOrder(order.id, {
         client_id: selectedClientId || null,
+        ...(siteId !== (order.site_id || "") ? { site_id: siteId || null } : {}),
         customer_name: customerName,
         contact_email: contactEmail,
         contact_phone: contactPhone,
@@ -323,6 +335,8 @@ export default function OrderActions({ order, inventory, crmClients = [] }: { or
                     </select>
                   </div>
                 )}
+                <SiteSelect sites={sites} value={siteId} onChange={pickSite}
+                  className="w-full px-4 py-2.5 bg-[#f9f7f0] border border-[#C59F59]/20 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/40" />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">

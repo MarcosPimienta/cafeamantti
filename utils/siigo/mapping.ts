@@ -128,7 +128,7 @@ export type AppClient = {
 const isCompany = (c: AppClient) => /nit/i.test(c.document_type ?? "") || /-\d$/.test((c.document_number ?? "").trim());
 
 /** POST /v1/customers body for a CRM client. */
-export function buildCustomerPayload(c: AppClient) {
+export function buildCustomerPayload(c: AppClient, branchOffice = 0) {
   const problems: string[] = [];
   const { identification, checkDigit } = cleanIdentification(c.document_number);
   if (!identification) problems.push(`${c.name}: falta la cédula o NIT.`);
@@ -147,7 +147,7 @@ export function buildCustomerPayload(c: AppClient) {
     identification,
     ...(company && checkDigit ? { check_digit: checkDigit } : {}),
     name: company ? [cleanName] : [first ?? cleanName, rest.join(" ") || first || cleanName],
-    branch_office: 0,
+    branch_office: branchOffice,
     active: true,
     vat_responsible: false,
     fiscal_responsibilities: [{ code: "R-99-PN" }],
@@ -220,7 +220,15 @@ export function addDays(ymd: string, days: number): string {
  * (already in Siigo) or the final-consumer one. Electronic invoices
  * cannot be dated before today, so the date is always `today`.
  */
-export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], customerIdentification: string | null, settings: SiigoSettings, today: string) {
+export function buildInvoicePayload(
+  order: AppOrder,
+  items: AppOrderItem[],
+  customerIdentification: string | null,
+  settings: SiigoSettings,
+  today: string,
+  /** The client's sede: its Siigo branch and how it shows in the observations. */
+  site?: { branchOffice?: number | null; label?: string | null }
+) {
   const problems: string[] = [];
   if (!settings.invoice_document_id) problems.push("Elige el tipo de factura de venta en Ajustes → Siigo.");
   if (!settings.seller_id) problems.push("Elige el vendedor en Ajustes → Siigo.");
@@ -262,15 +270,37 @@ export function buildInvoicePayload(order: AppOrder, items: AppOrderItem[], cust
   const payload = {
     document: { id: settings.invoice_document_id ?? 0 },
     date: today,
-    customer: { identification: customerIdentification ?? "", branch_office: 0 },
+    customer: { identification: customerIdentification ?? "", branch_office: site?.branchOffice ?? 0 },
     seller: settings.seller_id ?? 0,
     stamp: { send: !!settings.stamp_dian },
     mail: { send: !!settings.send_mail },
-    observations: [`Pedido Café Amantti #${order.id.split("-")[0]}`, order.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+    observations: [site?.label ? `Sede: ${site.label}` : "", `Pedido Café Amantti #${order.id.split("-")[0]}`, order.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
     items: lines,
     payments: [{ id: paymentId ?? 0, value: total, due_date: dueDate }],
   };
   return { payload, problems, total };
+}
+
+/**
+ * POST /v1/customers body for a client's sede as a branch office of its
+ * NIT: same identification, its own branch number, name ("RAZÓN SOCIAL -
+ * SEDE") and address, so each invoice shows the sede it is for.
+ */
+export function buildBranchPayload(
+  client: AppClient,
+  site: { name: string; address?: string | null; city_code?: string | null; phone?: string | null },
+  branchOffice: number
+) {
+  return buildCustomerPayload(
+    {
+      ...client,
+      name: `${client.name.trim()} - ${site.name.trim()}`,
+      address: site.address?.trim() || client.address,
+      city_code: site.city_code || client.city_code,
+      phone: site.phone || client.phone,
+    },
+    branchOffice
+  );
 }
 
 // ── Sales invoices (Siigo → app) ────────────────────────────
@@ -583,7 +613,7 @@ export function splitDocumentName(name: string | null | undefined): { prefix: st
 }
 
 export type AppPayment = { id: string; payment_date: string; amount: number; method: "web" | "transfer" | "cash"; notes?: string | null };
-export type EmittedInvoice = { siigo_name: string | null; due_date: string | null; customer_identification: string | null };
+export type EmittedInvoice = { siigo_name: string | null; due_date: string | null; customer_identification: string | null; branch_office?: number | null };
 
 /**
  * POST /v1/vouchers body: a "DebtPayment" receipt that pays (part of) an
@@ -602,7 +632,7 @@ export function buildVoucherPayload(payment: AppPayment, invoice: EmittedInvoice
     document: { id: settings.voucher_document_id ?? 0 },
     date: payment.payment_date,
     type: "DebtPayment",
-    customer: { identification: invoice.customer_identification ?? "", branch_office: 0 },
+    customer: { identification: invoice.customer_identification ?? "", branch_office: invoice.branch_office ?? 0 },
     items: [{ due: { prefix: due?.prefix ?? "", consecutive: due?.consecutive ?? 0, quote: 1, date: invoice.due_date ?? payment.payment_date }, value }],
     payment: { id: paymentId ?? 0, value },
     observations: [`Pago de ${invoice.siigo_name ?? "factura"} · Café Amantti`, payment.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),

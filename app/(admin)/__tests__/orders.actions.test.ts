@@ -261,3 +261,18 @@ describe("delivery and payment apart", () => {
     expect(stock("inv-250")).toBe(18);
   });
 });
+
+describe("sede of an order", () => {
+  it("is saved with the order; changing it later carries over to its invoice (in the app)", async () => {
+    db.rows("client_sites").push({ id: "s1", client_id: "cl1", name: "Fabricato" }, { id: "s2", client_id: "cl1", name: "Mayorca" });
+    const { orderId } = await createManualAdminOrder({ ...baseOrder("pending"), client_id: "cl1", site_id: "s1" });
+    expect(db.byId("orders", orderId)!.site_id).toBe("s1");
+    db.rows("sales_invoices").push({ id: "inv-x", order_id: orderId, status: "emitida", site_id: "s1" });
+    expect(await updateManualAdminOrder(orderId, { ...baseOrder("pending"), client_id: "cl1", items: undefined, site_id: "s2" })).toMatchObject({ success: true });
+    expect(db.byId("orders", orderId)!.site_id).toBe("s2");
+    expect(db.byId("sales_invoices", "inv-x")!.site_id).toBe("s2");
+    // Not saying the sede keeps it.
+    await updateManualAdminOrder(orderId, { ...baseOrder("pending"), client_id: "cl1", items: undefined });
+    expect(db.byId("orders", orderId)!.site_id).toBe("s2");
+  });
+});

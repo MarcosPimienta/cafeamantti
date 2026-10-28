@@ -23,6 +23,8 @@ type Invoice = {
   id: string;
   order_id: string;
   customer_name: string;
+  /** The client's sede the invoice is for. */
+  site_name?: string | null;
   customer_identification: string | null;
   payment_terms: "credito" | "contado";
   term_days: number;
@@ -237,6 +239,7 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-bold truncate">{inv.customer_name}</p>
+          {inv.site_name && <p className="text-xs font-bold text-[#9a7a3c] truncate">{tr("Sede: {name}", { name: inv.site_name })}</p>}
           <p className="text-xs text-foreground/50">
             {inv.siigo_name ?? tr("Sin número")}
             {" · "}

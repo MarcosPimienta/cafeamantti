@@ -276,4 +276,13 @@ export const server: Record<string, string> = {
   "La cuenta de {label} debe ser un código PUC de 4 a 10 dígitos.": "The {label} account must be a PUC code of 4 to 10 digits.",
   "La cuenta debe ser un código PUC de 4 a 10 dígitos.": "The account must be a PUC code of 4 to 10 digits.",
   "Escribe el nombre de la cuenta.": "Type the account name.",
+  "Falta aplicar la migración 20261102000000_client_sites.sql": "Apply the migration 20261102000000_client_sites.sql",
+  "Ese cliente ya tiene una sede con ese nombre.": "That client already has a location with that name.",
+  "Escribe el nombre de la sede.": "Type the location's name.",
+  "La sede ya tiene pedidos o facturas: desactívala en vez de eliminarla.": "The location already has orders or invoices: deactivate it instead of deleting it.",
+  "La sede ya está en Siigo como sucursal: desactívala en vez de eliminarla.": "The location is already a branch in Siigo: deactivate it instead of deleting it.",
+  "Sede no encontrada.": "Location not found.",
+  "Cliente no encontrado.": "Client not found.",
+  "El cliente no tiene NIT: agrégalo antes de crear sus sedes en Siigo.": "The client has no NIT: add it before creating its locations in Siigo.",
+  "Para crear la sede {name} en Siigo: {problems}": "To create the location {name} in Siigo: {problems}",
 };

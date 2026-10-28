@@ -36,9 +36,14 @@ export default async function AdminOrdersPage() {
       .maybeSingle(),
   ]);
 
+  // Each order shows its sede (from the clients' sedes, so no join is needed).
+  const siteNames = new Map<string, string>();
+  for (const c of crmClients) for (const site of (c.sites ?? []) as { id: string; name: string }[]) siteNames.set(site.id, site.name);
+  const withSites = (orders ?? []).map((o) => ({ ...o, site_name: o.site_id ? siteNames.get(o.site_id) ?? null : null }));
+
   return (
     <OrdersBoard
-      orders={orders ?? []}
+      orders={withSites}
       inventory={inventory ?? []}
       crmClients={crmClients}
       whatsappConfigured={isWhatsAppConfigured()}

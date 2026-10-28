@@ -319,3 +319,50 @@ describe("invoice notes", () => {
     expect(body.observations).toBe(`Pedido Café Amantti #${ORDER.split("-")[0]} · Orden de compra 1234`);
   });
 });
+
+describe("sedes: one NIT, an invoice per sede to its Siigo branch", () => {
+  const SITE = { id: "s1", client_id: "cl1", name: "Sede Poblado", address: "Calle 10 # 43 E 60", city: "Medellín", city_code: "05001", active: true, siigo_branch_office: null };
+  beforeEach(() => {
+    db.rows("client_sites").push({ ...SITE });
+    db.byId("orders", ORDER)!.site_id = "s1";
+    h.responses["GET /v1/customers"] = { results: [{ id: "c-1", branch_office: 0, name: ["HOTEL ANDINO"] }] };
+    h.responses["POST /v1/customers"] = { id: "c-br1" };
+    h.responses["POST /v1/invoices"] = { id: "sg-1", name: "FV-2-800", stamp: { status: "Accepted" } };
+  });
+  const posted = (path: string) => h.calls.filter((c) => c.method === "POST" && c.path === path).map((c) => c.opts?.body as Record<string, any>); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  it("the first invoice of a sede creates it in Siigo as branch 1 of the NIT and goes to that branch, with the sede in its observations", async () => {
+    await createInvoice(ORDER, { terms: "credito", termDays: 30 });
+    expect(invoice().site_id).toBe("s1");
+    expect(await sendPendingToSiigo()).toMatchObject({ success: true, invoicesSent: ["FV-2-800"] });
+    expect(posted("/v1/customers")[0]).toMatchObject({ identification: "900123456", branch_office: 1, name: ["Hotel Andino - Sede Poblado"], address: { address: "Calle 10 # 43 E 60", city: { city_code: "05001" } } });
+    const inv = posted("/v1/invoices")[0];
+    expect(inv.customer).toEqual({ identification: "900123456", branch_office: 1 });
+    expect(inv.observations).toMatch(/^Sede: Sede Poblado — Calle 10 # 43 E 60, Medellín · Pedido Café Amantti/);
+    expect(invoice()).toMatchObject({ status: "emitida", branch_office: 1 });
+    expect(db.byId("client_sites", "s1")).toMatchObject({ siigo_branch_office: 1, siigo_customer_id: "c-br1" });
+
+    // Its payments go to the same branch.
+    h.responses["POST /v1/vouchers"] = { id: "rc-1", name: "RC-1-50" };
+    await registerPayment(invoice().id, { date: "2026-11-05", amount: 30000, method: "transfer" });
+    await sendPendingToSiigo();
+    expect(posted("/v1/vouchers")[0].customer).toEqual({ identification: "900123456", branch_office: 1 });
+    expect(posted("/v1/customers")).toHaveLength(1); // the branch was made once
+  });
+
+  it("a branch already in Siigo with the sede's name is linked, not duplicated", async () => {
+    h.responses["GET /v1/customers"] = { results: [{ id: "c-1", branch_office: 0, name: ["HOTEL ANDINO"] }, { id: "c-br3", branch_office: 3, name: ["HOTEL ANDINO - SEDE POBLADO"] }] };
+    await createInvoice(ORDER, { terms: "credito" });
+    await sendPendingToSiigo();
+    expect(posted("/v1/customers")).toHaveLength(0);
+    expect(posted("/v1/invoices")[0].customer.branch_office).toBe(3);
+    expect(db.byId("client_sites", "s1")!.siigo_branch_office).toBe(3);
+  });
+
+  it("a new sede takes the next free branch number", async () => {
+    h.responses["GET /v1/customers"] = { results: [{ id: "c-1", branch_office: 0, name: ["HOTEL ANDINO"] }, { id: "c-x", branch_office: 2, name: ["HOTEL ANDINO - LAURELES"] }] };
+    await createInvoice(ORDER, { terms: "credito" });
+    await sendPendingToSiigo();
+    expect(posted("/v1/customers")[0].branch_office).toBe(3);
+  });
+});

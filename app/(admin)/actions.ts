@@ -431,6 +431,8 @@ async function _syncManualOrderStock(
 export async function createManualAdminOrder(
   data: {
     client_id?: string;
+    /** The client's sede the order is for. */
+    site_id?: string | null;
     /** Name shown on the order; for a CRM client it defaults to the CRM name. */
     customer_name?: string;
     /** A walk-in customer to save in the CRM and link to this order. */
@@ -557,6 +559,7 @@ export async function createManualAdminOrder(
     throw new Error(itemsErr.message);
   }
   await _saveOrderTax(supabase, order.id, data.items, data.prices_include_tax);
+  if (data.site_id) await _saveOrderSite(supabase, order.id, data.site_id);
 
   // Follow-up fields (later migrations): best-effort, reported back on failure.
   const now = new Date().toISOString();
@@ -647,6 +650,18 @@ async function _insertOrderItems(supabase: Awaited<ReturnType<typeof createClien
 }
 
 /**
+ * The sede an order is for. Its invoice (if any) follows in the app; in
+ * Siigo an issued invoice keeps the branch it went to. Best-effort: the
+ * column comes with a migration.
+ */
+async function _saveOrderSite(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string, siteId: string | null) {
+  const { error } = await supabase.from('orders').update({ site_id: siteId }).eq('id', orderId);
+  if (error) return console.warn('orders.site_id:', error.message);
+  const { error: invErr } = await supabase.from('sales_invoices').update({ site_id: siteId }).eq('order_id', orderId).neq('status', 'anulada');
+  if (invErr) console.warn('sales_invoices.site_id:', invErr.message);
+}
+
+/**
  * The order's IVA choice and the IVA added on top of its total (0 when the
  * prices include it). Best-effort: the columns come with migrations.
  * `choice` undefined keeps what the order has.
@@ -685,6 +700,8 @@ async function _updateManualAdminOrder(
   orderId: string,
   data: {
     client_id?: string | null;
+    /** The client's sede; undefined keeps the order's. */
+    site_id?: string | null;
     customer_name?: string;
     contact_email: string;
     contact_phone: string;
@@ -766,6 +783,8 @@ async function _updateManualAdminOrder(
     await _saveOrderTax(supabase, orderId, data.items, data.prices_include_tax);
     total_amount = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }
+
+  if (data.site_id !== undefined) await _saveOrderSite(supabase, orderId, data.site_id);
 
   // Only the IVA choice changed: its IVA is recomputed from the saved lines.
   if (!data.items && data.prices_include_tax !== undefined) await _saveOrderTax(supabase, orderId, null, data.prices_include_tax);
@@ -911,19 +930,21 @@ export async function getClientsCRM() {
   if (!isAdmin) throw new Error("Unauthorized");
 
   const supabase = await createClient();
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let { data, error }: { data: any[] | null; error: { message: string } | null } = await supabase
     .from('clients')
-    .select(`
-      *,
-      orders(count)
-    `)
+    .select('*, orders(count), sites:client_sites(*)')
     .order('created_at', { ascending: false });
+  // Before the sedes migration: clients without sedes.
+  if (error && /client_sites/.test(error.message)) {
+    ({ data, error } = await supabase.from('clients').select('*, orders(count)').order('created_at', { ascending: false }));
+  }
 
   if (error) {
     console.error("Error fetching clients:", error);
     return [];
   }
-  return data;
+  return data ?? [];
 }
 
 export async function createClientCRM(data: {

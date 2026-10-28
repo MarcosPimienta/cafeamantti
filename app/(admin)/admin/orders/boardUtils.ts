@@ -19,6 +19,8 @@ export type BoardOrder = {
   shipping_info?: any;
   siigo_invoice?: string | null;
   client?: { name: string | null } | { name: string | null }[] | null;
+  /** The client's sede the order is for. */
+  site_name?: string | null;
   order_items?: any[];
   [key: string]: any;
 };

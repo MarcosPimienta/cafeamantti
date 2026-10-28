@@ -6,6 +6,7 @@ import { createManualAdminOrder } from "../../actions";
 import { isSellable } from "@/utils/inventory/sellable";
 import { useTr } from "@/app/(admin)/AdminI18n";
 import { OrderTaxTotals, PricesIncludeTaxToggle, TaxSelect, useOrderTaxes } from "./OrderTaxFields";
+import { SiteSelect, activeSites } from "./SiteSelect";
 import { defaultTaxId, rateOf } from "@/utils/orders/tax";
 
 interface InventoryItem {
@@ -74,6 +75,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
 
   // ── Cliente ──
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [siteId, setSiteId] = useState("");
   const [customerName, setCustomerName] = useState(EMPTY_CUSTOMER.customerName);
   const [contactEmail, setContactEmail] = useState(EMPTY_CUSTOMER.contactEmail);
   const [contactPhone, setContactPhone] = useState(EMPTY_CUSTOMER.contactPhone);
@@ -112,8 +114,16 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
   // Only what we sell — supplies (bolsas, pergamino, stickers…) stay out.
   const sellable = inventory.filter(isSellable);
 
+  const sites = activeSites(crmClients.find((c) => c.id === selectedClientId));
+  const pickSite = (site: { id: string; address?: string | null; city?: string | null } | null) => {
+    setSiteId(site?.id ?? "");
+    if (site?.address) setAddress(site.address);
+    if (site?.city) setCity(site.city);
+  };
+
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
+    setSiteId("");
     const client = crmClients.find(c => c.id === clientId);
     if (client) {
       setCustomerName(client.name || "");
@@ -135,6 +145,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
 
   const resetForm = () => {
     setSelectedClientId("");
+    setSiteId("");
     setCustomerName(EMPTY_CUSTOMER.customerName);
     setContactEmail(EMPTY_CUSTOMER.contactEmail);
     setContactPhone(EMPTY_CUSTOMER.contactPhone);
@@ -193,6 +204,10 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
       setError(tr("Escribe el nombre del cliente."));
       return;
     }
+    if (sites.length && !siteId) {
+      setError(tr("Elige la sede del cliente."));
+      return;
+    }
     if (items.length === 0) {
       setError(tr("Debes agregar al menos un producto."));
       return;
@@ -208,6 +223,7 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
     try {
       const res = await createManualAdminOrder({
         client_id: selectedClientId || undefined,
+        site_id: siteId || null,
         customer_name: customerName,
         new_client:
           isNewClient && saveToCrm
@@ -282,6 +298,8 @@ export default function ManualOrderModal({ inventory, crmClients = [] }: ManualO
                     </select>
                   </div>
                 )}
+                <SiteSelect sites={sites} value={siteId} onChange={pickSite}
+                  className="w-full px-4 py-2.5 bg-[#f9f7f0] border border-[#C59F59]/20 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/40" />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
