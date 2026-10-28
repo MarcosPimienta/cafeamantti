@@ -7,6 +7,8 @@ import {
   siigoOf,
   groupOrdersByStatus,
   isPaid,
+  isClosed,
+  needsInvoice,
   NEXT_STATUS,
   UNDELIVERED,
   type BoardOrder,
@@ -91,15 +93,14 @@ describe("groupOrdersByStatus", () => {
   it("puts each order in its column, and unknown statuses in the first one", () => {
     const g = groupOrdersByStatus(
       [order({ id: "a", status: "shipped" }), order({ id: "b", status: "weird" }), order({ id: "c", status: "cancelled" })],
-      COLS,
-      { now: NOW }
+      COLS
     );
     expect(g.get("shipped")!.map((o) => o.id)).toEqual(["a"]);
     expect(g.get("processing")!.map((o) => o.id)).toEqual(["b"]);
     expect(g.get("cancelled")!.map((o) => o.id)).toEqual(["c"]);
   });
 
-  it("payment is not a column: new and old-'paid' orders are in Preparando, delivered ones in Entregado paid or not", () => {
+  it("payment is not a column: new and old-'paid' orders are in Preparando, delivered unpaid ones in Entregado", () => {
     const g = groupOrdersByStatus(
       [
         order({ id: "owed", status: "delivered", payment_status: "pending", delivered_at: "2026-10-07T00:00:00Z", created_at: "2026-10-02T00:00:00Z" }),
@@ -107,23 +108,46 @@ describe("groupOrdersByStatus", () => {
         order({ id: "new", status: "pending", created_at: "2026-10-02T00:00:00Z" }),
         order({ id: "legacy-paid", status: "paid", payment_status: undefined, created_at: "2026-10-03T00:00:00Z" }),
       ],
-      COLS,
-      { now: NOW }
+      COLS
     );
-    expect(g.get("delivered")!.map((o) => o.id)).toEqual(["owed", "done"]);
+    expect(g.get("delivered")!.map((o) => o.id)).toEqual(["owed"]);
     expect(g.get("processing")!.map((o) => o.id)).toEqual(["new", "legacy-paid"]);
     expect(isPaid({ status: "delivered", payment_status: "pending" })).toBe(false);
     expect(isPaid({ status: "delivered" })).toBe(true); // before the payment migration
   });
 
-  it("hides deliveries older than 30 days unless asked for all", () => {
+  it("a delivery needs a factura when the client has a document, it has a value and no Siigo invoice", () => {
+    const withNit = { name: "GRUPO PROFITNESS", document_number: "901656887" };
+    expect(needsInvoice(order({ total_amount: 100, client: withNit }))).toBe(true);
+    expect(needsInvoice(order({ total_amount: 100, client: [withNit] }))).toBe(true);
+    expect(needsInvoice(order({ total_amount: 100, client: withNit, siigo_invoice: "FV-2-726" }))).toBe(false);
+    expect(needsInvoice(order({ total_amount: 100, client: withNit, shipping_info: { siigo_invoice: "FV-1" } }))).toBe(false);
+    expect(needsInvoice(order({ total_amount: 0, client: withNit }))).toBe(false); // courtesy
+    expect(needsInvoice(order({ total_amount: 100, client: { name: "Elisa Uribe", document_number: null } }))).toBe(false); // consumidor final
+    expect(needsInvoice(order({ total_amount: 100 }))).toBe(false);
+  });
+
+  it("closed orders (delivered, paid, invoiced) leave the board unless asked; owed ones stay however old", () => {
+    const nit = { name: "ELEVATE", document_number: "902038087" };
     const orders = [
-      order({ id: "recent", status: "delivered", delivered_at: "2026-09-20T00:00:00Z" }),
-      order({ id: "old", status: "delivered", delivered_at: "2026-08-01T00:00:00Z" }),
-      order({ id: "legacy", status: "delivered", created_at: "2026-01-01T00:00:00Z" }), // no delivered_at
+      order({ id: "unpaid-old", status: "delivered", payment_status: "pending", delivered_at: "2026-06-01T00:00:00Z" }),
+      order({ id: "no-invoice", status: "delivered", payment_status: "paid", total_amount: 100, client: nit, delivered_at: "2026-10-01T00:00:00Z" }),
+      order({ id: "closed-old", status: "delivered", payment_status: "paid", total_amount: 100, client: nit, siigo_invoice: "FV-2-1", delivered_at: "2026-09-01T00:00:00Z" }),
+      order({ id: "closed-new", status: "delivered", payment_status: "paid", delivered_at: "2026-10-05T00:00:00Z" }),
+      order({ id: "unpaid-new", status: "delivered", payment_status: "pending", delivered_at: "2026-10-06T00:00:00Z" }),
     ];
-    expect(groupOrdersByStatus(orders, COLS, { now: NOW }).get("delivered")!.map((o) => o.id)).toEqual(["recent"]);
-    expect(groupOrdersByStatus(orders, COLS, { now: NOW, allDelivered: true }).get("delivered")).toHaveLength(3);
+    expect(isClosed(orders[2])).toBe(true);
+    expect(isClosed(orders[1])).toBe(false);
+    expect(isClosed(order({ status: "shipped", payment_status: "paid" }))).toBe(false);
+    expect(groupOrdersByStatus(orders, COLS).get("delivered")!.map((o) => o.id)).toEqual(["unpaid-old", "unpaid-new", "no-invoice"]);
+    // The history: oldest pending on top, then the latest closed first.
+    expect(groupOrdersByStatus(orders, COLS, { showClosed: true }).get("delivered")!.map((o) => o.id)).toEqual([
+      "unpaid-old",
+      "unpaid-new",
+      "no-invoice",
+      "closed-new",
+      "closed-old",
+    ]);
   });
 
   it("sorts by promised date first (soonest on top), then by age", () => {
@@ -134,8 +158,7 @@ describe("groupOrdersByStatus", () => {
         order({ id: "no-date-old", created_at: "2026-09-01T00:00:00Z" }),
         order({ id: "overdue", delivery_due_date: "2026-10-01" }),
       ],
-      COLS,
-      { now: NOW }
+      COLS
     );
     expect(g.get("processing")!.map((o) => o.id)).toEqual(["overdue", "due-later", "no-date-old", "no-date-new"]);
   });

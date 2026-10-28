@@ -46,7 +46,9 @@ import {
   NEXT_STATUS,
   boardColumn,
   isPaid,
-  DELIVERED_WINDOW_DAYS,
+  deliveredOn,
+  isClosed,
+  needsInvoice,
   bogotaToday,
   relDays,
   fmtDay,
@@ -123,7 +125,7 @@ export default function OrdersBoard({
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [onlyUnpaid, setOnlyUnpaid] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
-  const [allDelivered, setAllDelivered] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
   // ?order=<id> opens that order's panel (links from Facturas).
   const linkedOrder = useSearchParams().get("order");
   const [selectedId, setSelectedId] = useState<string | null>(linkedOrder);
@@ -166,9 +168,12 @@ export default function OrdersBoard({
   }, [orders, search, onlyOverdue, onlyUnpaid, today]);
 
   const byColumn = useMemo(
-    () => groupOrdersByStatus(filtered, COLUMNS.map((c) => c.id), { allDelivered }),
-    [filtered, allDelivered]
+    // A search also looks through closed orders: that is how the history is found.
+    () => groupOrdersByStatus(filtered, COLUMNS.map((c) => c.id), { showClosed: showClosed || !!search.trim() }),
+    [filtered, showClosed, search]
   );
+  const hiddenClosed = showClosed || search.trim() ? 0 : filtered.filter(isClosed).length;
+  const closedNote = hiddenClosed ? tr("{n} cerradas ocultas", { n: String(hiddenClosed) }) : undefined;
 
   const pending = orders.filter((o) => UNDELIVERED.has(o.status));
   const overdueCount = pending.filter((o) => dueState(o, today) === "overdue").length;
@@ -356,7 +361,7 @@ export default function OrdersBoard({
           <Toggle checked={onlyOverdue} onChange={setOnlyOverdue} label={tr("Solo atrasadas")} />
           <Toggle checked={onlyUnpaid} onChange={setOnlyUnpaid} label={tr("Solo por cobrar")} />
           <Toggle checked={showCancelled} onChange={setShowCancelled} label={tr("Mostrar canceladas")} />
-          <Toggle checked={allDelivered} onChange={setAllDelivered} label={tr("Todas las entregadas (no solo {DELIVERED_WINDOW_DAYS} días)", { DELIVERED_WINDOW_DAYS: DELIVERED_WINDOW_DAYS })} />
+          <Toggle checked={showClosed} onChange={setShowClosed} label={tr("Ver cerradas (pagadas y entregadas)")} />
         </div>
       </div>
 
@@ -385,7 +390,7 @@ export default function OrdersBoard({
         </div>
         <p className="text-[11px] text-foreground/40">
           {cop(mobileOrders.reduce((s, o) => s + Number(o.total_amount || 0), 0))}
-          {activeMobileCol === "delivered" && !allDelivered ? tr(" · Últimos {DELIVERED_WINDOW_DAYS} días", { DELIVERED_WINDOW_DAYS: DELIVERED_WINDOW_DAYS }) : ""}
+          {activeMobileCol === "delivered" && closedNote ? ` · ${closedNote}` : ""}
         </p>
         {mobileOrders.length === 0 ? (
           <p className="text-sm text-foreground/40 text-center py-12 border border-dashed border-foreground/10 rounded-2xl">
@@ -411,7 +416,7 @@ export default function OrdersBoard({
               today={today}
               onOpen={setSelectedId}
               draggingId={draggingId}
-              note={col.id === "delivered" && !allDelivered ? `Últimos ${DELIVERED_WINDOW_DAYS} días` : undefined}
+              note={col.id === "delivered" ? closedNote : undefined}
             />
           ))}
         </div>
@@ -633,7 +638,14 @@ function Card({
             ? <span className="font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">{tr("Pagado")}</span>
             : <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">{tr("Por cobrar")}</span>
         )}
-        <span className="text-foreground/40">{relDays(order.created_at)}</span>
+        {order.status === "delivered" && !isPaid(order) ? (
+          <span className="font-bold text-amber-800">{tr("Entregada {when}", { when: relDays(deliveredOn(order)) })}</span>
+        ) : (
+          <span className="text-foreground/40">{relDays(order.created_at)}</span>
+        )}
+        {order.status === "delivered" && needsInvoice(order) && (
+          <span className="font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded">{tr("Falta facturar")}</span>
+        )}
         {city && <span className="text-foreground/40">· {city}</span>}
         {due && order.delivery_due_date && (
           <span

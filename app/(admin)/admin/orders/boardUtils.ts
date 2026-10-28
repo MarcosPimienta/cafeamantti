@@ -18,7 +18,7 @@ export type BoardOrder = {
   contact_phone?: string | null;
   shipping_info?: any;
   siigo_invoice?: string | null;
-  client?: { name: string | null } | { name: string | null }[] | null;
+  client?: { name: string | null; document_number?: string | null } | { name: string | null; document_number?: string | null }[] | null;
   /** The client's sede the order is for. */
   site_name?: string | null;
   order_items?: any[];
@@ -48,8 +48,23 @@ export function boardColumn(o: { status: string; payment_status?: string | null 
   return o.status;
 }
 
-/** The Entregado column only shows recent deliveries unless asked for all. */
-export const DELIVERED_WINDOW_DAYS = 30;
+/**
+ * A delivered order still owes a factura when its client has a NIT or cédula
+ * and it has a value but no Siigo invoice yet. Consumidor final orders (no
+ * document) and courtesy orders ($0) don't.
+ */
+export function needsInvoice(o: BoardOrder): boolean {
+  const client = Array.isArray(o.client) ? o.client[0] : o.client;
+  return !!client?.document_number?.trim() && Number(o.total_amount || 0) > 0 && !siigoOf(o);
+}
+
+/** Delivered, paid and invoiced (when it needs it): nothing left to do, so it leaves the board. */
+export function isClosed(o: BoardOrder): boolean {
+  return o.status === "delivered" && isPaid(o) && !needsInvoice(o);
+}
+
+/** When the order was delivered (old ones have no delivered_at). */
+export const deliveredOn = (o: BoardOrder) => o.delivered_at || o.status_changed_at || o.updated_at || o.created_at;
 
 /** Today in Colombia (UTC-5) as YYYY-MM-DD. */
 export const bogotaToday = (now = Date.now()) => bogotaTodayAt(new Date(now));
@@ -91,29 +106,35 @@ export function waLink(phone: string | null | undefined) {
   return `https://wa.me/${digits.length === 10 ? `57${digits}` : digits}`;
 }
 
+/** Order of the Entregado column: unpaid first, then missing a factura, then closed. */
+const deliveredRank = (o: BoardOrder) => (!isPaid(o) ? 0 : needsInvoice(o) ? 1 : 2);
+
 /**
  * Orders per board column. Unknown statuses land in the first column so no
- * order disappears; old deliveries are hidden unless `allDelivered`. Inside a
- * column: soonest promised delivery first (overdue on top), then oldest.
+ * order disappears. The board is what is left to do: closed orders (delivered,
+ * paid, invoiced) are hidden unless `showClosed`, while unpaid or uninvoiced
+ * deliveries stay however old they are. Inside a column: soonest promised
+ * delivery first (overdue on top), then oldest; in Entregado, the oldest
+ * pending delivery first and the latest closed one first.
  */
 export function groupOrdersByStatus(
   orders: BoardOrder[],
   columns: string[],
-  opts: { allDelivered?: boolean; now?: number } = {}
+  opts: { showClosed?: boolean } = {}
 ): Map<string, BoardOrder[]> {
-  const now = opts.now ?? Date.now();
   const map = new Map<string, BoardOrder[]>(columns.map((c) => [c, []]));
   for (const o of orders) {
-    const col = boardColumn(o);
-    // The delivered column only keeps the recent ones.
-    if (col === "delivered" && !opts.allDelivered) {
-      const when = o.delivered_at || o.status_changed_at || o.updated_at || o.created_at;
-      if (daysBetween(when, now) > DELIVERED_WINDOW_DAYS) continue;
-    }
-    (map.get(col) ?? map.get(columns[0]))!.push(o);
+    if (!opts.showClosed && isClosed(o)) continue;
+    (map.get(boardColumn(o)) ?? map.get(columns[0]))!.push(o);
   }
-  for (const list of map.values()) {
+  for (const [col, list] of map) {
     list.sort((a, b) => {
+      if (col === "delivered") {
+        const ra = deliveredRank(a);
+        const rb = deliveredRank(b);
+        if (ra !== rb) return ra - rb;
+        return ra === 2 ? deliveredOn(b).localeCompare(deliveredOn(a)) : deliveredOn(a).localeCompare(deliveredOn(b));
+      }
       const da = a.delivery_due_date || "9999";
       const db = b.delivery_due_date || "9999";
       return da === db ? a.created_at.localeCompare(b.created_at) : da.localeCompare(db);

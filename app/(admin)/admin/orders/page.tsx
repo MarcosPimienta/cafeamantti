@@ -16,7 +16,7 @@ export default async function AdminOrdersPage() {
       .select(`
         *,
         order_items (*),
-        client:client_id ( name )
+        client:client_id ( name, document_number )
       `)
       .order('created_at', { ascending: false }),
     // '*' so is_sellable comes along when its migration is applied; the
