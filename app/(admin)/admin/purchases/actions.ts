@@ -11,7 +11,9 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin } from '../../actions';
 import { createExpenseDirect } from '../cashflow/actions';
-import { ADVANCE_CATEGORY, EXPENSE_CATEGORY_TYPE_MAP } from '../cashflow/types';
+import { ADVANCE_CATEGORY } from '../cashflow/types';
+import { categoryMonths, categoryTypes, namesOf } from '@/utils/expenses/categories';
+import { loadExpenseCategories } from '@/utils/expenses/server';
 import { getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
 import { buildAdvanceCrossPayload, buildAdvancePaymentPayload, buildAdvanceRefundPayload, buildPaymentReceiptPayload, buildPurchaseBillPayload, cleanIdentification, splitDocumentName } from '@/utils/siigo/mapping';
 import { daneCodeFor } from '@/utils/siigo/daneCities';
@@ -28,7 +30,10 @@ const providerPrefix = (raw: string | null | undefined) => (raw ?? '').trim().to
 const MIGRATION_INVENTORY_HINT = 'Falta aplicar la migración 20261028000000_purchase_bill_inventory.sql';
 const MIGRATION_ADVANCES_HINT = 'Falta aplicar la migración 20261029000000_supplier_advances.sql';
 const MIGRATION_JOURNALS_HINT = 'Falta aplicar la migración 20261030000000_supplier_advance_journals.sql';
-const CAPEX = Object.entries(EXPENSE_CATEGORY_TYPE_MAP).filter(([, t]) => t === 'CAPEX').map(([c]) => c);
+/** Fixed asset categories (built-in and the team's, active or not): their lines carry a useful life. */
+async function assetCategoryNames(supabase: Supabase) {
+  return namesOf(await loadExpenseCategories(supabase, { includeInactive: true }), (c) => c.type === 'CAPEX');
+}
 
 async function requireAdmin() {
   if (!(await checkIsAdmin())) throw new Error('Unauthorized');
@@ -72,7 +77,8 @@ export async function getPurchases() {
     supabase.from('inventory').select('id, product_code, product_name, unit, category').order('product_name'),
   ]);
   const { data: advances, error: advErr } = await supabase.from('supplier_advances').select('*').order('move_date', { ascending: false }).order('created_at', { ascending: false });
-  const categories = Object.keys(EXPENSE_CATEGORY_TYPE_MAP);
+  const allCategories = await loadExpenseCategories(supabase);
+  const categories = namesOf(allCategories);
   return {
     migrationApplied: !error,
     bills: bills ?? [],
@@ -83,7 +89,8 @@ export async function getPurchases() {
       .map((c) => ({ id: c.id, number: c.number, issuer_name: c.issuer_name, total: Number(c.siigo_ds_owed ?? c.total_amount), paid: (c.payments ?? []).reduce((s: number, p: { amount: number }) => s + Number(p.amount), 0), date: c.siigo_ds_date ?? c.issue_date })),
     categories,
     // Fixed asset classes: their lines ask for a useful life.
-    assetCategories: CAPEX,
+    assetCategories: namesOf(allCategories, (c) => c.type === 'CAPEX'),
+    assetMonths: categoryMonths(allCategories),
     // Saldo a favor: every movement (null before its migration).
     advances: advErr ? null : advances ?? [],
     // Products a purchase can bring in (services have no stock).
@@ -125,9 +132,10 @@ export async function createBill(input: BillInput) {
     const { data: supplier, error: supErr } = await supabase.from('suppliers').select('*').eq('id', input.supplierId).single();
     if (supErr || !supplier) throw supErr ?? new Error('Proveedor no encontrado.');
     const identification = cleanIdentification(supplier.document_number).identification;
-    const lines = normalizeLines(input.lines, input.issueDate);
+    const capex = await assetCategoryNames(supabase);
+    const lines = normalizeLines(input.lines, input.issueDate, capex);
     const bill = { supplier_identification: identification, provider_number: input.providerNumber.trim(), issue_date: input.issueDate, due_date: input.dueDate, lines };
-    const problems = billProblems(bill, CAPEX);
+    const problems = billProblems(bill, capex);
     if (problems.length) throw new Error(problems.join(' · '));
     const totals = billTotals(lines);
     const { data: created, error } = await supabase
@@ -189,9 +197,10 @@ export async function updateBill(billId: string, input: BillInput) {
     const { data: supplier, error: supErr } = await supabase.from('suppliers').select('*').eq('id', input.supplierId).single();
     if (supErr || !supplier) throw supErr ?? new Error('Proveedor no encontrado.');
     const identification = cleanIdentification(supplier.document_number).identification;
-    const lines = normalizeLines(input.lines, input.issueDate);
+    const capex = await assetCategoryNames(supabase);
+    const lines = normalizeLines(input.lines, input.issueDate, capex);
     const bill = { supplier_identification: identification, provider_number: input.providerNumber.trim(), issue_date: input.issueDate, due_date: input.dueDate, lines };
-    const problems = billProblems(bill, CAPEX);
+    const problems = billProblems(bill, capex);
     if (problems.length) throw new Error(problems.join(' · '));
     const totals = billTotals(lines);
     const paid = ((current.payments ?? []) as { amount: number }[]).reduce((sum, p) => sum + Number(p.amount), 0);
@@ -256,7 +265,7 @@ export async function updateBill(billId: string, input: BillInput) {
 }
 
 /** Clean lines; a fixed asset starts being used on the invoice date unless told otherwise. */
-const normalizeLines = (lines: BillLine[], issueDate: string): BillLine[] =>
+const normalizeLines = (lines: BillLine[], issueDate: string, capex: string[]): BillLine[] =>
   lines.map((l) => ({
     ...l,
     base: Number(l.base),
@@ -265,8 +274,8 @@ const normalizeLines = (lines: BillLine[], issueDate: string): BillLine[] =>
     description: (l.description || l.category).trim(),
     inventory_id: l.inventory_id || null,
     inventory_qty: l.inventory_id ? Number(l.inventory_qty) || 0 : null,
-    depreciation_months: CAPEX.includes(l.category) ? Math.floor(Number(l.depreciation_months)) || null : null,
-    in_service_date: CAPEX.includes(l.category) ? l.in_service_date || issueDate : null,
+    depreciation_months: capex.includes(l.category) ? Math.floor(Number(l.depreciation_months)) || null : null,
+    in_service_date: capex.includes(l.category) ? l.in_service_date || issueDate : null,
   }));
 
 /**
@@ -562,6 +571,7 @@ const documentRef = (target: PayableTarget) => ('billId' in target ? { bill_id: 
 /** Flujo de Caja expenses for `amount` paid on a document, split by its categories. Returns their ids. */
 async function paymentExpenses(doc: Document, date: string, amount: number, concept = `Pago ${doc.label} · ${doc.supplierName}`): Promise<string[]> {
   const ids: string[] = [];
+  const types = categoryTypes(await loadExpenseCategories(await createClient(), { includeInactive: true }));
   try {
     for (const part of allocatePayment(doc.lines, amount)) {
       // A fixed asset is registered (and depreciated) in Flujo de Caja as it is paid.
@@ -571,7 +581,7 @@ async function paymentExpenses(doc: Document, date: string, amount: number, conc
         category: part.category,
         amount: part.amount,
         tax_amount: part.tax,
-        expense_type: asset ? 'CAPEX' : EXPENSE_CATEGORY_TYPE_MAP[part.category] ?? 'OPEX',
+        expense_type: asset ? 'CAPEX' : types[part.category] === 'CAPEX' ? 'OPEX' : types[part.category] ?? 'OPEX',
         depreciation_months: asset?.months ?? null,
         ...(asset ? { asset_kind: asset.description || null, in_service_date: asset.in_service_date } : {}),
         ...(doc.supplierId ? { supplier_id: doc.supplierId } : {}),

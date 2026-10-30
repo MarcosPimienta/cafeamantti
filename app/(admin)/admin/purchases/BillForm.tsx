@@ -5,7 +5,6 @@ import { AlertTriangle, Loader2, Plus, Trash2, X } from "lucide-react";
 import { createBill, getPurchaseTaxes, updateBill } from "./actions";
 import { billProblems, billTotals, type BillLine } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
-import { DEFAULT_DEPRECIATION_MONTHS } from "../cashflow/types";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 type Tax = { id: number; name: string; rate: number };
@@ -32,7 +31,7 @@ export type EditableBill = {
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 
 export default function BillForm({
-  suppliers, categories, assetCategories, accounts, defaultAccounts, inventory, today, onClose, onDone, bill,
+  suppliers, categories, assetCategories, assetMonths, accounts, defaultAccounts, inventory, today, onClose, onDone, bill,
 }: {
   /** Given: edit this invoice instead of creating one. */
   bill?: EditableBill;
@@ -42,6 +41,8 @@ export default function BillForm({
   categories: string[];
   /** Fixed asset classes (equipos, muebles…): their lines ask for a useful life. */
   assetCategories: string[];
+  /** Suggested useful life per fixed asset category. */
+  assetMonths: Record<string, number>;
   accounts: { code: string; name: string }[];
   defaultAccounts: Record<string, string>;
   today: string;
@@ -78,7 +79,7 @@ export default function BillForm({
     setLine(i, {
       category,
       account: defaultAccounts[category] ?? (asset !== isAsset(l) ? "" : l.account),
-      depreciation_months: asset ? l.depreciation_months ?? DEFAULT_DEPRECIATION_MONTHS[category] ?? null : null,
+      depreciation_months: asset ? l.depreciation_months ?? assetMonths[category] ?? null : null,
       in_service_date: asset ? l.in_service_date ?? null : null,
       ...(asset ? { inventory_id: null, inventory_qty: null } : {}),
     });

@@ -54,6 +54,7 @@ export default function PurchasesClient(props: {
   cuentasCobro: { id: string; number: number; issuer_name: string; total: number; paid: number; date: string | null }[];
   categories: string[];
   assetCategories: string[];
+  assetMonths: Record<string, number>;
   advances: AdvanceMove[] | null;
   inventory: { id: string; product_code: string; product_name: string; unit: string | null }[];
   accounts: { code: string; name: string }[];
@@ -138,12 +139,12 @@ export default function PurchasesClient(props: {
       )}
 
       {editing && (
-        <BillForm bill={editing} suppliers={props.suppliers} categories={props.categories} assetCategories={props.assetCategories} inventory={props.inventory} accounts={props.accounts} defaultAccounts={props.defaultAccounts} today={props.today}
+        <BillForm bill={editing} suppliers={props.suppliers} categories={props.categories} assetCategories={props.assetCategories} assetMonths={props.assetMonths} inventory={props.inventory} accounts={props.accounts} defaultAccounts={props.defaultAccounts} today={props.today}
           onClose={() => setEditing(null)} onDone={(msg) => { setEditing(null); done(msg); }} />
       )}
 
       {creating && (
-        <BillForm suppliers={props.suppliers} categories={props.categories} assetCategories={props.assetCategories} inventory={props.inventory} accounts={props.accounts} defaultAccounts={props.defaultAccounts} today={props.today}
+        <BillForm suppliers={props.suppliers} categories={props.categories} assetCategories={props.assetCategories} assetMonths={props.assetMonths} inventory={props.inventory} accounts={props.accounts} defaultAccounts={props.defaultAccounts} today={props.today}
           onClose={() => setCreating(false)} onDone={(msg) => { setCreating(false); done(msg); }} />
       )}
     </div>

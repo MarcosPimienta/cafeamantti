@@ -94,6 +94,19 @@ describe("purchase invoices (companies)", () => {
     expect(await createBill({ ...input, providerNumber: "1969", lines: [{ ...molino, depreciation_months: null }] })).toMatchObject({ success: false, error: "Línea 1: indica la vida útil del activo en meses." });
   });
 
+  it("lines can use the team's categories: a fixed asset one asks for a useful life, a cost one is paid as COGS", async () => {
+    db.rows("expense_categories").push(
+      { id: "c1", name: "Bodega", expense_type: "CAPEX", depreciation_months: 240, active: true },
+      { id: "c2", name: "Fletes de café verde", expense_type: "COGS", depreciation_months: null, active: true }
+    );
+    expect(await createBill({ ...input, lines: [{ ...input.lines[0], category: "Bodega", account: "15160501" }] })).toMatchObject({ success: false, error: "Línea 1: indica la vida útil del activo en meses." });
+    h.responses["POST /v1/purchases"] = { id: "fc-3", name: "FC-1-242" };
+    await createBill({ ...input, lines: [{ ...input.lines[0], category: "Fletes de café verde", account: "61350595", tax_id: null, tax_rate: 0 }] });
+    h.responses["POST /v1/payment-receipts"] = { id: "rp-3", name: "RP-1-91" };
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 325000, method: "bank" });
+    expect(expenses()).toEqual([expect.objectContaining({ category: "Fletes de café verde", expense_type: "COGS", amount: 325000 })]);
+  });
+
   it("a payment Siigo rejects stays in Flujo de Caja and can be retried or deleted (with its expense)", async () => {
     h.responses["POST /v1/purchases"] = { id: "fc-1", name: "FC-1-240" };
     await createBill(input);

@@ -13,12 +13,14 @@ import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@
 import { downloadCuentaCobroPDF } from "@/utils/pdf/cuentasCobroPdf";
 import { DocLanguagePicker, useTr } from "@/app/(admin)/AdminI18n";
 import SupportDocumentSiigo from "./SupportDocumentSiigo";
-import { EXPENSE_CATEGORY_TYPE_MAP } from "../cashflow/types";
+import { useExpenseCategories } from "../settings/categories/useExpenseCategories";
+import { namesOf } from "@/utils/expenses/categories";
 import CuentaCobroPayments from "./CuentaCobroPayments";
 import { type Locale } from "@/utils/i18n/translate";
 
 export default function CuentasCobroPage() {
   const tr = useTr();
+  const expenseCategories = useExpenseCategories();
   const [docLang, setDocLang] = useState<Locale>(tr.locale);
   const [list, setList] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -859,7 +861,7 @@ export default function CuentasCobroPage() {
                     </>
                   ) : (
                     <>
-                      {Object.entries(EXPENSE_CATEGORY_TYPE_MAP).filter(([, t]) => t !== "CAPEX").map(([c]) => <option key={c} value={c}>{tr(c)}</option>)}
+                      {namesOf(expenseCategories, (c) => c.type !== "CAPEX").map((c) => <option key={c} value={c}>{tr(c)}</option>)}
                     </>
                   )}
                 </select>

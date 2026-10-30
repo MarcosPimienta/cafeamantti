@@ -4,12 +4,12 @@ import React, { useState } from "react";
 import { Wallet } from "lucide-react";
 import PayablePaymentForm from "../purchases/PayablePaymentForm";
 import { PaymentList, type PayablePayment } from "../purchases/PurchasesClient";
-import { EXPENSE_CATEGORY_TYPE_MAP } from "../cashflow/types";
+import { useExpenseCategories } from "../settings/categories/useExpenseCategories";
+import { namesOf } from "@/utils/expenses/categories";
 import { payableBalance } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
-const CATEGORIES = Object.entries(EXPENSE_CATEGORY_TYPE_MAP).filter(([, t]) => t !== "CAPEX").map(([c]) => c);
 const todayBogota = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -17,6 +17,7 @@ const todayBogota = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().s
 export default function CuentaCobroPayments({ cc, onChanged }: { cc: any; onChanged: () => void }) {
   /* eslint-enable @typescript-eslint/no-explicit-any */
   const tr = useTr();
+  const categories = namesOf(useExpenseCategories(), (c) => c.type !== "CAPEX");
   const [paying, setPaying] = useState(false);
   const [notice, setNotice] = useState("");
   const payments = (cc.payments ?? []) as PayablePayment[];
@@ -43,7 +44,7 @@ export default function CuentaCobroPayments({ cc, onChanged }: { cc: any; onChan
           title={tr("Cuenta de cobro No. {n} · {name}", { n: String(cc.number), name: cc.issuer_name })}
           balance={balance}
           today={todayBogota()}
-          categories={CATEGORIES}
+          categories={categories}
           defaultCategory={cc.siigo_ds_category}
           onClose={() => setPaying(false)}
           onDone={(msg) => { setPaying(false); setNotice(msg); onChanged(); }}

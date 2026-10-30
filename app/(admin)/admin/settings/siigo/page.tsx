@@ -3,7 +3,9 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { checkIsAdmin } from "../../../actions";
 import { getSiigoSetup } from "../../siigo/actions";
-import { EXPENSE_CATEGORY_TYPE_MAP } from "../../cashflow/types";
+import { createClient } from "@/utils/supabase/server";
+import { namesOf } from "@/utils/expenses/categories";
+import { loadExpenseCategories } from "@/utils/expenses/server";
 import SiigoSettingsClient from "./SiigoSettingsClient";
 import { getTr } from "@/utils/i18n/server";
 
@@ -13,7 +15,7 @@ export default async function SiigoSettingsPage() {
   const tr = await getTr();
   if (!(await checkIsAdmin())) redirect("/dashboard");
   const setup = await getSiigoSetup();
-  const categories = Object.entries(EXPENSE_CATEGORY_TYPE_MAP);
+  const categories = await loadExpenseCategories(await createClient());
   return (
     <div className="space-y-6">
       <div>
@@ -28,8 +30,8 @@ export default async function SiigoSettingsPage() {
         migrationApplied={setup.migrationApplied}
         initialSettings={setup.settings}
         log={setup.log}
-        expenseCategories={categories.filter(([, t]) => t !== "CAPEX").map(([c]) => c)}
-        assetCategories={categories.filter(([, t]) => t === "CAPEX").map(([c]) => c)}
+        expenseCategories={namesOf(categories, (c) => c.type !== "CAPEX")}
+        assetCategories={namesOf(categories, (c) => c.type === "CAPEX")}
       />
     </div>
   );

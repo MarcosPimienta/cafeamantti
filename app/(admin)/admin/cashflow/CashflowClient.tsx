@@ -25,7 +25,9 @@ import {
 import { fixedAssetRegister, type FixedAssetInput, type PLReportResult } from "./calculations";
 import { expenseLedger, fixedAssetSheets, incomeLedger, type ExportFilters } from "./exports";
 import { getSuppliers } from "../suppliers/actions";
-import { ASSET_KIND_SUGGESTIONS, ASSET_USES, DEFAULT_DEPRECIATION_MONTHS, EXPENSE_CATEGORY_TYPE_MAP, type AssetUse, type ExpenseType } from "./types";
+import { ASSET_KIND_SUGGESTIONS, ASSET_USES, type AssetUse, type ExpenseType } from "./types";
+import { useExpenseCategories } from "../settings/categories/useExpenseCategories";
+import { categoryMonths, categoryTypes, namesOf } from "@/utils/expenses/categories";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
 // ─────────────────────────────────────────────────────────────
@@ -42,7 +44,6 @@ const TABS = [
   { id: "auditoria", label: "Auditoría", Icon: History          },
 ] as const;
 
-const PREDEFINED_CATEGORIES = Object.keys(EXPENSE_CATEGORY_TYPE_MAP);
 
 const INCOME_CATEGORIES = ["Ventas Físicas", "Ventas Web", "Servicios", "Otros Ingresos"];
 
@@ -182,6 +183,11 @@ function ExpenseModal({
   expenseToEdit?: any;
 }) {
   const tr = useTr();
+  // Built-in categories plus the team's (Ajustes → Categorías de gasto).
+  const categoryList = useExpenseCategories();
+  const PREDEFINED_CATEGORIES = namesOf(categoryList);
+  const EXPENSE_CATEGORY_TYPE_MAP: Record<string, ExpenseType> = categoryTypes(categoryList);
+  const DEFAULT_DEPRECIATION_MONTHS = categoryMonths(categoryList);
   const today = new Date().toISOString().split("T")[0];
   const [date,     setDate]     = useState(expenseToEdit?.cashflow?.date || initialDate || today);
   const [concept,  setConcept]  = useState(expenseToEdit?.concept || "");
@@ -212,8 +218,7 @@ function ExpenseModal({
   const inferredType: ExpenseType = EXPENSE_CATEGORY_TYPE_MAP[category] ?? "OPEX";
   const [expenseType, setExpenseType] = useState<ExpenseType>(expenseToEdit?.expense_type || "OPEX");
 
-  // Sincronizar tipo con la categoría seleccionada (pero el usuario puede overridear)
-  useEffect(() => { setExpenseType(EXPENSE_CATEGORY_TYPE_MAP[category] ?? "OPEX"); }, [category]);
+
 
   const isCapex = expenseType === "CAPEX";
 
@@ -333,6 +338,8 @@ function ExpenseModal({
             <input type="text" list="exp-categories" value={category}
               onChange={(e) => {
                 setCategory(e.target.value);
+                // El tipo sigue a la categoría (el usuario puede cambiarlo después)
+                setExpenseType(EXPENSE_CATEGORY_TYPE_MAP[e.target.value] ?? "OPEX");
                 // Activos fijos: sugerir la vida útil si aún no se escribió
                 const months = DEFAULT_DEPRECIATION_MONTHS[e.target.value];
                 if (months) setDeprMos((cur) => cur || String(months));
@@ -1579,6 +1586,7 @@ function PaginationControls({
 
 export default function CashflowClient() {
   const tr = useTr();
+  const PREDEFINED_CATEGORIES = namesOf(useExpenseCategories());
   const [activeTab,      setActiveTab]      = useState<TabId>("gastos");
   const [reportMode,     setReportMode]     = useState<"cash" | "pl">("cash");
   const [era,            setEra]            = useState<'v1' | 'v2'>('v2');
