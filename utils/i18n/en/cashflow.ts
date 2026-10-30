@@ -172,6 +172,8 @@ export const cashflow: Record<string, string> = {
   "Reportes": "Reports",
   "Auditoría": "Audit",
   "Gasto operativo corriente": "Current operating expense",
+  "Balance": "Balance",
+  "Pago de un pasivo o activo, ej. retenciones a la DIAN (no es gasto)": "Payment of a liability or asset, e.g. withholdings to the DIAN (not an expense)",
   "Costo directo de ventas": "Direct cost of sales",
   "Activo fijo / inversión": "Fixed asset / investment",
   "OPEX": "OPEX",

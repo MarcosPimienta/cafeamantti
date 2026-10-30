@@ -175,6 +175,11 @@ describe("purchases", () => {
     expect(payload.items[0]).toMatchObject({ type: "FixedAsset", code: "AF-0001", price: 1340000 });
   });
 
+  it("a balance movement (paying the DIAN) is not sent as a purchase", () => {
+    const { problems } = buildPurchasePayload({ ...base, category: "Pago de autorretención a la DIAN", expense_type: "BALANCE" }, supplier, settings);
+    expect(problems).toContain("Un movimiento de balance (pago de retenciones, abono a un préstamo) no va a Siigo como compra: el egreso se hace en Siigo.");
+  });
+
   it("explains missing supplier, account and unsupported IVA", () => {
     const all = buildPurchasePayload({ ...base, category: "Diversos (Aseo, papelería, caja menor)", tax_amount: 19000 }, null, settings).problems.join(" | ");
     expect(all).toMatch(/proveedor/);

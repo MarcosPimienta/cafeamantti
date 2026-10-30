@@ -11,11 +11,13 @@ const TYPE_LABEL: Record<CategoryType, string> = {
   COGS: "Costo de ventas",
   OPEX: "Gasto operativo",
   CAPEX: "Activo fijo",
+  BALANCE: "Movimiento de balance",
 };
 const TYPE_HINT: Record<CategoryType, string> = {
   COGS: "Lo que cuesta producir o comprar lo que se vende (café, empaques, maquila).",
   OPEX: "Gastos del día a día: administración, ventas, servicios.",
   CAPEX: "Equipos, muebles o adecuaciones que duran años: se deprecian.",
+  BALANCE: "Plata que sale pero no es gasto: pago de retenciones a la DIAN, abono a un préstamo. Solo en Flujo de Caja, fuera del P&L.",
 };
 
 type Draft = { id?: string; name: string; type: CategoryType | ""; months: string; account: string };
@@ -62,7 +64,7 @@ export default function ExpenseCategoriesClient({ categories, accounts, defaultA
   };
 
   const accountName = (code: string | undefined) => (code ? `${code}${accounts.find((a) => a.code === code) ? ` · ${accounts.find((a) => a.code === code)!.name}` : ""}` : tr("Sin cuenta"));
-  const accountOptions = (type: CategoryType | "") => accounts.filter((a) => (type === "CAPEX" ? /^1[5-7]/ : /^(14|5|6|7)/).test(a.code) || a.code === draft?.account);
+  const accountOptions = (type: CategoryType | "") => accounts.filter((a) => (type === "CAPEX" ? /^1[5-7]/ : type === "BALANCE" ? /^[12]/ : /^(14|5|6|7)/).test(a.code) || a.code === draft?.account);
 
   const card = "bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-4";
   const field = "w-full px-3 py-2 bg-[#fafaf9] border border-foreground/10 rounded-xl text-sm";
@@ -116,7 +118,7 @@ export default function ExpenseCategoriesClient({ categories, accounts, defaultA
             {!draft.id && (
               <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={tr("Nombre, ej. Publicidad y Mercadeo (pauta, diseño)")} className={field} aria-label={tr("Nombre")} />
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {CATEGORY_TYPES.map((t) => (
                 <button key={t} type="button" onClick={() => setDraft({ ...draft, type: t, months: t === "CAPEX" ? draft.months : "" })}
                   className={`text-left rounded-xl border p-3 text-xs ${draft.type === t ? "border-[#C59F59] bg-[#C59F59]/10" : "border-foreground/10 hover:bg-foreground/5"}`}>

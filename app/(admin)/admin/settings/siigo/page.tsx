@@ -30,7 +30,7 @@ export default async function SiigoSettingsPage() {
         migrationApplied={setup.migrationApplied}
         initialSettings={setup.settings}
         log={setup.log}
-        expenseCategories={namesOf(categories, (c) => c.type !== "CAPEX")}
+        expenseCategories={namesOf(categories, (c) => c.type === "OPEX" || c.type === "COGS")}
         assetCategories={namesOf(categories, (c) => c.type === "CAPEX")}
       />
     </div>

@@ -11,6 +11,8 @@ const TYPE_LABEL: Record<string, string> = {
   OPEX: "OPEX · gasto operativo",
   COGS: "COGS · costo de ventas",
   CAPEX: "CAPEX · activo fijo",
+  ANTICIPO: "Anticipo · no es gasto",
+  BALANCE: "Balance · no es gasto",
 };
 
 const num = (v: unknown) => Number(v ?? 0) || 0;

@@ -59,3 +59,12 @@ describe("fixed assets in Gastos", () => {
     expect(res.error).toMatch(/20261015000000_expense_fixed_assets/);
   });
 });
+
+describe("balance movements in Gastos", () => {
+  it("the monthly autorretención payment leaves cash as BALANCE, with no IVA or asset data", async () => {
+    const res = await createExpenseDirect("2026-11-10", { concept: "Autorretención octubre (F350)", category: "Pago de autorretención a la DIAN", expense_type: "BALANCE", amount: 412000, tax_amount: 0 });
+    expect(res.error).toBeUndefined();
+    expect(db.rows("cashflow_expenses")[0]).toMatchObject({ expense_type: "BALANCE", amount: 412000, net_amount: 412000, depreciation_months: null });
+    expect(db.rows("cashflow_expenses")[0]).not.toHaveProperty("asset_kind");
+  });
+});

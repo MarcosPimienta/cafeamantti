@@ -17,7 +17,7 @@ const todayBogota = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().s
 export default function CuentaCobroPayments({ cc, onChanged }: { cc: any; onChanged: () => void }) {
   /* eslint-enable @typescript-eslint/no-explicit-any */
   const tr = useTr();
-  const categories = namesOf(useExpenseCategories(), (c) => c.type !== "CAPEX");
+  const categories = namesOf(useExpenseCategories(), (c) => c.type !== "CAPEX" && c.type !== "BALANCE");
   const [paying, setPaying] = useState(false);
   const [notice, setNotice] = useState("");
   const payments = (cc.payments ?? []) as PayablePayment[];

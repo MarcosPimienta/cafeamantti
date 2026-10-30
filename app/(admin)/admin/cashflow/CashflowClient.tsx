@@ -64,6 +64,7 @@ const EXPENSE_TYPE_META: Record<ExpenseType, { label: string; color: string; bg:
   COGS:  { label: "COGS",  color: "text-orange-700", bg: "bg-orange-100", desc: "Costo directo de ventas" },
   CAPEX: { label: "CAPEX", color: "text-purple-700", bg: "bg-purple-100", desc: "Activo fijo / inversión" },
   ANTICIPO: { label: "Anticipo", color: "text-teal-700", bg: "bg-teal-100", desc: "Saldo a favor con un proveedor (no es gasto)" },
+  BALANCE: { label: "Balance", color: "text-slate-700", bg: "bg-slate-100", desc: "Pago de un pasivo o activo, ej. retenciones a la DIAN (no es gasto)" },
 };
 
 const fmt = (val: number) =>
@@ -354,7 +355,7 @@ function ExpenseModal({
           <div>
             <label className="field-label">{tr("Clasificación contable")}</label>
             <div className="flex gap-2 mt-1">
-              {(["OPEX", "COGS", "CAPEX"] as ExpenseType[]).map((t) => {
+              {(["OPEX", "COGS", "CAPEX", "BALANCE"] as ExpenseType[]).map((t) => {
                 const m = EXPENSE_TYPE_META[t];
                 const active = expenseType === t;
                 return (

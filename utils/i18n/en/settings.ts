@@ -169,4 +169,7 @@ export const settings: Record<string, string> = {
   "Escribe el nombre de la categoría (mínimo 3 letras).": "Write the category name (at least 3 letters).",
   "Elige el tipo de la categoría.": "Choose the category type.",
   "Indica la vida útil sugerida en meses.": "Enter the suggested useful life in months.",
+  "Movimiento de balance": "Balance movement",
+  "Plata que sale pero no es gasto: pago de retenciones a la DIAN, abono a un préstamo. Solo en Flujo de Caja, fuera del P&L.": "Money that leaves but is not an expense: paying withholdings to the DIAN, a loan payment. Only in Cash Flow, outside the P&L.",
+  "Un movimiento de balance (pago de retenciones, abono a un préstamo) no va a Siigo como compra: el egreso se hace en Siigo.": "A balance movement (paying withholdings, a loan payment) doesn't go to Siigo as a purchase: the payment is made in Siigo.",
 };

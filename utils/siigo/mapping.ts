@@ -490,6 +490,7 @@ export function buildPurchasePayload(e: AppExpense, supplier: AppSupplier | null
   if (!supplier) problems.push("Asigna el proveedor al gasto.");
   else if (!identification) problems.push(`El proveedor ${supplier.name} no tiene NIT o cédula.`);
 
+  if (e.expense_type === "BALANCE") problems.push("Un movimiento de balance (pago de retenciones, abono a un préstamo) no va a Siigo como compra: el egreso se hace en Siigo.");
   const capex = e.expense_type === "CAPEX";
   const code = capex ? settings.fixed_asset_codes?.[e.category] : settings.expense_accounts?.[e.category];
   if (!code) {

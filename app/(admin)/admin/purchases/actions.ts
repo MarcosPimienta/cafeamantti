@@ -78,7 +78,8 @@ export async function getPurchases() {
   ]);
   const { data: advances, error: advErr } = await supabase.from('supplier_advances').select('*').order('move_date', { ascending: false }).order('created_at', { ascending: false });
   const allCategories = await loadExpenseCategories(supabase);
-  const categories = namesOf(allCategories);
+  // Balance movements (paying the DIAN…) are not supplier invoices.
+  const categories = namesOf(allCategories, (c) => c.type !== 'BALANCE');
   return {
     migrationApplied: !error,
     bills: bills ?? [],

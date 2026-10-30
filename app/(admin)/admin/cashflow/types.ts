@@ -23,7 +23,8 @@
  *          "Mantenimiento y Reparaciones" (según criterio contable)
  *  OPEX → Todo lo demás
  */
-export type ExpenseType = 'OPEX' | 'CAPEX' | 'COGS' | 'ANTICIPO';
+/** ANTICIPO and BALANCE are money that leaves without being an expense: they never reach the P&L. */
+export type ExpenseType = 'OPEX' | 'CAPEX' | 'COGS' | 'ANTICIPO' | 'BALANCE';
 
 /**
  * Salidas que no son gasto: plata entregada a un proveedor como saldo a

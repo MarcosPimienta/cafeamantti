@@ -861,7 +861,7 @@ export default function CuentasCobroPage() {
                     </>
                   ) : (
                     <>
-                      {namesOf(expenseCategories, (c) => c.type !== "CAPEX").map((c) => <option key={c} value={c}>{tr(c)}</option>)}
+                      {namesOf(expenseCategories, (c) => c.type !== "CAPEX" && c.type !== "BALANCE").map((c) => <option key={c} value={c}>{tr(c)}</option>)}
                     </>
                   )}
                 </select>

@@ -26,6 +26,13 @@ describe("expense categories", () => {
     expect(namesOf(list, (c) => c.type === "CAPEX")).toContain("Bodega");
   });
 
+  it("a balance movement (paying the DIAN) is a type of its own, with a liability account", () => {
+    expect(categoryProblems({ name: "Pago de autorretención a la DIAN", type: "BALANCE", account: "23657501" })).toEqual([]);
+    const list = mergeCategories([row("Pago de autorretención a la DIAN", "BALANCE")]);
+    expect(categoryTypes(list)["Pago de autorretención a la DIAN"]).toBe("BALANCE");
+    expect(namesOf(list, (c) => c.type !== "BALANCE")).not.toContain("Pago de autorretención a la DIAN");
+  });
+
   it("checks name, type, useful life and account", () => {
     expect(categoryProblems({ name: "Publicidad y Mercadeo", type: "OPEX", account: "52352501" })).toEqual([]);
     expect(categoryProblems({ name: "ab", type: "" })).toEqual(["Escribe el nombre de la categoría (mínimo 3 letras).", "Elige el tipo de la categoría."]);

@@ -10,7 +10,8 @@ import {
 } from "@/app/(admin)/admin/cashflow/types";
 
 export type CategoryType = Exclude<ExpenseType, "ANTICIPO">;
-export const CATEGORY_TYPES: CategoryType[] = ["COGS", "OPEX", "CAPEX"];
+/** BALANCE: money out against a liability or asset (e.g. paying the DIAN); not an expense. */
+export const CATEGORY_TYPES: CategoryType[] = ["COGS", "OPEX", "CAPEX", "BALANCE"];
 
 export type ExpenseCategory = {
   name: string;
