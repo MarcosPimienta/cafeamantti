@@ -2,10 +2,13 @@
 
 import React, { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Download, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, HandCoins, Loader2, RefreshCw } from "lucide-react";
 import { setReceivableSite } from "./actions";
 import { groupReceivables, receivableLines, type Bucketed, type ReceivableInvoice } from "@/utils/invoices/receivables";
-import { receivablesSheets, siteName, type SiteInfo } from "@/utils/invoices/receivablesExcel";
+import { receiptsSheet, receivablesSheets, siteName, type SiteInfo } from "@/utils/invoices/receivablesExcel";
+import type { Receipt } from "./receiptActions";
+import CollectionForm from "./CollectionForm";
+import ReceiptsHistory from "./ReceiptsHistory";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
@@ -13,7 +16,7 @@ const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", c
 type Site = SiteInfo & { id: string; client_id: string };
 const SOURCE_LABEL: Record<string, string> = { branch: "por la sucursal de Siigo", notes: "por las observaciones", manual: "asignada a mano" };
 
-export default function ReceivablesClient({ invoices, sites, today, error }: { invoices: ReceivableInvoice[]; clients: { id: string; name: string }[]; sites: Site[]; today: string; error: string | null }) {
+export default function ReceivablesClient({ invoices, sites, today, error, receipts }: { invoices: ReceivableInvoice[]; clients: { id: string; name: string }[]; sites: Site[]; today: string; error: string | null; receipts: Receipt[] | null }) {
   const tr = useTr();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -29,11 +32,21 @@ export default function ReceivablesClient({ invoices, sites, today, error }: { i
   const [clientId, setClientId] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [collecting, setCollecting] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
   const lines = useMemo(() => receivableLines(invoices, cutoff), [invoices, cutoff]);
   // Clients are keyed by app client, else by NIT (an invoice of a client not in the app).
   const keyOf = (i: ReceivableInvoice) => i.client_id ?? `nit:${i.customer_identification ?? i.customer_name}`;
+  const receiptKey = (r: Receipt) => r.client_id ?? `nit:${r.customer_identification}`;
+  // Everyone who owes something today (the deposit form ignores the cutoff).
+  const owing = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const i of invoices) if (i.balance > 0.5) m.set(keyOf(i), i.customer_name);
+    return [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [invoices]);
+  const shownReceipts = useMemo(() => (receipts && clientId ? receipts.filter((r) => receiptKey(r) === clientId) : receipts), [receipts, clientId]);
   const debtors = useMemo(() => {
     const m = new Map<string, string>();
     for (const l of lines) m.set(keyOf(l.invoice), l.invoice.customer_name);
@@ -50,6 +63,8 @@ export default function ReceivablesClient({ invoices, sites, today, error }: { i
     try {
       const { downloadWorkbook } = await import("@/utils/excel/workbook");
       const sheets = receivablesSheets({ clients: groups, totals, sites: siteMap, cutoff, scope });
+      const paid = (shownReceipts ?? []).filter((r) => r.receipt_date <= cutoff && r.status !== "pendiente" && r.status !== "error");
+      if (paid.length) sheets.push(receiptsSheet(paid, siteMap, cutoff, scope));
       const slug = scope.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
       downloadWorkbook(`Estado_de_cuenta_${slug}_${cutoff}.xlsx`, sheets);
     } finally {
@@ -97,7 +112,10 @@ export default function ReceivablesClient({ invoices, sites, today, error }: { i
             {debtors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
-        <button type="button" onClick={() => router.refresh()} className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-foreground/15 text-sm font-bold hover:bg-foreground/5" title={tr("Vuelve a leer los saldos de Siigo")}>
+        <button type="button" onClick={() => setCollecting(true)} disabled={receipts === null} className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background text-sm font-bold hover:opacity-90 disabled:opacity-40">
+          <HandCoins className="w-4 h-4" />{" "}{tr("Registrar cobro")}
+        </button>
+        <button type="button" onClick={() => router.refresh()} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-foreground/15 text-sm font-bold hover:bg-foreground/5" title={tr("Vuelve a leer los saldos de Siigo")}>
           <RefreshCw className="w-4 h-4" />{" "}{tr("Actualizar")}
         </button>
         <button type="button" onClick={download} disabled={exporting || !groups.length} className=" inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C59F59] text-white text-sm font-bold hover:bg-[#B38E4D] disabled:opacity-40">
@@ -105,7 +123,12 @@ export default function ReceivablesClient({ invoices, sites, today, error }: { i
         </button>
       </div>
 
+      {notice && <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800 break-words">{notice}</p>}
       {assignError && <p className="text-sm text-red-600 break-words">{tr.msg(assignError)}</p>}
+      {collecting && (
+        <CollectionForm invoices={invoices} debtors={owing} clientKey={clientId} keyOf={keyOf} sites={siteMap} today={today}
+          onClose={() => setCollecting(false)} onDone={(msg) => { setCollecting(false); setNotice(msg); router.refresh(); }} />
+      )}
       {groups.length === 0 ? (
         <p className="text-sm text-foreground/50">{tr("Nadie debe nada a esta fecha de corte.")}</p>
       ) : (
@@ -205,6 +228,8 @@ export default function ReceivablesClient({ invoices, sites, today, error }: { i
           </table>
         </div>
       )}
+
+      <ReceiptsHistory receipts={shownReceipts} sites={siteMap} />
     </div>
   );
 }

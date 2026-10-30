@@ -18,6 +18,8 @@ export type ReceivableInvoice = {
   due_date: string | null;
   total: number;
   balance: number;
+  /** The customer's Siigo branch (sucursal) it was issued to. */
+  branch_office?: number;
 };
 
 export type ReceivableLine = {

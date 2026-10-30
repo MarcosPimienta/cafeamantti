@@ -42,6 +42,42 @@ const amounts = (t: Bucketed): Cell[] => [t.count, t.billed, t.paid, t.balance, 
 const where = (s: SiteInfo | undefined) => (s ? [s.address, s.city].filter(Boolean).join(", ") : "");
 export const siteName = (siteId: string | null, sites: Map<string, SiteInfo>) => (siteId ? sites.get(siteId)?.name ?? "Sede" : "Sin sede identificada");
 
+const RECEIPT_COLUMNS: Column[] = [
+  { header: "Fecha", width: 12, format: "date" },
+  { header: "Recibo", width: 14 },
+  { header: "Cliente", width: 30 },
+  { header: "Sede", width: 26 },
+  { header: "Facturas", width: 40 },
+  { header: "Medio", width: 10 },
+  { header: "Valor", width: 15, format: "money" },
+];
+
+/** The deposits (recibos de caja) up to the cutoff, as their own sheet. */
+export function receiptsSheet(
+  receipts: { receipt_date: string; siigo_name: string | null; customer_name: string; site_id: string | null; method: string; amount: number; items: { name: string; value: number }[] }[],
+  sites: Map<string, SiteInfo>,
+  cutoff: string,
+  scope: string
+): TableSheet {
+  const rows: Cell[][] = receipts.map((r) => [
+    r.receipt_date,
+    r.siigo_name ?? "",
+    r.customer_name,
+    r.site_id ? siteName(r.site_id, sites) : "",
+    r.items.map((i) => `${i.name}: ${Math.round(i.value).toLocaleString("es-CO")}`).join(" · "),
+    r.method === "cash" ? "Caja" : "Banco",
+    Number(r.amount),
+  ]);
+  const total = receipts.reduce((s, r) => s + Number(r.amount), 0);
+  return {
+    name: "Abonos",
+    title: [[COMPANY_HEADER], [`Abonos recibidos — ${scope}`], ["Fecha de corte", cutoff]],
+    columns: RECEIPT_COLUMNS,
+    rows,
+    totals: ["TOTAL", "", "", "", "", "", Math.round(total * 100) / 100],
+  };
+}
+
 /** Excel tab names: at most 31 characters, none of []:*?/\, and unique. */
 function tabName(name: string, used: Set<string>): string {
   const base = name.replace(/[[\]:*?/\\]/g, " ").trim().slice(0, 28) || "Hoja";

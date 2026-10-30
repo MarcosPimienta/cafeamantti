@@ -90,6 +90,7 @@ export async function getReceivables() {
         due_date: dues.at(-1) ?? inv.date,
         total: Number(inv.total ?? 0),
         balance,
+        branch_office: branch,
       });
     }
     return { invoices, clients: (clients ?? []) as { id: string; name: string; document_number: string | null }[], sites: allSites, today, error: null };

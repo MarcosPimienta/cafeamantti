@@ -641,6 +641,40 @@ export function buildVoucherPayload(payment: AppPayment, invoice: EmittedInvoice
   return { payload, problems };
 }
 
+/**
+ * POST /v1/vouchers body for a customer deposit registered from the bank
+ * statement: one "DebtPayment" recibo de caja that pays (part of) several
+ * invoices of the same customer branch, also invoices made directly in Siigo.
+ */
+export function buildCollectionVoucherPayload(
+  r: { receipt_date: string; amount: number; method: "transfer" | "cash"; customer_identification: string; branch_office: number; notes?: string | null; items: { name: string; due_date: string | null; value: number }[] },
+  settings: SiigoSettings
+) {
+  const problems: string[] = [];
+  if (!settings.voucher_document_id) problems.push("Elige el tipo de recibo de caja en Ajustes → Siigo.");
+  const paymentId = r.method === "cash" ? settings.voucher_cash_id : settings.voucher_transfer_id;
+  if (!paymentId) problems.push("Elige la forma de pago de los recibos de caja para este medio en Ajustes → Siigo.");
+  const { identification } = cleanIdentification(r.customer_identification);
+  if (!identification) problems.push("El cliente no tiene identificación.");
+  const items = r.items.map((i) => {
+    const due = splitDocumentName(i.name);
+    if (!due) problems.push(`No se reconoce el número de la factura ${i.name}.`);
+    return { due: { prefix: due?.prefix ?? "", consecutive: due?.consecutive ?? 0, quote: 1, date: i.due_date ?? r.receipt_date }, value: round2(num(i.value)) };
+  });
+  const value = round2(items.reduce((s, i) => s + i.value, 0));
+  if (Math.abs(value - round2(num(r.amount))) > 0.5) problems.push("Lo asignado a las facturas no cuadra con el valor del recibo.");
+  const payload = {
+    document: { id: settings.voucher_document_id ?? 0 },
+    date: r.receipt_date,
+    type: "DebtPayment",
+    customer: { identification, branch_office: r.branch_office ?? 0 },
+    items,
+    payment: { id: paymentId ?? 0, value },
+    observations: [`Abono de ${r.items.map((i) => i.name).join(", ")} · Café Amantti`, r.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+  };
+  return { payload, problems };
+}
+
 // ── Support documents (signed cuentas de cobro → Siigo) ─────
 
 export type AppCuentaCobro = {
