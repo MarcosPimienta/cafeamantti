@@ -787,7 +787,7 @@ export type AppBill = {
   issue_date: string;
   due_date: string;
   notes?: string | null;
-  lines: { account: string; description: string; base: number; tax_id: number | null; retention_id: number | null }[];
+  lines: { category?: string; account: string; description: string; base: number; tax_id: number | null; retention_id: number | null; depreciation_months?: number | null }[];
   total: number;
 };
 
@@ -795,6 +795,8 @@ export type AppBill = {
  * POST /v1/purchases body for a supplier's invoice, the way the accountant
  * registers them: one ledger-account line per concept with its IVA and
  * Retefuente, owed to the supplier until it is paid (payment receipt).
+ * A fixed asset line goes as a FixedAsset item when its class has a Siigo
+ * asset code in Ajustes; otherwise to its asset account (PUC 15xx).
  */
 export function buildPurchaseBillPayload(bill: AppBill, settings: SiigoSettings) {
   const problems: string[] = [];
@@ -809,14 +811,17 @@ export function buildPurchaseBillPayload(bill: AppBill, settings: SiigoSettings)
     supplier: { identification, branch_office: 0 },
     provider_invoice: { prefix: bill.provider_prefix.trim().slice(0, 6), number: bill.provider_number.trim() },
     observations: (bill.notes ?? "").slice(0, 4000),
-    items: bill.lines.map((l) => ({
-      type: "Account",
-      code: l.account,
+    items: bill.lines.map((l) => {
+      const assetCode = num(l.depreciation_months) > 0 && l.category ? settings.fixed_asset_codes?.[l.category]?.trim() : "";
+      return {
+      type: assetCode ? "FixedAsset" : "Account",
+      code: assetCode || l.account,
       description: l.description.slice(0, 200),
       quantity: 1,
       price: round2(num(l.base)),
       taxes: [l.tax_id, l.retention_id].filter(Boolean).map((id) => ({ id })),
-    })),
+      };
+    }),
     payments: [{ id: settings.purchase_payment_id ?? 0, value: round2(num(bill.total)), due_date: bill.due_date }],
   };
   return { payload, problems };

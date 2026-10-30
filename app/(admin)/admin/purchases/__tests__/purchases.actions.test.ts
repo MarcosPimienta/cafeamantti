@@ -78,6 +78,22 @@ describe("purchase invoices (companies)", () => {
     expect(await registerPayablePayment({ billId: bill().id }, { date: "2026-10-21", amount: 200000, method: "bank" })).toMatchObject({ success: false, error: "El pago supera el saldo por pagar." });
   });
 
+  it("equipment on credit: the invoice owes it, and each payment registers its part of the asset in Flujo de Caja", async () => {
+    const MAQ = "Maquinaria y Equipo (PUC 1520)";
+    h.responses["POST /v1/purchases"] = { id: "fc-2", name: "FC-1-241" };
+    const molino = { category: MAQ, account: "15200501", description: "Molino Mahlkönig", base: 10000000, tax_id: 13156, tax_rate: 19, retention_id: null, retention_rate: 0, depreciation_months: 120 };
+    expect(await createBill({ ...input, lines: [molino] })).toMatchObject({ success: true, sent: true });
+    expect(bill()).toMatchObject({ total: 11900000, lines: [expect.objectContaining({ depreciation_months: 120, in_service_date: "2026-10-15" })] });
+    expect(h.calls.find((c) => c.path === "/v1/purchases")!.opts?.body).toMatchObject({ items: [{ type: "Account", code: "15200501", taxes: [{ id: 13156 }] }] });
+    h.responses["POST /v1/payment-receipts"] = { id: "rp-2", name: "RP-1-90" };
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 5950000, method: "bank" });
+    expect(expenses()).toEqual([expect.objectContaining({
+      category: MAQ, expense_type: "CAPEX", amount: 5950000, tax_amount: 950000, net_amount: 5000000,
+      depreciation_months: 120, asset_kind: "Molino Mahlkönig", in_service_date: "2026-10-15",
+    })]);
+    expect(await createBill({ ...input, providerNumber: "1969", lines: [{ ...molino, depreciation_months: null }] })).toMatchObject({ success: false, error: "Línea 1: indica la vida útil del activo en meses." });
+  });
+
   it("a payment Siigo rejects stays in Flujo de Caja and can be retried or deleted (with its expense)", async () => {
     h.responses["POST /v1/purchases"] = { id: "fc-1", name: "FC-1-240" };
     await createBill(input);

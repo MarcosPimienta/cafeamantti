@@ -16,6 +16,10 @@ export type BillLine = {
   inventory_id?: string | null;
   /** How much of it came in, in the product's unit (kg, units…). */
   inventory_qty?: number | null;
+  /** Fixed asset line (equipo, muebles…): useful life in months. */
+  depreciation_months?: number | null;
+  /** Fixed asset line: when it starts being used (empty = the payment date). */
+  in_service_date?: string | null;
 };
 
 /** "advance" = paid with the supplier's balance (saldo a favor), no money moves. */
@@ -48,7 +52,10 @@ export function billProblems(bill: { supplier_identification: string; provider_n
   bill.lines.forEach((l, i) => {
     const n = i + 1;
     if (!l.category) p.push(`Línea ${n}: elige la categoría.`);
-    else if (capexCategories.includes(l.category)) p.push(`Línea ${n}: los activos fijos se registran en Flujo de Caja, no aquí.`);
+    else if (capexCategories.includes(l.category)) {
+      if (!(Number.isInteger(num(l.depreciation_months)) && num(l.depreciation_months) > 0)) p.push(`Línea ${n}: indica la vida útil del activo en meses.`);
+      if (l.inventory_id) p.push(`Línea ${n}: un activo fijo no entra al inventario.`);
+    }
     if (!/^\d{4,10}$/.test(l.account ?? "")) p.push(`Línea ${n}: elige la cuenta contable.`);
     if (!(num(l.base) > 0)) p.push(`Línea ${n}: el valor debe ser mayor a cero.`);
     if (l.inventory_id && !(num(l.inventory_qty) > 0)) p.push(`Línea ${n}: indica cuánto entra al inventario.`);
@@ -73,22 +80,38 @@ export function payablePaymentProblems(balance: number, amount: number, date: st
   return p;
 }
 
+export type PaymentPart = {
+  category: string;
+  amount: number;
+  tax: number;
+  /** A fixed asset line: its own part, so Flujo de Caja registers (and depreciates) it. */
+  asset?: { description: string; months: number; in_service_date: string | null };
+};
+
 /**
  * Splits a payment across the invoice's categories in proportion to what
  * each line leaves owed, with the IVA inside each part (for Flujo de Caja).
+ * Fixed asset lines (with a useful life) are not merged: each one is a part.
  */
-export function allocatePayment(lines: BillLine[], amount: number): { category: string; amount: number; tax: number }[] {
+export function allocatePayment(lines: BillLine[], amount: number): PaymentPart[] {
   const { perLine, total } = billTotals(lines);
   if (!(total > 0)) return [];
-  const byCat = new Map<string, { amount: number; tax: number }>();
+  const byKey = new Map<string, PaymentPart>();
   lines.forEach((l, i) => {
     const share = perLine[i].owed / total;
-    const part = byCat.get(l.category) ?? { amount: 0, tax: 0 };
+    const months = num(l.depreciation_months);
+    const key = months > 0 ? `asset:${i}` : `cat:${l.category}`;
+    const part = byKey.get(key) ?? {
+      category: l.category,
+      amount: 0,
+      tax: 0,
+      ...(months > 0 ? { asset: { description: l.description, months, in_service_date: l.in_service_date || null } } : {}),
+    };
     part.amount += amount * share;
     part.tax += perLine[i].owed > 0 ? (amount * share * perLine[i].iva) / perLine[i].owed : 0;
-    byCat.set(l.category, part);
+    byKey.set(key, part);
   });
-  const parts = [...byCat].map(([category, v]) => ({ category, amount: round2(v.amount), tax: round2(v.tax) }));
+  const parts = [...byKey.values()].map((v) => ({ ...v, amount: round2(v.amount), tax: round2(v.tax) }));
   // Rounding leftovers go to the largest part, so the parts add up to the payment.
   const diff = round2(amount - parts.reduce((s, x) => s + x.amount, 0));
   if (diff !== 0 && parts.length) parts.sort((a, b) => b.amount - a.amount)[0].amount = round2(parts[0].amount + diff);

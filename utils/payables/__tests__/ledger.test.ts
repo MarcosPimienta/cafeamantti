@@ -15,10 +15,34 @@ describe("purchase invoices", () => {
     expect(billProblems(ok)).toEqual([]);
     expect(billProblems({ ...ok, provider_number: "FETD1968" })).toEqual(["El número de la factura del proveedor debe tener solo dígitos (el prefijo va aparte)."]);
     expect(billProblems({ ...ok, due_date: "2026-10-01" })).toEqual(["La fecha de vencimiento debe ser igual o posterior a la de la factura."]);
-    expect(billProblems({ ...ok, lines: [line({ category: "Maquinaria y Equipo (PUC 1520)", account: "", base: 0 })] }, ["Maquinaria y Equipo (PUC 1520)"])).toEqual([
-      "Línea 1: los activos fijos se registran en Flujo de Caja, no aquí.",
+    expect(billProblems({ ...ok, lines: [line({ account: "", base: 0 })] })).toEqual([
       "Línea 1: elige la cuenta contable.",
       "Línea 1: el valor debe ser mayor a cero.",
+    ]);
+  });
+
+  it("a fixed asset line needs its useful life and never moves stock", () => {
+    const ok = { supplier_identification: "901980434", provider_number: "77", issue_date: "2026-10-15", due_date: "2026-10-15", lines: [line({})] };
+    const CAPEX = ["Maquinaria y Equipo (PUC 1520)"];
+    const molino = line({ category: CAPEX[0], account: "15200501", description: "Molino", depreciation_months: 120 });
+    expect(billProblems({ ...ok, lines: [molino] }, CAPEX)).toEqual([]);
+    expect(billProblems({ ...ok, lines: [{ ...molino, depreciation_months: null, inventory_id: "inv-1", inventory_qty: 1 }] }, CAPEX)).toEqual([
+      "Línea 1: indica la vida útil del activo en meses.",
+      "Línea 1: un activo fijo no entra al inventario.",
+    ]);
+  });
+
+  it("each fixed asset line is its own part of a payment, with its useful life", () => {
+    const lines = [
+      line({}),
+      line({ category: "Maquinaria y Equipo (PUC 1520)", account: "15200501", description: "Molino", base: 1000000, tax_rate: 19, depreciation_months: 120, in_service_date: "2026-10-20" }),
+      line({ category: "Maquinaria y Equipo (PUC 1520)", account: "15200501", description: "Balanza", base: 100000, tax_rate: 19, depreciation_months: 60 }),
+    ];
+    const parts = allocatePayment(lines, billTotals(lines).total);
+    expect(parts).toEqual([
+      { category: "Costo de Ventas (Materia prima, insumos, empaques)", amount: 386750, tax: 61750 },
+      { category: "Maquinaria y Equipo (PUC 1520)", amount: 1190000, tax: 190000, asset: { description: "Molino", months: 120, in_service_date: "2026-10-20" } },
+      { category: "Maquinaria y Equipo (PUC 1520)", amount: 119000, tax: 19000, asset: { description: "Balanza", months: 60, in_service_date: null } },
     ]);
   });
 
@@ -54,6 +78,16 @@ describe("Siigo payloads", () => {
       items: [{ type: "Account", code: "52954001", description: "Empaques", quantity: 1, price: 325000, taxes: [{ id: 13156 }] }],
       payments: [{ id: 4183, value: 386750, due_date: "2026-11-14" }],
     });
+  });
+
+  it("a fixed asset line goes as FixedAsset when its class has a Siigo code, else to its 15xx account", () => {
+    const bill = {
+      supplier_identification: "901980434", provider_prefix: "FE", provider_number: "77", issue_date: "2026-10-15", due_date: "2026-10-15", total: 1190000,
+      lines: [{ category: "Maquinaria y Equipo (PUC 1520)", account: "15200501", description: "Molino", base: 1000000, tax_id: 13156, retention_id: null, depreciation_months: 120 }],
+    };
+    expect(buildPurchaseBillPayload(bill, SETTINGS).payload.items[0]).toMatchObject({ type: "Account", code: "15200501" });
+    const withCode = { ...SETTINGS, fixed_asset_codes: { "Maquinaria y Equipo (PUC 1520)": "MAQ-01" } };
+    expect(buildPurchaseBillPayload(bill, withCode).payload.items[0]).toMatchObject({ type: "FixedAsset", code: "MAQ-01", taxes: [{ id: 13156 }] });
   });
 
   it("egreso against the supplier's invoice, like RP-999-108", () => {

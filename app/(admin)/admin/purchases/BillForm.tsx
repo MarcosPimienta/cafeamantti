@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, Plus, Trash2, X } from "lucide-react";
 import { createBill, getPurchaseTaxes, updateBill } from "./actions";
 import { billProblems, billTotals, type BillLine } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
+import { DEFAULT_DEPRECIATION_MONTHS } from "../cashflow/types";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 type Tax = { id: number; name: string; rate: number };
@@ -31,7 +32,7 @@ export type EditableBill = {
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 
 export default function BillForm({
-  suppliers, categories, accounts, defaultAccounts, inventory, today, onClose, onDone, bill,
+  suppliers, categories, assetCategories, accounts, defaultAccounts, inventory, today, onClose, onDone, bill,
 }: {
   /** Given: edit this invoice instead of creating one. */
   bill?: EditableBill;
@@ -39,6 +40,8 @@ export default function BillForm({
   /** Products a line can bring into stock. */
   inventory: { id: string; product_code: string; product_name: string; unit: string | null }[];
   categories: string[];
+  /** Fixed asset classes (equipos, muebles…): their lines ask for a useful life. */
+  assetCategories: string[];
   accounts: { code: string; name: string }[];
   defaultAccounts: Record<string, string>;
   today: string;
@@ -65,9 +68,21 @@ export default function BillForm({
   const supplier = suppliers.find((s) => s.id === supplierId);
   const dueDate = addDays(issueDate, term);
   const totals = billTotals(lines);
-  const problems = billProblems({ supplier_identification: supplier?.document_number ?? "", provider_number: number, issue_date: issueDate, due_date: dueDate, lines });
+  const problems = billProblems({ supplier_identification: supplier?.document_number ?? "", provider_number: number, issue_date: issueDate, due_date: dueDate, lines }, assetCategories);
 
   const setLine = (i: number, patch: Partial<BillLine>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const isAsset = (l: BillLine) => assetCategories.includes(l.category);
+  /** A fixed asset class suggests its fiscal useful life and never moves stock. */
+  const setCategory = (i: number, l: BillLine, category: string) => {
+    const asset = assetCategories.includes(category);
+    setLine(i, {
+      category,
+      account: defaultAccounts[category] ?? (asset !== isAsset(l) ? "" : l.account),
+      depreciation_months: asset ? l.depreciation_months ?? DEFAULT_DEPRECIATION_MONTHS[category] ?? null : null,
+      in_service_date: asset ? l.in_service_date ?? null : null,
+      ...(asset ? { inventory_id: null, inventory_qty: null } : {}),
+    });
+  };
   const pickTax = (list: Tax[] | undefined, id: string) => {
     const t = list?.find((x) => x.id === Number(id));
     return t ? { id: t.id, rate: t.rate } : { id: null, rate: 0 };
@@ -139,14 +154,17 @@ export default function BillForm({
           {lines.map((l, i) => (
             <div key={i} className="space-y-1.5 rounded-xl @3xl:rounded-none border @3xl:border-0 border-foreground/10 p-2 @3xl:p-0 @3xl:pb-2 @3xl:border-b @3xl:border-foreground/5">
             <div className="grid grid-cols-1 @3xl:grid-cols-[1.3fr_1.4fr_1.2fr_0.8fr_0.8fr_0.8fr_auto] gap-2 items-center [&>*]:min-w-0">
-              <select value={l.category} onChange={(e) => setLine(i, { category: e.target.value, account: defaultAccounts[e.target.value] ?? l.account })} className={small} aria-label={tr("Categoría")}>
+              <select value={l.category} onChange={(e) => setCategory(i, l, e.target.value)} className={small} aria-label={tr("Categoría")}>
                 <option value="">{tr("— Categoría —")}</option>
-                {categories.map((c) => <option key={c} value={c}>{tr(c)}</option>)}
+                {categories.filter((c) => !assetCategories.includes(c)).map((c) => <option key={c} value={c}>{tr(c)}</option>)}
+                <optgroup label={tr("Activos fijos")}>
+                  {categories.filter((c) => assetCategories.includes(c)).map((c) => <option key={c} value={c}>{tr(c)}</option>)}
+                </optgroup>
               </select>
               {accounts.length ? (
                 <select value={l.account} onChange={(e) => setLine(i, { account: e.target.value })} className={small} aria-label={tr("Cuenta contable")}>
                   <option value="">{tr("— Cuenta —")}</option>
-                  {accounts.filter((a) => /^(14|5|6)/.test(a.code) || a.code === l.account).map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                  {accounts.filter((a) => (isAsset(l) ? /^1[5-7]/ : /^(14|5|6)/).test(a.code) || a.code === l.account).map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
                   {l.account && !accounts.some((a) => a.code === l.account) && <option value={l.account}>{tr("{code} · inactiva o no está en el PUC traído", { code: l.account })}</option>}
                 </select>
               ) : (
@@ -166,7 +184,20 @@ export default function BillForm({
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
-            {/* What this line brings into stock (materia prima, empaques…). */}
+            {isAsset(l) ? (
+            /* A fixed asset: Flujo de Caja registers and depreciates it as it is paid. */
+            <div className="flex flex-wrap items-center gap-2 text-xs text-foreground/60">
+              <span>{tr("Vida útil:")}</span>
+              <input type="number" min={1} step={1} value={l.depreciation_months ?? ""} onChange={(e) => setLine(i, { depreciation_months: e.target.value === "" ? null : Number(e.target.value) })}
+                className={`${inline} w-20`} aria-label={tr("Vida útil en meses")} />
+              <span>{tr("meses")}</span>
+              <span className="ml-2">{tr("En uso desde:")}</span>
+              <input type="date" value={l.in_service_date ?? ""} onChange={(e) => setLine(i, { in_service_date: e.target.value || null })}
+                className={inline} aria-label={tr("Fecha de puesta en uso")} />
+              <span className="basis-full text-[11px] text-foreground/40">{tr("Activo fijo: se deprecia en Flujo de Caja a medida que se paga. Sin fecha de uso, desde la fecha de la factura.")}</span>
+            </div>
+            ) : (
+            /* What this line brings into stock (materia prima, empaques…). */
             <div className="flex flex-wrap items-center gap-2 text-xs text-foreground/60">
               <span>{tr("Entra al inventario:")}</span>
               <select value={l.inventory_id ?? ""} onChange={(e) => setLine(i, { inventory_id: e.target.value || null, inventory_qty: e.target.value ? l.inventory_qty ?? null : null })}
@@ -182,6 +213,7 @@ export default function BillForm({
                 </>
               )}
             </div>
+            )}
             </div>
           ))}
           <button type="button" onClick={() => setLines((ls) => [...ls, blank()])} className="inline-flex items-center gap-1 text-xs font-bold text-[#C59F59] hover:underline">

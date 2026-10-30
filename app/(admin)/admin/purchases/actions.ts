@@ -72,7 +72,7 @@ export async function getPurchases() {
     supabase.from('inventory').select('id, product_code, product_name, unit, category').order('product_name'),
   ]);
   const { data: advances, error: advErr } = await supabase.from('supplier_advances').select('*').order('move_date', { ascending: false }).order('created_at', { ascending: false });
-  const categories = Object.keys(EXPENSE_CATEGORY_TYPE_MAP).filter((c) => !CAPEX.includes(c));
+  const categories = Object.keys(EXPENSE_CATEGORY_TYPE_MAP);
   return {
     migrationApplied: !error,
     bills: bills ?? [],
@@ -82,6 +82,8 @@ export async function getPurchases() {
       .filter((c) => !c.expense_id)
       .map((c) => ({ id: c.id, number: c.number, issuer_name: c.issuer_name, total: Number(c.siigo_ds_owed ?? c.total_amount), paid: (c.payments ?? []).reduce((s: number, p: { amount: number }) => s + Number(p.amount), 0), date: c.siigo_ds_date ?? c.issue_date })),
     categories,
+    // Fixed asset classes: their lines ask for a useful life.
+    assetCategories: CAPEX,
     // Saldo a favor: every movement (null before its migration).
     advances: advErr ? null : advances ?? [],
     // Products a purchase can bring in (services have no stock).
@@ -123,7 +125,7 @@ export async function createBill(input: BillInput) {
     const { data: supplier, error: supErr } = await supabase.from('suppliers').select('*').eq('id', input.supplierId).single();
     if (supErr || !supplier) throw supErr ?? new Error('Proveedor no encontrado.');
     const identification = cleanIdentification(supplier.document_number).identification;
-    const lines = normalizeLines(input.lines);
+    const lines = normalizeLines(input.lines, input.issueDate);
     const bill = { supplier_identification: identification, provider_number: input.providerNumber.trim(), issue_date: input.issueDate, due_date: input.dueDate, lines };
     const problems = billProblems(bill, CAPEX);
     if (problems.length) throw new Error(problems.join(' · '));
@@ -187,7 +189,7 @@ export async function updateBill(billId: string, input: BillInput) {
     const { data: supplier, error: supErr } = await supabase.from('suppliers').select('*').eq('id', input.supplierId).single();
     if (supErr || !supplier) throw supErr ?? new Error('Proveedor no encontrado.');
     const identification = cleanIdentification(supplier.document_number).identification;
-    const lines = normalizeLines(input.lines);
+    const lines = normalizeLines(input.lines, input.issueDate);
     const bill = { supplier_identification: identification, provider_number: input.providerNumber.trim(), issue_date: input.issueDate, due_date: input.dueDate, lines };
     const problems = billProblems(bill, CAPEX);
     if (problems.length) throw new Error(problems.join(' · '));
@@ -253,7 +255,8 @@ export async function updateBill(billId: string, input: BillInput) {
   });
 }
 
-const normalizeLines = (lines: BillLine[]): BillLine[] =>
+/** Clean lines; a fixed asset starts being used on the invoice date unless told otherwise. */
+const normalizeLines = (lines: BillLine[], issueDate: string): BillLine[] =>
   lines.map((l) => ({
     ...l,
     base: Number(l.base),
@@ -262,6 +265,8 @@ const normalizeLines = (lines: BillLine[]): BillLine[] =>
     description: (l.description || l.category).trim(),
     inventory_id: l.inventory_id || null,
     inventory_qty: l.inventory_id ? Number(l.inventory_qty) || 0 : null,
+    depreciation_months: CAPEX.includes(l.category) ? Math.floor(Number(l.depreciation_months)) || null : null,
+    in_service_date: CAPEX.includes(l.category) ? l.in_service_date || issueDate : null,
   }));
 
 /**
@@ -559,13 +564,16 @@ async function paymentExpenses(doc: Document, date: string, amount: number, conc
   const ids: string[] = [];
   try {
     for (const part of allocatePayment(doc.lines, amount)) {
+      // A fixed asset is registered (and depreciated) in Flujo de Caja as it is paid.
+      const asset = part.asset;
       const res = await createExpenseDirect(date, {
-        concept: concept.slice(0, 200),
+        concept: (asset?.description ? `${asset.description} · ${concept}` : concept).slice(0, 200),
         category: part.category,
         amount: part.amount,
         tax_amount: part.tax,
-        expense_type: EXPENSE_CATEGORY_TYPE_MAP[part.category] ?? 'OPEX',
-        depreciation_months: null,
+        expense_type: asset ? 'CAPEX' : EXPENSE_CATEGORY_TYPE_MAP[part.category] ?? 'OPEX',
+        depreciation_months: asset?.months ?? null,
+        ...(asset ? { asset_kind: asset.description || null, in_service_date: asset.in_service_date } : {}),
         ...(doc.supplierId ? { supplier_id: doc.supplierId } : {}),
       });
       if ('error' in res && res.error) throw new Error(res.error);
