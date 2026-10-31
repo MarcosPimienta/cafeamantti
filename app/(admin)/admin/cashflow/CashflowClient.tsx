@@ -27,6 +27,8 @@ import { expenseLedger, fixedAssetSheets, incomeLedger, type ExportFilters } fro
 import { getSuppliers } from "../suppliers/actions";
 import { ASSET_KIND_SUGGESTIONS, ASSET_USES, type AssetUse, type ExpenseType } from "./types";
 import { useExpenseCategories } from "../settings/categories/useExpenseCategories";
+import BreakdownBars, { KIND_COLOR } from "./BreakdownBars";
+import { expenseBreakdown, incomeBreakdown, previousPeriod } from "./reportBreakdown";
 import { categoryMonths, categoryTypes, namesOf } from "@/utils/expenses/categories";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
@@ -1176,20 +1178,14 @@ function CashflowReportView({
   const totalExp  = filteredExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const balance   = totalInc - totalExp;
 
-  const expByCategory = Object.entries(
-    filteredExpenses.reduce((acc, e) => {
-      acc[e.category] = (acc[e.category] || 0) + Number(e.amount);
-      return acc;
-    }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name: tr.msg(name), value }));
-
-  const incByType = Object.entries(
-    filteredIncomes.reduce((acc, i) => {
-      const k = String(i.type || "manual").toUpperCase();
-      acc[k] = (acc[k] || 0) + Number(i.amount);
-      return acc;
-    }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value }));
+  // With a closed period, each bar is compared with the period before it.
+  const dateOf = (r: any) => r.date || r.cashflow?.date || (r.created_at ? new Date(r.created_at).toISOString().split("T")[0] : "");
+  const prev = startDate && endDate ? previousPeriod(startDate, endDate) : null;
+  const inPrev = (r: any) => !!prev && dateOf(r) >= prev.start && dateOf(r) <= prev.end;
+  const exp = expenseBreakdown(filteredExpenses, prev ? expenses.filter(inPrev) : undefined);
+  const inc = incomeBreakdown(filteredIncomes, prev ? incomes.filter(inPrev) : undefined);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const selectedRows = selectedCategory ? filteredExpenses.filter((e) => e.category === selectedCategory) : [];
 
   return (
     <div className="space-y-6">
@@ -1245,43 +1241,67 @@ function CashflowReportView({
         </div>
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-          <h3 className="text-lg font-serif mb-5">{tr("Gastos por Categoría")}</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={expByCategory} cx="50%" cy="50%" outerRadius={70}
-                  labelLine={false} dataKey="value">
-                  {expByCategory.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+      {/* Gastos por naturaleza: lo que costó el periodo, aparte de inversiones y lo que no es gasto */}
+      <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm space-y-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-lg font-serif">{tr("Gastos del periodo")}</h3>
+          {totalInc > 0 && <p className="text-xs text-foreground/50">{tr("El gasto es el {p} de los ingresos", { p: `${Math.round((exp.gasto / totalInc) * 100)}%` })}</p>}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-foreground/10 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{tr("Gasto del periodo")}</p>
+            <p className="mt-1 font-serif text-2xl text-foreground">{formatCurrency(exp.gasto)}</p>
+            <p className="text-[11px] text-foreground/50">
+              {tr("Costo de ventas {a} · operativo {b}", { a: formatCurrency(exp.costos), b: formatCurrency(exp.operativos) })}
+              {exp.previousGasto ? ` · ${exp.gasto >= exp.previousGasto ? "▲" : "▼"} ${Math.round(Math.abs(exp.gasto - exp.previousGasto) / exp.previousGasto * 100)}% ${tr("vs anterior")}` : ""}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-foreground/10 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{tr("Inversión (activos fijos)")}</p>
+            <p className="mt-1 font-serif text-2xl text-foreground">{formatCurrency(exp.inversion)}</p>
+            <p className="text-[11px] text-foreground/50">{tr("Se deprecia en los meses de su vida útil")}</p>
+          </div>
+          <div className="rounded-2xl border border-foreground/10 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{tr("No es gasto")}</p>
+            <p className="mt-1 font-serif text-2xl text-foreground">{formatCurrency(exp.noGasto)}</p>
+            <p className="text-[11px] text-foreground/50">{tr("Anticipos a proveedores y movimientos de balance")}</p>
           </div>
         </div>
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-bold text-foreground/60">{tr("Gasto del periodo por categoría")}</p>
+            <div className="flex gap-4 text-[11px] text-foreground/60">
+              <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_COLOR.COGS }} />{tr("Costo de ventas")}</span>
+              <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_COLOR.OPEX }} />{tr("Gasto operativo")}</span>
+            </div>
+          </div>
+          <BreakdownBars bars={exp.bars} formatCurrency={formatCurrency} selected={selectedCategory}
+            onSelect={(b) => setSelectedCategory(b.kind === "OTROS" || selectedCategory === b.name ? null : b.name)} />
+          {selectedCategory && (
+            <div className="mt-3 rounded-2xl bg-foreground/[0.02] p-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-bold">{tr.msg(selectedCategory)} · {tr("{n} movimiento(s)", { n: String(selectedRows.length) })}</p>
+                <button type="button" onClick={() => setSelectedCategory(null)} aria-label={tr("Cerrar")} className="text-foreground/40 hover:text-foreground"><X className="h-4 w-4" /></button>
+              </div>
+              <ul className="divide-y divide-foreground/5 text-xs">
+                {selectedRows.map((e) => (
+                  <li key={e.id} className="flex justify-between gap-3 py-1.5">
+                    <span className="min-w-0 truncate"><span className="text-foreground/50">{dateOf(e)}</span> · {e.concept}</span>
+                    <span className="shrink-0 font-bold tabular-nums">{formatCurrency(Number(e.amount))}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-foreground/40">{tr("Toca una barra para ver sus movimientos.")}{prev ? " " + tr("La flecha compara con {a} – {b}.", { a: prev.start, b: prev.end }) : " " + tr("Elige un rango de fechas para comparar con el periodo anterior.")}</p>
+        </div>
+      </div>
 
-        <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-          <h3 className="text-lg font-serif mb-5">{tr("Ingresos por Tipo")}</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={incByType} cx="50%" cy="50%" outerRadius={70}
-                  labelLine={false} dataKey="value">
-                  {incByType.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      {/* Ingresos por origen */}
+      <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
+        <h3 className="text-lg font-serif">{tr("Ingresos por origen")}</h3>
+        <p className="mb-4 text-xs text-foreground/50">{tr("De dónde entró la plata: cobros de facturas con RC, órdenes pagadas en la app y otros ingresos registrados a mano.")}</p>
+        <BreakdownBars bars={inc.bars} formatCurrency={formatCurrency} />
       </div>
     </div>
   );
