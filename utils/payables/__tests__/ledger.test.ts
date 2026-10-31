@@ -41,8 +41,8 @@ describe("purchase invoices", () => {
     const parts = allocatePayment(lines, billTotals(lines).total);
     expect(parts).toEqual([
       { category: "Costo de Ventas (Materia prima, insumos, empaques)", amount: 386750, tax: 61750 },
-      { category: "Maquinaria y Equipo (PUC 1520)", amount: 1190000, tax: 190000, asset: { description: "Molino", months: 120, in_service_date: "2026-10-20" } },
-      { category: "Maquinaria y Equipo (PUC 1520)", amount: 119000, tax: 19000, asset: { description: "Balanza", months: 60, in_service_date: null } },
+      { category: "Maquinaria y Equipo (PUC 1520)", amount: 1190000, tax: 190000, asset: { description: "Molino", months: 120, in_service_date: "2026-10-20", use: null } },
+      { category: "Maquinaria y Equipo (PUC 1520)", amount: 119000, tax: 19000, asset: { description: "Balanza", months: 60, in_service_date: null, use: null } },
     ]);
   });
 

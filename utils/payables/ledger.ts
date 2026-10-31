@@ -20,6 +20,8 @@ export type BillLine = {
   depreciation_months?: number | null;
   /** Fixed asset line: when it starts being used (empty = the payment date). */
   in_service_date?: string | null;
+  /** Fixed asset line: where it is used (producción, punto de venta, comodato, administración). */
+  asset_use?: string | null;
 };
 
 /** "advance" = paid with the supplier's balance (saldo a favor), no money moves. */
@@ -85,7 +87,7 @@ export type PaymentPart = {
   amount: number;
   tax: number;
   /** A fixed asset line: its own part, so Flujo de Caja registers (and depreciates) it. */
-  asset?: { description: string; months: number; in_service_date: string | null };
+  asset?: { description: string; months: number; in_service_date: string | null; use: string | null };
 };
 
 /**
@@ -105,7 +107,7 @@ export function allocatePayment(lines: BillLine[], amount: number): PaymentPart[
       category: l.category,
       amount: 0,
       tax: 0,
-      ...(months > 0 ? { asset: { description: l.description, months, in_service_date: l.in_service_date || null } } : {}),
+      ...(months > 0 ? { asset: { description: l.description, months, in_service_date: l.in_service_date || null, use: l.asset_use || null } } : {}),
     };
     part.amount += amount * share;
     part.tax += perLine[i].owed > 0 ? (amount * share * perLine[i].iva) / perLine[i].owed : 0;

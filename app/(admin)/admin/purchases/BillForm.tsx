@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, Plus, Trash2, X } from "lucide-react";
 import { createBill, getPurchaseTaxes, updateBill } from "./actions";
 import { billProblems, billTotals, type BillLine } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
+import { ASSET_USES } from "../cashflow/types";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 type Tax = { id: number; name: string; rate: number };
@@ -81,6 +82,7 @@ export default function BillForm({
       account: defaultAccounts[category] ?? (asset !== isAsset(l) ? "" : l.account),
       depreciation_months: asset ? l.depreciation_months ?? assetMonths[category] ?? null : null,
       in_service_date: asset ? l.in_service_date ?? null : null,
+      asset_use: asset ? l.asset_use ?? null : null,
       ...(asset ? { inventory_id: null, inventory_qty: null } : {}),
     });
   };
@@ -195,7 +197,12 @@ export default function BillForm({
               <span className="ml-2">{tr("En uso desde:")}</span>
               <input type="date" value={l.in_service_date ?? ""} onChange={(e) => setLine(i, { in_service_date: e.target.value || null })}
                 className={inline} aria-label={tr("Fecha de puesta en uso")} />
-              <span className="basis-full text-[11px] text-foreground/40">{tr("Activo fijo: se deprecia en Flujo de Caja a medida que se paga. Sin fecha de uso, desde la fecha de la factura.")}</span>
+              <span className="ml-2">{tr("Destino:")}</span>
+              <select value={l.asset_use ?? ""} onChange={(e) => setLine(i, { asset_use: e.target.value || null })} className={inline} aria-label={tr("Destino del activo")}>
+                <option value="">{tr("— Elige —")}</option>
+                {Object.entries(ASSET_USES).map(([k, u]) => <option key={k} value={k} title={tr(u.hint)}>{tr(u.label)}</option>)}
+              </select>
+              <span className="basis-full text-[11px] text-foreground/40">{tr("Activo fijo: se deprecia en Flujo de Caja a medida que se paga. Sin fecha de uso, desde la fecha de la factura. El destino dice a dónde va la depreciación (comodato y punto de venta: gasto de ventas).")}</span>
             </div>
             ) : (
             /* What this line brings into stock (materia prima, empaques…). */

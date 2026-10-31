@@ -94,6 +94,20 @@ describe("purchase invoices (companies)", () => {
     expect(await createBill({ ...input, providerNumber: "1969", lines: [{ ...molino, depreciation_months: null }] })).toMatchObject({ success: false, error: "Línea 1: indica la vida útil del activo en meses." });
   });
 
+  it("equal assets on one invoice (3 cafeteras en comodato) are told apart and keep their destination", async () => {
+    const MAQ = "Maquinaria y Equipo (PUC 1520)";
+    h.responses["POST /v1/purchases"] = { id: "fc-9", name: "FC-1-242" };
+    const krups = { category: MAQ, account: "1524100101", description: "COFFEE CRUSH", base: 1000000, tax_id: null, tax_rate: 0, retention_id: null, retention_rate: 0, depreciation_months: 12, asset_use: "comodato" };
+    await createBill({ ...input, providerNumber: "74081", lines: [krups, krups, krups] });
+    h.responses["POST /v1/payment-receipts"] = { id: "rp-9", name: "RP-1-89" };
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-23", amount: 1500000, method: "bank" });
+    expect(expenses().map((e) => [e.concept.split(" · ")[0], e.amount, e.asset_use])).toEqual([
+      ["COFFEE CRUSH (1 de 3)", 500000, "comodato"],
+      ["COFFEE CRUSH (2 de 3)", 500000, "comodato"],
+      ["COFFEE CRUSH (3 de 3)", 500000, "comodato"],
+    ]);
+  });
+
   it("lines can use the team's categories: a fixed asset one asks for a useful life, a cost one is paid as COGS", async () => {
     db.rows("expense_categories").push(
       { id: "c1", name: "Bodega", expense_type: "CAPEX", depreciation_months: 240, active: true },

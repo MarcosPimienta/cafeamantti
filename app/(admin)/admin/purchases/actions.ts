@@ -11,7 +11,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin } from '../../actions';
 import { createExpenseDirect } from '../cashflow/actions';
-import { ADVANCE_CATEGORY } from '../cashflow/types';
+import { ADVANCE_CATEGORY, ASSET_USES, type AssetUse } from '../cashflow/types';
 import { categoryMonths, categoryTypes, namesOf } from '@/utils/expenses/categories';
 import { loadExpenseCategories } from '@/utils/expenses/server';
 import { getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
@@ -277,6 +277,7 @@ const normalizeLines = (lines: BillLine[], issueDate: string, capex: string[]): 
     inventory_qty: l.inventory_id ? Number(l.inventory_qty) || 0 : null,
     depreciation_months: capex.includes(l.category) ? Math.floor(Number(l.depreciation_months)) || null : null,
     in_service_date: capex.includes(l.category) ? l.in_service_date || issueDate : null,
+    asset_use: capex.includes(l.category) && l.asset_use && l.asset_use in ASSET_USES ? l.asset_use : null,
   }));
 
 /**
@@ -573,18 +574,26 @@ const documentRef = (target: PayableTarget) => ('billId' in target ? { bill_id: 
 async function paymentExpenses(doc: Document, date: string, amount: number, concept = `Pago ${doc.label} · ${doc.supplierName}`): Promise<string[]> {
   const ids: string[] = [];
   const types = categoryTypes(await loadExpenseCategories(await createClient(), { includeInactive: true }));
+  const parts = allocatePayment(doc.lines, amount);
+  // Several equal assets (3 cafeteras on one invoice) are told apart: "(2 de 3)".
+  const sameAsset = (d: string) => parts.filter((p) => p.asset?.description === d).length;
+  const seen = new Map<string, number>();
   try {
-    for (const part of allocatePayment(doc.lines, amount)) {
+    for (const part of parts) {
       // A fixed asset is registered (and depreciated) in Flujo de Caja as it is paid.
       const asset = part.asset;
+      const of = asset ? sameAsset(asset.description) : 0;
+      const n = asset ? (seen.get(asset.description) ?? 0) + 1 : 0;
+      if (asset) seen.set(asset.description, n);
+      const label = asset?.description ? `${asset.description}${of > 1 ? ` (${n} de ${of})` : ''} · ${concept}` : concept;
       const res = await createExpenseDirect(date, {
-        concept: (asset?.description ? `${asset.description} · ${concept}` : concept).slice(0, 200),
+        concept: label.slice(0, 200),
         category: part.category,
         amount: part.amount,
         tax_amount: part.tax,
         expense_type: asset ? 'CAPEX' : types[part.category] === 'CAPEX' ? 'OPEX' : types[part.category] ?? 'OPEX',
         depreciation_months: asset?.months ?? null,
-        ...(asset ? { asset_kind: asset.description || null, in_service_date: asset.in_service_date } : {}),
+        ...(asset ? { asset_kind: asset.description || null, in_service_date: asset.in_service_date, asset_use: (asset.use as AssetUse | null) ?? null } : {}),
         ...(doc.supplierId ? { supplier_id: doc.supplierId } : {}),
       });
       if ('error' in res && res.error) throw new Error(res.error);
