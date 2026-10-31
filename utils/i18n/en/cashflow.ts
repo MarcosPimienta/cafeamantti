@@ -248,8 +248,6 @@ export const cashflow: Record<string, string> = {
   "No es gasto": "Not an expense",
   "Anticipos a proveedores y movimientos de balance": "Supplier advances and balance movements",
   "Gasto del periodo por categoría": "Period expense by category",
-  "{n} movimiento(s)": "{n} movement(s)",
-  "Toca una barra para ver sus movimientos.": "Tap a bar to see its movements.",
   "La flecha compara con {a} – {b}.": "The arrow compares with {a} – {b}.",
   "Elige un rango de fechas para comparar con el periodo anterior.": "Pick a date range to compare with the previous period.",
   "Ingresos por origen": "Income by source",
@@ -257,4 +255,8 @@ export const cashflow: Record<string, string> = {
   "Cobros de facturas con RC": "Invoice collections with a receipt",
   "Órdenes pagadas en la app": "Orders paid in the app",
   "Otros ingresos": "Other income",
+  "{p} de «{name}»": "{p} of «{name}»",
+  "Toca para cerrar": "Tap to close",
+  "Toca para ver qué la compone ({n})": "Tap to see what makes it up ({n})",
+  "Toca una barra para ver qué la compone (proveedor o concepto).": "Tap a bar to see what makes it up (supplier or concept).",
 };

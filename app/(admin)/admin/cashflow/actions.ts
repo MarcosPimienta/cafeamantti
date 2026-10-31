@@ -83,11 +83,10 @@ export async function ensureCashflowDate(date: string) {
 
 export async function getAllExpenses(era: 'v1' | 'v2' = 'v2') {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('cashflow_expenses')
-    .select('*, cashflow:cashflow_id(date)')
-    .eq('era', era)
-    .order('created_at', { ascending: false });
+  const query = (columns: string) => supabase.from('cashflow_expenses').select(columns).eq('era', era).order('created_at', { ascending: false });
+  // The supplier's name (for the report's breakdown); before the Siigo migration there is no supplier_id.
+  let { data, error } = await query('*, cashflow:cashflow_id(date), supplier:supplier_id(name)');
+  if (error && /supplier/.test(error.message)) ({ data, error } = await query('*, cashflow:cashflow_id(date)'));
 
   if (error) {
     console.error('Error fetching expenses:', error);

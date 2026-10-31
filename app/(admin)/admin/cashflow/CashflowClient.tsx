@@ -1184,8 +1184,6 @@ function CashflowReportView({
   const inPrev = (r: any) => !!prev && dateOf(r) >= prev.start && dateOf(r) <= prev.end;
   const exp = expenseBreakdown(filteredExpenses, prev ? expenses.filter(inPrev) : undefined);
   const inc = incomeBreakdown(filteredIncomes, prev ? incomes.filter(inPrev) : undefined);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const selectedRows = selectedCategory ? filteredExpenses.filter((e) => e.category === selectedCategory) : [];
 
   return (
     <div className="space-y-6">
@@ -1275,25 +1273,8 @@ function CashflowReportView({
               <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_COLOR.OPEX }} />{tr("Gasto operativo")}</span>
             </div>
           </div>
-          <BreakdownBars bars={exp.bars} formatCurrency={formatCurrency} selected={selectedCategory}
-            onSelect={(b) => setSelectedCategory(b.kind === "OTROS" || selectedCategory === b.name ? null : b.name)} />
-          {selectedCategory && (
-            <div className="mt-3 rounded-2xl bg-foreground/[0.02] p-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-xs font-bold">{tr.msg(selectedCategory)} · {tr("{n} movimiento(s)", { n: String(selectedRows.length) })}</p>
-                <button type="button" onClick={() => setSelectedCategory(null)} aria-label={tr("Cerrar")} className="text-foreground/40 hover:text-foreground"><X className="h-4 w-4" /></button>
-              </div>
-              <ul className="divide-y divide-foreground/5 text-xs">
-                {selectedRows.map((e) => (
-                  <li key={e.id} className="flex justify-between gap-3 py-1.5">
-                    <span className="min-w-0 truncate"><span className="text-foreground/50">{dateOf(e)}</span> · {e.concept}</span>
-                    <span className="shrink-0 font-bold tabular-nums">{formatCurrency(Number(e.amount))}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <p className="mt-2 text-[11px] text-foreground/40">{tr("Toca una barra para ver sus movimientos.")}{prev ? " " + tr("La flecha compara con {a} – {b}.", { a: prev.start, b: prev.end }) : " " + tr("Elige un rango de fechas para comparar con el periodo anterior.")}</p>
+          <BreakdownBars bars={exp.bars} formatCurrency={formatCurrency} />
+          <p className="mt-2 text-[11px] text-foreground/40">{tr("Toca una barra para ver qué la compone (proveedor o concepto).")}{prev ? " " + tr("La flecha compara con {a} – {b}.", { a: prev.start, b: prev.end }) : " " + tr("Elige un rango de fechas para comparar con el periodo anterior.")}</p>
         </div>
       </div>
 

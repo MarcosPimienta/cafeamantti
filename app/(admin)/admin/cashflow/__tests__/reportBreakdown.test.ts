@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { expenseBreakdown, incomeBreakdown, incomeSource, previousPeriod, shortLabel, MAX_BARS } from "../reportBreakdown";
+import { expenseBreakdown, expenseDetail, incomeBreakdown, incomeDetail, incomeSource, previousPeriod, shortLabel, MAX_BARS } from "../reportBreakdown";
 
 // October 2026 as it was in the app.
 const OCT = [
@@ -51,5 +51,35 @@ describe("Flujo de Caja report breakdown", () => {
     expect(previousPeriod("2026-03-01", "2026-03-31")).toEqual({ start: "2026-02-01", end: "2026-02-28" });
     expect(previousPeriod("2026-10-11", "2026-10-20")).toEqual({ start: "2026-10-01", end: "2026-10-10" });
     expect(shortLabel("Gastos de Viaje y Transporte")).toBe("Gastos de Viaje y Transporte");
+  });
+
+  it("a bar opens into what adds up to it: supplier or concept for expenses, client for RC collections", () => {
+    const rows = [
+      { category: "Intereses Financieros (Préstamos de terceros)", amount: 1500000, expense_type: "OPEX", concept: "Intereses Gloria" },
+      { category: "Intereses Financieros (Préstamos de terceros)", amount: 337183, expense_type: "OPEX", concept: "Intereses Diana Patricia Rueda" },
+      { category: "Intereses Financieros (Préstamos de terceros)", amount: 100000, expense_type: "OPEX", concept: "Interes vanessa" },
+      { category: "Costo de Ventas (Materia prima, insumos, empaques)", amount: 375624, expense_type: "COGS", concept: "Pago factura FC3339 (FC-1-238) · TODO EMPAQUES RESTREPO SAS", supplier: { name: "TODO EMPAQUES RESTREPO SAS" } },
+      { category: "Costo de Ventas (Materia prima, insumos, empaques)", amount: 375623, expense_type: "COGS", concept: "Pago factura FC3339 (FC-1-238) · TODO EMPAQUES RESTREPO SAS", supplier: [{ name: "TODO EMPAQUES RESTREPO SAS" }] },
+    ];
+    const prev = [{ category: "Intereses Financieros (Préstamos de terceros)", amount: 1500000, expense_type: "OPEX", concept: "Intereses Gloria" }];
+    const [intereses, costo] = expenseBreakdown(rows, prev).bars;
+    expect(intereses.children!.map((c) => [c.label, c.value, Math.round(c.share * 100), c.kind, c.previous])).toEqual([
+      ["Intereses Gloria", 1500000, 77, "OPEX", 1500000],
+      ["Intereses Diana Patricia Rueda", 337183, 17, "OPEX", 0],
+      ["Interes vanessa", 100000, 5, "OPEX", 0],
+    ]);
+    expect(intereses.children!.reduce((s, c) => s + c.value, 0)).toBe(intereses.value);
+    expect(costo.children).toEqual([expect.objectContaining({ name: "TODO EMPAQUES RESTREPO SAS", value: 751247, share: 1, kind: "COGS" })]);
+    expect(expenseDetail({ category: "x", amount: 1, concept: "Pago cuenta de cobro No. 32 (DS-1-45) · HECTOR GONZALEZ PEREZ" })).toBe("HECTOR GONZALEZ PEREZ");
+
+    expect(incomeDetail({ concept: "RC-1-252 · GRUPO PROFITNESS S.A.S · FV-2-687, FV-2-694", amount: 1 })).toBe("GRUPO PROFITNESS S.A.S");
+    const inc = incomeBreakdown([{ concept: "RC-1-251 · ELEVATE NUTRITION S.A.S · FV-2-702", amount: 300 }, { concept: "RC-1-253 · ELEVATE NUTRITION S.A.S · FV-2-729", amount: 100 }, { concept: "RC-1-250 · MXM · FV-2-709", amount: 100 }]);
+    expect(inc.bars[0].children!.map((c) => [c.name, c.value])).toEqual([["ELEVATE NUTRITION S.A.S", 400], ["MXM", 100]]);
+  });
+
+  it("«Otros» opens into the categories it folds", () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({ category: `Cat ${i}`, amount: 900 - i * 100, expense_type: "OPEX", concept: "c" }));
+    const otros = expenseBreakdown(many).bars.at(-1)!;
+    expect(otros.children!.map((c) => [c.label, c.value])).toEqual([["Cat 6", 300], ["Cat 7", 200], ["Cat 8", 100]]);
   });
 });
