@@ -438,9 +438,78 @@ export default function Home() {
         />
       </header>
 
-      {/* ── Historia ─────────────────────────── */}
-      <section id="historia" className="section-dark">
+      {/* ── Tienda ───────────────────────────── */}
+      <section id="tienda" style={{ padding: "110px clamp(20px, 5vw, 48px) 140px", background: "#0B0B0B", color: "#F4F1ED" }}>
         <div className="section-inner">
+          {/* Header row */}
+          <div
+            data-reveal=""
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 24,
+              flexWrap: "wrap",
+              borderTop: "1px solid rgba(194,168,120,.25)",
+              paddingTop: 56,
+              marginBottom: 64,
+            }}
+          >
+            <h2 className="heading-section" style={{ margin: 0, color: "#F4F1ED" }}>
+              {t("home.tienda.title")}
+            </h2>
+            <p
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
+                fontStyle: "italic",
+                fontSize: 19,
+                color: "#C2A878",
+              }}
+            >
+              {t("home.tienda.subtitle")}
+            </p>
+          </div>
+
+          {/* Product Carousel */}
+          <ProductCarousel products={PRODUCTS} t={t} />
+
+          {/* Meta labels */}
+          <div
+            data-reveal=""
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 56,
+              flexWrap: "wrap",
+              marginTop: 80,
+            }}
+          >
+            {(["metaEnvio", "metaTostado", "metaOrigen", "metaCalidad"] as const).map((key) => (
+              <p
+                key={key}
+                style={{
+                  margin: 0,
+                  fontSize: 11,
+                  letterSpacing: ".24em",
+                  textTransform: "uppercase",
+                  color: "rgba(244,241,237,.45)",
+                  fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
+                }}
+              >
+                {t(`home.tienda.${key}`)}
+              </p>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Combo KRUPS Coffee Crush ─────────── */}
+      <KrupsSection onAdded={() => setIsCartOpen(true)} />
+
+      {/* ── Historia ─────────────────────────── */}
+      <section id="historia" className="section-dark" style={{ paddingTop: 0 }}>
+        <div className="section-inner" style={{ borderTop: "1px solid rgba(194,168,120,.25)", paddingTop: 56 }}>
           <div
             style={{
               display: "grid",
@@ -749,75 +818,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* ── Tienda ───────────────────────────── */}
-      <section id="tienda" style={{ padding: "0 clamp(20px, 5vw, 48px) 140px", background: "#0B0B0B", color: "#F4F1ED" }}>
-        <div className="section-inner">
-          {/* Header row */}
-          <div
-            data-reveal=""
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              justifyContent: "space-between",
-              gap: 24,
-              flexWrap: "wrap",
-              borderTop: "1px solid rgba(194,168,120,.25)",
-              paddingTop: 56,
-              marginBottom: 64,
-            }}
-          >
-            <h2 className="heading-section" style={{ margin: 0, color: "#F4F1ED" }}>
-              {t("home.tienda.title")}
-            </h2>
-            <p
-              style={{
-                margin: 0,
-                fontFamily: "var(--font-bodoni), 'Bodoni Moda', serif",
-                fontStyle: "italic",
-                fontSize: 19,
-                color: "#C2A878",
-              }}
-            >
-              {t("home.tienda.subtitle")}
-            </p>
-          </div>
-
-          {/* Product Carousel */}
-          <ProductCarousel products={PRODUCTS} t={t} />
-
-          {/* Meta labels */}
-          <div
-            data-reveal=""
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 56,
-              flexWrap: "wrap",
-              marginTop: 80,
-            }}
-          >
-            {(["metaEnvio", "metaTostado", "metaOrigen", "metaCalidad"] as const).map((key) => (
-              <p
-                key={key}
-                style={{
-                  margin: 0,
-                  fontSize: 11,
-                  letterSpacing: ".24em",
-                  textTransform: "uppercase",
-                  color: "rgba(244,241,237,.45)",
-                  fontFamily: "var(--font-archivo), 'Archivo', sans-serif",
-                }}
-              >
-                {t(`home.tienda.${key}`)}
-              </p>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Combo KRUPS Coffee Crush ─────────── */}
-      <KrupsSection onAdded={() => setIsCartOpen(true)} />
 
       {/* ── Contacto (Cream) ─────────────────── */}
       <section id="contacto" className="section-cream">
