@@ -268,7 +268,7 @@ export default function CostosTab() {
     );
   }
 
-  const { sheet, settings, pricedItems, packagingOptions, salesWindowDays, migrated } = data;
+  const { sheet, settings, pricedItems, packagingOptions, salesWindowDays, migrated, entryCosts } = data;
   const optionName = (code: string) => packagingOptions.find((o) => o.code === code)?.name ?? code;
   const profiles = Object.keys(sheet.yields) as CoffeeProfileId[];
   const coffeeItems = pricedItems.filter((i) => /^(CAFV|CAPG)-/.test(i.product_code));
@@ -399,25 +399,17 @@ export default function CostosTab() {
         {/* Purchase prices */}
         <div className={`${cardCls} p-6`}>
           <h3 className="font-serif text-lg">{tr("Precios de compra")}</h3>
-          <p className="text-xs text-foreground/50 mt-0.5 mb-5">{tr("Lo que pagas hoy por cada insumo. Se guarda al salir del campo.")}</p>
+          <p className="text-xs text-foreground/50 mt-0.5 mb-5">
+            {entryCosts
+              ? tr("Salen del costo de cada entrada al inventario: el promedio ponderado desde septiembre. Se actualizan solos con cada entrada o compra.")
+              : tr("Lo que pagas hoy por cada insumo. Se guarda al salir del campo.")}
+          </p>
 
           <p className={labelCls}>{tr("Café (por kg)")}</p>
           <div className="space-y-3 mb-6">
             {coffeeItems.length === 0 && <p className="text-sm text-foreground/40">{tr("No hay café verde ni pergamino en el inventario.")}</p>}
             {coffeeItems.map((i) => (
-              <div key={i.id} className="grid grid-cols-[1fr_170px] gap-3 items-center">
-                <div>
-                  <div className="text-sm font-bold">{i.product_name}</div>
-                  <div className="font-mono text-[10px] text-foreground/40">{i.product_code}</div>
-                </div>
-                <SaveField
-                  value={i.standard_cost}
-                  onSave={(v) => saveCost(i.id, v)}
-                  placeholder={tr("$ / kg")}
-                  ariaLabel={`Precio por kg de ${i.product_name}`}
-                  step="any"
-                />
-              </div>
+              <PriceRow key={i.id} item={i} unit="kg" summary={entryCosts?.[i.id] ?? null} fromEntries={!!entryCosts} onSave={(v) => saveCost(i.id, v)} />
             ))}
           </div>
 
@@ -425,19 +417,7 @@ export default function CostosTab() {
           <div className="space-y-3">
             {packagingItems.length === 0 && <p className="text-sm text-foreground/40">{tr("No hay empaques asociados a las referencias.")}</p>}
             {packagingItems.map((i) => (
-              <div key={i.id} className="grid grid-cols-[1fr_170px] gap-3 items-center">
-                <div>
-                  <div className="text-sm font-bold">{i.product_name}</div>
-                  <div className="font-mono text-[10px] text-foreground/40">{i.product_code}</div>
-                </div>
-                <SaveField
-                  value={i.standard_cost}
-                  onSave={(v) => saveCost(i.id, v)}
-                  placeholder={tr("$ / unidad")}
-                  ariaLabel={`Costo por unidad de ${i.product_name}`}
-                  step="10"
-                />
-              </div>
+              <PriceRow key={i.id} item={i} unit="unidad" summary={entryCosts?.[i.id] ?? null} fromEntries={!!entryCosts} onSave={(v) => saveCost(i.id, v)} />
             ))}
           </div>
         </div>
@@ -568,6 +548,46 @@ export default function CostosTab() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * One item's price. With costed entradas it is their weighted average (read
+ * only, with where it comes from); without any, a provisional typed price
+ * until an entrada brings the real one.
+ */
+function PriceRow({ item, unit, summary, fromEntries, onSave }: {
+  item: { id: string; product_code: string; product_name: string; standard_cost: number | null };
+  unit: "kg" | "unidad";
+  summary: { average: number; count: number; quantity: number; lastCost: number; lastDate: string } | null;
+  fromEntries: boolean;
+  onSave: (v: number | null) => Promise<unknown>;
+}) {
+  const tr = useTr();
+  const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: n < 100 ? 2 : 0 }).format(n);
+  const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "short" });
+  return (
+    <div className="grid grid-cols-[1fr_190px] gap-3 items-center">
+      <div className="min-w-0">
+        <div className="text-sm font-bold">{item.product_name}</div>
+        <div className="font-mono text-[10px] text-foreground/40">{item.product_code}</div>
+      </div>
+      {summary ? (
+        <div className="text-right">
+          <div className="text-sm font-bold tabular-nums">{cop(summary.average)} <span className="font-normal text-foreground/40">/ {unit === "kg" ? "kg" : tr("unidad")}</span></div>
+          <div className="text-[10px] text-foreground/45">
+            {tr("Promedio de {n} entrada(s) · última {c} el {d}", { n: String(summary.count), c: cop(summary.lastCost), d: day(summary.lastDate) })}
+          </div>
+        </div>
+      ) : fromEntries ? (
+        <div className="space-y-1">
+          <SaveField value={item.standard_cost} onSave={onSave} placeholder={unit === "kg" ? tr("$ / kg") : tr("$ / unidad")} ariaLabel={`Precio provisional de ${item.product_name}`} step="any" />
+          <div className="text-[10px] font-bold text-amber-700">{tr("Sin entradas con costo: precio provisional")}</div>
+        </div>
+      ) : (
+        <SaveField value={item.standard_cost} onSave={onSave} placeholder={unit === "kg" ? tr("$ / kg") : tr("$ / unidad")} ariaLabel={`Precio de ${item.product_name}`} step="any" />
+      )}
     </div>
   );
 }

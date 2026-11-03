@@ -21,7 +21,7 @@ import { loadSiigoSettings } from "@/utils/siigo/server";
 import { cleanIdentification } from "@/utils/siigo/mapping";
 import { isSellable } from "@/utils/inventory/sellable";
 import { isInventoryCategory, type InventoryCategory, type EntryType } from "@/utils/inventory/categories";
-import { entryCostProblem } from "@/utils/inventory/entryCost";
+import { entryCostProblem, summarizeEntryCosts } from "@/utils/inventory/entryCost";
 import { refreshStandardCost } from "@/utils/inventory/costServer";
 import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
 import { buildProductKardex, buildGeneralKardex } from "@/utils/inventory/kardex";
@@ -2618,6 +2618,16 @@ export async function getCostingData() {
     ]);
   if (itemsErr) throw new Error(itemsErr.message);
 
+  // What each item cost when it came in (entradas since the cutover). Before
+  // the entry-cost migration there is no unit_cost: the typed prices stay.
+  const { data: costedIn, error: costedErr } = await supabase
+    .from('inventory_movements')
+    .select('inventory_id, quantity, unit_cost, movement_date, created_at')
+    .eq('type', 'entrada')
+    .eq('era', 'v2')
+    .not('unit_cost', 'is', null);
+  const entryCosts = costedErr ? null : summarizeEntryCosts((costedIn ?? []) as { inventory_id: string; quantity: number; unit_cost: number; movement_date: string | null; created_at: string }[]);
+
   const inv = items ?? [];
   const codeOf = new Map(inv.map((i) => [i.id as string, i.product_code as string]));
 
@@ -2658,7 +2668,8 @@ export async function getCostingData() {
     id: i.id,
     product_code: i.product_code,
     product_name: i.product_name,
-    standard_cost: i.standard_cost === null || i.standard_cost === undefined ? null : Number(i.standard_cost),
+    // The entradas' weighted average wins over a typed price.
+    standard_cost: entryCosts?.[i.id]?.average ?? (i.standard_cost === null || i.standard_cost === undefined ? null : Number(i.standard_cost)),
   }));
 
   const sheet = buildCostSheet({
@@ -2694,6 +2705,8 @@ export async function getCostingData() {
     packagingOptions,
     salesWindowDays: COSTING_SALES_WINDOW_DAYS,
     migrated: settingsRow !== null && inv.some((i) => 'standard_cost' in i),
+    /** item id → its costed entradas (null before the entry-cost migration). */
+    entryCosts,
   };
 }
 

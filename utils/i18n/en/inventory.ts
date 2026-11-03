@@ -514,4 +514,7 @@ export const inventory: Record<string, string> = {
   "Total {v}": "Total {v}",
   "Solo las entradas llevan costo.": "Only entries carry a cost.",
   "Falta aplicar la migración 20261107000000_inventory_entry_cost.sql para guardar el costo de las entradas.": "Migration 20261107000000_inventory_entry_cost.sql must be applied to save entry costs.",
+  "Salen del costo de cada entrada al inventario: el promedio ponderado desde septiembre. Se actualizan solos con cada entrada o compra.": "They come from the cost of each inventory entry: the weighted average since September. They update themselves with every entry or purchase.",
+  "Promedio de {n} entrada(s) · última {c} el {d}": "Average of {n} entry(ies) · last {c} on {d}",
+  "Sin entradas con costo: precio provisional": "No entries with a cost: provisional price",
 };
