@@ -158,8 +158,10 @@ export async function importStatement(form: FormData) {
     let items;
     try {
       items = await pdfTextItems(bytes);
-    } catch {
-      throw new Error('No pude leer el PDF. ¿Tiene contraseña? Descárgalo de nuevo sin clave.');
+    } catch (err) {
+      console.error('importStatement: pdf.js', err);
+      if (/password/i.test(errorText(err))) throw new Error('El PDF tiene contraseña. Descárgalo de nuevo sin clave.');
+      throw new Error('No pude leer el PDF del extracto.');
     }
     const parsed = parseDavivienda(items);
     if (parsed.problems.length) throw new Error(parsed.problems.join(' · '));

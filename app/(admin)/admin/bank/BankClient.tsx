@@ -102,8 +102,9 @@ export default function BankClient({ migrationApplied, statements, statement, li
       setError("");
       setNotice("");
       const res = await importStatement(form);
-      if (!res.success) return setError(res.error);
+      // Lets the same file be chosen again (after an error, or once deleted).
       if (fileRef.current) fileRef.current.value = "";
+      if (!res.success) return setError(res.error);
       setNotice(tr("Extracto cargado: {n} movimientos.", { n: String(res.lines) }));
       router.push(`/admin/bank?extracto=${res.id}`);
       router.refresh();
@@ -168,8 +169,8 @@ export default function BankClient({ migrationApplied, statements, statement, li
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="max-w-[240px] text-xs" />
-          <button type="button" disabled={isPending} onClick={upload} className="inline-flex items-center gap-2 rounded-xl bg-[#C59F59] px-4 py-2 text-xs font-bold text-white hover:bg-[#B38E4D] disabled:opacity-50">
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={upload} />
+          <button type="button" disabled={isPending} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl bg-[#C59F59] px-4 py-2 text-xs font-bold text-white hover:bg-[#B38E4D] disabled:opacity-50">
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}{tr("Cargar extracto (PDF Davivienda)")}
           </button>
         </div>

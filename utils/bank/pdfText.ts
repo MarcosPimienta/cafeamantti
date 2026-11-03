@@ -2,6 +2,10 @@ import type { TextItem } from "./davivienda";
 
 /** The text pieces of a PDF with their position (PDF units, y up). Server only. */
 export async function pdfTextItems(data: Uint8Array): Promise<TextItem[]> {
+  // pdf.js loads its worker by a computed path that Vercel doesn't bundle;
+  // imported here by name it ships with the function and runs in-process.
+  const g = globalThis as { pdfjsWorker?: unknown };
+  g.pdfjsWorker ??= await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const task = getDocument({ data, useSystemFonts: false, verbosity: 0 });
   const out: TextItem[] = [];
