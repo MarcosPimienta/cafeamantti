@@ -16,6 +16,7 @@ import {
   Receipt,
   ShoppingCart,
   HandCoins,
+  Landmark,
 } from "lucide-react";
 import { useTr } from "./AdminI18n";
 
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/admin/purchases", label: "Compras", Icon: ShoppingCart },
   { href: "/admin/invoices", label: "Facturas", Icon: Receipt },
   { href: "/admin/receivables", label: "Cuentas por cobrar", Icon: HandCoins },
+  { href: "/admin/liabilities", label: "Pasivos", Icon: Landmark },
   { href: "/admin/quotes", label: "Cotizaciones", Icon: FileText },
   { href: "/admin/cuentas-cobro", label: "Cuentas de Cobro", Icon: FileText },
   { href: "/admin/cashflow", label: "Flujo de Caja", Icon: Wallet },

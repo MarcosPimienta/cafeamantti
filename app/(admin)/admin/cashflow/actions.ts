@@ -3,6 +3,7 @@
 import { PAID_ORDER_STATUSES } from '@/utils/orders/stock';
 
 import { createClient } from '@/utils/supabase/server';
+import { accruedInterestInMonth, type Loan, type LoanMove } from '@/utils/loans/ledger';
 import { revalidatePath } from 'next/cache';
 import {
   DailyCashflow,
@@ -704,6 +705,9 @@ export async function getMonthlyPLReport(
     ({ data: capexRows, error: capexError } = await capexQuery('net_amount, depreciation_months, created_at, cashflow:cashflow_id!inner ( date )'));
   }
 
+  // Interest that capitalizes (no money leaves) is still a cost of the month.
+  const accruedInterest = await accruedLoanInterest(supabase, period_start.slice(0, 7));
+
   for (const [label, err] of [
     ['manualIncomes', incErr],
     ['webOrders', ordErr],
@@ -723,13 +727,23 @@ export async function getMonthlyPLReport(
     webOrders: webOrders ?? [],
     cogsExpenses: cogsExpenses ?? [],
     inventoryConsumptions: inventoryConsumptions ?? [],
-    opexExpenses: opexExpenses ?? [],
+    opexExpenses: [...(opexExpenses ?? []), ...(accruedInterest > 0 ? [{ net_amount: accruedInterest }] : [])],
     capexItems: ((capexRows ?? []) as unknown as CapexRow[]).map(({ cashflow, ...a }) => ({
       ...a,
       purchase_date: (Array.isArray(cashflow) ? cashflow[0] : cashflow)?.date ?? null,
     })),
     paidExpenses: paidExpenses ?? [],
   });
+}
+
+/** Interest the loans add to their capital in the month (0 before the loans migration). */
+async function accruedLoanInterest(supabase: any, month: string): Promise<number> {
+  const [{ data: loans, error }, { data: moves }] = await Promise.all([
+    supabase.from('loans').select('*').eq('scheme', 'capitaliza'),
+    supabase.from('loan_movements').select('loan_id, move_date, kind, amount'),
+  ]);
+  if (error || !loans) return 0;
+  return (loans as Loan[]).reduce((s, l) => s + accruedInterestInMonth(l, (moves ?? []) as LoanMove[], month), 0);
 }
 
 export async function markDateAsNoMovements(date: string) {
