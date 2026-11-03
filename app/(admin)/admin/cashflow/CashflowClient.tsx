@@ -15,7 +15,7 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import {
   getAllExpenses, getAllIncomes, getCashflowHistory,
-  createExpenseDirect, deleteExpenseDirect,
+  createExpenseDirect, createSplitExpense, deleteExpenseDirect,
   createIncomeDirect, deleteIncomeDirect,
   getMissingCashflowDays, getMonthlyPLReport,
   markDateAsNoMovements,
@@ -171,7 +171,7 @@ function Dropzone({
 }
 
 // ─────────────────────────────────────────────────────────────
-// EXPENSE MODAL — con toggle OPEX/COGS/CAPEX + IVA
+// EXPENSE MODAL — con toggle OPEX/COGS/CAPEX; un pago puede dividirse en varias categorías
 // ─────────────────────────────────────────────────────────────
 
 function ExpenseModal({
@@ -196,7 +196,11 @@ function ExpenseModal({
   const [concept,  setConcept]  = useState(expenseToEdit?.concept || "");
   const [category, setCategory] = useState(expenseToEdit?.category || "");
   const [amount,   setAmount]   = useState(expenseToEdit?.amount ? String(expenseToEdit.amount) : "");
-  const [taxAmt,   setTaxAmt]   = useState(expenseToEdit?.tax_amount ? String(expenseToEdit.tax_amount) : "");
+  // El IVA se registra en Compras: aquí solo se conserva el de filas que vienen de allá.
+  const taxAmt = Number(expenseToEdit?.tax_amount ?? 0);
+  // Un pago dividido en varias categorías (p. ej. varias retenciones en un pago a la DIAN); null = una sola.
+  const [splitLines, setSplitLines] = useState<{ category: string; amount: string; type: ExpenseType }[] | null>(null);
+  const splitTotal = (splitLines ?? []).reduce((s, l) => s + (Number(l.amount) || 0), 0);
   const [deprMos,  setDeprMos]  = useState(expenseToEdit?.depreciation_months ? String(expenseToEdit.depreciation_months) : "");
   // Activo fijo (CAPEX)
   const [assetKind,     setAssetKind]     = useState<string>(expenseToEdit?.asset_kind || "");
@@ -225,11 +229,47 @@ function ExpenseModal({
 
   const isCapex = expenseType === "CAPEX";
 
-  // IVA auto-sugerido: 19% del monto si hay monto
-  const autoTax = amount ? (Number(amount) * 0.19).toFixed(0) : "";
+  function resetForm() {
+    setConcept("");
+    setCategory("");
+    setAmount("");
+    setSplitLines(null);
+    setDeprMos("");
+    setAssetKind("");
+    setAssetUse("");
+    setInServiceDate("");
+    setResidual("");
+    setSupplierId("");
+    setImageUrl(null);
+  }
+
+  function afterSave(error?: string) {
+    if (error) return alert(tr.msg(error));
+    onSuccess();
+    if (shouldClose) return onClose();
+    resetForm();
+    setSuccessMessage(tr("¡Gasto registrado con éxito!"));
+    setTimeout(() => setSuccessMessage(""), 4000);
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (splitLines) {
+      if (!concept || !date) return;
+      if (splitLines.some((l) => !l.category.trim() || !(Number(l.amount) > 0))) {
+        alert(tr("Cada línea necesita categoría y un valor mayor a cero."));
+        return;
+      }
+      startTransition(async () => {
+        const res = await createSplitExpense(
+          date,
+          { concept, image_url: imageUrl, ...(supplierId ? { supplier_id: supplierId } : {}) },
+          splitLines.map((l) => ({ category: l.category.trim(), amount: Number(l.amount), expense_type: l.type }))
+        );
+        afterSave(res.error);
+      });
+      return;
+    }
     if (!concept || !category || !amount || !date) return;
     if (isCapex && (!deprMos || Number(deprMos) <= 0)) {
       alert(tr("Para un activo CAPEX debes indicar los meses de vida útil (> 0)."));
@@ -245,8 +285,8 @@ function ExpenseModal({
         category,
         amount:              Number(amount),
         expense_type:        expenseType,
-        tax_amount:          taxAmt ? Number(taxAmt) : 0,
-        net_amount:          Number(amount) - (taxAmt ? Number(taxAmt) : 0),
+        tax_amount:          taxAmt,
+        net_amount:          Number(amount) - taxAmt,
         depreciation_months: isCapex ? Number(deprMos) : null,
         asset_kind:          isCapex ? assetKind || null : null,
         asset_use:           isCapex && assetUse ? assetUse : null,
@@ -261,28 +301,7 @@ function ExpenseModal({
         ? await updateExpenseDirect(expenseToEdit.id, payload)
         : await createExpenseDirect(date, payload);
 
-      if (res.error) {
-        alert(tr.msg(res.error));
-      } else {
-        onSuccess();
-        if (shouldClose) {
-          onClose();
-        } else {
-          setConcept("");
-          setCategory("");
-          setAmount("");
-          setTaxAmt("");
-          setDeprMos("");
-          setAssetKind("");
-          setAssetUse("");
-          setInServiceDate("");
-          setResidual("");
-          setSupplierId("");
-          setImageUrl(null);
-          setSuccessMessage(tr("¡Gasto registrado con éxito!"));
-          setTimeout(() => setSuccessMessage(""), 4000);
-        }
-      }
+      afterSave(res.error);
     });
   }
 
@@ -314,8 +333,12 @@ function ExpenseModal({
             </div>
             <div>
               <label className="field-label">{tr("Valor total ($)")}</label>
-              <input type="number" min="0" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} required
-                placeholder="0" className="field-input" />
+              {splitLines ? (
+                <p className="field-input bg-foreground/[0.03] font-bold tabular-nums">{fmt(splitTotal)}</p>
+              ) : (
+                <input type="number" min="0" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} required
+                  placeholder="0" className="field-input" />
+              )}
             </div>
           </div>
 
@@ -335,6 +358,40 @@ function ExpenseModal({
             </select>
           </div>
 
+          {splitLines ? (
+            <div className="space-y-2">
+              <label className="field-label">{tr("Líneas del pago")}</label>
+              {splitLines.map((l, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <input type="text" list="exp-categories" value={l.category} aria-label={tr("Categoría")}
+                    onChange={(e) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, category: e.target.value, type: EXPENSE_CATEGORY_TYPE_MAP[e.target.value] === "CAPEX" ? "OPEX" : EXPENSE_CATEGORY_TYPE_MAP[e.target.value] ?? x.type } : x)))}
+                    placeholder={tr("Categoría")} className="field-input min-w-0 flex-1" />
+                  <select value={l.type} aria-label={tr("Clasificación contable")}
+                    onChange={(e) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, type: e.target.value as ExpenseType } : x)))}
+                    className="field-input w-28">
+                    {(["OPEX", "COGS", "BALANCE"] as ExpenseType[]).map((t) => <option key={t} value={t}>{tr(EXPENSE_TYPE_META[t].label)}</option>)}
+                  </select>
+                  <input type="number" min="0" step="1" value={l.amount} aria-label={tr("Valor")} placeholder="0"
+                    onChange={(e) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))}
+                    className="field-input w-32" />
+                  <button type="button" disabled={splitLines.length <= 2} aria-label={tr("Quitar línea")}
+                    onClick={() => setSplitLines(splitLines.filter((_, j) => j !== i))}
+                    className="p-2 text-foreground/30 hover:text-red-600 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+              <datalist id="exp-categories">
+                {PREDEFINED_CATEGORIES.filter((c) => EXPENSE_CATEGORY_TYPE_MAP[c] !== "CAPEX").map((c) => <option key={c} value={c} label={tr(c)} />)}
+              </datalist>
+              <div className="flex flex-wrap justify-between gap-2 text-[11px]">
+                <button type="button" onClick={() => setSplitLines([...splitLines, { category: "", amount: "", type: "OPEX" }])}
+                  className="inline-flex items-center gap-1 font-bold text-[#C59F59] hover:underline"><Plus className="w-3.5 h-3.5" />{tr("Agregar línea")}</button>
+                <button type="button" onClick={() => { setCategory(splitLines[0].category); setAmount(splitLines[0].amount); setExpenseType(splitLines[0].type); setSplitLines(null); }}
+                  className="text-foreground/50 hover:text-foreground">{tr("Volver a una sola categoría")}</button>
+              </div>
+              <p className="text-[10px] text-foreground/50">{tr("Se crea un registro por línea, con la misma fecha, concepto y soporte. Los activos fijos se registran solos.")}</p>
+            </div>
+          ) : (
+            <>
           {/* Categoría */}
           <div>
             <label className="field-label">{tr("Categoría")}</label>
@@ -381,26 +438,19 @@ function ExpenseModal({
               </p>
             )}
           </div>
-
-          {/* IVA */}
-          <div>
-            <label className="field-label">
-              {tr("IVA discriminado ($)")}
-              {autoTax && !taxAmt && (
-                <button type="button" onClick={() => setTaxAmt(autoTax)}
-                  className="ml-2 text-[10px] text-[#C59F59] font-bold underline-offset-2 underline">
-                  {tr("Sugerir 19% = ${v}", { v: Number(autoTax).toLocaleString("es-CO") })}
+              {!expenseToEdit && !isCapex && (
+                <button type="button"
+                  onClick={() => setSplitLines([{ category, amount, type: expenseType }, { category: "", amount: "", type: "OPEX" }])}
+                  className="-mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-[#C59F59] hover:underline">
+                  <Plus className="w-3.5 h-3.5" />{tr("Dividir en varias categorías")}
                 </button>
               )}
-            </label>
-            <input type="number" min="0" step="1" value={taxAmt} onChange={(e) => setTaxAmt(e.target.value)}
-              placeholder={tr("0 si no aplica")} className="field-input" />
-            {taxAmt && amount && (
-              <p className="text-[10px] text-foreground/50 mt-1">
-                {tr("Neto antes de IVA:")}{" "}<strong>{fmt(Number(amount) - Number(taxAmt))}</strong>
-              </p>
-            )}
-          </div>
+            </>
+          )}
+
+          {taxAmt > 0 && (
+            <p className="text-[11px] text-foreground/50">{tr("Incluye IVA de {v}, registrado desde Compras.", { v: fmt(taxAmt) })}</p>
+          )}
 
           {category === "Mercancía para Reventa (Inventario PUC 1435)" && (
             <p className="text-[11px] text-foreground/60 bg-foreground/5 rounded-xl px-3 py-2">
@@ -452,7 +502,7 @@ function ExpenseModal({
                 {deprMos && amount && (
                   <p className="text-[10px] text-purple-700 mt-1.5">
                     {tr("Depreciación mensual:")}{" "}<strong>
-                      {fmt(Math.max(0, Number(amount) - (taxAmt ? Number(taxAmt) : 0) - (residual ? Number(residual) : 0)) / Number(deprMos))}
+                      {fmt(Math.max(0, Number(amount) - taxAmt - (residual ? Number(residual) : 0)) / Number(deprMos))}
                     </strong>{" "}{tr("/ mes durante")}{" "}{deprMos}{" "}{tr("meses")}
                     {DEFAULT_DEPRECIATION_MONTHS[category] ? tr(" · sugerido {v} (tope fiscal); ajústalo al uso real", { v: DEFAULT_DEPRECIATION_MONTHS[category] }) : ""}
                   </p>

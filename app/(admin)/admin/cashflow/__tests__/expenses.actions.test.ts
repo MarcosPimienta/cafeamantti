@@ -5,7 +5,7 @@ const h = vi.hoisted(() => ({ client: null as unknown }));
 vi.mock("@/utils/supabase/server", () => ({ createClient: async () => h.client }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-import { createExpenseDirect, updateExpenseDirect } from "../actions";
+import { createExpenseDirect, createSplitExpense, updateExpenseDirect } from "../actions";
 
 let db: FakeDB;
 beforeEach(() => {
@@ -66,5 +66,34 @@ describe("balance movements in Gastos", () => {
     expect(res.error).toBeUndefined();
     expect(db.rows("cashflow_expenses")[0]).toMatchObject({ expense_type: "BALANCE", amount: 412000, net_amount: 412000, depreciation_months: null });
     expect(db.rows("cashflow_expenses")[0]).not.toHaveProperty("asset_kind");
+  });
+});
+
+describe("one payment split into several categories", () => {
+  const RETE = "Retención en la fuente por pagar";
+  const RETEICA = "ReteICA por pagar";
+
+  it("makes one row per line with the same date, concept and support, none with IVA", async () => {
+    const res = await createSplitExpense("2026-10-21", { concept: "Pago DIAN retenciones septiembre", image_url: "https://x/soporte.png" }, [
+      { category: RETE, amount: 180000, expense_type: "BALANCE" },
+      { category: RETEICA, amount: 80000, expense_type: "BALANCE" },
+    ]);
+    expect(res).toMatchObject({ success: true });
+    expect(db.rows("cashflow_expenses").map((e) => [e.concept, e.category, e.amount, e.expense_type, e.tax_amount, e.image_url])).toEqual([
+      ["Pago DIAN retenciones septiembre", RETE, 180000, "BALANCE", 0, "https://x/soporte.png"],
+      ["Pago DIAN retenciones septiembre", RETEICA, 80000, "BALANCE", 0, "https://x/soporte.png"],
+    ]);
+    expect(new Set(db.rows("cashflow_expenses").map((e) => e.cashflow_id)).size).toBe(1);
+  });
+
+  it("is all or nothing, and refuses fixed assets and empty lines", async () => {
+    db.failOn("cashflow_expenses", "insert", "forced failure", 1); // the second line fails
+    expect(await createSplitExpense("2026-10-21", { concept: "Pago" }, [
+      { category: RETE, amount: 1, expense_type: "BALANCE" },
+      { category: RETEICA, amount: 2, expense_type: "BALANCE" },
+    ])).toMatchObject({ error: "forced failure" });
+    expect(db.rows("cashflow_expenses")).toHaveLength(0);
+    expect(await createSplitExpense("2026-10-21", { concept: "Pago" }, [{ category: RETE, amount: 1, expense_type: "BALANCE" }, { category: "", amount: 2, expense_type: "OPEX" }])).toMatchObject({ error: "Cada línea necesita categoría y un valor mayor a cero." });
+    expect(await createSplitExpense("2026-10-21", { concept: "Pago" }, [{ category: "Maquinaria y Equipo (PUC 1520)", amount: 1, expense_type: "CAPEX" }, { category: RETE, amount: 2, expense_type: "BALANCE" }])).toMatchObject({ error: "Un activo fijo se registra solo, no en un gasto dividido." });
   });
 });

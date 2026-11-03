@@ -282,6 +282,38 @@ export async function createExpenseDirect(
   return { success: true, data };
 }
 
+/**
+ * One payment split into several categories (e.g. the DIAN payment of
+ * several withholdings): one Flujo de Caja row per line, with the same
+ * date, concept, supplier and support. All or nothing.
+ */
+export async function createSplitExpense(
+  date: string,
+  base: Pick<Partial<CashflowExpense>, 'concept' | 'image_url' | 'supplier_id'>,
+  lines: { category: string; amount: number; expense_type: CashflowExpense['expense_type'] }[]
+) {
+  if (lines.length < 2) return { error: 'Un gasto dividido necesita al menos dos líneas.' };
+  if (lines.some((l) => !l.category?.trim() || !(Number(l.amount) > 0))) return { error: 'Cada línea necesita categoría y un valor mayor a cero.' };
+  if (lines.some((l) => l.expense_type === 'CAPEX')) return { error: 'Un activo fijo se registra solo, no en un gasto dividido.' };
+  const created: string[] = [];
+  for (const l of lines) {
+    const res = await createExpenseDirect(date, {
+      ...base,
+      category: l.category.trim(),
+      amount: Number(l.amount),
+      expense_type: l.expense_type,
+      tax_amount: 0,
+      depreciation_months: null,
+    });
+    if ('error' in res && res.error) {
+      for (const id of created) await deleteExpenseDirect(id);
+      return { error: res.error };
+    }
+    created.push((res as { data: { id: string } }).data.id);
+  }
+  return { success: true, ids: created };
+}
+
 export async function updateExpenseDirect(
   id: string,
   expense: Partial<CashflowExpense>

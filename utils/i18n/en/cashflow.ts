@@ -352,4 +352,11 @@ export const cashflow: Record<string, string> = {
   "El vencimiento debe ser posterior a la fecha del préstamo.": "The maturity must be after the loan date.",
   "Este préstamo no paga intereses cada mes.": "This loan doesn't pay interest every month.",
   "Abono a capital de préstamos": "Loan capital payments",
+  // A payment split into several categories
+  "Cada línea necesita categoría y un valor mayor a cero.": "Each line needs a category and an amount above zero.",
+  "Líneas del pago": "Payment lines",
+  "Volver a una sola categoría": "Back to a single category",
+  "Se crea un registro por línea, con la misma fecha, concepto y soporte. Los activos fijos se registran solos.": "One record is created per line, with the same date, description and support. Fixed assets are registered on their own.",
+  "Dividir en varias categorías": "Split into several categories",
+  "Incluye IVA de {v}, registrado desde Compras.": "Includes VAT of {v}, registered from Purchases.",
 };
