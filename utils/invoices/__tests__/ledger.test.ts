@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { balanceDue, daysOverdue, invoiceLinesFromOrder, paymentProblems, paymentState, type LedgerInvoice } from "../ledger";
+import { balanceDue, daysOverdue, invoiceLinesFromOrder, invoiceMatches, paymentProblems, paymentState, type LedgerInvoice } from "../ledger";
 import { addDays, buildInvoicePayload, buildVoucherPayload, splitDocumentName, type SiigoSettings } from "@/utils/siigo/mapping";
 
 const credit: LedgerInvoice = { total: 100000, status: "emitida", payment_terms: "credito", due_date: "2026-10-10" };
@@ -158,5 +158,16 @@ describe("relinking invoice lines", () => {
     const lines = [line];
     expect(relinkLines(lines, [{ id: "a", product_code: "AROM-SURT" }])).toBe(lines);
     expect(relinkLines(lines, [])).toBe(lines);
+  });
+});
+
+describe("searching invoices", () => {
+  const inv = { siigo_name: "FV-2-691", customer_name: "Productora de Alimentos Contegral", customer_identification: "890901271", credit_notes: [{ siigo_name: "NC-1-12" }] };
+
+  it.each(["FV-2-691", "fv2691", "fv 2 691", "691", "69", "nc-1-12", "contegral", "PRODUCTORA", "890901271"])("finds it by %s", (q) => expect(invoiceMatches(inv, q)).toBe(true));
+  it.each(["692", "91", "FV-2-692", "ERCO", "8909"])("not by %s", (q) => expect(invoiceMatches(inv, q)).toBe(false));
+  it("an empty search shows everything; one without number is found by customer", () => {
+    expect(invoiceMatches(inv, "  ")).toBe(true);
+    expect(invoiceMatches({ siigo_name: null, customer_name: "Grupo Nonna SAS" }, "nonna")).toBe(true);
   });
 });

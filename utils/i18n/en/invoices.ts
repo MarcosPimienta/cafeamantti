@@ -179,4 +179,7 @@ export const invoices: Record<string, string> = {
   "¿Eliminar este cobro? También se borra su ingreso en Flujo de Caja.": "Delete this payment? Its Cash Flow income is deleted too.",
   "Eliminar cobro": "Delete payment",
   "Traído de Siigo": "Brought from Siigo",
+  "Buscar # de factura o cliente": "Search invoice # or customer",
+  "{n} resultado(s) en todas las facturas, incluidas las anuladas.": "{n} result(s) across all invoices, annulled ones included.",
+  "Ninguna factura coincide con «{q}».": "No invoice matches «{q}».",
 };

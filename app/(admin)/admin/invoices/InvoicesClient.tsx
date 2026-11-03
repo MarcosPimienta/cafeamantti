@@ -3,9 +3,9 @@
 import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, ExternalLink, FileMinus, Landmark, Loader2, Plus, RefreshCw, Send, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, FileMinus, Landmark, Loader2, Plus, RefreshCw, Search, Send, Trash2, X } from "lucide-react";
 import { annulInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo, stampInvoice } from "./actions";
-import { CREDIT_REASONS, balanceDue, daysOverdue, paidAmount, paymentState, type CreditReason, type InvoiceLine, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
+import { CREDIT_REASONS, balanceDue, daysOverdue, invoiceMatches, paidAmount, paymentState, type CreditReason, type InvoiceLine, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
 import CreditNoteModal from "./CreditNoteModal";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
@@ -66,6 +66,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
     [raw]
   );
   const [filter, setFilter] = useState<Filter>("todas");
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [isSending, startSending] = useTransition();
@@ -87,7 +88,10 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
   const receivable = live.reduce((s, x) => s + x.balance, 0);
   const overdue = live.reduce((s, x) => s + (x.overdue > 0 ? x.balance : 0), 0);
 
+  // A search looks through every invoice, annulled ones included, whatever the filter.
+  const searching = search.trim().length > 0;
   const shown = info.filter(({ inv, balance, overdue: late }) => {
+    if (searching) return invoiceMatches(inv, search);
     switch (filter) {
       case "siigo": return inv.status === "borrador" || inv.status === "error" || (inv.status === "emitida" && inv.payments.some((p) => p.siigo_status !== "enviado"));
       case "cobrar": return inv.status !== "anulada" && balance > 0.5;
@@ -150,22 +154,38 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
       {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700 break-words">{tr.msg(error)}</p>}
       {report && <BatchReport report={report} onClose={() => setReport(null)} />}
 
-      <div className="flex flex-wrap gap-2">
-        {FILTERS.map(([f, label]) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold border ${filter === f ? "bg-foreground text-background border-foreground" : "border-foreground/15 text-foreground/60 hover:bg-foreground/5"}`}
-          >
-            {tr(label)}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className={`flex flex-wrap gap-2 ${searching ? "opacity-40" : ""}`}>
+          {FILTERS.map(([f, label]) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => { setFilter(f); setSearch(""); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border ${filter === f && !searching ? "bg-foreground text-background border-foreground" : "border-foreground/15 text-foreground/60 hover:bg-foreground/5"}`}
+            >
+              {tr(label)}
+            </button>
+          ))}
+        </div>
+        <label className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={tr("Buscar # de factura o cliente")}
+            aria-label={tr("Buscar # de factura o cliente")}
+            className="w-full rounded-full border border-foreground/15 py-1.5 pl-9 pr-3 text-sm focus:border-[#C59F59] focus:outline-none"
+          />
+        </label>
       </div>
+      {searching && (
+        <p className="text-xs text-foreground/50">{tr("{n} resultado(s) en todas las facturas, incluidas las anuladas.", { n: String(shown.length) })}</p>
+      )}
 
       {shown.length === 0 ? (
         <p className="text-sm text-foreground/50">
-          {invoices.length === 0 ? tr("Aún no hay facturas. Créalas desde el panel de cada pedido en Órdenes.") : tr("No hay facturas en este filtro.")}
+          {invoices.length === 0 ? tr("Aún no hay facturas. Créalas desde el panel de cada pedido en Órdenes.") : searching ? tr("Ninguna factura coincide con «{q}».", { q: search.trim() }) : tr("No hay facturas en este filtro.")}
         </p>
       ) : (
         <div className="space-y-3">

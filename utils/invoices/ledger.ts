@@ -176,3 +176,24 @@ export function creditNoteLines(
   if (total > round2(num(invoice.total) - num(invoice.credited)) + 0.5) problems.push("La nota crédito supera el valor pendiente de la factura.");
   return { lines, problems };
 }
+
+/** Letters and digits only, lowercase: "FV-2 691" → "fv2691". */
+const searchKey = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Whether an invoice matches what was typed in the search: its number
+ * ("FV-2-691", "fv2691" or just the consecutive "691"), one of its credit
+ * notes', or the customer's name or NIT.
+ */
+export function invoiceMatches(
+  inv: { siigo_name: string | null; customer_name: string; customer_identification?: string | null; credit_notes?: { siigo_name: string | null }[] },
+  query: string
+): boolean {
+  const q = searchKey(query);
+  if (!q) return true;
+  const numbers = [inv.siigo_name, ...(inv.credit_notes ?? []).map((n) => n.siigo_name)].filter((n): n is string => !!n);
+  // Only digits: the consecutive starts with them, so typing "6", "69", "691" narrows down to FV-2-691.
+  if (/^\d+$/.test(q) && numbers.some((n) => (n.match(/\d+$/)?.[0] ?? "").startsWith(q) || searchKey(n) === q)) return true;
+  if (!/^\d+$/.test(q) && numbers.some((n) => searchKey(n).includes(q))) return true;
+  return searchKey(inv.customer_name).includes(q) || (!!inv.customer_identification && searchKey(inv.customer_identification).includes(q) && q.length >= 5);
+}
