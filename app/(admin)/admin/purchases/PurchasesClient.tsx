@@ -3,10 +3,11 @@
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Loader2, Pencil, Plus, RefreshCw, Trash2, Wallet, X } from "lucide-react";
-import { annulBill, deletePayablePayment, retryBill, retryPayablePayment } from "./actions";
+import { AlertTriangle, CheckCircle2, FileMinus, Loader2, Pencil, Plus, RefreshCw, Trash2, Undo2, Wallet, X } from "lucide-react";
+import { annulBill, deleteBillCreditNote, deletePayablePayment, retryBill, retryPayablePayment } from "./actions";
 import BillForm, { type EditableBill } from "./BillForm";
 import PayablePaymentForm from "./PayablePaymentForm";
+import BillCreditNoteForm from "./BillCreditNoteForm";
 import AdvancesPanel, { type AdvanceMove } from "./AdvancesPanel";
 import { payableBalance, paidOf, type BillLine, type PayableMethod } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
@@ -43,7 +44,9 @@ type Bill = {
   siigo_error: string | null;
   payments: PayablePayment[];
 };
-type Filter = "pendientes" | "vencidas" | "pagadas" | "todas";
+/** The supplier's credit note that voided the invoice. */
+type CreditNote = { id: string; bill_id: string; number: string; issue_date: string; paid: number; goods_returned: boolean; reason: string | null; siigo_name: string | null };
+type Filter = "pendientes" | "vencidas" | "pagadas" | "todas" | "anuladas";
 const METHOD_LABEL: Record<PayableMethod, string> = { bank: "Banco", cash: "Efectivo", advance: "Saldo a favor" };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -56,6 +59,7 @@ export default function PurchasesClient(props: {
   assetCategories: string[];
   assetMonths: Record<string, number>;
   advances: AdvanceMove[] | null;
+  creditNotes: CreditNote[] | null;
   inventory: { id: string; product_code: string; product_name: string; unit: string | null }[];
   accounts: { code: string; name: string }[];
   defaultAccounts: Record<string, string>;
@@ -66,6 +70,8 @@ export default function PurchasesClient(props: {
   const tr = useTr();
   const router = useRouter();
   const bills = (props.bills as Bill[]).filter((b) => b.status !== "anulada");
+  const noteOf = new Map((props.creditNotes ?? []).map((n) => [n.bill_id, n]));
+  const voided = (props.bills as Bill[]).filter((b) => b.status === "anulada" && noteOf.has(b.id));
   const [filter, setFilter] = useState<Filter>("pendientes");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<EditableBill | null>(null);
@@ -115,7 +121,7 @@ export default function PurchasesClient(props: {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          {([["pendientes", "Por pagar"], ["vencidas", "Vencidas"], ["pagadas", "Pagadas"], ["todas", "Todas"]] as [Filter, string][]).map(([f, label]) => (
+          {([["pendientes", "Por pagar"], ["vencidas", "Vencidas"], ["pagadas", "Pagadas"], ["todas", "Todas"], ...(voided.length ? [["anuladas", "Anuladas con nota crédito"]] : [])] as [Filter, string][]).map(([f, label]) => (
             <button key={f} type="button" onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-full text-xs font-bold border ${filter === f ? "bg-foreground text-background border-foreground" : "border-foreground/15 text-foreground/60 hover:bg-foreground/5"}`}>
               {tr(label)}
@@ -130,11 +136,15 @@ export default function PurchasesClient(props: {
       {!props.configured && <p className="text-xs text-red-600">{tr("Siigo no está configurado en el servidor.")}</p>}
 
 
-      {shown.length === 0 ? (
+      {filter === "anuladas" ? (
+        <div className="space-y-3">
+          {voided.map((b) => <VoidedCard key={b.id} b={b} note={noteOf.get(b.id)!} onDone={done} />)}
+        </div>
+      ) : shown.length === 0 ? (
         <p className="text-sm text-foreground/50">{bills.length === 0 ? tr("Aún no hay facturas de compra. Registra la primera con «Nueva factura de compra».") : tr("No hay facturas en este filtro.")}</p>
       ) : (
         <div className="space-y-3">
-          {shown.map((r) => <BillCard key={r.b.id} {...r} today={props.today} inventory={props.inventory} onDone={done} onEdit={() => setEditing(r.b)} />)}
+          {shown.map((r) => <BillCard key={r.b.id} {...r} today={props.today} inventory={props.inventory} creditNotesReady={props.creditNotes !== null} onDone={done} onEdit={() => setEditing(r.b)} />)}
         </div>
       )}
 
@@ -160,9 +170,10 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
   );
 }
 
-function BillCard({ b, balance, overdue, today, inventory, onDone, onEdit }: { b: Bill; balance: number; overdue: boolean; today: string; inventory: { id: string; product_name: string; unit: string | null }[]; onDone: (msg: string) => void; onEdit: () => void }) {
+function BillCard({ b, balance, overdue, today, inventory, creditNotesReady, onDone, onEdit }: { b: Bill; balance: number; overdue: boolean; today: string; inventory: { id: string; product_name: string; unit: string | null }[]; creditNotesReady: boolean; onDone: (msg: string) => void; onEdit: () => void }) {
   const tr = useTr();
   const [paying, setPaying] = useState(false);
+  const [crediting, setCrediting] = useState(false);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const run = (action: () => Promise<{ success: boolean; error?: string }>, ok: string, confirmText?: string) => {
@@ -232,12 +243,60 @@ function BillCard({ b, balance, overdue, today, inventory, onDone, onEdit }: { b
             )}
           </>
         )}
+        {creditNotesReady && (
+          <button type="button" disabled={isPending} onClick={() => setCrediting(true)} className="inline-flex items-center gap-1 text-xs font-bold text-foreground/40 hover:text-red-600 disabled:opacity-50">
+            <FileMinus className="w-3.5 h-3.5" />{" "}{tr("Nota crédito del proveedor")}
+          </button>
+        )}
       </div>
       {error && <p className="text-xs text-red-600 break-words">{tr.msg(error)}</p>}
+      {crediting && (
+        <BillCreditNoteForm billId={b.id} title={`${b.supplier_name} · ${tr("Factura {n}", { n: invoiceNo })}`} total={Number(b.total)} paid={paidOf(b.payments)} supplier={b.supplier_name}
+          hasStock={b.lines.some((l) => l.inventory_id && Number(l.inventory_qty) > 0)} today={today}
+          onClose={() => setCrediting(false)} onDone={(msg) => { setCrediting(false); onDone(msg); }} />
+      )}
       {paying && (
         <PayablePaymentForm target={{ billId: b.id }} title={`${b.supplier_name} · ${tr("Factura {n}", { n: invoiceNo })}`} balance={balance} today={today}
           onClose={() => setPaying(false)} onDone={(msg) => { setPaying(false); onDone(msg); }} />
       )}
+    </div>
+  );
+}
+
+/** An invoice the supplier voided with a credit note; undone only while its saldo a favor is unused. */
+function VoidedCard({ b, note, onDone }: { b: Bill; note: CreditNote; onDone: (msg: string) => void }) {
+  const tr = useTr();
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const invoiceNo = `${b.provider_prefix}${b.provider_prefix ? "-" : ""}${b.provider_number}`;
+  const undo = () => {
+    if (!window.confirm(tr("¿Deshacer la nota crédito? La factura vuelve a quedar por pagar con sus pagos."))) return;
+    startTransition(async () => {
+      setError("");
+      const res = await deleteBillCreditNote(note.id);
+      if (!res.success) return setError(res.error);
+      onDone(tr("Nota crédito deshecha: la factura volvió."));
+    });
+  };
+  return (
+    <div className="rounded-2xl border border-foreground/10 bg-foreground/[0.02] p-4 space-y-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-bold truncate">{b.supplier_name}</p>
+          <p className="text-xs text-foreground/50">{tr("Factura {n}", { n: invoiceNo })} · {tr("Anulada con la nota crédito {nc} del {date}", { nc: note.number, date: note.issue_date })}</p>
+        </div>
+        <p className="font-bold text-foreground/40 line-through">{cop(Number(b.total))}</p>
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-foreground/60">
+        {Number(note.paid) > 0.5 && <span>{tr("Lo pagado ({amount}) quedó como saldo a favor", { amount: cop(Number(note.paid)) })}</span>}
+        <span>{note.goods_returned ? tr("La mercancía salió del inventario") : tr("La mercancía se quedó en el inventario")}</span>
+        <span>{note.siigo_name ? tr("En Siigo: {name}", { name: note.siigo_name }) : tr("Contabilidad la registra en Siigo")}</span>
+        {note.reason && <span>{note.reason}</span>}
+      </div>
+      <button type="button" disabled={isPending} onClick={undo} className="inline-flex items-center gap-1 text-xs font-bold text-foreground/40 hover:text-red-600 disabled:opacity-50">
+        {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}{" "}{tr("Deshacer nota crédito")}
+      </button>
+      {error && <p className="text-xs text-red-600 break-words">{tr.msg(error)}</p>}
     </div>
   );
 }

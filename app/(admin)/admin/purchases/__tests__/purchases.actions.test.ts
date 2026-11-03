@@ -22,7 +22,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { annulBill, createBill, deleteAdvance, deletePayablePayment, getAdvanceBalance, registerAdvance, registerAdvanceRefund, registerPayablePayment, retryBill, retryPayablePayment, updateBill } from "../actions";
+import { annulBill, createBill, deleteAdvance, deleteBillCreditNote, deletePayablePayment, getAdvanceBalance, getPurchases, registerAdvance, registerAdvanceRefund, registerBillCreditNote, registerPayablePayment, retryBill, retryPayablePayment, updateBill } from "../actions";
 
 const SETTINGS = { purchase_document_id: 18133, purchase_payment_id: 4183, payment_receipt_document_id: 18132, payout_bank_id: 4182, payout_cash_id: 4177, expense_accounts: {}, fixed_asset_codes: {} };
 const CC = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
@@ -366,5 +366,90 @@ describe("saldo a favor (supplier advances)", () => {
     expect(await deleteAdvance(refund.id)).toMatchObject({ success: true });
     expect(await deleteAdvance(anticipo.id)).toMatchObject({ success: true });
     expect(anticipoRows()).toHaveLength(0);
+  });
+});
+
+describe("a supplier's credit note that voids the whole invoice", () => {
+  const coffee = { ...input, providerNumber: "77", lines: [{ ...input.lines[0], description: "Café verde excelso", base: 1000000, tax_id: null, tax_rate: 0, inventory_id: "verde", inventory_qty: 598 }] };
+  const note = { number: " nc 125 ", date: "2026-10-28", reason: "Factura con valores errados", goodsReturned: true };
+  const moves = () => db.rows("supplier_advances");
+
+  beforeEach(async () => {
+    db.rows("inventory").push({ id: "verde", product_code: "CAFV-001", product_name: "Café Verde", unit: "kg", category: "cafe", current_stock: 10 });
+    db.rows("siigo_settings")[0].config = { ...SETTINGS, advance_journal_document_id: 28547 };
+    h.responses["POST /v1/purchases"] = { id: "fc-1", name: "FC-1-240" };
+    h.responses["POST /v1/payment-receipts"] = { id: "rp-1", name: "RP-1-90" };
+    h.responses["POST /v1/journals"] = { id: "cc-1", name: "CC-3-40" };
+    await createBill(coffee); // owes 1.000.000; 598 kg in
+  });
+
+  it("unpaid: the invoice is anulada and the goods that went back leave the inventory; nothing goes to Siigo", async () => {
+    h.calls = [];
+    expect(await registerBillCreditNote(bill().id, note)).toMatchObject({ success: true, paid: 0, unstocked: 1 });
+    expect(bill().status).toBe("anulada");
+    expect(db.rows("purchase_credit_notes")[0]).toMatchObject({ number: "NC125", issue_date: "2026-10-28", total: 1000000, previous_status: "registrada", goods_returned: true });
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(10);
+    expect(db.rows("inventory_movements")).toHaveLength(0);
+    expect(moves()).toHaveLength(0);
+    expect(h.calls).toHaveLength(0);
+    expect(await registerBillCreditNote(bill().id, note)).toMatchObject({ success: false, error: "La factura ya está anulada." });
+  });
+
+  it("paid: the payments stop being a cost and the supplier holds the money as saldo a favor", async () => {
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 600000, method: "bank" });
+    expect(expenses()).toEqual([expect.objectContaining({ amount: 600000, expense_type: "COGS" })]);
+    h.calls = [];
+    expect(await registerBillCreditNote(bill().id, { ...note, goodsReturned: false })).toMatchObject({ success: true, paid: 600000, unstocked: 0 });
+    // The money did leave on Oct 20, but it is no longer a cost: it is an advance.
+    expect(expenses()).toEqual([expect.objectContaining({ amount: 600000, expense_type: "ANTICIPO", category: "Anticipos a proveedores", concept: expect.stringMatching(/^Saldo a favor por nota crédito NC125 · /) })]);
+    expect(moves()).toEqual([expect.objectContaining({ kind: "anticipo", amount: 600000, siigo_status: "no_aplica", purchase_credit_note_id: db.rows("purchase_credit_notes")[0].id, expense_id: null })]);
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(608); // the goods stayed
+    expect(h.calls).toHaveLength(0);
+    expect((await getPurchases()).creditNotes).toHaveLength(1);
+  });
+
+  it("its balance pays the next invoice, crossed by hand in Siigo (it is not an anticipo egreso)", async () => {
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 600000, method: "bank" });
+    await registerBillCreditNote(bill().id, { ...note, goodsReturned: false });
+    h.responses["POST /v1/purchases"] = { id: "fc-2", name: "FC-1-241" };
+    await createBill({ ...input, providerNumber: "1970" });
+    const next = db.rows("purchase_bills")[1];
+    h.calls = [];
+    const res = await registerPayablePayment({ billId: next.id }, { date: "2026-10-30", amount: 386750, method: "advance" });
+    expect(res).toMatchObject({ success: true, crossed: 386750, siigo: null });
+    expect(h.calls).toHaveLength(0);
+    expect(moves().find((m) => m.kind === "cruce")).toMatchObject({ siigo_status: "no_aplica" });
+    expect(await registerAdvanceRefund({ supplierId: "sup1", date: "2026-10-31", amount: 213250, method: "bank" })).toMatchObject({ success: true, siigo: null });
+    expect(h.calls).toHaveLength(0);
+  });
+
+  it("refuses to take out goods that were already used", async () => {
+    db.byId("inventory", "verde")!.current_stock = 100;
+    expect(await registerBillCreditNote(bill().id, note)).toMatchObject({ success: false, error: expect.stringContaining("ya se usó parte") });
+    expect(bill().status).toBe("registrada");
+    expect(db.rows("purchase_credit_notes")).toHaveLength(0);
+  });
+
+  it("undoing it gives back the invoice, its payments' expenses and its stock — not once its balance was used", async () => {
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 600000, method: "bank" });
+    await registerBillCreditNote(bill().id, note);
+    const id = db.rows("purchase_credit_notes")[0].id;
+    expect(await deleteAdvance(moves()[0].id)).toMatchObject({ success: false, error: "Este saldo viene de una nota crédito: se quita deshaciendo la nota crédito." });
+    expect(await deleteBillCreditNote(id)).toMatchObject({ success: true });
+    expect(bill().status).toBe("registrada");
+    expect(expenses()).toEqual([expect.objectContaining({ amount: 600000, expense_type: "COGS", category: EMPAQUES })]);
+    expect(db.byId("inventory", "verde")!.current_stock).toBe(608);
+    expect(db.rows("inventory_movements")).toHaveLength(1);
+    expect(moves()).toHaveLength(0);
+    expect(db.rows("purchase_credit_notes")).toHaveLength(0);
+
+    await registerBillCreditNote(bill().id, { ...note, goodsReturned: false });
+    await registerAdvanceRefund({ supplierId: "sup1", date: "2026-10-31", amount: 600000, method: "bank" });
+    expect(await deleteBillCreditNote(db.rows("purchase_credit_notes")[0].id)).toMatchObject({ success: false, error: expect.stringContaining("ya se usó") });
+  });
+
+  it("checks the number and the date", async () => {
+    expect(await registerBillCreditNote(bill().id, { ...note, number: " " })).toMatchObject({ success: false, error: "Escribe el número de la nota crédito del proveedor." });
+    expect(await registerBillCreditNote(bill().id, { ...note, date: "2026-10-01" })).toMatchObject({ success: false, error: "La nota crédito no puede ser anterior a la factura." });
   });
 });

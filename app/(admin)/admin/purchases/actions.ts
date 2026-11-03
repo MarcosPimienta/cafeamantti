@@ -79,6 +79,7 @@ export async function getPurchases() {
     supabase.from('inventory').select('id, product_code, product_name, unit, category').order('product_name'),
   ]);
   const { data: advances, error: advErr } = await supabase.from('supplier_advances').select('*').order('move_date', { ascending: false }).order('created_at', { ascending: false });
+  const { data: creditNotes, error: ncErr } = await supabase.from('purchase_credit_notes').select('*');
   const allCategories = await loadExpenseCategories(supabase);
   // Balance movements (paying the DIAN…) are not supplier invoices.
   const categories = namesOf(allCategories, (c) => c.type !== 'BALANCE');
@@ -96,6 +97,8 @@ export async function getPurchases() {
     assetMonths: categoryMonths(allCategories),
     // Saldo a favor: every movement (null before its migration).
     advances: advErr ? null : advances ?? [],
+    // Suppliers' credit notes that voided an invoice (null before its migration).
+    creditNotes: ncErr ? null : creditNotes ?? [],
     // Products a purchase can bring in (services have no stock).
     inventory: (inventory ?? []).filter((p) => tracksStock(p.category, p.product_code)),
     accounts: settings.siigo_accounts ?? [],
@@ -430,6 +433,193 @@ export async function annulBill(billId: string) {
   });
 }
 
+// ── Notas crédito de proveedores ────────────────────────────
+
+const MIGRATION_CREDIT_NOTES_HINT = 'Falta aplicar la migración 20261109000000_purchase_credit_notes.sql';
+/** Flujo de Caja fields a credit note changes on the payments' rows (kept to undo it). */
+const CONVERTED_FIELDS = ['concept', 'category', 'expense_type', 'depreciation_months'] as const;
+
+export type BillCreditNoteInput = {
+  number: string;
+  date: string;
+  reason?: string | null;
+  /** The goods went back to the supplier: the invoice's inventory entries come out. */
+  goodsReturned: boolean;
+  /** Its document in Siigo, if the accountant already registered it. */
+  siigoName?: string | null;
+};
+
+/**
+ * The supplier voided the whole invoice with a credit note (the accountant
+ * registers it in Siigo). The invoice is anulada; the goods leave the
+ * inventory if they went back; what was already paid stays with the
+ * supplier as saldo a favor: the payments' Flujo de Caja rows stop being a
+ * cost (ANTICIPO) and an anticipo movement holds the balance.
+ */
+export async function registerBillCreditNote(billId: string, input: BillCreditNoteInput) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    const number = input.number.trim().toUpperCase().replace(/\s+/g, '');
+    const problems: string[] = [];
+    if (!number) problems.push('Escribe el número de la nota crédito del proveedor.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) problems.push('Fecha inválida.');
+    else if (input.date > todayBogota()) problems.push('La fecha no puede ser futura.');
+    if (problems.length) throw new Error(problems.join(' · '));
+
+    const { data: bill, error } = await supabase.from('purchase_bills').select('*').eq('id', billId).single();
+    if (error || !bill) throw error ?? new Error('Factura de compra no encontrada.');
+    if (bill.status === 'anulada') throw new Error('La factura ya está anulada.');
+    if (input.date < bill.issue_date) throw new Error('La nota crédito no puede ser anterior a la factura.');
+    const label = `${bill.provider_prefix ?? ''}${bill.provider_prefix ? '-' : ''}${bill.provider_number}`;
+
+    const { data: note, error: noteErr } = await supabase.from('purchase_credit_notes').insert({
+      bill_id: billId,
+      number,
+      issue_date: input.date,
+      total: Number(bill.total),
+      reason: input.reason?.trim() || null,
+      goods_returned: input.goodsReturned,
+      previous_status: bill.status,
+      siigo_name: input.siigoName?.trim().toUpperCase() || null,
+      created_by: userId,
+    }).select('id').single();
+    if (noteErr) {
+      if (/purchase_credit_notes/.test(noteErr.message) && /exist|relation|schema/i.test(noteErr.message)) throw new Error(MIGRATION_CREDIT_NOTES_HINT);
+      if (/duplicate|unique/i.test(noteErr.message)) throw new Error('Esa factura ya tiene una nota crédito.');
+      throw noteErr;
+    }
+
+    const undo: (() => Promise<unknown>)[] = [async () => supabase.from('purchase_credit_notes').delete().eq('id', note.id)];
+    try {
+      // 1. Goods back to the supplier (refused if part was already used).
+      let unstocked: Record<string, unknown>[] = [];
+      if (input.goodsReturned) {
+        const { data: movs } = await supabase.from('inventory_movements').select('*').eq('purchase_bill_id', billId);
+        await unstockBill(supabase, billId);
+        unstocked = (movs ?? []) as Record<string, unknown>[];
+        undo.push(() => restock(supabase, unstocked));
+      }
+
+      // 2. What was paid is no longer a cost: it is money the supplier holds.
+      const { data: payments, error: payErr } = await supabase.from('payable_payments').select('id, amount, siigo_status, expense_ids').eq('bill_id', billId);
+      if (payErr) throw payErr;
+      const paid = round2((payments ?? []).reduce((s, p) => s + Number(p.amount), 0));
+      const ids = [...new Set((payments ?? []).flatMap((p) => (p.expense_ids ?? []) as string[]))];
+      const { data: rows, error: rowsErr } = ids.length ? await supabase.from('cashflow_expenses').select('*').in('id', ids) : { data: [], error: null };
+      if (rowsErr) throw rowsErr;
+      const converted = ((rows ?? []) as Record<string, unknown>[])
+        .filter((r) => r.expense_type !== 'ANTICIPO')
+        .map((r) => Object.fromEntries([['id', r.id], ['cashflow_id', r.cashflow_id], ...CONVERTED_FIELDS.map((f) => [f, r[f] ?? null])]));
+      undo.push(() => restoreRows(supabase, userId, converted));
+      for (const r of converted) {
+        const fields = {
+          concept: `Saldo a favor por nota crédito ${number} · ${String(r.concept)}`.slice(0, 200),
+          category: ADVANCE_CATEGORY,
+          expense_type: 'ANTICIPO',
+          depreciation_months: null,
+        };
+        const { error: upErr } = await supabase.from('cashflow_expenses').update(fields).eq('id', r.id);
+        if (upErr) throw upErr;
+        await supabase.from('cashflow_audit_logs').insert({ admin_id: userId, action_type: 'UPDATE_EXPENSE', expense_id: r.id, cashflow_id: r.cashflow_id, details: { old: r, new: fields, reason: `Nota crédito ${number} de la factura de compra ${label}` } });
+      }
+
+      // 3. Egresos and cruces not in Siigo yet: the accountant handles them there with the note.
+      const waiting = (payments ?? []).filter((p) => p.siigo_status === 'pendiente' || p.siigo_status === 'error');
+      const paymentsBefore = waiting.map((p) => ({ id: p.id, siigo_status: p.siigo_status }));
+      if (waiting.length) {
+        const wIds = waiting.map((p) => p.id);
+        await supabase.from('payable_payments').update({ siigo_status: 'no_aplica' }).in('id', wIds);
+        await supabase.from('supplier_advances').update({ siigo_status: 'no_aplica' }).in('payment_id', wIds).eq('kind', 'cruce');
+        undo.push(async () => {
+          for (const p of paymentsBefore) {
+            await supabase.from('payable_payments').update({ siigo_status: p.siigo_status }).eq('id', p.id);
+            await supabase.from('supplier_advances').update({ siigo_status: p.siigo_status }).eq('payment_id', p.id).eq('kind', 'cruce');
+          }
+        });
+      }
+
+      // 4. The balance the supplier holds.
+      if (paid > 0.5) {
+        const { error: advErr } = await supabase.from('supplier_advances').insert({
+          supplier_id: bill.supplier_id,
+          supplier_name: bill.supplier_name,
+          supplier_identification: bill.supplier_identification,
+          kind: 'anticipo',
+          move_date: input.date,
+          amount: paid,
+          notes: `Nota crédito ${number} · factura ${label}`,
+          siigo_status: 'no_aplica',
+          siigo_name: input.siigoName?.trim().toUpperCase() || null,
+          purchase_credit_note_id: note.id,
+          created_by: userId,
+        });
+        if (advErr) throw /purchase_credit_note_id/.test(advErr.message) ? new Error(MIGRATION_CREDIT_NOTES_HINT) : advErr;
+      }
+
+      const { error: noteUp } = await supabase.from('purchase_credit_notes').update({ paid, converted, unstocked, payments: paymentsBefore }).eq('id', note.id);
+      if (noteUp) throw noteUp;
+      const { error: billErr } = await supabase.from('purchase_bills').update({ status: 'anulada', updated_at: new Date().toISOString() }).eq('id', billId);
+      if (billErr) throw billErr;
+      refresh();
+      revalidatePath('/admin/inventory');
+      return { paid, unstocked: unstocked.length };
+    } catch (err) {
+      for (const step of undo.reverse()) await step();
+      throw err;
+    }
+  });
+}
+
+/** Undoes a supplier's credit note registered by mistake, if its saldo a favor was not used. */
+export async function deleteBillCreditNote(noteId: string) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    const { data: note, error } = await supabase.from('purchase_credit_notes').select('*').eq('id', noteId).single();
+    if (error || !note) throw error ?? new Error('Nota crédito no encontrada.');
+    const { data: bill } = await supabase.from('purchase_bills').select('supplier_identification').eq('id', note.bill_id).single();
+    const moves = bill ? await supplierMoves(supabase, bill.supplier_identification) : [];
+    const own = moves.filter((m) => m.purchase_credit_note_id === noteId);
+    if (own.some((a) => moves.some((m) => (m.applied ?? []).some((x) => x.advance_id === a.id))) || (own.length && advanceBalance(moves) - advanceBalance(own) < -0.5)) {
+      throw new Error('El saldo a favor de esta nota crédito ya se usó en otro pago o devolución: elimina eso primero.');
+    }
+    await restock(supabase, (note.unstocked ?? []) as Record<string, unknown>[]);
+    await restoreRows(supabase, userId, (note.converted ?? []) as Record<string, unknown>[]);
+    for (const p of (note.payments ?? []) as { id: string; siigo_status: string }[]) {
+      await supabase.from('payable_payments').update({ siigo_status: p.siigo_status }).eq('id', p.id);
+      await supabase.from('supplier_advances').update({ siigo_status: p.siigo_status }).eq('payment_id', p.id).eq('kind', 'cruce');
+    }
+    await supabase.from('supplier_advances').delete().eq('purchase_credit_note_id', noteId);
+    await supabase.from('purchase_bills').update({ status: note.previous_status, updated_at: new Date().toISOString() }).eq('id', note.bill_id);
+    const { error: delErr } = await supabase.from('purchase_credit_notes').delete().eq('id', noteId);
+    if (delErr) throw delErr;
+    refresh();
+    revalidatePath('/admin/inventory');
+    return {};
+  });
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Puts back inventory entries a credit note took out. */
+async function restock(supabase: Supabase, movements: Record<string, unknown>[]) {
+  for (const m of movements) {
+    const { error } = await supabase.from('inventory_movements').insert(m);
+    if (error) throw error;
+    const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', m.inventory_id).single();
+    await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) + Number(m.quantity) }).eq('id', m.inventory_id);
+    await refreshStandardCost(supabase, m.inventory_id as string);
+  }
+}
+
+/** Gives the payments' Flujo de Caja rows back the fields a credit note changed. */
+async function restoreRows(supabase: Supabase, userId: string | null, rows: Record<string, unknown>[]) {
+  for (const r of rows) {
+    const fields = Object.fromEntries(CONVERTED_FIELDS.map((f) => [f, r[f] ?? null]));
+    await supabase.from('cashflow_expenses').update(fields).eq('id', r.id);
+    await supabase.from('cashflow_audit_logs').insert({ admin_id: userId, action_type: 'UPDATE_EXPENSE', expense_id: r.id, cashflow_id: r.cashflow_id ?? null, details: { new: fields, reason: 'Se deshizo la nota crédito del proveedor' } });
+  }
+}
+
 // ── Payments to suppliers ───────────────────────────────────
 
 export type PayableTarget = { billId: string } | { cuentaCobroId: string };
@@ -621,14 +811,23 @@ async function paymentExpenses(doc: Document, date: string, amount: number, conc
 type AdvanceResult = { id: string; amount: number; sent: boolean; name: string | null; error: string | null; manual: boolean };
 type SiigoResult = { sent: boolean; name: string | null; error: string | null };
 type Supplier = { supplierId: string | null; supplierName: string; supplierIdentification: string };
-type AdvanceMoveRow = { id: string; kind: string; amount: number; move_date: string; siigo_name: string | null; siigo_status: string; applied: { advance_id: string; amount: number }[] | null };
+type AdvanceMoveRow = { id: string; kind: string; amount: number; move_date: string; siigo_name: string | null; siigo_status: string; applied: { advance_id: string; amount: number }[] | null; purchase_credit_note_id?: string | null };
 
 /** Every movement of a supplier's saldo a favor (by identification). */
 async function supplierMoves(supabase: Supabase, identification: string): Promise<AdvanceMoveRow[]> {
-  const { data, error } = await supabase.from('supplier_advances').select('id, kind, amount, move_date, siigo_name, siigo_status, applied').eq('supplier_identification', identification);
+  // All columns: purchase_credit_note_id only exists after its migration.
+  const { data, error } = await supabase.from('supplier_advances').select('*').eq('supplier_identification', identification);
   if (error) throw error;
   return (data ?? []) as AdvanceMoveRow[];
 }
+
+/**
+ * Balance a supplier's credit note left sits on their account in Siigo, not
+ * on an anticipo egreso: a cruce or devolución that takes from it is done
+ * there by hand.
+ */
+const takesCreditNote = (moves: AdvanceMoveRow[], applied: { advance_id: string }[]) =>
+  applied.some((a) => moves.find((m) => m.id === a.advance_id)?.purchase_credit_note_id);
 
 /** A Flujo de Caja ANTICIPO row: + money that left to the supplier, − money that came back or was crossed. */
 async function advanceCashRow(s: Supplier, date: string, amount: number, concept: string): Promise<string | null> {
@@ -761,6 +960,7 @@ async function payWithAdvance(supabase: Supabase, userId: string | null, target:
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) problems.push('Fecha del pago inválida.');
   if (problems.length) throw new Error(problems.join(' · '));
   const applied = allocateAdvances(moves, amount).map((a) => ({ advance_id: a.advance_id, amount: a.amount }));
+  const manual = doc.manual || takesCreditNote(moves, applied);
 
   const expenseIds: string[] = [];
   let paymentId: string | null = null;
@@ -777,7 +977,7 @@ async function payWithAdvance(supabase: Supabase, userId: string | null, target:
         method: 'advance',
         notes: input.notes?.trim() || null,
         expense_ids: expenseIds,
-        siigo_status: doc.manual ? 'no_aplica' : 'pendiente',
+        siigo_status: manual ? 'no_aplica' : 'pendiente',
         created_by: userId,
       })
       .select('id')
@@ -796,16 +996,16 @@ async function payWithAdvance(supabase: Supabase, userId: string | null, target:
         payment_id: payment.id,
         applied,
         notes: `Aplicado a ${doc.label}`,
-        siigo_status: doc.manual ? 'no_aplica' : 'pendiente',
+        siigo_status: manual ? 'no_aplica' : 'pendiente',
         created_by: userId,
       })
       .select('id')
       .single();
     if (moveErr || !move) throw moveErr ?? new Error('No se pudo guardar el cruce.');
-    // A document made by hand in Siigo is crossed there too; one not there yet waits for it.
-    const siigo = doc.manual || !doc.due ? null : await sendAdvance(supabase, userId, move.id);
+    // A document made by hand in Siigo is crossed there too (and a credit note's balance); one not there yet waits for it.
+    const siigo = manual || !doc.due ? null : await sendAdvance(supabase, userId, move.id);
     refresh();
-    return { paymentId: payment.id, siigo, waitingForDocument: !doc.manual && !doc.due, advance: null, crossed: amount };
+    return { paymentId: payment.id, siigo, waitingForDocument: !manual && !doc.due, advance: null, crossed: amount };
   } catch (err) {
     if (paymentId) await supabase.from('payable_payments').delete().eq('id', paymentId);
     if (expenseIds.length) await supabase.from('cashflow_expenses').delete().in('id', expenseIds);
@@ -879,6 +1079,8 @@ export async function registerAdvanceRefund(input: AdvanceInput) {
     const amount = Number(input.amount);
     const moves = await supplierMoves(supabase, supplier.supplierIdentification);
     if (amount > advanceBalance(moves) + 0.5) throw new Error('La devolución supera el saldo a favor del proveedor.');
+    const applied = allocateAdvances(moves, amount).map((a) => ({ advance_id: a.advance_id, amount: a.amount }));
+    const manual = takesCreditNote(moves, applied);
     const expenseId = await advanceCashRow(supplier, input.date, -amount, 'Devolución de saldo a favor');
     const { data: move, error } = await supabase
       .from('supplier_advances')
@@ -891,9 +1093,9 @@ export async function registerAdvanceRefund(input: AdvanceInput) {
         amount,
         method: input.method,
         expense_id: expenseId,
-        applied: allocateAdvances(moves, amount).map((a) => ({ advance_id: a.advance_id, amount: a.amount })),
+        applied,
         notes: input.notes?.trim() || null,
-        siigo_status: 'pendiente',
+        siigo_status: manual ? 'no_aplica' : 'pendiente',
         created_by: userId,
       })
       .select('id')
@@ -902,7 +1104,7 @@ export async function registerAdvanceRefund(input: AdvanceInput) {
       if (expenseId) await supabase.from('cashflow_expenses').delete().eq('id', expenseId);
       throw error ?? new Error('No se pudo guardar la devolución.');
     }
-    const siigo = await sendAdvance(supabase, userId, move.id);
+    const siigo = manual ? null : await sendAdvance(supabase, userId, move.id);
     refresh();
     return { siigo };
   });
@@ -937,6 +1139,7 @@ export async function deleteAdvance(moveId: string) {
     const { data: m, error } = await supabase.from('supplier_advances').select('*').eq('id', moveId).single();
     if (error || !m) throw error ?? new Error('Movimiento no encontrado.');
     if (m.kind === 'cruce' || m.payment_id) throw new Error('Este movimiento es parte de un pago: elimina el pago.');
+    if (m.purchase_credit_note_id) throw new Error('Este saldo viene de una nota crédito: se quita deshaciendo la nota crédito.');
     await canRemoveAdvances(supabase, [m]);
     if (m.expense_id) {
       const { error: delExp } = await supabase.from('cashflow_expenses').delete().eq('id', m.expense_id);

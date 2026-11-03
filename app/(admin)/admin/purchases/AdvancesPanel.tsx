@@ -171,7 +171,9 @@ function AdvanceForm({ kind, suppliers, balances, today, onClose, onDone }: {
         const res = await registerAdvanceRefund(input);
         if (!res.success) return setError(res.error);
         return onDone(
-          res.siigo.sent
+          !res.siigo
+            ? tr("Devolución registrada en Flujo de Caja. Viene de una nota crédito: regístrala a mano en Siigo.")
+            : res.siigo.sent
             ? tr("Devolución registrada: comprobante {name} en Siigo y entrada en Flujo de Caja.", { name: res.siigo.name ?? "" })
             : tr("Devolución registrada en Flujo de Caja, pero Siigo no la recibió: {error}", { error: tr.msg(res.siigo.error ?? "") })
         );
