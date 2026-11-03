@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   HandCoins,
   Landmark,
+  Scale,
 } from "lucide-react";
 import { useTr } from "./AdminI18n";
 
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { href: "/admin/quotes", label: "Cotizaciones", Icon: FileText },
   { href: "/admin/cuentas-cobro", label: "Cuentas de Cobro", Icon: FileText },
   { href: "/admin/cashflow", label: "Flujo de Caja", Icon: Wallet },
+  { href: "/admin/bank", label: "Conciliación bancaria", Icon: Scale },
 ];
 
 /** The single nav item for this path: the longest href that matches. */

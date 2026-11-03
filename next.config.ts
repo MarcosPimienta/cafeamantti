@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Read bank statements on the server (pdf.js loads its worker from node_modules).
+  serverExternalPackages: ['pdfjs-dist'],
   async headers() {
     return [
       {
