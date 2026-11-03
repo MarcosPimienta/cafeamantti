@@ -96,7 +96,7 @@ export default function BankClient({ migrationApplied, statements, statement, li
 
   const upload = () => {
     const file = fileRef.current?.files?.[0];
-    if (!file) return setError(tr("Elige el extracto en PDF."));
+    if (!file) return setError(tr("Elige el extracto en PDF o Excel."));
     const form = new FormData();
     form.append("file", file);
     startTransition(async () => {
@@ -155,7 +155,7 @@ export default function BankClient({ migrationApplied, statements, statement, li
         <div className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{tr("Extractos cargados")}</p>
           {statements.length === 0 ? (
-            <p className="text-sm text-foreground/50">{tr("Aún no hay extractos. Carga el PDF del mes que descargas de Davivienda.")}</p>
+            <p className="text-sm text-foreground/50">{tr("Aún no hay extractos. Carga el del mes que descargas de Davivienda, en PDF o Excel.")}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {statements.map((s) => (
@@ -169,9 +169,9 @@ export default function BankClient({ migrationApplied, statements, statement, li
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={upload} />
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf,.xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" className="hidden" onChange={upload} />
           <button type="button" disabled={isPending} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl bg-[#C59F59] px-4 py-2 text-xs font-bold text-white hover:bg-[#B38E4D] disabled:opacity-50">
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}{tr("Cargar extracto (PDF Davivienda)")}
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}{tr("Cargar extracto (PDF o Excel)")}
           </button>
         </div>
       </section>

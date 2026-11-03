@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createFakeClient, seedDB, ADMIN_ID, type FakeDB } from "@/test/fakeSupabase";
+import * as XLSX from "xlsx";
 import type { TextItem } from "@/utils/bank/davivienda";
 
 const h = vi.hoisted(() => ({ client: null as unknown, items: [] as unknown[] }));
@@ -69,7 +70,7 @@ describe("bank reconciliation", () => {
     expect(res.success).toBe(false);
     const notPdf = new FormData();
     notPdf.append("file", new File(["hola"], "x.pdf"));
-    expect(await importStatement(notPdf)).toMatchObject({ success: false, error: "El archivo no es un PDF." });
+    expect(await importStatement(notPdf)).toMatchObject({ success: false, error: "El archivo no es un PDF ni un Excel." });
   });
 
   it("accepting the suggestions reconciles; the second copy of a deposit is left out", async () => {
@@ -157,5 +158,45 @@ describe("undoing several matches at once", () => {
     expect(db.rows("bank_matches")).toHaveLength(0);
     expect(db.byId("cashflow_incomes", "contegral")).toBeTruthy();
     expect(db.rows("cashflow_expenses").some((e) => e.concept === "Pago")).toBe(false);
+  });
+});
+
+describe("a statement in Excel", () => {
+  const workbook = (rows: unknown[][]) => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Extracto");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Conciliación bancaria"], ["Saldo según extracto"]]), "Conciliación");
+    const form = new FormData();
+    form.append("file", new File([XLSX.write(wb, { type: "array", bookType: "xlsx" })], "Extracto.xlsx"));
+    return form;
+  };
+  const rows = [
+    ["Extracto Davivienda Cuenta de Ahorros 1234 5678 9012"],
+    [null, null, null, null, null, "Saldo anterior", 1000000],
+    ["Fecha", "Doc.", "Clase de movimiento", "Oficina", "Crédito (+)", "Débito (−)", "Saldo"],
+    [46312, "9974", "Abono ACH BOGOTA 8909012715", "PROCESOS ACH", 4197187, null, null],
+    [46303, "3842", "Descuento Transferencia Intereses", "PORTAL PYMES", null, 1500000, null],
+    [null, null, null, "Según extracto", 4197187, 1500000, 3697187],
+  ];
+
+  it("is read like the PDF, and can't be loaded twice for the same month (even as PDF)", async () => {
+    const res = await importStatement(workbook(rows));
+    expect(res).toMatchObject({ success: true, lines: 2 });
+    const data = await getBankData(res.success ? res.id : "");
+    expect(data.statement).toMatchObject({ account_number: "1234 5678 9012", period_month: "2026-10-01", opening_balance: 1000000, closing_balance: 3697187, file_name: "Extracto.xlsx" });
+    expect(data.lines.map((l) => l.amount)).toEqual([4197187, -1500000]);
+    expect(await importStatement(pdf())).toMatchObject({ success: false, error: "Ese extracto ya está cargado. Para cargarlo de nuevo, borra el que está." });
+  });
+
+  it("says what is missing in a sheet that is not a statement", async () => {
+    const res = await importStatement(workbook([["Ventas por producto"], ["Producto", "Cantidad"]]));
+    expect(res).toMatchObject({ success: false, error: expect.stringContaining("No encontré la tabla de movimientos") });
+  });
+
+  it("reads a CSV too", async () => {
+    const csv = "Cuenta 1234 5678 9012\nSaldo anterior,1000000\nFecha,Descripción,Valor\n2026-10-08,Descuento Transferencia Intereses,-1500000\n";
+    const form = new FormData();
+    form.append("file", new File([csv], "extracto.csv", { type: "text/csv" }));
+    expect(await importStatement(form)).toMatchObject({ success: true, lines: 1 });
   });
 });

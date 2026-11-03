@@ -13,13 +13,15 @@ import { createExpenseDirect, createIncomeDirect, deleteExpenseDirect, deleteInc
 import { INCOME_CATEGORIES } from '../cashflow/types';
 import { errorText } from '@/utils/siigo/server';
 import { loadExpenseCategories } from '@/utils/expenses/server';
-import { parseDavivienda } from '@/utils/bank/davivienda';
+import * as XLSX from 'xlsx';
+import { parseDavivienda, type ParsedStatement } from '@/utils/bank/davivienda';
+import { parseStatementRows } from '@/utils/bank/excel';
 import { pdfTextItems } from '@/utils/bank/pdfText';
 import { balanced, difference, type CashRow } from '@/utils/bank/matching';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261108000000_bank_reconciliation.sql';
-// Server actions take up to 1 MB; a month's statement is ~200 KB.
-const MAX_PDF_BYTES = 950 * 1024;
+// Server actions take up to 1 MB; a month's statement is ~200 KB (PDF) or ~15 KB (Excel).
+const MAX_FILE_BYTES = 950 * 1024;
 /** Flujo de Caja rows this many days around the month can explain its lines. */
 const WINDOW_DAYS = 10;
 
@@ -145,26 +147,57 @@ export async function getBankData(statementId?: string | null) {
   return { migrationApplied: true, statements, statement, lines: bankLines, matches, rows };
 }
 
-/** Reads a Davivienda PDF statement and keeps its lines (not the file). */
+/** The movements of a Davivienda PDF (text, not a printed image). */
+async function readPdf(bytes: Uint8Array): Promise<ParsedStatement> {
+  let items;
+  try {
+    items = await pdfTextItems(bytes);
+  } catch (err) {
+    console.error('importStatement: pdf.js', err);
+    if (/password/i.test(errorText(err))) throw new Error('El PDF tiene contraseña. Descárgalo de nuevo sin clave.');
+    throw new Error('No pude leer el PDF del extracto.');
+  }
+  if (!items.length) throw new Error('Este PDF es solo una imagen (impreso a PDF o escaneado), sin texto que leer. Descarga el extracto original desde Davivienda, sin imprimirlo.');
+  return parseDavivienda(items);
+}
+
+/** The movements of an Excel or CSV statement: the first sheet with a movements table. */
+function readSpreadsheet(bytes: Uint8Array, csv: boolean): ParsedStatement {
+  let wb: XLSX.WorkBook;
+  try {
+    // A CSV is read as UTF-8 text and left as text: no guessing of dates (it shifts them by the time zone).
+    wb = csv
+      ? XLSX.read(new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, ''), { type: 'string', raw: true })
+      : XLSX.read(bytes, { type: 'array', cellDates: false });
+  } catch (err) {
+    console.error('importStatement: xlsx', err);
+    throw new Error('No pude leer el archivo de Excel. ¿Tiene contraseña?');
+  }
+  let first: ParsedStatement | null = null;
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(wb.Sheets[name], { header: 1, raw: true, defval: null });
+    const parsed = parseStatementRows(rows);
+    if (parsed.lines.length) return parsed;
+    first ??= parsed;
+  }
+  return first ?? parseStatementRows([]);
+}
+
+const isPdf = (b: Uint8Array) => String.fromCharCode(...b.slice(0, 5)) === '%PDF-';
+// .xlsx is a zip (PK), .xls an OLE file; a CSV is plain text.
+const isWorkbook = (b: Uint8Array) => (b[0] === 0x50 && b[1] === 0x4b) || (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0);
+const isCsv = (name: string) => /\.csv$/i.test(name);
+
+/** Reads a Davivienda statement (PDF, Excel or CSV) and keeps its lines (not the file). */
 export async function importStatement(form: FormData) {
   const { supabase, userId } = await requireAdmin();
   return guard(async () => {
     const file = form.get('file');
-    if (!(file instanceof File) || !file.size) throw new Error('Elige el extracto en PDF.');
-    if (file.size > MAX_PDF_BYTES) throw new Error('El archivo pesa más de 1 MB: ¿es el extracto del banco?');
+    if (!(file instanceof File) || !file.size) throw new Error('Elige el extracto en PDF o Excel.');
+    if (file.size > MAX_FILE_BYTES) throw new Error('El archivo pesa más de 1 MB: ¿es el extracto del banco?');
     const bytes = new Uint8Array(await file.arrayBuffer());
-    if (String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') throw new Error('El archivo no es un PDF.');
-
-    let items;
-    try {
-      items = await pdfTextItems(bytes);
-    } catch (err) {
-      console.error('importStatement: pdf.js', err);
-      if (/password/i.test(errorText(err))) throw new Error('El PDF tiene contraseña. Descárgalo de nuevo sin clave.');
-      throw new Error('No pude leer el PDF del extracto.');
-    }
-    if (!items.length) throw new Error('Este PDF es solo una imagen (impreso a PDF o escaneado), sin texto que leer. Descarga el extracto original desde Davivienda, sin imprimirlo.');
-    const parsed = parseDavivienda(items);
+    const parsed = isPdf(bytes) ? await readPdf(bytes) : isWorkbook(bytes) || isCsv(file.name) ? readSpreadsheet(bytes, !isWorkbook(bytes)) : null;
+    if (!parsed) throw new Error('El archivo no es un PDF ni un Excel.');
     if (parsed.problems.length) throw new Error(parsed.problems.join(' · '));
 
     const { data: existing } = await supabase.from('bank_statements').select('id')
