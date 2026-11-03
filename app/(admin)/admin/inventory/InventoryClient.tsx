@@ -55,6 +55,7 @@ import {
   getTrillaBatches,
   getTostionBatches,
   createEntrada,
+  setEntryCost,
   createSalida,
   createProdConsumo,
   createProdAlta,
@@ -92,6 +93,7 @@ import {
   type InventoryCategory,
 } from "@/utils/inventory/categories";
 import CostosTab from "./CostosTab";
+import { COSTED_SINCE, needsCost } from "@/utils/inventory/entryCost";
 import QuantityInput from "./QuantityInput";
 import {
   MOLIENDAS,
@@ -137,6 +139,8 @@ interface MovementRecord {
   molienda: string | null;
   production_batch_id?: string | null;
   income_id?: string | null;
+  /** Entradas: what one unit cost, before IVA. */
+  unit_cost?: number | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   income?: any;
   created_at: string;
@@ -1682,6 +1686,8 @@ function EntradasTab({
     responsable: "",
     lote: "",
     molienda: "" as Molienda | "",
+    /** Cost of one unit before IVA; the total is shown (and can be typed) next to it. */
+    unitCost: "",
   };
   const [form, setForm] = useState(initForm);
   const [records, setRecords] = useState<MovementRecord[]>([]);
@@ -1696,19 +1702,25 @@ function EntradasTab({
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
   const [search, setSearch] = useState("");
+  const [onlyMissingCost, setOnlyMissingCost] = useState(false);
 
   const selectedItem = useMemo(
     () => inventory.find((i) => i.id === form.inventoryId) ?? null,
     [inventory, form.inventoryId]
   );
 
+  // Entradas of materia prima / material since the cutover that still have no cost.
+  const missingCost = (r: MovementRecord) => needsCost(r.entry_type) && (r.unit_cost === null || r.unit_cost === undefined) && (r.movement_date ?? r.created_at).slice(0, 10) >= COSTED_SINCE;
+  const missingCount = records.filter(missingCost).length;
+
   // Free-text filter over the history — every whitespace-separated term must
   // match somewhere in the row, so "honey 250" narrows down as you type.
   const filteredRecords = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return records;
+    const base = onlyMissingCost ? records.filter(missingCost) : records;
+    if (!q) return base;
     const terms = q.split(/\s+/);
-    return records.filter((r) => {
+    return base.filter((r) => {
       const inv = getRelation(r.inventory);
       const haystack = [
         inv?.product_code,
@@ -1727,7 +1739,7 @@ function EntradasTab({
         .toLowerCase();
       return terms.every((t) => haystack.includes(t));
     });
-  }, [records, search]);
+  }, [records, search, onlyMissingCost]);
 
   const sortedRecords = useMemo(() => sortRecordsList(filteredRecords, sortField, sortAsc), [filteredRecords, sortField, sortAsc]);
 
@@ -1780,6 +1792,10 @@ function EntradasTab({
       setFeedback({ type: "error", msg: tr("Selecciona la molienda (Grano o Molido)") });
       return;
     }
+    if (needsCost(form.entryType) && form.unitCost === "") {
+      setFeedback({ type: "error", msg: tr("Escribe el costo unitario (sin IVA) de la entrada.") });
+      return;
+    }
     startTransition(async () => {
       try {
         const res = await createEntrada(
@@ -1789,7 +1805,8 @@ function EntradasTab({
           form.entryType,
           form.responsable || undefined,
           form.lote || undefined,
-          form.molienda || undefined
+          form.molienda || undefined,
+          form.unitCost === "" ? null : Number(form.unitCost)
         );
         
         if (!res.success) {
@@ -1910,6 +1927,41 @@ function EntradasTab({
                 ))}
               </select>
             </div>
+            <div>
+              <label htmlFor="ent-cost" className={labelCls}>
+                {tr("Costo por {unit} (sin IVA)", { unit: selectedItem?.unit || tr("unidad") })}{" "}
+                {needsCost(form.entryType) && <span className="text-red-400">*</span>}
+              </label>
+              <input
+                id="ent-cost"
+                type="number"
+                min={0}
+                step="any"
+                value={form.unitCost}
+                onChange={(e) => setForm({ ...form, unitCost: e.target.value })}
+                placeholder={tr("ej. 31000")}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label htmlFor="ent-total" className={labelCls}>
+                {tr("Valor total (sin IVA)")}
+              </label>
+              <input
+                id="ent-total"
+                type="number"
+                min={0}
+                step="any"
+                value={form.unitCost !== "" && Number(form.qty) > 0 ? String(Math.round(Number(form.unitCost) * Number(form.qty))) : ""}
+                onChange={(e) => {
+                  const q = Number(form.qty);
+                  setForm({ ...form, unitCost: e.target.value === "" || !(q > 0) ? "" : String(Math.round((Number(e.target.value) / q) * 100) / 100) });
+                }}
+                placeholder={Number(form.qty) > 0 ? tr("o escribe el total de la factura") : tr("primero la cantidad")}
+                disabled={!(Number(form.qty) > 0)}
+                className={inputCls}
+              />
+            </div>
             {selectedItem?.category === "equipo" && (
               <p className="md:col-span-2 lg:col-span-3 text-xs text-foreground/60 bg-[#fdfbf7] border border-foreground/5 rounded-xl px-4 py-3">
                 {tr("Después de registrar la entrada, da de alta cada máquina con su serial en")}{" "}
@@ -1960,6 +2012,16 @@ function EntradasTab({
           </button>
         </form>
       </div>
+      )}
+
+      {/* Entradas since the cutover without their cost */}
+      {era === 'v2' && missingCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">
+          <span>{tr("{n} entrada(s) de materia prima o material desde septiembre sin costo. Agrégalo en la columna «Costo unitario» para saber cuánto cuesta cada producto.", { n: String(missingCount) })}</span>
+          <button type="button" onClick={() => { setOnlyMissingCost(!onlyMissingCost); setCurrentPage(1); }} className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold hover:bg-amber-100">
+            {onlyMissingCost ? tr("Ver todas") : tr("Ver solo las que faltan")}
+          </button>
+        </div>
       )}
 
       {/* History */}
@@ -2035,6 +2097,7 @@ function EntradasTab({
                   <SortableTh label={tr("Molienda")} field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label={tr("Lote")} field="lote" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label={tr("Tipo")} field="entry_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <SortableTh label={tr("Costo unitario")} field="unit_cost" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label={tr("Responsable")} field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>{tr("Acciones")}</th>
                 </tr>
@@ -2081,6 +2144,9 @@ function EntradasTab({
                           </span>
                         )}
                       </td>
+                      <td className={`${tdCls} text-right`}>
+                        <EntradaCostCell record={r} unit={inv?.unit} onSaved={loadHistory} />
+                      </td>
                       <td className={`${tdCls} text-foreground/50`}>
                         {r.responsable || "—"}
                       </td>
@@ -2105,6 +2171,50 @@ function EntradasTab({
         <EditMovementModal record={editingRecord} onClose={() => setEditingRecord(null)} onSuccess={(invId, s) => { onStockUpdate(invId, s); loadHistory(); setEditingRecord(null); }} />
       )}
     </div>
+  );
+}
+
+/**
+ * An entrada's cost: per unit and in total. Missing on a materia prima or
+ * material entrada, it can be added right there (the item's average cost
+ * follows).
+ */
+function EntradaCostCell({ record, unit, onSaved }: { record: MovementRecord; unit?: string | null; onSaved: () => void }) {
+  const tr = useTr();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(record.unit_cost != null ? String(record.unit_cost) : "");
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
+  const save = () =>
+    startTransition(async () => {
+      setError("");
+      const res = await setEntryCost(record.id, Number(value));
+      if (!res.success) return setError(tr.msg(res.error));
+      setEditing(false);
+      onSaved();
+    });
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <input type="number" min={0} step="any" value={value} onChange={(e) => setValue(e.target.value)} autoFocus
+          onKeyDown={(e) => { if (e.key === "Enter" && value !== "") save(); if (e.key === "Escape") setEditing(false); }}
+          aria-label={tr("Costo por {unit} (sin IVA)", { unit: unit || tr("unidad") })} className="w-24 rounded-lg border border-foreground/15 px-2 py-1 text-right text-xs" />
+        <button type="button" disabled={isPending || value === ""} onClick={save} className="rounded-lg bg-[#C59F59] px-2 py-1 text-[10px] font-bold text-white disabled:opacity-40">{isPending ? "…" : tr("Guardar")}</button>
+        {error && <span className="block text-[10px] text-red-600">{error}</span>}
+      </span>
+    );
+  }
+  if (record.unit_cost == null) {
+    return needsCost(record.entry_type)
+      ? <button type="button" onClick={() => setEditing(true)} className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800 hover:bg-amber-100">{tr("Agregar costo")}</button>
+      : <span className="text-foreground/30">—</span>;
+  }
+  return (
+    <button type="button" onClick={() => setEditing(true)} className="text-right" title={tr("Corregir costo")}>
+      <span className="block text-xs font-bold tabular-nums">{cop(Number(record.unit_cost))}<span className="font-normal text-foreground/40"> / {unit || tr("unidad")}</span></span>
+      <span className="block text-[10px] tabular-nums text-foreground/45">{tr("Total {v}", { v: cop(Number(record.unit_cost) * Number(record.quantity)) })}</span>
+    </button>
   );
 }
 

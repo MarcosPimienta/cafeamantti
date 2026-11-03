@@ -174,6 +174,9 @@ describe("purchase invoices that bring stock in", () => {
     expect(await createBill(coffee)).toMatchObject({ success: true, stocked: ["598 kg Café Verde"] });
     expect(db.byId("inventory", "verde")!.current_stock).toBe(608);
     expect(db.rows("inventory_movements")).toEqual([expect.objectContaining({ inventory_id: "verde", type: "entrada", quantity: 598, entry_type: "MP", tab_source: "entrada", movement_date: "2026-10-15", purchase_bill_id: bill().id, reason: "Compra · Todo Empaques SAS FETD77" })]);
+    // Its cost comes from the invoice line (before IVA): $1.000.000 ÷ 598 kg.
+    expect(db.rows("inventory_movements")[0].unit_cost).toBe(1672.24);
+    expect(db.byId("inventory", "verde")!.standard_cost).toBe(1672.24);
   });
 
   it("stays in stock even if Siigo rejects the invoice (the purchase happened)", async () => {

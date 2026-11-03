@@ -19,6 +19,8 @@ import { buildAdvanceCrossPayload, buildAdvancePaymentPayload, buildAdvanceRefun
 import { daneCodeFor } from '@/utils/siigo/daneCities';
 import { ensureSiigoSupplier, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
 import { entryTypeFor, tracksStock } from '@/utils/inventory/categories';
+import { lineUnitCost } from '@/utils/inventory/entryCost';
+import { refreshStandardCost } from '@/utils/inventory/costServer';
 import { isGrindTracked } from '@/app/(admin)/coffeeProfiles';
 import { advanceBalance, advanceUseProblems, allocateAdvances, allocatePayment, billProblems, billTotals, payableBalance, payablePaymentProblems, splitPayment, type BillLine, type PayableMethod } from '@/utils/payables/ledger';
 
@@ -318,14 +320,18 @@ async function stockBillLines(
         molienda: isGrindTracked(p.product_code) ? 'grano' : null,
         created_by: userId,
         purchase_bill_id: billId,
+        // What the invoice line says one unit cost (before IVA).
+        ...(lineUnitCost(l.base, qty) !== null ? { unit_cost: lineUnitCost(l.base, qty) } : {}),
       };
       const { data: mov, error: movErr } = await supabase.from('inventory_movements').insert(row).select('id').single();
       if (movErr && /purchase_bill_id/.test(movErr.message)) throw new Error(MIGRATION_INVENTORY_HINT);
+      if (movErr && /unit_cost/.test(movErr.message)) throw new Error('Falta aplicar la migración 20261107000000_inventory_entry_cost.sql');
       if (movErr || !mov) throw movErr ?? new Error('No se pudo registrar la entrada.');
       const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', p.id).single();
       const { error: stockErr } = await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) + qty }).eq('id', p.id);
       if (stockErr) throw stockErr;
       done.push({ movementId: mov.id, inventoryId: p.id, qty });
+      await refreshStandardCost(supabase, p.id);
       stocked.push(`${qty} ${p.unit ?? ''} ${p.product_name}`.replace(/\s+/g, ' ').trim());
     }
   } catch (err) {

@@ -21,6 +21,8 @@ import { loadSiigoSettings } from "@/utils/siigo/server";
 import { cleanIdentification } from "@/utils/siigo/mapping";
 import { isSellable } from "@/utils/inventory/sellable";
 import { isInventoryCategory, type InventoryCategory, type EntryType } from "@/utils/inventory/categories";
+import { entryCostProblem } from "@/utils/inventory/entryCost";
+import { refreshStandardCost } from "@/utils/inventory/costServer";
 import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
 import { buildProductKardex, buildGeneralKardex } from "@/utils/inventory/kardex";
 import {
@@ -1304,6 +1306,8 @@ async function _insertMovement(
     molienda?: Molienda | null;
     income_id?: string | null;
     repack_batch_id?: string | null;
+    /** What one stock unit cost, before IVA (entradas). */
+    unit_cost?: number | null;
   } = {}
 ) {
   const { data, error } = await supabase.from('inventory_movements').insert({
@@ -1320,6 +1324,8 @@ async function _insertMovement(
     molienda: opts.molienda ?? null,
     income_id: opts.income_id ?? null,
     repack_batch_id: opts.repack_batch_id ?? null,
+    // Only sent when there is one: works before the entry-cost migration.
+    ...(opts.unit_cost !== undefined && opts.unit_cost !== null ? { unit_cost: opts.unit_cost } : {}),
   }).select('id').single();
   if (error) throw new Error(error.message);
   return data.id;
@@ -1487,26 +1493,68 @@ export async function getMovementsByTab(tabSource: string, era: 'v1' | 'v2' = 'v
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from('inventory_movements')
-    .select(`
+  // unit_cost (the entrada's cost) exists once its migration runs. Literal
+  // selects keep the rows typed.
+  const WITH_COST = `
+      id, inventory_id, type, quantity, reason, lote,
+      movement_date, responsable, entry_type, tab_source, molienda, created_at,
+      production_batch_id, income_id, unit_cost,
+      inventory ( product_code, product_name, unit ),
+      income:income_id ( gross_amount )
+    ` as const;
+  const WITHOUT_COST = `
       id, inventory_id, type, quantity, reason, lote,
       movement_date, responsable, entry_type, tab_source, molienda, created_at,
       production_batch_id, income_id,
       inventory ( product_code, product_name, unit ),
       income:income_id ( gross_amount )
-    `)
+    ` as const;
+  const query = (cost: boolean) => supabase
+    .from('inventory_movements')
+    .select(cost ? WITH_COST : WITHOUT_COST)
     .eq('tab_source', tabSource)
     .eq('era', era)
     .order('movement_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(200);
 
-  if (error) {
-    console.error('getMovementsByTab error:', error);
+  let res = await query(true);
+  if (res.error && /unit_cost/.test(res.error.message)) res = await query(false);
+  if (res.error) {
+    console.error('getMovementsByTab error:', res.error);
     return [];
   }
-  return data;
+  return res.data as unknown as MovementWithCost[];
+}
+
+type MovementWithCost = {
+  id: string; inventory_id: string; type: string; quantity: number; reason: string | null; lote: string | null;
+  movement_date: string | null; responsable: string | null; entry_type: string | null; tab_source: string | null; molienda: string | null; created_at: string;
+  production_batch_id: string | null; income_id: string | null; unit_cost?: number | null;
+  inventory: { product_code: string; product_name: string; unit: string | null } | null;
+  income: { gross_amount: number } | null;
+};
+
+/**
+ * Sets (or corrects) what one unit of an entrada cost, before IVA; the
+ * item's standard cost follows. For entradas registered without it.
+ */
+export async function setEntryCost(movementId: string, unitCost: number) {
+  const isAdmin = await checkIsAdmin();
+  if (!isAdmin) throw new Error('Unauthorized');
+  if (!(Number.isFinite(unitCost) && unitCost >= 0)) return { success: false as const, error: 'El costo debe ser un número mayor o igual a cero.' };
+  const supabase = await createClient();
+  const { data: mov, error } = await supabase.from('inventory_movements').select('id, inventory_id, type').eq('id', movementId).single();
+  if (error || !mov) return { success: false as const, error: 'Movimiento no encontrado' };
+  if (mov.type !== 'entrada') return { success: false as const, error: 'Solo las entradas llevan costo.' };
+  const { error: updErr } = await supabase.from('inventory_movements').update({ unit_cost: unitCost }).eq('id', movementId);
+  if (updErr) {
+    return { success: false as const, error: /unit_cost/.test(updErr.message) ? 'Falta aplicar la migración 20261107000000_inventory_entry_cost.sql para guardar el costo de las entradas.' : updErr.message };
+  }
+  await refreshStandardCost(supabase, mov.inventory_id);
+  await logAuditAction("UPDATE", "MOVEMENT", movementId, mov.inventory_id, { unitCost });
+  revalidatePath('/admin/inventory');
+  return { success: true as const };
 }
 
 export async function getTrillaBatches(era: 'v1' | 'v2' = 'v2') {
@@ -1574,7 +1622,9 @@ export async function createEntrada(
   entryType: EntryType,
   responsable?: string,
   lote?: string,
-  molienda?: string | null
+  molienda?: string | null,
+  /** What one unit cost before IVA ($/kg, $/unidad): required for materia prima and material. */
+  unitCost?: number | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1583,6 +1633,8 @@ export async function createEntrada(
   const { data: { user } } = await supabase.auth.getUser();
 
   try {
+    const costProblem = entryCostProblem(entryType, unitCost);
+    if (costProblem) return { success: false, error: costProblem };
     const grind = await _resolveMolienda(supabase, inventoryId, molienda);
 
     const mId = await _insertMovement(supabase, user?.id ?? null, inventoryId, 'entrada', qty, {
@@ -1592,13 +1644,18 @@ export async function createEntrada(
       tab_source: 'entrada',
       lote,
       molienda: grind,
+      unit_cost: unitCost ?? null,
     });
 
     const newStock = await _updateStockBy(supabase, inventoryId, qty);
-    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote, molienda: grind });
+    if (unitCost !== undefined && unitCost !== null) await refreshStandardCost(supabase, inventoryId);
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote, molienda: grind, unitCost });
     revalidatePath('/admin/inventory');
     return { success: true, newStock };
   } catch (err: any) {
+    if (String(err.message).includes('unit_cost')) {
+      return { success: false, error: 'Falta aplicar la migración 20261107000000_inventory_entry_cost.sql para guardar el costo de las entradas.' };
+    }
     if (String(err.message).includes('inventory_movements_entry_type_check')) {
       return { success: false, error: `Falta aplicar la migración 20261010040000_entry_type_enseres.sql para registrar entradas de tipo ${entryType}.` };
     }
