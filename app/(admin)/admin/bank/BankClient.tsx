@@ -4,7 +4,7 @@ import React, { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, Sparkles, Trash2, Undo2, UploadCloud } from "lucide-react";
-import { acceptSuggestions, deleteStatement, ignoreLines, importStatement, markReversal, reconcile, undoMatch, type BankLine, type BankMatch, type BankStatement, type ReconRow } from "./actions";
+import { acceptSuggestions, deleteStatement, ignoreLines, importStatement, markReversal, reconcile, undoMatches, type BankLine, type BankMatch, type BankStatement, type ReconRow } from "./actions";
 import { balanced, difference, possibleDuplicates, signed, suggestMatches, type Suggestion } from "@/utils/bank/matching";
 import { INCOME_CATEGORIES } from "../cashflow/types";
 import { useExpenseCategories } from "../settings/categories/useExpenseCategories";
@@ -39,7 +39,8 @@ export default function BankClient({ migrationApplied, statements, statement, li
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [onlyPending, setOnlyPending] = useState(true);
+  const [view, setView] = useState<"pendientes" | "conciliados">("pendientes");
+  const [pickedMatches, setPickedMatches] = useState<Set<string>>(new Set());
   const [pickedLines, setPickedLines] = useState<Set<string>>(new Set());
   const [pickedRows, setPickedRows] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -49,7 +50,6 @@ export default function BankClient({ migrationApplied, statements, statement, li
   const [note, setNote] = useState("");
   const categories = useExpenseCategories();
 
-  const matchById = useMemo(() => new Map(matches.map((m) => [m.id, m])), [matches]);
   const rowById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
   const pendingLines = lines.filter((l) => !l.match_id);
   const freeRows = rows.filter((r) => !r.matchId);
@@ -68,6 +68,7 @@ export default function BankClient({ migrationApplied, statements, statement, li
   const lineSum = selLines.reduce((s, l) => s + l.amount, 0);
 
   const clear = () => {
+    setPickedMatches(new Set());
     setPickedLines(new Set());
     setPickedRows(new Set());
     setMode("");
@@ -143,7 +144,6 @@ export default function BankClient({ migrationApplied, statements, statement, li
     .filter((r) => !q || r.concept.toLowerCase().includes(q) || r.category.toLowerCase().includes(q) || String(r.amount).includes(q.replace(/\D/g, "") || "\u0000"))
     .filter((r) => pickedRows.has(r.id) || !selLines.length || Math.sign(signed(r)) === Math.sign(lineSum) || lineSum === 0)
     .sort((a, b) => nearest(a) - nearest(b) || a.date.localeCompare(b.date));
-  const shownLines = onlyPending ? pendingLines : lines;
   const rowLabel = (r: ReconRow) => `${day(r.date)} · ${r.concept}`;
 
   return (
@@ -234,46 +234,53 @@ export default function BankClient({ migrationApplied, statements, statement, li
             </section>
           )}
 
+          <div className="flex flex-wrap gap-2">
+            {([["pendientes", tr("Pendientes ({n})", { n: String(pendingLines.length) })], ["conciliados", tr("Conciliados ({n})", { n: String(done) })]] as const).map(([v, label]) => (
+              <button key={v} type="button" onClick={() => { clear(); setView(v); }}
+                className={`rounded-full border px-4 py-1.5 text-xs font-bold ${view === v ? "border-foreground bg-foreground text-background" : "border-foreground/15 text-foreground/60 hover:bg-foreground/5"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {view === "conciliados" ? (
+            <ConciliatedList lines={lines} matches={matches} rowById={rowById} picked={pickedMatches} setPicked={setPickedMatches} isPending={isPending}
+              onUndo={(ids, owned) => {
+                const ask = owned ? tr("Se borrarán también los registros que se crearon desde el extracto. ¿Continuar?") : ids.length > 1 ? tr("¿Deshacer {n} conciliaciones? Sus movimientos vuelven a quedar pendientes.", { n: String(ids.length) }) : null;
+                if (ask && !window.confirm(ask)) return;
+                startTransition(async () => {
+                  setError("");
+                  setNotice("");
+                  const res = await undoMatches(ids);
+                  if (!res.success) setError(res.error);
+                  else {
+                    setNotice(res.done === 1 ? tr("Conciliación deshecha.") : tr("{n} conciliaciones deshechas.", { n: String(res.done) }));
+                    if (res.failed.length) setError(res.failed.join(" · "));
+                  }
+                  clear();
+                  router.refresh();
+                });
+              }} />
+          ) : (
           <div className="grid gap-5 xl:grid-cols-2">
             <section className={card}>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-serif text-xl">{tr("Movimientos del banco")}</h2>
-                <label className="flex items-center gap-1.5 text-xs text-foreground/60"><input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} />{tr("Solo pendientes")}</label>
               </div>
-              {shownLines.length === 0 ? (
+              {pendingLines.length === 0 ? (
                 <p className="text-sm text-foreground/50">{tr("Todo el extracto está conciliado.")}</p>
               ) : (
                 <ul className="max-h-[640px] divide-y divide-foreground/5 overflow-y-auto text-sm">
-                  {shownLines.map((l) => {
-                    const m = l.match_id ? matchById.get(l.match_id) : null;
-                    const linked = m?.rows.map((r) => rowById.get(r.id)).filter((r): r is ReconRow => !!r) ?? [];
-                    const broken = m?.kind === "flujo" && m.rows.length > 0 && linked.length === m.rows.length && !balanced(difference(lines.filter((x) => x.match_id === m.id), linked));
-                    return (
-                      <li key={l.id} className={`flex items-start gap-3 py-2 ${pickedLines.has(l.id) ? "bg-[#C59F59]/10" : ""}`}>
-                        {!m ? (
-                          <input type="checkbox" className="mt-1" checked={pickedLines.has(l.id)} onChange={() => toggle(pickedLines, l.id, setPickedLines)} aria-label={l.description} />
-                        ) : (
-                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="break-words"><span className="mr-2 text-xs text-foreground/50">{day(l.line_date)}</span>{l.description}</p>
-                          <p className="text-[11px] text-foreground/40">{[l.office, l.doc && `Doc. ${l.doc}`].filter(Boolean).join(" · ")}</p>
-                          {m && (
-                            <p className={`text-[11px] ${broken ? "text-red-700" : "text-foreground/60"}`}>
-                              <span className="font-bold">{tr(KIND_LABEL[m.kind])}</span>
-                              {m.kind === "flujo" && linked.length > 0 && <> · {linked.map(rowLabel).join(" + ")}</>}
-                              {m.kind === "flujo" && linked.length === 0 && <> · {tr("con registros fuera de este mes")}</>}
-                              {m.note && <> · {m.note}</>}
-                              {broken && <> · {tr("ya no cuadra: revisa si cambió el registro")}</>}
-                              <button type="button" disabled={isPending} onClick={() => run(() => undoMatch(m.id), tr("Conciliación deshecha."), m.rows.some((r) => r.owned) ? tr("Se borrará también el registro que se creó desde el extracto. ¿Continuar?") : undefined)}
-                                className="ml-2 inline-flex items-center gap-1 text-foreground/40 hover:text-red-600"><Undo2 className="h-3 w-3" />{tr("Deshacer")}</button>
-                            </p>
-                          )}
-                        </div>
-                        <div className="shrink-0 text-right">{money(l.amount)}</div>
-                      </li>
-                    );
-                  })}
+                  {pendingLines.map((l) => (
+                    <li key={l.id} className={`flex items-start gap-3 py-2 ${pickedLines.has(l.id) ? "bg-[#C59F59]/10" : ""}`}>
+                      <input type="checkbox" className="mt-1" checked={pickedLines.has(l.id)} onChange={() => toggle(pickedLines, l.id, setPickedLines)} aria-label={l.description} />
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words"><span className="mr-2 text-xs text-foreground/50">{day(l.line_date)}</span>{l.description}</p>
+                        <p className="text-[11px] text-foreground/40">{[l.office, l.doc && `Doc. ${l.doc}`].filter(Boolean).join(" · ")}</p>
+                      </div>
+                      <div className="shrink-0 text-right">{money(l.amount)}</div>
+                    </li>
+                  ))}
                 </ul>
               )}
             </section>
@@ -302,8 +309,9 @@ export default function BankClient({ migrationApplied, statements, statement, li
               )}
             </section>
           </div>
+          )}
 
-          {notInBank.length > 0 && (
+          {view === "pendientes" && notInBank.length > 0 && (
             <section className={card}>
               <h2 className="mb-1 flex items-center gap-2 font-serif text-xl"><AlertTriangle className="h-5 w-5 text-amber-600" />{tr("En Flujo de Caja pero no en el banco")} <span className="text-sm text-foreground/50">({notInBank.length})</span></h2>
               <p className="mb-3 text-xs text-foreground/50">{tr("Registros del mes que ningún movimiento del extracto explica: pagos en efectivo, plata que entró a otra cuenta, o duplicados. Los duplicados se corrigen en Flujo de Caja.")}</p>
@@ -383,5 +391,108 @@ export default function BankClient({ migrationApplied, statements, statement, li
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * What was already reconciled, one card per match: its bank lines and the
+ * Flujo de Caja rows that explain them. Several can be undone at once; the
+ * rows created from the statement go with them.
+ */
+function ConciliatedList({ lines, matches, rowById, picked, setPicked, isPending, onUndo }: {
+  lines: BankLine[];
+  matches: BankMatch[];
+  rowById: Map<string, ReconRow>;
+  picked: Set<string>;
+  setPicked: (s: Set<string>) => void;
+  isPending: boolean;
+  onUndo: (ids: string[], deletesRows: boolean) => void;
+}) {
+  const tr = useTr();
+  const [kind, setKind] = useState<"" | BankMatch["kind"]>("");
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const groups = matches
+    .map((m) => {
+      const ls = lines.filter((l) => l.match_id === m.id);
+      const rs = m.rows.map((r) => ({ ...r, row: rowById.get(r.id) }));
+      const known = rs.map((r) => r.row).filter((r): r is ReconRow => !!r);
+      const broken = m.kind === "flujo" && known.length === rs.length && rs.length > 0 && !balanced(difference(ls, known));
+      return { m, ls, rs, broken, first: ls.map((l) => l.line_date).sort()[0] ?? "" };
+    })
+    .filter((g) => g.ls.length && (!kind || g.m.kind === kind))
+    .filter((g) => !q || [...g.ls.map((l) => l.description), ...g.rs.map((r) => r.row?.concept ?? ""), g.m.note ?? ""].some((t) => t.toLowerCase().includes(q)) || g.ls.some((l) => String(Math.abs(l.amount)).includes(q.replace(/\D/g, "") || "\u0000")))
+    .sort((a, b) => a.first.localeCompare(b.first));
+  const chosen = groups.filter((g) => picked.has(g.m.id));
+  const toggle = (id: string) => {
+    const next = new Set(picked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setPicked(next);
+  };
+  const allShown = groups.length > 0 && groups.every((g) => picked.has(g.m.id));
+
+  return (
+    <section className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-serif text-xl">{tr("Conciliaciones hechas")}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="rounded-xl border border-foreground/10 px-3 py-1.5 text-xs">
+            <option value="">{tr("Todas")}</option>
+            {(Object.keys(KIND_LABEL) as BankMatch["kind"][]).map((k) => <option key={k} value={k}>{tr(KIND_LABEL[k])}</option>)}
+          </select>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tr("Buscar concepto o valor")} className="w-48 rounded-xl border border-foreground/10 px-3 py-1.5 text-xs" />
+        </div>
+      </div>
+      {groups.length === 0 ? (
+        <p className="text-sm text-foreground/50">{tr("Aún no hay conciliaciones en este extracto.")}</p>
+      ) : (
+        <>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <label className="flex items-center gap-1.5 text-foreground/60">
+              <input type="checkbox" checked={allShown} onChange={() => setPicked(allShown ? new Set() : new Set(groups.map((g) => g.m.id)))} />
+              {tr("Elegir todas las que se ven ({n})", { n: String(groups.length) })}
+            </label>
+            {chosen.length > 0 && (
+              <button type="button" disabled={isPending} onClick={() => onUndo(chosen.map((g) => g.m.id), chosen.some((g) => g.rs.some((r) => r.owned)))}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-1.5 font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">
+                <Undo2 className="h-3.5 w-3.5" />{tr("Deshacer {n} seleccionadas", { n: String(chosen.length) })}
+              </button>
+            )}
+          </div>
+          <ul className="max-h-[720px] space-y-2 overflow-y-auto text-sm">
+            {groups.map(({ m, ls, rs, broken }) => (
+              <li key={m.id} className={`flex items-start gap-3 rounded-2xl border p-3 ${picked.has(m.id) ? "border-[#C59F59] bg-[#C59F59]/5" : broken ? "border-red-200" : "border-foreground/10"}`}>
+                <input type="checkbox" className="mt-1" checked={picked.has(m.id)} onChange={() => toggle(m.id)} aria-label={tr(KIND_LABEL[m.kind])} />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-[#9a7a3c]">
+                    {tr(KIND_LABEL[m.kind])}{m.note && <span className="ml-2 font-normal normal-case text-foreground/60">{m.note}</span>}
+                  </p>
+                  {ls.map((l) => (
+                    <p key={l.id} className="flex justify-between gap-3">
+                      <span className="min-w-0 break-words"><span className="mr-2 text-xs text-foreground/50">{tr("Banco")} · {day(l.line_date)}</span>{l.description}</span>
+                      <span className="shrink-0">{money(l.amount)}</span>
+                    </p>
+                  ))}
+                  {rs.map((r) => (
+                    <p key={r.id} className="flex justify-between gap-3 text-foreground/70">
+                      <span className="min-w-0 break-words">
+                        <span className="mr-2 text-xs text-foreground/50">{tr("Flujo de Caja")}{r.row && <> · {day(r.row.date)}</>}</span>
+                        {r.row ? r.row.concept : tr("con registros fuera de este mes")}
+                        {r.owned && <span className="ml-2 text-[11px] font-bold text-amber-700">{tr("creado desde el extracto")}</span>}
+                      </span>
+                      {r.row && <span className="shrink-0">{money(signed(r.row))}</span>}
+                    </p>
+                  ))}
+                  {broken && <p className="text-[11px] text-red-700">{tr("ya no cuadra: revisa si cambió el registro")}</p>}
+                </div>
+                <button type="button" disabled={isPending} onClick={() => onUndo([m.id], rs.some((r) => r.owned))}
+                  className="inline-flex shrink-0 items-center gap-1 text-xs text-foreground/40 hover:text-red-600 disabled:opacity-50"><Undo2 className="h-3 w-3" />{tr("Deshacer")}</button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }

@@ -391,3 +391,17 @@ export async function acceptSuggestions(list: { kind: 'flujo' | 'reverso'; lineI
   }
   return { success: true as const, done, failed };
 }
+
+/** Undoes several matches; each one that fails is reported, the rest go back to pending. */
+export async function undoMatches(matchIds: string[]) {
+  await requireAdmin();
+  let done = 0;
+  const failed: string[] = [];
+  for (const id of [...new Set(matchIds)]) {
+    const res = await undoMatch(id);
+    if (res.success) done += 1;
+    else failed.push(res.error);
+  }
+  if (!done && failed.length) return { success: false as const, error: failed.join(' · ') };
+  return { success: true as const, done, failed };
+}

@@ -7,7 +7,7 @@ vi.mock("@/utils/supabase/server", () => ({ createClient: async () => h.client }
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 vi.mock("@/utils/bank/pdfText", () => ({ pdfTextItems: async () => h.items }));
 
-import { acceptSuggestions, deleteStatement, getBankData, ignoreLines, importStatement, markReversal, reconcile, undoMatch } from "../actions";
+import { acceptSuggestions, deleteStatement, getBankData, ignoreLines, importStatement, markReversal, reconcile, undoMatch, undoMatches } from "../actions";
 import { suggestMatches } from "@/utils/bank/matching";
 
 // An invented October statement, laid out like Davivienda's PDF.
@@ -139,5 +139,23 @@ describe("a statement printed to PDF", () => {
   it("is refused with what to do: it has no text, only pictures", async () => {
     h.items = [];
     expect(await importStatement(pdf())).toMatchObject({ success: false, error: expect.stringContaining("Descarga el extracto original desde Davivienda") });
+  });
+});
+
+describe("undoing several matches at once", () => {
+  it("puts their lines back to pending and deletes only the rows created from the statement", async () => {
+    const res = await importStatement(pdf());
+    if (!res.success) throw new Error(res.error);
+    const data = await getBankData(res.id);
+    const id = (doc: string, sign = 1) => data.lines.find((l) => l.doc === doc && Math.sign(l.amount) === sign)!.id;
+    await reconcile({ lineIds: [id("9974")], incomeIds: ["contegral"] });
+    await reconcile({ lineIds: [id("8568", -1)], create: { concept: "Pago", category: "Costo de Ventas (Materia prima, insumos, empaques)" } });
+    await markReversal([id("5281", -1), id("5281")]);
+    const ids = db.rows("bank_matches").map((m) => m.id);
+    expect(await undoMatches([...ids, ids[0]])).toMatchObject({ success: true, done: 3, failed: [] });
+    expect(db.rows("bank_lines").every((l) => !l.match_id)).toBe(true);
+    expect(db.rows("bank_matches")).toHaveLength(0);
+    expect(db.byId("cashflow_incomes", "contegral")).toBeTruthy();
+    expect(db.rows("cashflow_expenses").some((e) => e.concept === "Pago")).toBe(false);
   });
 });
