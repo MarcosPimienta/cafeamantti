@@ -134,3 +134,10 @@ describe("bank reconciliation", () => {
     expect(db.rows("cashflow_expenses").some((e) => e.concept === "Pago")).toBe(true);
   });
 });
+
+describe("a statement printed to PDF", () => {
+  it("is refused with what to do: it has no text, only pictures", async () => {
+    h.items = [];
+    expect(await importStatement(pdf())).toMatchObject({ success: false, error: expect.stringContaining("Descarga el extracto original desde Davivienda") });
+  });
+});

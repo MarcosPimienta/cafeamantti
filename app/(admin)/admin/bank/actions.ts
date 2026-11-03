@@ -163,6 +163,7 @@ export async function importStatement(form: FormData) {
       if (/password/i.test(errorText(err))) throw new Error('El PDF tiene contraseña. Descárgalo de nuevo sin clave.');
       throw new Error('No pude leer el PDF del extracto.');
     }
+    if (!items.length) throw new Error('Este PDF es solo una imagen (impreso a PDF o escaneado), sin texto que leer. Descarga el extracto original desde Davivienda, sin imprimirlo.');
     const parsed = parseDavivienda(items);
     if (parsed.problems.length) throw new Error(parsed.problems.join(' · '));
 
