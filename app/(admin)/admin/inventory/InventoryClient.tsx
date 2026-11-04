@@ -510,7 +510,7 @@ function AdjustModal({
             <p className="text-sm text-foreground/50 mt-1">
               {tr("Stock:")}{" "}
               <span className="font-bold text-foreground">
-                {item.current_stock} {item.unit}
+                {fmtQty(Number(item.current_stock))} {item.unit}
               </span>
             </p>
           </div>
@@ -1435,7 +1435,7 @@ function InventarioTab({
                             : "text-foreground"
                         }`}
                       >
-                        {item.current_stock}
+                        {fmtQty(Number(item.current_stock))}
                       </span>
                     </td>
                     <td className={`${tdCls} text-right text-foreground/40 font-mono`}>
@@ -3562,7 +3562,7 @@ function ColdBrewTab({
     if (selectedCoffee && Number(selectedCoffee.current_stock) < inputNum) {
       setFeedback({
         type: "error",
-        msg: tr("Stock insuficiente de café tostado ({product_name}). Disponible: {current_stock} kg", { product_name: selectedCoffee.product_name, current_stock: selectedCoffee.current_stock }),
+        msg: tr("Stock insuficiente de café tostado ({product_name}). Disponible: {current_stock} kg", { product_name: selectedCoffee.product_name, current_stock: fmtQty(Number(selectedCoffee.current_stock)) }),
       });
       return;
     }
@@ -3724,7 +3724,7 @@ function ColdBrewTab({
                 />
                 {selectedColdBrew && (
                   <p className="text-xs text-foreground/50 mt-1">
-                    {tr("Stock actual:")}{" "}<span className="font-semibold text-foreground">{tr("{current_stock} uds", { current_stock: selectedColdBrew.current_stock })}</span>
+                    {tr("Stock actual:")}{" "}<span className="font-semibold text-foreground">{tr("{current_stock} uds", { current_stock: fmtQty(Number(selectedColdBrew.current_stock)) })}</span>
                   </p>
                 )}
               </div>
@@ -4505,7 +4505,7 @@ function ReempaqueTab({
               {w !== null && q > 0 && (
                 <p className="text-[10px] text-foreground/40 mt-1">
                   = {fmtKg(q * w)}
-                  {side === "origen" && it ? tr(" · stock {current_stock}", { current_stock: it.current_stock }) : ""}
+                  {side === "origen" && it ? tr(" · stock {current_stock}", { current_stock: fmtQty(Number(it.current_stock)) }) : ""}
                 </p>
               )}
             </div>

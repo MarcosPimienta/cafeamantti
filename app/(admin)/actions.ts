@@ -1128,15 +1128,8 @@ export async function adjustInventoryStock(
       created_by: user?.id || null,
     });
 
+  // The database moved the stock with the movement.
   if (movError) throw new Error(movError.message);
-
-  // Update current_stock
-  const { error: updateError } = await supabase
-    .from('inventory')
-    .update({ current_stock: newStock })
-    .eq('id', inventoryId);
-
-  if (updateError) throw new Error(updateError.message);
 
   revalidatePath('/admin/inventory');
 
@@ -1214,12 +1207,6 @@ export async function runProductionBatch(
   });
   if (salErr) throw new Error(salErr.message);
 
-  const { error: inpUpdErr } = await supabase
-    .from('inventory')
-    .update({ current_stock: newInputStock })
-    .eq('id', inputInventoryId);
-  if (inpUpdErr) throw new Error(inpUpdErr.message);
-
   // ── Entrada on output ────────────────────────────────────
   const { error: entErr } = await supabase.from('inventory_movements').insert({
     inventory_id: outputInventoryId,
@@ -1229,12 +1216,6 @@ export async function runProductionBatch(
     created_by: user?.id ?? null,
   });
   if (entErr) throw new Error(entErr.message);
-
-  const { error: outUpdErr } = await supabase
-    .from('inventory')
-    .update({ current_stock: newOutputStock })
-    .eq('id', outputInventoryId);
-  if (outUpdErr) throw new Error(outUpdErr.message);
 
   // ── Record the production batch ──────────────────────────
   const { error: batchErr } = await supabase.from('production_batches').insert({
@@ -1331,22 +1312,20 @@ async function _insertMovement(
   return data.id;
 }
 
+/**
+ * A product's stock after the movements just written. The database moves it
+ * with every movement (trigger inventory_movements_stock) and refuses one
+ * that leaves it below zero, so actions only read it back.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function _updateStockBy(supabase: any, inventoryId: string, delta: number): Promise<number> {
-  const { data, error: selErr } = await supabase
+async function _stockOf(supabase: any, inventoryId: string): Promise<number> {
+  const { data, error } = await supabase
     .from('inventory')
     .select('current_stock')
     .eq('id', inventoryId)
     .single();
-  if (selErr || !data) throw new Error('Producto no encontrado');
-  const newStock = Number(data.current_stock) + delta;
-  if (newStock < 0) throw new Error('El stock no puede ser negativo');
-  const { error: updErr } = await supabase
-    .from('inventory')
-    .update({ current_stock: newStock })
-    .eq('id', inventoryId);
-  if (updErr) throw new Error(updErr.message);
-  return newStock;
+  if (error || !data) throw new Error('Producto no encontrado');
+  return Number(data.current_stock);
 }
 
 /**
@@ -1647,7 +1626,7 @@ export async function createEntrada(
       unit_cost: unitCost ?? null,
     });
 
-    const newStock = await _updateStockBy(supabase, inventoryId, qty);
+    const newStock = await _stockOf(supabase, inventoryId);
     if (unitCost !== undefined && unitCost !== null) await refreshStandardCost(supabase, inventoryId);
     await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote, molienda: grind, unitCost });
     revalidatePath('/admin/inventory');
@@ -1714,7 +1693,7 @@ export async function createSalida(
     });
     mId = movementId;
 
-    const newStock = await _updateStockBy(supabase, inventoryId, -qty);
+    const newStock = await _stockOf(supabase, inventoryId);
     await logAuditAction("CREATE", "MOVEMENT", movementId, inventoryId, { qty: -qty, reason, responsable, molienda: grind, income_id: incomeId, sale_amount: sale?.amount });
     revalidatePath('/admin/inventory');
     if (incomeId) revalidatePath('/admin/cashflow');
@@ -1748,7 +1727,7 @@ export async function createProdConsumo(
       tab_source: 'prod_consumo',
     });
 
-    const newStock = await _updateStockBy(supabase, inventoryId, -qty);
+    const newStock = await _stockOf(supabase, inventoryId);
     await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty: -qty, entryType, responsable });
     revalidatePath('/admin/inventory');
     return { success: true, newStock };
@@ -1803,7 +1782,7 @@ export async function createProdAlta(
         entry_type: 'MAT',
         tab_source: 'prod_alta',
       });
-      const ns = await _updateStockBy(supabase, c.id, -c.qty);
+      const ns = await _stockOf(supabase, c.id);
       consumedResults.push({ id: c.id, newStock: ns });
       await logAuditAction("CREATE", "MOVEMENT", cId, c.id, { qty: -c.qty, reason: matReason });
     }
@@ -1816,7 +1795,7 @@ export async function createProdAlta(
       molienda: grind,
     });
 
-    const newStock = await _updateStockBy(supabase, inventoryId, qty);
+    const newStock = await _stockOf(supabase, inventoryId);
     await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, reason, molienda: grind, consumosCount: consumos.length });
     
     revalidatePath('/admin/inventory');
@@ -1866,8 +1845,7 @@ export async function createTrillaBatch(
       tab_source: 'trilla',
     });
     undo.push(() => supabase.from('inventory_movements').delete().eq('id', mId1));
-    const newPergaminoStock = await _updateStockBy(supabase, pergaminoInventoryId, -inputQtyKg);
-    undo.push(() => _updateStockBy(supabase, pergaminoInventoryId, inputQtyKg));
+    const newPergaminoStock = await _stockOf(supabase, pergaminoInventoryId);
 
     // Entrada: Verde
     const mId2 = await _insertMovement(supabase, user?.id ?? null, verdeInventoryId, 'entrada', outputQtyKg, {
@@ -1876,8 +1854,7 @@ export async function createTrillaBatch(
       tab_source: 'trilla',
     });
     undo.push(() => supabase.from('inventory_movements').delete().eq('id', mId2));
-    const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, outputQtyKg);
-    undo.push(() => _updateStockBy(supabase, verdeInventoryId, -outputQtyKg));
+    const newVerdeStock = await _stockOf(supabase, verdeInventoryId);
 
     // Production batch record
     const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
@@ -1956,8 +1933,7 @@ export async function createTostionBatch(
       tab_source: 'prod_consumo', // Keep using same tab_source or create 'tostion'
     });
     undo.push(() => supabase.from('inventory_movements').delete().eq('id', mId1));
-    const newVerdeStock = await _updateStockBy(supabase, verdeInventoryId, -inputQtyKg);
-    undo.push(() => _updateStockBy(supabase, verdeInventoryId, inputQtyKg));
+    const newVerdeStock = await _stockOf(supabase, verdeInventoryId);
 
     // Entrada: Tostado. Coffee leaves the roaster whole-bean — grinding is a
     // separate step — so the batch output is always Grano.
@@ -1968,8 +1944,7 @@ export async function createTostionBatch(
       molienda: isGrindTracked(tostado?.product_code) ? 'grano' : null,
     });
     undo.push(() => supabase.from('inventory_movements').delete().eq('id', mId2));
-    const newTostadoStock = await _updateStockBy(supabase, tostadoInventoryId, outputQtyKg);
-    undo.push(() => _updateStockBy(supabase, tostadoInventoryId, -outputQtyKg));
+    const newTostadoStock = await _stockOf(supabase, tostadoInventoryId);
 
     // Production batch record
     const { data: batchData, error: batchErr } = await supabase.from('production_batches').insert({
@@ -2060,7 +2035,7 @@ export async function createColdBrewBatch(
         entry_type: 'MP',
       });
     }
-    const newCoffeeStock = await _updateStockBy(supabase, roastedCoffeeInventoryId, -inputQtyKg);
+    const newCoffeeStock = await _stockOf(supabase, roastedCoffeeInventoryId);
 
     // 2. Entrada: Cold Brew 340ml
     let entradaId: string;
@@ -2080,7 +2055,7 @@ export async function createColdBrewBatch(
         lote: lote || undefined,
       });
     }
-    const newColdBrewStock = await _updateStockBy(supabase, coldBrewInventoryId, outputBottles);
+    const newColdBrewStock = await _stockOf(supabase, coldBrewInventoryId);
 
     // 3. Ratio: bottles per kg
     const bottlesPerKg = inputQtyKg > 0 ? outputBottles / inputQtyKg : 0;
@@ -2452,7 +2427,6 @@ export async function createRepackBatch(input: {
         molienda,
         repack_batch_id: batchId,
       });
-      await _updateStockBy(supabase, inventoryId, delta);
       applied.push({ movementId: mId, inventoryId, delta });
     };
 
@@ -2479,10 +2453,10 @@ export async function createRepackBatch(input: {
       sobranteKg,
     };
   } catch (err: unknown) {
-    // Undo in reverse order so stock never dips below zero on the way back.
+    // Undo in reverse order so stock never dips below zero on the way back
+    // (deleting a movement gives its stock back).
     for (const a of [...applied].reverse()) {
       try {
-        await _updateStockBy(supabase, a.inventoryId, -a.delta);
         await supabase.from('inventory_movements').delete().eq('id', a.movementId);
       } catch (undoErr) {
         console.error('createRepackBatch rollback error:', undoErr);
@@ -2553,12 +2527,13 @@ async function _deleteRepackBatch(batchId: string) {
     }
   }
 
-  // Take back what was added first, then return what was consumed.
+  // Take back what was added first, then return what was consumed (deleting
+  // a movement moves its stock back).
   const ordered = [...(movs ?? [])].sort((a, b) => Number(b.quantity) - Number(a.quantity));
   for (const m of ordered) {
-    await _updateStockBy(supabase, m.inventory_id, -Number(m.quantity));
+    const { error: delErr } = await supabase.from('inventory_movements').delete().eq('id', m.id);
+    if (delErr) throw new Error(delErr.message);
   }
-  await supabase.from('inventory_movements').delete().eq('repack_batch_id', batchId);
   const { error } = await supabase.from('repack_batches').delete().eq('id', batchId);
   if (error) throw new Error(error.message);
 
@@ -3023,8 +2998,8 @@ async function _deleteMovement(id: string) {
     .eq('id', id);
   if (error) throw new Error(error.message);
 
-  // Reverse the stock effect (negate the stored quantity)
-  const newStock = await _updateStockBy(supabase, mov.inventory_id, -Number(mov.quantity));
+  // Deleting it gave its stock back (or refused, if that stock was already used).
+  const newStock = await _stockOf(supabase, mov.inventory_id);
   // A paid-sale salida takes its cashflow income with it.
   if (mov.income_id) {
     await _deleteSaleIncome(supabase, user?.id ?? null, mov.income_id);
@@ -3076,9 +3051,9 @@ export async function updateMovement(
     .eq('id', id);
   if (error) throw new Error(error.message);
 
-  // Apply only the difference to stock
-  const delta = newQty - Number(mov.quantity);
-  const newStock = await _updateStockBy(supabase, mov.inventory_id, delta);
+  // The database applied only the difference to the stock (and refused the
+  // edit if it left the product below zero).
+  const newStock = await _stockOf(supabase, mov.inventory_id);
 
   // Keep the linked sale income on the same payment date, quantity and value.
   if (mov.income_id) {
@@ -3179,8 +3154,8 @@ async function _updateProductionBatch(batchId: string, edit: ProductionBatchEdit
     if (movErr) throw new Error(movErr.message);
   }
 
-  const newInputStock = dIn ? await _updateStockBy(supabase, batch.input_inventory_id, -dIn) : Number(input.current_stock);
-  const newOutputStock = dOut ? await _updateStockBy(supabase, batch.output_inventory_id, dOut) : Number(output.current_stock);
+  const newInputStock = await _stockOf(supabase, batch.input_inventory_id);
+  const newOutputStock = await _stockOf(supabase, batch.output_inventory_id);
 
   await logAuditAction("UPDATE", batch.process_type === 'trilla' ? 'TRILLA_BATCH' : 'TOSTION_BATCH', batchId, undefined, {
     before: { input: Number(batch.input_quantity_kg), output: Number(batch.output_quantity_kg), date: batch.movement_date, notes: batch.notes },
@@ -3229,8 +3204,11 @@ async function _deleteProductionBatch(batchId: string) {
     );
   }
 
-  // Delete any linked movements (if production_batch_id column exists)
-  await supabase.from('inventory_movements').delete().eq('production_batch_id', batchId);
+  // Deleting its movements gives back the input and takes out the output.
+  // A batch whose movements were never linked only loses its record: the
+  // stock keeps following those movements, which stay in the Kardex.
+  const { error: movErr } = await supabase.from('inventory_movements').delete().eq('production_batch_id', batchId);
+  if (movErr) throw new Error(movErr.message);
 
   const { error } = await supabase
     .from('production_batches')
@@ -3238,13 +3216,8 @@ async function _deleteProductionBatch(batchId: string) {
     .eq('id', batchId);
   if (error) throw new Error(error.message);
 
-  // Reverse: add back input, subtract output
-  const newInputStock = await _updateStockBy(
-    supabase, batch.input_inventory_id, Number(batch.input_quantity_kg)
-  );
-  const newOutputStock = await _updateStockBy(
-    supabase, batch.output_inventory_id, -Number(batch.output_quantity_kg)
-  );
+  const newInputStock = await _stockOf(supabase, batch.input_inventory_id);
+  const newOutputStock = await _stockOf(supabase, batch.output_inventory_id);
 
   const logEntityType =
     batch.process_type === 'trilla'
@@ -3349,10 +3322,7 @@ export async function migrateLegacyTostion() {
       }
     }
 
-    if (successCount > 0) {
-      const finalNewStock = Number(caft.current_stock) + totalKgs;
-      await supabase.from('inventory').update({ current_stock: finalNewStock }).eq('id', caft.id);
-    }
+    // Each entrada inserted above already moved the stock.
 
     revalidatePath('/admin/inventory');
     return { success: true, count: successCount, totalKgs, message: `Procesados ${successCount} registros.` };
@@ -3435,10 +3405,7 @@ export async function migrateLegacyAltas() {
       successCount++;
     }
 
-    if (totalKgsToDeduct > 0) {
-      const finalNewStock = Number(caft.current_stock) - totalKgsToDeduct;
-      await supabase.from('inventory').update({ current_stock: finalNewStock }).eq('id', caft.id);
-    }
+    // Each salida inserted above already moved the stock.
 
     revalidatePath('/admin/inventory');
     return { success: true, count: successCount, totalKgs: -totalKgsToDeduct, message: `Deducidos ${totalKgsToDeduct.toFixed(2)} kg de CAFT-001.` };
@@ -3535,7 +3502,7 @@ export async function createInventoryProduct(data: {
       reason: 'Saldo inicial al crear el producto',
       tab_source: 'entrada',
     });
-    newItem.current_stock = await _updateStockBy(supabase, newItem.id, opening);
+    newItem.current_stock = await _stockOf(supabase, newItem.id);
     await logAuditAction("CREATE", "MOVEMENT", mId, newItem.id, { qty: opening, reason: 'Saldo inicial' });
   }
 

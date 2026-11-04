@@ -251,18 +251,19 @@ export async function updateBill(billId: string, input: BillInput) {
       .eq('id', billId);
     if (upErr) throw upErr;
 
-    // Old entradas out, new ones in: the net change is the difference checked above.
-    for (const m of oldMovs ?? []) {
-      const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', m.inventory_id).single();
-      await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) - Number(m.quantity) }).eq('id', m.inventory_id);
-      await supabase.from('inventory_movements').delete().eq('id', m.id);
-    }
+    // New entradas in, then the old ones out (deleting a movement takes its
+    // stock back): the net change is the difference checked above, and doing
+    // it in this order never leaves a product below zero on the way.
     const stocked = await stockBillLines(supabase, userId, billId, {
       lines,
       date: input.issueDate,
       label: `Compra · ${supplier.name} ${prefix}${bill.provider_number}`,
       supplier: supplier.name,
     });
+    for (const m of oldMovs ?? []) {
+      const { error: delErr } = await supabase.from('inventory_movements').delete().eq('id', m.id);
+      if (delErr) throw delErr;
+    }
     const sent = await sendBillToSiigo(supabase, userId, billId);
     refresh();
     revalidatePath('/admin/inventory');
@@ -330,9 +331,6 @@ async function stockBillLines(
       if (movErr && /purchase_bill_id/.test(movErr.message)) throw new Error(MIGRATION_INVENTORY_HINT);
       if (movErr && /unit_cost/.test(movErr.message)) throw new Error('Falta aplicar la migración 20261107000000_inventory_entry_cost.sql');
       if (movErr || !mov) throw movErr ?? new Error('No se pudo registrar la entrada.');
-      const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', p.id).single();
-      const { error: stockErr } = await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) + qty }).eq('id', p.id);
-      if (stockErr) throw stockErr;
       done.push({ movementId: mov.id, inventoryId: p.id, qty });
       await refreshStandardCost(supabase, p.id);
       stocked.push(`${qty} ${p.unit ?? ''} ${p.product_name}`.replace(/\s+/g, ' ').trim());
@@ -340,8 +338,6 @@ async function stockBillLines(
   } catch (err) {
     for (const d of done.reverse()) {
       await supabase.from('inventory_movements').delete().eq('id', d.movementId);
-      const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', d.inventoryId).single();
-      await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) - d.qty }).eq('id', d.inventoryId);
     }
     throw err;
   }
@@ -360,9 +356,8 @@ async function unstockBill(supabase: Supabase, billId: string) {
     }
   }
   for (const m of movs) {
-    const p = (products ?? []).find((x) => x.id === m.inventory_id);
-    await supabase.from('inventory').update({ current_stock: Number(p?.current_stock ?? 0) - Number(m.quantity) }).eq('id', m.inventory_id);
-    await supabase.from('inventory_movements').delete().eq('id', m.id);
+    const { error: delErr } = await supabase.from('inventory_movements').delete().eq('id', m.id);
+    if (delErr) throw delErr;
   }
 }
 
@@ -605,8 +600,6 @@ async function restock(supabase: Supabase, movements: Record<string, unknown>[])
   for (const m of movements) {
     const { error } = await supabase.from('inventory_movements').insert(m);
     if (error) throw error;
-    const { data: cur } = await supabase.from('inventory').select('current_stock').eq('id', m.inventory_id).single();
-    await supabase.from('inventory').update({ current_stock: Number(cur?.current_stock ?? 0) + Number(m.quantity) }).eq('id', m.inventory_id);
     await refreshStandardCost(supabase, m.inventory_id as string);
   }
 }

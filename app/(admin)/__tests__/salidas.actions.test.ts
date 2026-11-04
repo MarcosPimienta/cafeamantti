@@ -78,7 +78,7 @@ describe("createSalida — paid sale (stock and cash together)", () => {
 
   it("if stock would go negative, neither the movement nor the income survive", async () => {
     const res = await createSalida("inv-cold", 50, "2026-10-05", undefined, undefined, undefined, { amount: 600000 });
-    expect(res).toMatchObject({ success: false, error: expect.stringMatching(/negativo/) });
+    expect(res).toMatchObject({ success: false, error: expect.stringMatching(/Stock insuficiente/) });
     expect(stock("inv-cold")).toBe(12);
     expect(db.rows("inventory_movements")).toHaveLength(0);
     expect(db.rows("cashflow_incomes")).toHaveLength(0);
@@ -127,6 +127,44 @@ describe("editing and deleting a paid sale keeps cash in sync", () => {
     expect(db.rows("inventory_movements")).toHaveLength(0);
     expect(db.rows("cashflow_incomes")).toHaveLength(0);
     expect(db.rows("cashflow_audit_logs").map((l) => l.action_type)).toEqual(["CREATE_INCOME", "DELETE_INCOME"]);
+  });
+});
+
+describe("stock always matches the Kardex", () => {
+  const kardex = (id: string) => db.rows("inventory_movements").filter((m) => m.inventory_id === id && m.era === "v2").reduce((s, m) => s + Number(m.quantity), 0);
+
+  it("an entrada typed in grams and fixed later leaves stock equal to its movements", async () => {
+    db.rows("inventory_movements").push({ id: "e1", inventory_id: "inv-cold", type: "entrada", quantity: 4663, era: "v2" });
+    db.byId("inventory", "inv-cold")!.current_stock = 4663;
+    await updateMovement("e1", 4.66, "2026-10-01");
+    expect(stock("inv-cold")).toBeCloseTo(4.66);
+    expect(stock("inv-cold")).toBeCloseTo(kardex("inv-cold"));
+  });
+
+  it("an edit that would leave the product below zero is refused whole", async () => {
+    await createSalida("inv-cold", 10, "2026-10-05");
+    const [m] = db.rows("inventory_movements");
+    await expect(updateMovement(m.id, -20, "2026-10-05")).rejects.toThrow(/Stock insuficiente de "Cold Brew 340ml"/);
+    expect(db.byId("inventory_movements", m.id)!.quantity).toBe(-10);
+    expect(stock("inv-cold")).toBe(2);
+  });
+
+  it("deleting an entrada whose stock was already used is refused, and the entrada stays", async () => {
+    db.byId("inventory", "inv-cold")!.current_stock = 0;
+    db.rows("inventory_movements").push({ id: "e1", inventory_id: "inv-cold", type: "entrada", quantity: 5, era: "v2" });
+    db.byId("inventory", "inv-cold")!.current_stock = 5;
+    await createSalida("inv-cold", 4, "2026-10-05");
+    expect(await deleteMovement("e1")).toMatchObject({ success: false, error: expect.stringMatching(/Stock insuficiente/) });
+    expect(db.byId("inventory_movements", "e1")).toBeDefined();
+    expect(stock("inv-cold")).toBe(1);
+  });
+
+  it("editing or deleting a movement from before the September 2026 cutover (v1) does not touch today's stock", async () => {
+    db.rows("inventory_movements").push({ id: "old", inventory_id: "inv-cold", type: "entrada", quantity: 845, era: "v1" });
+    await updateMovement("old", 8.45, "2026-05-03");
+    expect(stock("inv-cold")).toBe(12);
+    await deleteMovement("old");
+    expect(stock("inv-cold")).toBe(12);
   });
 });
 

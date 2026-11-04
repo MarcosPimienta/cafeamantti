@@ -66,28 +66,22 @@ export async function findOrderMovements(supabase: DB, orderId: string): Promise
   return out;
 }
 
-async function changeStock(supabase: DB, inventoryId: string, delta: number, allowNegative: boolean): Promise<number> {
-  const { data, error } = await supabase.from("inventory").select("current_stock").eq("id", inventoryId).single();
-  if (error || !data) throw new Error("Producto no encontrado");
-  const next = Number(data.current_stock) + delta;
-  if (next < 0 && !allowNegative) throw new Error("El stock no puede ser negativo");
-  const { error: updErr } = await supabase.from("inventory").update({ current_stock: next }).eq("id", inventoryId);
-  if (updErr) throw new Error(updErr.message);
-  return next;
-}
-
 /** The order has an invoice that is not annulled (false while the invoices migration is missing). */
 export async function hasLiveInvoice(supabase: DB, orderId: string): Promise<boolean> {
   const { data, error } = await supabase.from("sales_invoices").select("id").eq("order_id", orderId).neq("status", "anulada").limit(1);
   return !error && (data ?? []).length > 0;
 }
 
-/** Gives back every unit an order took and deletes its movements. */
+/**
+ * Gives back every unit an order took by deleting its movements: the
+ * database moves the stock with each movement (trigger
+ * inventory_movements_stock), so only what was really taken comes back.
+ */
 export async function revertOrderStock(supabase: DB, orderId: string): Promise<Movement[]> {
   const movements = await findOrderMovements(supabase, orderId);
-  for (const m of movements) await changeStock(supabase, m.inventory_id, -Number(m.quantity), true);
   if (movements.length) {
-    await supabase.from("inventory_movements").delete().in("id", movements.map((m) => m.id));
+    const { error } = await supabase.from("inventory_movements").delete().in("id", movements.map((m) => m.id));
+    if (error) throw new Error(error.message);
   }
   return movements;
 }
@@ -145,28 +139,54 @@ export async function syncOrderStock(supabase: DB, opts: SyncOptions): Promise<"
   const reason = orderMovementReason(orderId, order?.source);
   const movementDate = new Date().toISOString();
 
-  for (const item of linked) {
-    const qty = Number(item.quantity);
-    if (!(qty > 0)) continue;
-    const { data: mov, error } = await supabase
-      .from("inventory_movements")
-      .insert({
-        inventory_id: item.inventory_id,
-        type: "salida",
-        quantity: -qty,
-        reason,
-        created_by: userId,
-        movement_date: movementDate,
-        tab_source: "salida",
-        order_id: orderId,
-      })
-      .select("id")
-      .single();
-    if (error) throw new Error(error.message);
-    await changeStock(supabase, item.inventory_id, -qty, allowNegative);
-    await onMovement?.({ id: mov.id, inventory_id: item.inventory_id, quantity: -qty, reason, reverted: false });
+  const lines = linked.map((it) => ({ inventoryId: it.inventory_id, qty: Number(it.quantity) })).filter((l) => l.qty > 0);
+  // The database records an order's salida even when stock is short (a paid
+  // sale happened anyway), so the check is here: every product before any
+  // movement is written.
+  if (!allowNegative) await assertStockFor(supabase, lines);
+
+  const written: { id: string; inventory_id: string; quantity: number }[] = [];
+  try {
+    for (const l of lines) {
+      const { data: mov, error } = await supabase
+        .from("inventory_movements")
+        .insert({
+          inventory_id: l.inventoryId,
+          type: "salida",
+          quantity: -l.qty,
+          reason,
+          created_by: userId,
+          movement_date: movementDate,
+          tab_source: "salida",
+          order_id: orderId,
+        })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      written.push({ id: mov.id, inventory_id: l.inventoryId, quantity: -l.qty });
+    }
+  } catch (err) {
+    // All the order's products leave together or none does.
+    if (written.length) await supabase.from("inventory_movements").delete().in("id", written.map((m) => m.id));
+    throw err;
   }
+  for (const m of written) await onMovement?.({ ...m, reason, reverted: false });
   return "deducted";
+}
+
+/** Throws unless every product has the quantity an order takes (summed per product). */
+async function assertStockFor(supabase: DB, lines: { inventoryId: string; qty: number }[]) {
+  const need = new Map<string, number>();
+  for (const l of lines) need.set(l.inventoryId, (need.get(l.inventoryId) ?? 0) + l.qty);
+  if (!need.size) return;
+  const { data, error } = await supabase.from("inventory").select("id, product_name, current_stock").in("id", [...need.keys()]);
+  if (error) throw new Error(error.message);
+  for (const p of (data ?? []) as { id: string; product_name: string; current_stock: number }[]) {
+    const qty = need.get(p.id) ?? 0;
+    if (Number(p.current_stock) < qty - 1e-9) {
+      throw new Error(`Stock insuficiente de "${p.product_name}": hay ${Number(p.current_stock)}, se necesitan ${qty}.`);
+    }
+  }
 }
 
 /**
@@ -198,7 +218,6 @@ export async function restockCreditNote(
       credit_note_id: opts.creditNoteId,
     });
     if (movErr) throw new Error(movErr.message);
-    await changeStock(supabase, l.inventory_id, qty, true);
     moved++;
   }
   return moved;

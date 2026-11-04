@@ -49,8 +49,8 @@ async function moveStock(supabase: DB, userId: string | null, inventoryId: strin
     movement_date: date,
     tab_source: delta > 0 ? 'entrada' : 'salida',
   });
+  // The database moved the stock with the movement.
   if (movErr) throw new Error(movErr.message);
-  await supabase.from('inventory').update({ current_stock: next }).eq('id', inventoryId);
 }
 
 async function loadUnit(supabase: DB, unitId: string) {

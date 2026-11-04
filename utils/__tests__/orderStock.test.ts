@@ -71,11 +71,28 @@ describe("syncOrderStock", () => {
 
   it("refuses to go negative unless the payment already happened", async () => {
     db.byId("order_items", "i1")!.quantity = 9;
-    await expect(syncOrderStock(sb, { orderId: "web-0001", status: "paid", userId: null })).rejects.toThrow(/negativo/);
-    db.tables.inventory_movements = [];
-    db.byId("inventory", "inv-250")!.current_stock = 5;
+    await expect(syncOrderStock(sb, { orderId: "web-0001", status: "paid", userId: null })).rejects.toThrow(/Stock insuficiente/);
+    // Nothing half done: no salida without its deduction.
+    expect(db.rows("inventory_movements")).toHaveLength(0);
+    expect(stock()).toBe(5);
     await syncOrderStock(sb, { orderId: "web-0001", status: "paid", userId: null, allowNegative: true });
     expect(stock()).toBe(-4); // the shortfall shows up in the Kardex
+  });
+
+  it("an order leaves whole or not at all: one short product writes no salida for the others", async () => {
+    db.rows("inventory").push({ id: "inv-500", product_code: "CAFT-500G", product_name: "Premium 500 g", current_stock: 1 });
+    db.rows("order_items").push({ id: "i2", order_id: "web-0001", inventory_id: "inv-500", quantity: 3 });
+    await expect(syncOrderStock(sb, { orderId: "web-0001", status: "paid", userId: null })).rejects.toThrow(/Premium 500 g/);
+    expect(db.rows("inventory_movements")).toHaveLength(0);
+    expect(stock()).toBe(5);
+  });
+
+  it("reverting an order gives back only what it really took, even if reverted twice", async () => {
+    await syncOrderStock(sb, { orderId: "web-0001", status: "paid", userId: null });
+    expect(stock()).toBe(3);
+    await revertOrderStock(sb, "web-0001");
+    await revertOrderStock(sb, "web-0001");
+    expect(stock()).toBe(5);
   });
 
   it("orders without inventory links are left alone", async () => {

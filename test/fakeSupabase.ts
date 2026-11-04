@@ -82,6 +82,46 @@ const DEFAULTS: Record<string, () => Row> = {
 
 export type FakeError = { message: string; code?: string };
 
+const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
+
+/**
+ * Mirrors the inventory_movements_stock trigger: each v2 movement written
+ * (inserted, edited, deleted) moves its product's current_stock, and a
+ * movement that leaves a product below zero is refused (except an order's
+ * salida). Gets the (before, after) rows of the statement; on refusal the
+ * stock is put back and the error returned, for the caller to undo the write.
+ */
+function moveStock(db: FakeDB, pairs: [Row | null, Row | null][]): FakeError | null {
+  const undo: (() => void)[] = [];
+  const isV2 = (r: Row | null) => !!r && (r.era ?? "v2") === "v2";
+  const apply = (row: Row, delta: number): FakeError | null => {
+    const item = db.byId("inventory", row.inventory_id as string);
+    if (!item) return null;
+    const before = item.current_stock;
+    item.current_stock = round6(Number(before ?? 0) + delta);
+    undo.push(() => (item.current_stock = before));
+    if (delta < 0 && (item.current_stock as number) < 0 && !row.order_id) {
+      const had = round6((item.current_stock as number) - delta);
+      return { message: `Stock insuficiente de "${item.product_name}": hay ${had}, se necesitan ${round6(-delta)}.`, code: "23514" };
+    }
+    return null;
+  };
+  for (const [o, n] of pairs) {
+    let dOld = isV2(o) ? -Number(o!.quantity) : 0;
+    let dNew = isV2(n) ? Number(n!.quantity) : 0;
+    if (o && n && o.inventory_id === n.inventory_id) {
+      dNew += dOld;
+      dOld = 0;
+    }
+    const err = (dOld && apply(o!, dOld)) || (dNew && apply(n!, dNew)) || null;
+    if (err) {
+      for (const f of undo.reverse()) f();
+      return err;
+    }
+  }
+  return null;
+}
+
 export class FakeDB {
   tables: Record<string, Row[]> = {};
   private seq = 0;
@@ -318,19 +358,41 @@ class Query implements PromiseLike<{ data: any; error: FakeError | null; count?:
         this.db.rows(this.table).push(row);
         written.push(row);
       }
+      if (this.table === "inventory_movements") {
+        const err = moveStock(this.db, written.map((r) => [null, r]));
+        if (err) {
+          this.db.tables[this.table] = this.db.rows(this.table).filter((r) => !written.includes(r));
+          return { data: null, error: err };
+        }
+      }
       const data = written.map((r) => this.embed(r));
       return this.returning || this.mode !== "many" ? this.finish(data) : { data: null, error: null };
     }
 
     if (this.op === "update") {
       const hits = this.matches();
+      const before = hits.map((r) => ({ ...r }));
       for (const r of hits) Object.assign(r, this.payload);
+      if (this.table === "inventory_movements") {
+        const err = moveStock(this.db, hits.map((r, i) => [before[i], r]));
+        if (err) {
+          hits.forEach((r, i) => {
+            for (const k of Object.keys(r)) delete r[k];
+            Object.assign(r, before[i]);
+          });
+          return { data: null, error: err };
+        }
+      }
       const data = hits.map((r) => this.embed(r));
       return this.returning || this.mode !== "many" ? this.finish(data) : { data: null, error: null };
     }
 
     if (this.op === "delete") {
       const hits = new Set(this.matches());
+      if (this.table === "inventory_movements") {
+        const err = moveStock(this.db, [...hits].map((r) => [r, null]));
+        if (err) return { data: null, error: err };
+      }
       this.db.tables[this.table] = this.db.rows(this.table).filter((r) => !hits.has(r));
       return { data: null, error: null };
     }

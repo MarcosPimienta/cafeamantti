@@ -274,26 +274,16 @@ export async function executeSiigoImportAction(
               movement_date: orderTimestamp,
               tab_source: 'salida',
               era: 'v2',
+              // Linked to its order: recorded even if stock is short (the sale
+              // already happened), and given back if the order is deleted.
+              order_id: orderRow.id,
             })
             .select('id')
             .single();
 
+          // The database moved the stock with the movement.
+          if (movErr) errors.push(`Factura ${invoiceNum}: no se descontó ${item.matched_product_name || item.raw_name} del inventario (${movErr.message}).`);
           if (!movErr && movData) {
-            // Update stock
-            const { data: invRow } = await supabase
-              .from('inventory')
-              .select('current_stock')
-              .eq('id', item.matched_inventory_id)
-              .single();
-
-            if (invRow) {
-              const newStock = Number(invRow.current_stock) - Number(item.quantity);
-              await supabase
-                .from('inventory')
-                .update({ current_stock: newStock })
-                .eq('id', item.matched_inventory_id);
-            }
-
             await logAuditAction("CREATE", "MOVEMENT", movData.id, item.matched_inventory_id, {
               qty: -Number(item.quantity),
               reason: movementReason,

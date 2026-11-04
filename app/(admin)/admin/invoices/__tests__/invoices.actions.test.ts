@@ -66,7 +66,7 @@ describe("credit sales invoice", () => {
 
   it("without enough stock no invoice is left behind", async () => {
     db.byId("inventory", "inv1")!.current_stock = 1;
-    expect(await createInvoice(ORDER, { terms: "credito" })).toMatchObject({ success: false, error: "El stock no puede ser negativo" });
+    expect(await createInvoice(ORDER, { terms: "credito" })).toMatchObject({ success: false, error: expect.stringMatching(/Stock insuficiente de "Premium 250 g"/) });
     expect(db.rows("sales_invoices")).toHaveLength(0);
   });
 
