@@ -116,15 +116,18 @@ describe("groupOrdersByStatus", () => {
     expect(isPaid({ status: "delivered" })).toBe(true); // before the payment migration
   });
 
-  it("a delivery needs a factura when the client has a document, it has a value and no Siigo invoice", () => {
+  it("an order needs a factura when it has a value and no invoice, also for consumidor final", () => {
     const withNit = { name: "GRUPO PROFITNESS", document_number: "901656887" };
     expect(needsInvoice(order({ total_amount: 100, client: withNit }))).toBe(true);
     expect(needsInvoice(order({ total_amount: 100, client: [withNit] }))).toBe(true);
+    expect(needsInvoice(order({ total_amount: 100, client: { name: "Elisa Uribe", document_number: null } }))).toBe(true);
+    expect(needsInvoice(order({ total_amount: 100 }))).toBe(true);
     expect(needsInvoice(order({ total_amount: 100, client: withNit, siigo_invoice: "FV-2-726" }))).toBe(false);
     expect(needsInvoice(order({ total_amount: 100, client: withNit, shipping_info: { siigo_invoice: "FV-1" } }))).toBe(false);
+    // An invoice made in the app counts even while it is a draft not yet in Siigo.
+    expect(needsInvoice(order({ total_amount: 100, invoice: { siigo_name: null, status: "borrador" } }))).toBe(false);
     expect(needsInvoice(order({ total_amount: 0, client: withNit }))).toBe(false); // courtesy
-    expect(needsInvoice(order({ total_amount: 100, client: { name: "Elisa Uribe", document_number: null } }))).toBe(false); // consumidor final
-    expect(needsInvoice(order({ total_amount: 100 }))).toBe(false);
+    expect(needsInvoice(order({ total_amount: 100, status: "cancelled" }))).toBe(false);
   });
 
   it("closed orders (delivered, paid, invoiced) leave the board unless asked; owed ones stay however old", () => {

@@ -10,7 +10,7 @@ export default async function AdminOrdersPage() {
   if (!isAdmin) redirect('/dashboard');
 
   const supabase = await createClient();
-  const [{ data: orders }, { data: inventory }, crmClients, { data: lastNotification }] = await Promise.all([
+  const [{ data: orders }, { data: inventory }, crmClients, { data: lastNotification }, { data: invoices }] = await Promise.all([
     supabase
       .from('orders')
       .select(`
@@ -34,12 +34,15 @@ export default async function AdminOrdersPage() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Live invoices made in the app: an order without one shows "Sin factura".
+    supabase.from('sales_invoices').select('order_id, siigo_name, status').neq('status', 'anulada'),
   ]);
 
   // Each order shows its sede (from the clients' sedes, so no join is needed).
   const siteNames = new Map<string, string>();
   for (const c of crmClients) for (const site of (c.sites ?? []) as { id: string; name: string }[]) siteNames.set(site.id, site.name);
-  const withSites = (orders ?? []).map((o) => ({ ...o, site_name: o.site_id ? siteNames.get(o.site_id) ?? null : null }));
+  const invoiceOf = new Map(((invoices ?? []) as { order_id: string; siigo_name: string | null; status: string }[]).map((i) => [i.order_id, { siigo_name: i.siigo_name, status: i.status }]));
+  const withSites = (orders ?? []).map((o) => ({ ...o, site_name: o.site_id ? siteNames.get(o.site_id) ?? null : null, invoice: invoiceOf.get(o.id) ?? null }));
 
   return (
     <OrdersBoard

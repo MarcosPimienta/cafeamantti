@@ -124,6 +124,7 @@ export default function OrdersBoard({
   const [search, setSearch] = useState("");
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [onlyUnpaid, setOnlyUnpaid] = useState(false);
+  const [onlyUninvoiced, setOnlyUninvoiced] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   // ?order=<id> opens that order's panel (links from Facturas).
@@ -150,6 +151,7 @@ export default function OrdersBoard({
     return orders.filter((o) => {
       if (onlyOverdue && dueState(o, today) !== "overdue") return false;
       if (onlyUnpaid && (isPaid(o) || o.status === "cancelled")) return false;
+      if (onlyUninvoiced && !needsInvoice(o)) return false;
       if (!term) return true;
       const hay = [
         o.id,
@@ -165,7 +167,7 @@ export default function OrdersBoard({
         .toLowerCase();
       return hay.includes(term);
     });
-  }, [orders, search, onlyOverdue, onlyUnpaid, today]);
+  }, [orders, search, onlyOverdue, onlyUnpaid, onlyUninvoiced, today]);
 
   const byColumn = useMemo(
     // A search also looks through closed orders: that is how the history is found.
@@ -181,6 +183,8 @@ export default function OrdersBoard({
   // Owed: not paid yet, whatever the delivery stage (with IVA when it goes on top).
   const unpaid = orders.filter((o) => o.status !== "cancelled" && !isPaid(o));
   const unpaidValue = unpaid.reduce((s, o) => s + Number(o.total_amount || 0) + Number(o.tax_amount || 0), 0);
+  const uninvoiced = orders.filter(needsInvoice);
+  const uninvoicedValue = uninvoiced.reduce((s, o) => s + Number(o.total_amount || 0), 0);
   const visibleColumns = COLUMNS.filter((c) => c.id !== "cancelled" || showCancelled);
   const activeMobileCol = visibleColumns.some((c) => c.id === mobileCol) ? mobileCol : visibleColumns[0].id;
   const mobileOrders = byColumn.get(activeMobileCol) ?? [];
@@ -298,6 +302,20 @@ export default function OrdersBoard({
       </div>
 
       {/* Summary */}
+      {uninvoiced.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setOnlyUninvoiced(!onlyUninvoiced)}
+          className={`w-full flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-left text-sm ${onlyUninvoiced ? "border-red-300 bg-red-100 text-red-800" : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"}`}
+        >
+          <span className="flex items-center gap-2 font-bold">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {tr("{n} pedido(s) sin factura · {total}", { n: String(uninvoiced.length), total: cop(uninvoicedValue) })}
+          </span>
+          <span className="text-xs font-bold underline">{onlyUninvoiced ? tr("Ver todos los pedidos") : tr("Ver solo los que faltan por facturar")}</span>
+        </button>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat label={tr("Por entregar")} value={String(pending.length)} icon={<Package className="w-4 h-4" />} />
         <Stat
@@ -643,8 +661,11 @@ function Card({
         ) : (
           <span className="text-foreground/40">{relDays(order.created_at)}</span>
         )}
-        {order.status === "delivered" && needsInvoice(order) && (
-          <span className="font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded">{tr("Falta facturar")}</span>
+        {needsInvoice(order) && (
+          <span className="inline-flex items-center gap-0.5 font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded"><AlertTriangle className="w-3 h-3" />{tr("Sin factura")}</span>
+        )}
+        {order.invoice && !order.invoice.siigo_name && (
+          <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">{tr("Factura por enviar")}</span>
         )}
         {city && <span className="text-foreground/40">· {city}</span>}
         {due && order.delivery_due_date && (

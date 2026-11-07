@@ -21,6 +21,7 @@ import {
   markDateAsNoMovements,
   updateExpenseDirect, updateIncomeDirect,
   getFixedAssets,
+  getLinkableOrders, setIncomeOrders, type LinkableOrder,
 } from "./actions";
 import { fixedAssetRegister, type FixedAssetInput, type PLReportResult } from "./calculations";
 import { expenseLedger, fixedAssetSheets, incomeLedger, type ExportFilters } from "./exports";
@@ -619,6 +620,9 @@ function IncomeModal({
   const [isPending,   startTransition] = useTransition();
   const [successMessage, setSuccessMessage] = useState("");
   const [shouldClose, setShouldClose] = useState(true);
+  // The orders (invoices) this income pays: Flujo de Caja then doesn't count them a second time.
+  const initialLinked: string[] = (incomeToEdit?.linked_orders ?? []).map((o: LinkableOrder) => o.id);
+  const [linked, setLinked] = useState<string[]>(initialLinked);
 
   const isWebSale = category === "Ventas Web";
 
@@ -655,6 +659,15 @@ function IncomeModal({
         ? await updateIncomeDirect(incomeToEdit.id, payload)
         : await createIncomeDirect(date, payload);
 
+      if (!res.error) {
+        const id: string | undefined = incomeToEdit?.id ?? (res as { data?: { id?: string } }).data?.id;
+        const changed = linked.length !== initialLinked.length || linked.some((x) => !initialLinked.includes(x));
+        if (id && changed) {
+          const link = await setIncomeOrders(id, linked);
+          if (link.error) alert(tr("El ingreso se guardó, pero no se pudo ligar a las facturas: {error}", { error: tr.msg(link.error) }));
+        }
+      }
+
       if (res.error) {
         alert(tr.msg(res.error));
       } else {
@@ -669,6 +682,7 @@ function IncomeModal({
           setShipping("");
           setTax("");
           setImageUrl(null);
+          setLinked([]);
           setSuccessMessage(tr("¡Ingreso registrado con éxito!"));
           setTimeout(() => setSuccessMessage(""), 4000);
         }
@@ -761,6 +775,8 @@ function IncomeModal({
             </div>
           </div>
 
+          <LinkedOrdersPicker date={date} incomeId={incomeToEdit?.id ?? null} gross={Number(gross || 0)} value={linked} onChange={setLinked} />
+
           <p className="text-[11px] text-foreground/50 bg-[#f9f7f0] rounded-xl px-4 py-3 border border-foreground/5">
             {tr("Los ingresos del flujo de caja no afectan el inventario. Para registrar una venta de producto, usa")}{" "}<strong>{tr("Inventario → Salidas")}</strong>{" "}{tr("y marca la salida como venta pagada: se descuenta el stock y se crea el ingreso aquí.")}
           </p>
@@ -832,6 +848,93 @@ function IncomeModal({
           )}
         </form>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Which orders (invoices) a manual income pays — a transfer typed here that
+ * was later invoiced. Linked orders stop counting by themselves in Flujo de
+ * Caja, so the sale is counted once. One transfer can pay several.
+ */
+function LinkedOrdersPicker({ date, incomeId, gross, value, onChange }: {
+  date: string;
+  incomeId: string | null;
+  gross: number;
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const tr = useTr();
+  const [open, setOpen] = useState(value.length > 0);
+  // The answer is kept with the date it was asked for: a new date shows "buscando" until its own answer arrives.
+  const [loaded, setLoaded] = useState<{ key: string; orders: LinkableOrder[]; error: string } | null>(null);
+  const [query, setQuery] = useState("");
+  const key = `${date}|${incomeId ?? ""}`;
+
+  useEffect(() => {
+    if (!open || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    let alive = true;
+    getLinkableOrders(date, incomeId).then((res) => {
+      if (alive) setLoaded({ key: `${date}|${incomeId ?? ""}`, orders: res.orders, error: res.error ?? "" });
+    });
+    return () => { alive = false; };
+  }, [open, date, incomeId]);
+  const orders = loaded?.key === key ? loaded.orders : null;
+  const error = loaded?.key === key ? loaded.error : "";
+
+  const chosen = (orders ?? []).filter((o) => value.includes(o.id));
+  const sum = chosen.reduce((s, o) => s + o.total, 0);
+  const q = query.trim().toLowerCase();
+  const shown = (orders ?? []).filter((o) => value.includes(o.id) || !q || [o.invoice ?? "", o.customer, String(o.total), o.id].some((t) => t.toLowerCase().includes(q)));
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="w-full text-left text-xs font-bold text-[#9a7a3c] hover:underline">
+        + {tr("¿Este ingreso es el pago de una factura o pedido? Lígalo para no contarlo dos veces")}
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border border-foreground/10 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-widest text-foreground/50">{tr("Facturas o pedidos que paga")}</p>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tr("Buscar cliente, factura o valor")} className="w-44 rounded-lg border border-foreground/10 px-2 py-1 text-xs" />
+      </div>
+      <p className="text-[11px] text-foreground/50">{tr("Los pedidos que marques dejan de sumarse solos en Flujo de Caja: la plata ya está en este ingreso. Una transferencia puede pagar varias facturas.")}</p>
+      {error && <p className="text-xs text-red-600">{tr.msg(error)}</p>}
+      {orders === null ? (
+        <p className="flex items-center gap-1.5 text-xs text-foreground/50"><Loader2 className="h-3.5 w-3.5 animate-spin" />{tr("Buscando pedidos…")}</p>
+      ) : shown.length === 0 ? (
+        <p className="text-xs text-foreground/50">{tr("No hay pedidos cerca de esta fecha.")}</p>
+      ) : (
+        <ul className="max-h-48 divide-y divide-foreground/5 overflow-y-auto text-xs">
+          {shown.map((o) => {
+            const elsewhere = !!o.income_id && o.income_id !== incomeId;
+            return (
+              <li key={o.id}>
+                <label className={`flex items-center gap-2 py-1.5 ${elsewhere ? "opacity-50" : "cursor-pointer"}`}>
+                  <input type="checkbox" checked={value.includes(o.id)} disabled={elsewhere} onChange={() => toggle(o.id)} />
+                  <span className="min-w-0 flex-1 truncate">
+                    <strong>{o.invoice ?? tr("Pedido #{id} (sin factura)", { id: o.id.slice(0, 8) })}</strong> · {o.customer} · {o.date}
+                    {!o.paid && <span className="text-amber-700"> · {tr("por cobrar")}</span>}
+                    {elsewhere && <span className="text-foreground/60"> · {tr("ya ligado a otro ingreso")}</span>}
+                  </span>
+                  <span className="shrink-0 font-mono">{fmt(o.total)}</span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {chosen.length > 0 && (
+        <p className={`text-xs font-bold ${Math.abs(sum - gross) < 1 ? "text-green-700" : "text-amber-700"}`}>
+          {tr("Ligados: {sum} · ingreso: {gross}", { sum: fmt(sum), gross: fmt(gross) })}
+          {sum > gross + 1 && <span className="font-normal"> · {tr("los pedidos suman más: el resto queda por cobrar en sus facturas")}</span>}
+          {sum + 1 < gross && <span className="font-normal"> · {tr("el ingreso trae más que los pedidos")}</span>}
+        </p>
+      )}
     </div>
   );
 }
@@ -2320,6 +2423,11 @@ export default function CashflowClient() {
                           <td className="px-5 py-4 font-mono text-xs">{inc.date ?? inc.cashflow?.date ?? new Date(inc.created_at).toISOString().split("T")[0]}</td>
                           <td className="px-5 py-4 font-bold max-w-[180px] truncate">
                             <div>{inc.concept}</div>
+                            {(inc.linked_orders?.length ?? 0) > 0 && (
+                              <div className="text-[10px] font-normal text-blue-700 mt-0.5 truncate" title={tr("Paga estos pedidos: Flujo de Caja no los vuelve a sumar")}>
+                                ↔ {inc.linked_orders.map((o: LinkableOrder) => o.invoice ?? tr("Pedido #{id}", { id: o.id.slice(0, 8) })).join(", ")}
+                              </div>
+                            )}
                             {inc.inventory && (
                               <div className="text-[10px] font-normal text-[#C59F59] mt-0.5 flex items-center gap-1">
                                 <Package className="w-3 h-3 text-[#C59F59]" />

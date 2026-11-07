@@ -21,6 +21,8 @@ export type BoardOrder = {
   client?: { name: string | null; document_number?: string | null } | { name: string | null; document_number?: string | null }[] | null;
   /** The client's sede the order is for. */
   site_name?: string | null;
+  /** Its live invoice made in the app (not annulled), if any. */
+  invoice?: { siigo_name: string | null; status: string } | null;
   order_items?: any[];
   [key: string]: any;
 };
@@ -49,13 +51,13 @@ export function boardColumn(o: { status: string; payment_status?: string | null 
 }
 
 /**
- * A delivered order still owes a factura when its client has a NIT or cédula
- * and it has a value but no Siigo invoice yet. Consumidor final orders (no
- * document) and courtesy orders ($0) don't.
+ * An order still owes a factura when it has a value and no invoice: neither
+ * one made in the app (a live sales invoice, even a draft) nor one from Siigo.
+ * Consumidor final orders are invoiced too (to the generic NIT); courtesy
+ * orders ($0) and cancelled ones are not.
  */
 export function needsInvoice(o: BoardOrder): boolean {
-  const client = Array.isArray(o.client) ? o.client[0] : o.client;
-  return !!client?.document_number?.trim() && Number(o.total_amount || 0) > 0 && !siigoOf(o);
+  return o.status !== "cancelled" && Number(o.total_amount || 0) > 0 && !siigoOf(o) && !o.invoice;
 }
 
 /** Delivered, paid and invoiced (when it needs it): nothing left to do, so it leaves the board. */
@@ -87,7 +89,7 @@ export function fmtDay(ymd: string) {
 export const customerOf = (o: BoardOrder) => orderCustomer(o);
 
 export function siigoOf(o: BoardOrder): string | null {
-  return o.siigo_invoice || o.shipping_info?.siigo_invoice || null;
+  return o.siigo_invoice || o.invoice?.siigo_name || o.shipping_info?.siigo_invoice || null;
 }
 
 /** Due-date state of an order that is not delivered yet. */

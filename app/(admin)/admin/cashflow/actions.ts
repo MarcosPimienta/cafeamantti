@@ -3,6 +3,8 @@
 import { PAID_ORDER_STATUSES } from '@/utils/orders/stock';
 
 import { createClient } from '@/utils/supabase/server';
+import { checkIsAdmin } from '../../actions';
+import { orderCustomer } from '@/utils/orders/pendingDeliveries';
 import { accruedInterestInMonth, type Loan, type LoanMove } from '@/utils/loans/ledger';
 import { revalidatePath } from 'next/cache';
 import {
@@ -188,6 +190,9 @@ export async function getAllIncomes(era: 'v1' | 'v2' = 'v2') {
     });
   }
 
+  // Orders (invoices) whose money each manual income already holds.
+  const linked = await ordersByIncome(supabase, (manual || []).map((m: { id: string }) => m.id));
+
   // ── 4. Fusionar y ordenar por fecha descendente ─────────────────────
   const merged = [
     ...(manual || []).map(({ salidas, ...m }) => ({
@@ -195,6 +200,7 @@ export async function getAllIncomes(era: 'v1' | 'v2' = 'v2') {
       type: 'manual' as const,
       // Ingreso generado por una Salida de inventario: se gestiona desde allá.
       from_salida: (salidas?.length ?? 0) > 0,
+      linked_orders: linked.get(m.id) ?? [],
     })),
     ...autoIncomes,
   ].sort(
@@ -822,3 +828,128 @@ export async function getInventory() {
   }
   return data || [];
 }
+
+// ── Manual income ↔ the orders (invoices) it pays ─────────────────────
+
+/** An order a manual income can hold: its invoice number when it has one. */
+export type LinkableOrder = {
+  id: string;
+  /** "FV-2-770", "Factura por enviar" or null (no invoice). */
+  invoice: string | null;
+  customer: string;
+  total: number;
+  date: string;
+  paid: boolean;
+  /** The manual income that already holds it (null = none). */
+  income_id: string | null;
+};
+
+const NO_ID = '00000000-0000-0000-0000-000000000000';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function describeOrders(supabase: any, rows: { id: string; total_amount: number; created_at: string; paid_at?: string | null; payment_status?: string | null; cashflow_income_id?: string | null; client_id?: string | null; shipping_info?: unknown; contact_email?: string | null }[]): Promise<LinkableOrder[]> {
+  if (!rows.length) return [];
+  const clientIds = [...new Set(rows.map((r) => r.client_id).filter(Boolean))] as string[];
+  const [{ data: clients }, { data: invoices }] = await Promise.all([
+    clientIds.length ? supabase.from('clients').select('id, name').in('id', clientIds) : Promise.resolve({ data: [] }),
+    supabase.from('sales_invoices').select('order_id, siigo_name, status').in('order_id', rows.map((r) => r.id)).neq('status', 'anulada'),
+  ]);
+  const clientName = new Map(((clients ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
+  const invoiceOf = new Map(((invoices ?? []) as { order_id: string; siigo_name: string | null }[]).map((i) => [i.order_id, i.siigo_name ?? 'Factura por enviar']));
+  return rows.map((r) => ({
+    id: r.id,
+    invoice: invoiceOf.get(r.id) ?? null,
+    customer: orderCustomer({ ...r, client: r.client_id ? { name: clientName.get(r.client_id) ?? null } : null }),
+    total: Number(r.total_amount || 0),
+    date: String(r.paid_at ?? r.created_at).slice(0, 10),
+    paid: r.payment_status === 'paid',
+    income_id: r.cashflow_income_id ?? null,
+  }));
+}
+
+const ORDER_COLUMNS = 'id, total_amount, created_at, paid_at, payment_status, cashflow_income_id, client_id, shipping_info, contact_email';
+
+/** For each manual income, the orders it holds (empty before the link migration). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function ordersByIncome(supabase: any, incomeIds: string[]): Promise<Map<string, LinkableOrder[]>> {
+  const out = new Map<string, LinkableOrder[]>();
+  if (!incomeIds.length) return out;
+  const { data, error } = await supabase.from('orders').select(ORDER_COLUMNS).in('cashflow_income_id', incomeIds);
+  if (error) return out;
+  for (const o of await describeOrders(supabase, data ?? [])) {
+    out.set(o.income_id!, [...(out.get(o.income_id!) ?? []), o]);
+  }
+  return out;
+}
+
+/**
+ * Orders a manual income of this date could be paying: not cancelled, with a
+ * value, made or paid from 60 days before to 30 after (plus those this income
+ * already holds), closest to the date first.
+ */
+export async function getLinkableOrders(date: string, incomeId?: string | null) {
+  if (!(await checkIsAdmin())) return { error: 'Unauthorized', orders: [] as LinkableOrder[] };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: 'Fecha inválida.', orders: [] as LinkableOrder[] };
+  const supabase = await createClient();
+  const shift = (n: number) => { const t = new Date(`${date}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const { data, error } = await supabase
+    .from('orders')
+    .select(ORDER_COLUMNS)
+    .neq('status', 'cancelled')
+    .gte('created_at', `${shift(-60)}T00:00:00Z`)
+    .lte('created_at', `${shift(30)}T23:59:59Z`);
+  if (error) {
+    if (/cashflow_income_id/.test(error.message)) return { error: 'Falta aplicar la migración 20261111000000_order_counted_in_income.sql', orders: [] as LinkableOrder[] };
+    return { error: error.message, orders: [] as LinkableOrder[] };
+  }
+  let rows = (data ?? []).filter((o: { total_amount: number }) => Number(o.total_amount) > 0);
+  if (incomeId) {
+    const { data: mine } = await supabase.from('orders').select(ORDER_COLUMNS).eq('cashflow_income_id', incomeId);
+    const seen = new Set(rows.map((r: { id: string }) => r.id));
+    rows = [...rows, ...(mine ?? []).filter((m: { id: string }) => !seen.has(m.id))];
+  }
+  const orders = await describeOrders(supabase, rows);
+  const gap = (d: string) => Math.abs(Date.parse(d) - Date.parse(date));
+  orders.sort((a, b) => Number(b.income_id === incomeId && !!incomeId) - Number(a.income_id === incomeId && !!incomeId) || gap(a.date) - gap(b.date));
+  return { orders };
+}
+
+/**
+ * The orders (invoices) whose money this manual income holds: Flujo de Caja
+ * stops counting them by themselves. Orders left out are released. An order
+ * another income already holds is refused.
+ */
+export async function setIncomeOrders(incomeId: string, orderIds: string[]) {
+  if (!(await checkIsAdmin())) return { error: 'Unauthorized' };
+  const supabase = await createClient();
+  const ids = [...new Set(orderIds)];
+  const { data: income, error: incErr } = await supabase.from('cashflow_incomes').select('id').eq('id', incomeId).maybeSingle();
+  if (incErr) return { error: incErr.message };
+  if (!income) return { error: 'Ese ingreso ya no existe en Flujo de Caja.' };
+
+  const { data: current, error: curErr } = await supabase.from('orders').select('id, cashflow_income_id').in('id', ids.length ? ids : [NO_ID]);
+  if (curErr) {
+    if (/cashflow_income_id/.test(curErr.message)) return { error: 'Falta aplicar la migración 20261111000000_order_counted_in_income.sql' };
+    return { error: curErr.message };
+  }
+  const taken = ((current ?? []) as { id: string; cashflow_income_id: string | null }[]).filter((o) => o.cashflow_income_id && o.cashflow_income_id !== incomeId);
+  if (taken.length) {
+    const { data: takenRows } = await supabase.from('orders').select(ORDER_COLUMNS).in('id', taken.map((t) => t.id));
+    const described = await describeOrders(supabase, takenRows ?? []);
+    return { error: `Ya están ligados a otro ingreso: ${described.map((d) => d.invoice ?? `Pedido #${d.id.slice(0, 8)}`).join(', ')}. Quítalos de ese ingreso primero.` };
+  }
+
+  const { data: before } = await supabase.from('orders').select('id').eq('cashflow_income_id', incomeId);
+  const release = ((before ?? []) as { id: string }[]).map((o) => o.id).filter((id) => !ids.includes(id));
+  if (release.length) {
+    const { error } = await supabase.from('orders').update({ cashflow_income_id: null }).in('id', release);
+    if (error) return { error: error.message };
+  }
+  if (ids.length) {
+    const { error } = await supabase.from('orders').update({ cashflow_income_id: incomeId }).in('id', ids);
+    if (error) return { error: error.message };
+  }
+  for (const path of ['/admin/cashflow', '/admin/invoices', '/admin/orders']) revalidatePath(path);
+  return { success: true as const };
+}
+
