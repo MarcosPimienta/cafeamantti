@@ -91,3 +91,18 @@ describe("orders in Flujo de Caja", () => {
     expect(incomes.map((i: { amount: number; date: string }) => [i.amount, i.date])).toEqual([[300000, "2026-10-16"]]);
   });
 });
+
+describe("an order already counted by a manual income", () => {
+  it("is left out of Flujo de Caja, so one transfer isn't counted twice", async () => {
+    db.rows("daily_cashflows").push({ id: "d10", date: "2026-10-10" });
+    db.rows("cashflow_incomes").push({ id: "inc220", cashflow_id: "d10", era: "v2", concept: "Pago cafe sin factura", category: "Ventas Físicas", amount: 220000, gross_amount: 220000, created_at: "2026-10-10T15:00:00Z" });
+    db.rows("orders").push(
+      { id: "o144", status: "delivered", payment_status: "paid", paid_at: "2026-10-10T17:00:00Z", total_amount: 144000, created_at: "2026-10-08T15:00:00Z", cashflow_income_id: "inc220" },
+      { id: "o300", status: "delivered", payment_status: "paid", paid_at: "2026-10-16T17:00:00Z", total_amount: 300000, created_at: "2026-10-01T15:00:00Z", cashflow_income_id: null },
+    );
+    const all = await getAllIncomes("v2");
+    expect(all.filter((i: { type: string }) => i.type === "auto").map((i: { amount: number }) => i.amount)).toEqual([300000]);
+    expect(all.filter((i: { type: string }) => i.type === "manual").map((i: { amount: number }) => i.amount)).toEqual([220000]);
+  });
+});
+

@@ -4,7 +4,7 @@ import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ExternalLink, FileMinus, Landmark, Loader2, Plus, RefreshCw, Search, Send, Trash2, X } from "lucide-react";
-import { annulInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo, stampInvoice } from "./actions";
+import { annulInvoice, deletePayment, getIncomeCandidates, refreshInvoice, registerPayment, sendPendingToSiigo, setOrderCountedIn, stampInvoice, type CountedIncome } from "./actions";
 import { CREDIT_REASONS, balanceDue, daysOverdue, invoiceInRange, invoiceMatches, paidAmount, paymentState, sortInvoices, type CreditReason, type InvoiceSort, type InvoiceLine, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
 import CreditNoteModal from "./CreditNoteModal";
 import { useTr } from "@/app/(admin)/AdminI18n";
@@ -48,6 +48,8 @@ type Invoice = {
   credit_notes?: CreditNote[];
   /** Sum of its credit notes (computed here). */
   credited?: number;
+  /** Manual income in Flujo de Caja that already holds this order's money. */
+  counted_in?: CountedIncome | null;
 };
 type CreditNote = { id: string; reason: CreditReason; total: number; origin: "app" | "siigo"; siigo_name: string | null; siigo_status: string | null; lines: (InvoiceLine & { restock?: boolean })[]; created_at: string };
 type Filter = "siigo" | "cobrar" | "vencidas" | "pagadas" | "anuladas" | "todas";
@@ -59,7 +61,7 @@ const STATUS_LABEL: Record<InvoiceStatus, string> = { borrador: "Por enviar a Si
 const DIAN_LABEL: Record<string, string> = { Accepted: "Aceptada por la DIAN", Rejected: "Rechazada por la DIAN", Pending: "Enviada a la DIAN", Sending: "Enviando a la DIAN…", Draft: "Creada (sin enviar a la DIAN)" };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export default function InvoicesClient({ invoices: raw, migrationApplied, today, configured }: { invoices: any[]; migrationApplied: boolean; today: string; configured: boolean }) {
+export default function InvoicesClient({ invoices: raw, migrationApplied, today, configured, incomeLinkReady = false }: { invoices: any[]; migrationApplied: boolean; today: string; configured: boolean; incomeLinkReady?: boolean }) {
   /* eslint-enable @typescript-eslint/no-explicit-any */
   const tr = useTr();
   const router = useRouter();
@@ -202,7 +204,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
       ) : (
         <div className="space-y-3">
           {shown.map((x) => (
-            <InvoiceCard key={x.inv.id} {...x} today={today} onChanged={() => router.refresh()} />
+            <InvoiceCard key={x.inv.id} {...x} today={today} incomeLinkReady={incomeLinkReady} onChanged={() => router.refresh()} />
           ))}
         </div>
       )}
@@ -241,7 +243,7 @@ function BatchReport({ report, onClose }: { report: Report; onClose: () => void 
   );
 }
 
-function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: Invoice; balance: number; overdue: number; state: string; today: string; onChanged: () => void }) {
+function InvoiceCard({ inv, balance, overdue, state, today, incomeLinkReady, onChanged }: { inv: Invoice; balance: number; overdue: number; state: string; today: string; incomeLinkReady: boolean; onChanged: () => void }) {
   const tr = useTr();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -338,6 +340,8 @@ function InvoiceCard({ inv, balance, overdue, state, today, onChanged }: { inv: 
         </ul>
       )}
 
+      {incomeLinkReady && inv.status !== "anulada" && <CountedIn inv={inv} onChanged={onChanged} />}
+
       {crediting && <CreditNoteModal invoice={inv} onClose={() => setCrediting(false)} onDone={() => { setCrediting(false); onChanged(); }} />}
 
       {paying && <PaymentForm invoiceId={inv.id} balance={balance} today={today} onDone={() => { setPaying(false); onChanged(); }} onCancel={() => setPaying(false)} />}
@@ -433,6 +437,84 @@ function PaymentForm({ invoiceId, balance, today, onDone, onCancel }: { invoiceI
         </button>
       </div>
       {error && <p className="text-xs text-red-600 break-words">{tr.msg(error)}</p>}
+    </div>
+  );
+}
+
+/**
+ * The sale was already typed in Flujo de Caja as a manual income (a transfer
+ * registered before invoicing): linking it there keeps Flujo de Caja from
+ * counting the order a second time.
+ */
+function CountedIn({ inv, onChanged }: { inv: Invoice; onChanged: () => void }) {
+  const tr = useTr();
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<(CountedIncome & { category: string; orders: number })[] | null>(null);
+  const [picked, setPicked] = useState("");
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const save = (incomeId: string | null) =>
+    startTransition(async () => {
+      setError("");
+      const res = await setOrderCountedIn(inv.id, incomeId);
+      if (!res.success) return setError(res.error);
+      setOpen(false);
+      onChanged();
+    });
+  const load = () =>
+    startTransition(async () => {
+      setError("");
+      setOpen(true);
+      const res = await getIncomeCandidates(inv.id);
+      if (!res.success) return setError(res.error);
+      setOptions(res.incomes);
+      setPicked(res.incomes[0]?.id ?? "");
+    });
+
+  if (inv.counted_in) {
+    const c = inv.counted_in;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-blue-50/60 px-3 py-2 text-xs text-blue-900">
+        <span className="flex items-start gap-1.5">
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {tr("Ya está en Flujo de Caja como «{concept}» ({date}, {amount}). Flujo de Caja no vuelve a sumar este pedido.", { concept: c.concept, date: c.date, amount: cop(c.amount) })}
+        </span>
+        <button type="button" disabled={isPending} onClick={() => { if (window.confirm(tr("Si lo quitas, Flujo de Caja vuelve a contar este pedido cuando esté pagado. ¿Continuar?"))) save(null); }}
+          className="font-bold text-blue-900/60 hover:text-red-600 disabled:opacity-50">{tr("Quitar")}</button>
+        {error && <p className="w-full text-red-600 break-words">{tr.msg(error)}</p>}
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button type="button" disabled={isPending} onClick={load} className="inline-flex items-center gap-1 text-xs font-bold text-foreground/50 hover:text-foreground disabled:opacity-50">
+        <Landmark className="h-3.5 w-3.5" />{" "}{tr("¿El pago ya está en Flujo de Caja como ingreso manual?")}
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border border-foreground/10 p-3 text-xs">
+      <p className="text-foreground/60">{tr("Si esta venta ya la registraste a mano en Flujo de Caja (por ejemplo, la transferencia antes de facturar), elige ese ingreso. Así Flujo de Caja no la cuenta dos veces. Una transferencia puede cubrir varias facturas.")}</p>
+      {options === null ? (
+        <p className="flex items-center gap-1.5 text-foreground/50"><Loader2 className="h-3.5 w-3.5 animate-spin" />{tr("Buscando ingresos…")}</p>
+      ) : options.length === 0 ? (
+        <p className="text-foreground/50">{tr("No hay ingresos manuales en Flujo de Caja cerca de la fecha de esta factura.")}</p>
+      ) : (
+        <select value={picked} onChange={(e) => setPicked(e.target.value)} className="w-full rounded-lg border border-foreground/15 bg-background px-2 py-1.5 text-sm">
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.date} · {o.concept} · {cop(o.amount)}{o.orders ? ` · ${tr("ya cubre {n} pedido(s)", { n: String(o.orders) })}` : ""}
+            </option>
+          ))}
+        </select>
+      )}
+      <div className="flex gap-2">
+        <button type="button" disabled={isPending || !picked} onClick={() => save(picked)} className="rounded-lg bg-foreground px-3 py-1.5 font-bold text-background hover:bg-[#C59F59] disabled:opacity-40">{tr("Ligar a este ingreso")}</button>
+        <button type="button" onClick={() => setOpen(false)} className="px-2 text-foreground/50 hover:text-foreground">{tr("Cancelar")}</button>
+      </div>
+      {error && <p className="text-red-600 break-words">{tr.msg(error)}</p>}
     </div>
   );
 }

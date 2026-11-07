@@ -148,8 +148,109 @@ export async function getInvoices() {
   // Each invoice shows its sede (none before the sedes migration).
   const { data: sites } = await supabase.from('client_sites').select('id, name');
   const siteNames = new Map(((sites ?? []) as { id: string; name: string }[]).map((x) => [x.id, x.name]));
-  const invoices = ((data ?? []) as unknown as Record<string, unknown>[]).map((inv) => ({ ...inv, site_name: typeof inv.site_id === 'string' ? siteNames.get(inv.site_id) ?? null : null }));
-  return { invoices, migrationApplied: true, today: todayBogota() };
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  const counted = await countedIncomes(supabase, rows.map((r) => r.order_id as string));
+  const invoices = rows.map((inv) => ({
+    ...inv,
+    site_name: typeof inv.site_id === 'string' ? siteNames.get(inv.site_id) ?? null : null,
+    counted_in: counted.byOrder.get(inv.order_id as string) ?? null,
+  }));
+  return { invoices, migrationApplied: true, today: todayBogota(), incomeLinkReady: counted.ready };
+}
+
+// ── Order already counted in Flujo de Caja ──────────────────
+
+export type CountedIncome = { id: string; date: string; concept: string; amount: number };
+
+async function incomesById(supabase: Supabase, ids: string[]): Promise<Map<string, CountedIncome>> {
+  if (!ids.length) return new Map();
+  const { data: inc, error } = await supabase.from('cashflow_incomes').select('id, cashflow_id, concept, amount, gross_amount').in('id', ids);
+  if (error) throw error;
+  const dayIds = [...new Set(((inc ?? []) as { cashflow_id: string }[]).map((i) => i.cashflow_id))];
+  const { data: days } = dayIds.length ? await supabase.from('daily_cashflows').select('id, date').in('id', dayIds) : { data: [] };
+  const dateOf = new Map(((days ?? []) as { id: string; date: string }[]).map((d) => [d.id, d.date]));
+  return new Map(
+    ((inc ?? []) as { id: string; cashflow_id: string; concept: string; amount: number; gross_amount: number | null }[]).map((i) => [
+      i.id,
+      { id: i.id, date: dateOf.get(i.cashflow_id) ?? '', concept: i.concept, amount: Number(i.gross_amount) || Number(i.amount) },
+    ])
+  );
+}
+
+/** The manual income each order is already counted in (ready = false before its migration). */
+async function countedIncomes(supabase: Supabase, orderIds: string[]): Promise<{ ready: boolean; byOrder: Map<string, CountedIncome> }> {
+  const ids = [...new Set(orderIds.filter(Boolean))];
+  const { data, error } = await supabase.from('orders').select('id, cashflow_income_id').in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+  if (error) return { ready: false, byOrder: new Map() };
+  const links = ((data ?? []) as { id: string; cashflow_income_id: string | null }[]).filter((o) => o.cashflow_income_id);
+  const incomes = await incomesById(supabase, [...new Set(links.map((o) => o.cashflow_income_id as string))]);
+  const byOrder = new Map<string, CountedIncome>();
+  for (const o of links) {
+    const inc = incomes.get(o.cashflow_income_id as string);
+    if (inc) byOrder.set(o.id, inc);
+  }
+  return { ready: true, byOrder };
+}
+
+/**
+ * Manual incomes in Flujo de Caja (v2) that could already hold this invoice's
+ * money: from 60 days before the invoice to 15 after, closest first, with
+ * what other orders already point to each.
+ */
+export async function getIncomeCandidates(invoiceId: string) {
+  const { supabase } = await requireAdmin();
+  return guard(async () => {
+    const { data: inv, error } = await supabase.from('sales_invoices').select('id, order_id, issue_date, created_at, total').eq('id', invoiceId).single();
+    if (error || !inv) throw error ?? new Error('Factura no encontrada.');
+    const day = (inv.issue_date as string | null) ?? String(inv.created_at).slice(0, 10);
+    const shift = (n: number) => { const t = new Date(`${day}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+    const { data: days, error: dErr } = await supabase.from('daily_cashflows').select('id, date').gte('date', shift(-60)).lte('date', shift(15));
+    if (dErr) throw dErr;
+    const dayIds = ((days ?? []) as { id: string }[]).map((d) => d.id);
+    if (!dayIds.length) return { incomes: [] as (CountedIncome & { category: string; orders: number })[] };
+    const dateOf = new Map(((days ?? []) as { id: string; date: string }[]).map((d) => [d.id, d.date]));
+    const { data: inc, error: iErr } = await supabase.from('cashflow_incomes').select('id, cashflow_id, concept, category, amount, gross_amount').eq('era', 'v2').in('cashflow_id', dayIds);
+    if (iErr) throw iErr;
+    const list = ((inc ?? []) as { id: string; cashflow_id: string; concept: string; category: string; amount: number; gross_amount: number | null }[]).map((i) => ({
+      id: i.id, date: dateOf.get(i.cashflow_id) ?? '', concept: i.concept, category: i.category, amount: Number(i.gross_amount) || Number(i.amount), orders: 0,
+    }));
+    const { data: linked } = list.length ? await supabase.from('orders').select('id, cashflow_income_id').in('cashflow_income_id', list.map((i) => i.id)) : { data: [] };
+    for (const o of (linked ?? []) as { id: string; cashflow_income_id: string }[]) {
+      const hit = list.find((i) => i.id === o.cashflow_income_id);
+      if (hit && o.id !== inv.order_id) hit.orders += 1;
+    }
+    const gap = (d: string) => Math.abs(Date.parse(d) - Date.parse(day));
+    list.sort((a, b) => Number(b.amount >= Number(inv.total)) - Number(a.amount >= Number(inv.total)) || gap(a.date) - gap(b.date));
+    return { incomes: list };
+  });
+}
+
+/**
+ * Says that this invoice's order is already counted in Flujo de Caja by a
+ * manual income (null undoes it): Flujo de Caja stops adding the order.
+ */
+export async function setOrderCountedIn(invoiceId: string, incomeId: string | null) {
+  const { supabase } = await requireAdmin();
+  const res = await guard(async () => {
+    const { data: inv, error } = await supabase.from('sales_invoices').select('order_id').eq('id', invoiceId).single();
+    if (error || !inv) throw error ?? new Error('Factura no encontrada.');
+    if (incomeId) {
+      const { data: income, error: iErr } = await supabase.from('cashflow_incomes').select('id, era').eq('id', incomeId).maybeSingle();
+      if (iErr) throw iErr;
+      if (!income) throw new Error('Ese ingreso ya no existe en Flujo de Caja.');
+    }
+    const { error: upErr } = await supabase.from('orders').update({ cashflow_income_id: incomeId }).eq('id', inv.order_id);
+    if (upErr) {
+      if (/cashflow_income_id/.test(upErr.message)) throw new Error('Falta aplicar la migración 20261111000000_order_counted_in_income.sql');
+      throw upErr;
+    }
+    return {};
+  });
+  if (res.success) {
+    refresh();
+    revalidatePath('/admin/cashflow');
+  }
+  return res;
 }
 
 /** The live invoice of an order, with its payments (null if none). */

@@ -40,12 +40,17 @@ async function _saleLockError(supabase: any, incomeId: string): Promise<string |
 
 /**
  * Orders whose money came in (payment_status = paid), with paid_at — the
- * day they count in Flujo de Caja. Before the payment migration: the old
- * rule (paid-like statuses, on their creation date).
+ * day they count in Flujo de Caja. An order whose money is already in a
+ * manual income (cashflow_income_id) is left out, so it doesn't count twice.
+ * Before the payment migration: the old rule (paid-like statuses, on their
+ * creation date).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function selectPaidOrders(supabase: any, columns: string, scope: (q: any, dateCol: 'paid_at' | 'created_at') => any): Promise<{ data: any[] | null; error: any }> {
-  const res = await scope(supabase.from('orders').select(`${columns}, paid_at`).eq('payment_status', 'paid').neq('status', 'cancelled'), 'paid_at');
+  const paid = () => supabase.from('orders').select(`${columns}, paid_at`).eq('payment_status', 'paid').neq('status', 'cancelled');
+  let res = await scope(paid().is('cashflow_income_id', null), 'paid_at');
+  // Before 20261111000000_order_counted_in_income.sql: every paid order counts.
+  if (res.error && /cashflow_income_id/.test(res.error.message)) res = await scope(paid(), 'paid_at');
   if (res.error && /payment_status|paid_at/.test(res.error.message)) {
     return scope(supabase.from('orders').select(columns).in('status', PAID_ORDER_STATUSES), 'created_at');
   }
