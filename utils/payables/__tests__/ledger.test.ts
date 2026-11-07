@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { allocatePayment, billProblems, billTotals, payableBalance, payablePaymentProblems, type BillLine } from "../ledger";
+import { allocatePayment, billMatches, billProblems, billTotals, payableBalance, payablePaymentProblems, type BillLine } from "../ledger";
 import { buildPaymentReceiptPayload, buildPurchaseBillPayload, type SiigoSettings } from "@/utils/siigo/mapping";
 
 const line = (patch: Partial<BillLine>): BillLine => ({ category: "Costo de Ventas (Materia prima, insumos, empaques)", account: "52954001", description: "Empaques", base: 325000, tax_id: 13156, tax_rate: 19, retention_id: null, retention_rate: 0, ...patch });
@@ -103,4 +103,11 @@ describe("Siigo payloads", () => {
       payment: { id: 4182, value: 386750 },
     });
   });
+});
+
+describe("searching purchase invoices", () => {
+  const bill = { supplier_name: "Todo Empaques Restrepo SAS", supplier_identification: "901234567", provider_prefix: "FE", provider_number: "3692", siigo_name: "FC-1-45", notes: "Bolsas diciembre", lines: [{ description: "250 G 4PRO KRAFT NATURAL" }] };
+  it.each(["todo empaques", "RESTREPO", "FE-3692", "fe3692", "3692", "fc-1-45", "kraft", "diciembre", "901234567", "90123"])("finds it by %s", (q) => expect(billMatches(bill, q)).toBe(true));
+  it.each(["3693", "café", "9012", "erco"])("not by %s", (q) => expect(billMatches(bill, q)).toBe(false));
+  it("an empty search keeps everything", () => expect(billMatches(bill, " ")).toBe(true));
 });

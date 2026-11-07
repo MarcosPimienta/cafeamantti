@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ExternalLink, FileMinus, Landmark, Loader2, Plus, RefreshCw, Search, Send, Trash2, X } from "lucide-react";
 import { annulInvoice, deletePayment, refreshInvoice, registerPayment, sendPendingToSiigo, stampInvoice } from "./actions";
-import { CREDIT_REASONS, balanceDue, daysOverdue, invoiceInRange, invoiceMatches, paidAmount, parseAmount, paymentState, sortInvoices, type CreditReason, type InvoiceSort, type InvoiceLine, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
+import { CREDIT_REASONS, balanceDue, daysOverdue, invoiceInRange, invoiceMatches, paidAmount, paymentState, sortInvoices, type CreditReason, type InvoiceSort, type InvoiceLine, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
 import CreditNoteModal from "./CreditNoteModal";
 import { useTr } from "@/app/(admin)/AdminI18n";
+import RangeSortBar, { emptyRange, toRange, type RangeSortState } from "@/app/(admin)/RangeSortBar";
+import { isRangeSet } from "@/utils/lists/rangeSort";
 
 type Payment = {
   id: string;
@@ -67,11 +69,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
   );
   const [filter, setFilter] = useState<Filter>("todas");
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<InvoiceSort>("fecha-desc");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [minText, setMinText] = useState("");
-  const [maxText, setMaxText] = useState("");
+  const [bar, setBar] = useState<RangeSortState>(emptyRange("fecha-desc"));
   const [error, setError] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [isSending, startSending] = useTransition();
@@ -95,8 +93,8 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
 
   // A search looks through every invoice, annulled ones included, whatever the filter.
   const searching = search.trim().length > 0;
-  const range = { from, to, min: parseAmount(minText), max: parseAmount(maxText) };
-  const ranged = !!(from || to || range.min != null || range.max != null);
+  const range = toRange(bar);
+  const ranged = isRangeSet(range);
   const filtered = info.filter(({ inv, balance, overdue: late }) => {
     if (!invoiceInRange(inv, range)) return false;
     if (searching) return invoiceMatches(inv, search);
@@ -109,8 +107,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
       default: return inv.status !== "anulada";
     }
   });
-  const shown = sortInvoices(filtered, sort);
-  const clearRange = () => { setFrom(""); setTo(""); setMinText(""); setMaxText(""); };
+  const shown = sortInvoices(filtered, bar.sort as InvoiceSort);
 
   const sendAll = () => {
     if (!window.confirm(tr("Se enviarán a Siigo las facturas pendientes (Siigo las emite ante la DIAN y se las envía al cliente) y los pagos como recibos de caja. ¿Continuar?"))) return;
@@ -189,34 +186,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
           />
         </label>
       </div>
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-foreground/10 p-3">
-        <RangeField label={tr("Desde")}>
-          <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className={RANGE_INPUT} />
-        </RangeField>
-        <RangeField label={tr("Hasta")}>
-          <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={RANGE_INPUT} />
-        </RangeField>
-        <RangeField label={tr("Valor mínimo")}>
-          <input inputMode="numeric" value={minText} onChange={(e) => setMinText(e.target.value)} placeholder="$ 0" className={`${RANGE_INPUT} w-32`} />
-        </RangeField>
-        <RangeField label={tr("Valor máximo")}>
-          <input inputMode="numeric" value={maxText} onChange={(e) => setMaxText(e.target.value)} placeholder={tr("Sin límite")} className={`${RANGE_INPUT} w-32`} />
-        </RangeField>
-        <RangeField label={tr("Ordenar por")}>
-          <select value={sort} onChange={(e) => setSort(e.target.value as InvoiceSort)} className={RANGE_INPUT}>
-            <option value="fecha-desc">{tr("Fecha: más recientes primero")}</option>
-            <option value="fecha-asc">{tr("Fecha: más antiguas primero")}</option>
-            <option value="valor-desc">{tr("Valor: de mayor a menor")}</option>
-            <option value="valor-asc">{tr("Valor: de menor a mayor")}</option>
-            <option value="saldo-desc">{tr("Saldo por cobrar: de mayor a menor")}</option>
-          </select>
-        </RangeField>
-        {ranged && (
-          <button type="button" onClick={clearRange} className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-foreground/60 hover:bg-foreground/5">
-            <X className="h-3.5 w-3.5" /> {tr("Quitar fechas y valores")}
-          </button>
-        )}
-      </div>
+      <RangeSortBar value={bar} onChange={setBar} sorts={["fecha-desc", "fecha-asc", "valor-desc", "valor-asc", "saldo-desc"]} />
       {(searching || ranged) && (
         <p className="text-xs text-foreground/50">
           {searching
@@ -237,17 +207,6 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
         </div>
       )}
     </div>
-  );
-}
-
-const RANGE_INPUT = "rounded-lg border border-foreground/15 bg-background px-2 py-1.5 text-sm focus:border-[#C59F59] focus:outline-none";
-
-function RangeField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/50">{label}</span>
-      {children}
-    </label>
   );
 }
 

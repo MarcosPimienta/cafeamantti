@@ -71,4 +71,7 @@ export const bank: Record<string, string> = {
   "Elegir todas las que se ven ({n})": "Select all shown ({n})",
   "Deshacer {n} seleccionadas": "Undo {n} selected",
   "creado desde el extracto": "created from the statement",
+  "Los valores se comparan sin signo: sirven igual para entradas y salidas. Lo que ya elegiste sigue a la vista aunque quede fuera del filtro.": "Amounts are compared without sign, so they work the same for money in and out. What you already picked stays visible even if it falls outside the filter.",
+  "Ningún movimiento en esas fechas y valores.": "No transactions in those dates and amounts.",
+  "{n} de {total} movimientos pendientes": "{n} of {total} pending transactions",
 };

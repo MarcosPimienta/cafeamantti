@@ -1,5 +1,7 @@
 // Sales invoices and what the customer still owes. Pure functions.
 
+import { inRange, sortRows, type ListRange, type ListSort } from "@/utils/lists/rangeSort";
+
 export type InvoiceStatus = "borrador" | "emitida" | "error" | "anulada";
 export type PaymentMethod = "web" | "transfer" | "cash";
 export type PaymentState = "pendiente" | "parcial" | "pagada";
@@ -200,41 +202,21 @@ export function invoiceMatches(
 
 // ── Filtering and sorting the invoice list ──────────────────────────
 
+export { parseAmount } from "@/utils/lists/rangeSort";
+export type InvoiceRange = ListRange;
+export type InvoiceSort = Extract<ListSort, "fecha-desc" | "fecha-asc" | "valor-desc" | "valor-asc" | "saldo-desc">;
+
 /** The invoice's date: its issue date, else the day it was created (drafts have no issue date yet). */
 export function invoiceDate(inv: { issue_date: string | null; created_at: string }): string {
   return inv.issue_date ?? inv.created_at.slice(0, 10);
 }
 
-/** A typed amount ("1.500.000", "$ 150000", "150,000") as a number; null when empty. */
-export function parseAmount(text: string): number | null {
-  const digits = text.replace(/[^\d]/g, "");
-  return digits ? Number(digits) : null;
-}
-
-export type InvoiceRange = { from?: string; to?: string; min?: number | null; max?: number | null };
-
 /** Dates are inclusive (YYYY-MM-DD); amounts are compared with the invoice total. */
 export function invoiceInRange(inv: { issue_date: string | null; created_at: string; total: number | string }, r: InvoiceRange): boolean {
-  const date = invoiceDate(inv);
-  const total = Number(inv.total);
-  if (r.from && date < r.from) return false;
-  if (r.to && date > r.to) return false;
-  if (r.min != null && total < r.min) return false;
-  if (r.max != null && total > r.max) return false;
-  return true;
+  return inRange(invoiceDate(inv), Number(inv.total), r);
 }
-
-export type InvoiceSort = "fecha-desc" | "fecha-asc" | "valor-desc" | "valor-asc" | "saldo-desc";
 
 /** A sorted copy. Ties keep the newest first. */
 export function sortInvoices<T extends { inv: { issue_date: string | null; created_at: string; total: number | string }; balance: number }>(rows: T[], sort: InvoiceSort): T[] {
-  const newest = (a: T, b: T) => invoiceDate(b.inv).localeCompare(invoiceDate(a.inv)) || b.inv.created_at.localeCompare(a.inv.created_at);
-  const by: Record<InvoiceSort, (a: T, b: T) => number> = {
-    "fecha-desc": newest,
-    "fecha-asc": (a, b) => -newest(a, b),
-    "valor-desc": (a, b) => Number(b.inv.total) - Number(a.inv.total) || newest(a, b),
-    "valor-asc": (a, b) => Number(a.inv.total) - Number(b.inv.total) || newest(a, b),
-    "saldo-desc": (a, b) => b.balance - a.balance || newest(a, b),
-  };
-  return [...rows].sort(by[sort]);
+  return sortRows(rows, sort, (x) => ({ date: invoiceDate(x.inv), amount: Number(x.inv.total), balance: x.balance, tiebreak: x.inv.created_at }));
 }

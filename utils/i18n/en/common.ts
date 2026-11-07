@@ -204,4 +204,18 @@ export const common: Record<string, string> = {
   "Esta sede ya es sucursal en Siigo: el cambio queda en la app y en las facturas nuevas; en Siigo edítala a mano si hace falta.": "This location is already a branch in Siigo: the change applies in the app and to new invoices; edit it by hand in Siigo if needed.",
   "Guardar sede": "Save location",
   "Agregar sede": "Add location",
+  // Date / amount / sort bar of the admin lists (RangeSortBar).
+  "Desde": "From",
+  "Hasta": "To",
+  "Valor mínimo": "Minimum amount",
+  "Valor máximo": "Maximum amount",
+  "Sin límite": "No limit",
+  "Ordenar por": "Sort by",
+  "Fecha: más recientes primero": "Date: newest first",
+  "Fecha: más antiguas primero": "Date: oldest first",
+  "Valor: de mayor a menor": "Amount: highest to lowest",
+  "Valor: de menor a mayor": "Amount: lowest to highest",
+  "Saldo: de mayor a menor": "Balance: highest to lowest",
+  "Vencimiento: el más próximo primero": "Due date: soonest first",
+  "Quitar fechas y valores": "Clear dates and amounts",
 };

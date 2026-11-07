@@ -3,13 +3,15 @@
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, FileMinus, Loader2, Pencil, Plus, RefreshCw, Trash2, Undo2, Wallet, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileMinus, Loader2, Pencil, Plus, RefreshCw, Search, Trash2, Undo2, Wallet, X } from "lucide-react";
 import { annulBill, deleteBillCreditNote, deletePayablePayment, retryBill, retryPayablePayment } from "./actions";
 import BillForm, { type EditableBill } from "./BillForm";
 import PayablePaymentForm from "./PayablePaymentForm";
 import BillCreditNoteForm from "./BillCreditNoteForm";
 import AdvancesPanel, { type AdvanceMove } from "./AdvancesPanel";
-import { payableBalance, paidOf, type BillLine, type PayableMethod } from "@/utils/payables/ledger";
+import { billMatches, payableBalance, paidOf, type BillLine, type PayableMethod } from "@/utils/payables/ledger";
+import { inRange, isRangeSet, sortRows } from "@/utils/lists/rangeSort";
+import RangeSortBar, { emptyRange, toRange, type RangeSortState } from "@/app/(admin)/RangeSortBar";
 import { useTr } from "@/app/(admin)/AdminI18n";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
@@ -76,6 +78,8 @@ export default function PurchasesClient(props: {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<EditableBill | null>(null);
   const [notice, setNotice] = useState("");
+  const [search, setSearch] = useState("");
+  const [bar, setBar] = useState<RangeSortState>(emptyRange("fecha-desc"));
 
   if (!props.migrationApplied) {
     return <p className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">{tr("Falta aplicar la migración 20261025000000_purchases_payables.sql")}</p>;
@@ -90,9 +94,20 @@ export default function PurchasesClient(props: {
   const late = rows.reduce((s, r) => s + (r.overdue ? r.balance : 0), 0);
   const ccOwed = props.cuentasCobro.reduce((s, c) => s + Math.max(0, c.total - c.paid), 0);
   const ccOpen = props.cuentasCobro.filter((c) => c.total - c.paid > 0.5).length;
-  const shown = rows.filter(({ balance, overdue }) =>
-    filter === "pendientes" ? balance > 0.5 : filter === "vencidas" ? overdue : filter === "pagadas" ? balance <= 0.5 : true
+  // A search looks through every invoice whatever the filter (the voided ones keep their own tab).
+  const searching = search.trim().length > 0;
+  const range = toRange(bar);
+  const ranged = isRangeSet(range);
+  const keep = (b: Bill) => inRange(b.issue_date, Number(b.total), range) && billMatches(b, search);
+  const shown = sortRows(
+    rows.filter(({ b, balance, overdue }) =>
+      keep(b) && (searching || (filter === "pendientes" ? balance > 0.5 : filter === "vencidas" ? overdue : filter === "pagadas" ? balance <= 0.5 : true))
+    ),
+    bar.sort,
+    (r) => ({ date: r.b.issue_date, amount: Number(r.b.total), balance: r.balance, due: r.b.due_date, tiebreak: r.b.id })
   );
+  const voidedShown = sortRows(voided.filter(keep), bar.sort, (b) => ({ date: b.issue_date, amount: Number(b.total), due: b.due_date, tiebreak: b.id }));
+  const listing = filter === "anuladas" && !searching ? voidedShown : shown;
   const done = (msg: string) => {
     setNotice(msg);
     router.refresh();
@@ -120,10 +135,10 @@ export default function PurchasesClient(props: {
       <AdvancesPanel moves={props.advances} suppliers={props.suppliers} today={props.today} onDone={done} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
+        <div className={`flex flex-wrap gap-2 ${searching ? "opacity-40" : ""}`}>
           {([["pendientes", "Por pagar"], ["vencidas", "Vencidas"], ["pagadas", "Pagadas"], ["todas", "Todas"], ...(voided.length ? [["anuladas", "Anuladas con nota crédito"]] : [])] as [Filter, string][]).map(([f, label]) => (
-            <button key={f} type="button" onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold border ${filter === f ? "bg-foreground text-background border-foreground" : "border-foreground/15 text-foreground/60 hover:bg-foreground/5"}`}>
+            <button key={f} type="button" onClick={() => { setFilter(f); setSearch(""); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border ${filter === f && !searching ? "bg-foreground text-background border-foreground" : "border-foreground/15 text-foreground/60 hover:bg-foreground/5"}`}>
               {tr(label)}
             </button>
           ))}
@@ -135,13 +150,33 @@ export default function PurchasesClient(props: {
       </div>
       {!props.configured && <p className="text-xs text-red-600">{tr("Siigo no está configurado en el servidor.")}</p>}
 
+      <RangeSortBar value={bar} onChange={setBar} sorts={["fecha-desc", "fecha-asc", "valor-desc", "valor-asc", "saldo-desc", "vence-asc"]}>
+        <label className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/40" />
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tr("Buscar proveedor, # de factura o producto")} aria-label={tr("Buscar proveedor, # de factura o producto")}
+            className="w-full rounded-full border border-foreground/15 py-1.5 pl-9 pr-3 text-sm focus:border-[#C59F59] focus:outline-none" />
+        </label>
+      </RangeSortBar>
+      {(searching || ranged) && (
+        <p className="text-xs text-foreground/50">
+          {searching
+            ? tr("{n} resultado(s) en todas las facturas de compra · {total}", { n: String(listing.length), total: cop(shown.reduce((s, r) => s + Number(r.b.total), 0)) })
+            : tr("{n} factura(s) · {total}", { n: String(listing.length), total: cop(filter === "anuladas" ? voidedShown.reduce((s, b) => s + Number(b.total), 0) : shown.reduce((s, r) => s + Number(r.b.total), 0)) })}
+        </p>
+      )}
 
-      {filter === "anuladas" ? (
-        <div className="space-y-3">
-          {voided.map((b) => <VoidedCard key={b.id} b={b} note={noteOf.get(b.id)!} onDone={done} />)}
-        </div>
+      {filter === "anuladas" && !searching ? (
+        voidedShown.length === 0 ? (
+          <p className="text-sm text-foreground/50">{tr("Ninguna factura en esas fechas y valores.")}</p>
+        ) : (
+          <div className="space-y-3">
+            {voidedShown.map((b) => <VoidedCard key={b.id} b={b} note={noteOf.get(b.id)!} onDone={done} />)}
+          </div>
+        )
       ) : shown.length === 0 ? (
-        <p className="text-sm text-foreground/50">{bills.length === 0 ? tr("Aún no hay facturas de compra. Registra la primera con «Nueva factura de compra».") : tr("No hay facturas en este filtro.")}</p>
+        <p className="text-sm text-foreground/50">
+          {bills.length === 0 ? tr("Aún no hay facturas de compra. Registra la primera con «Nueva factura de compra».") : searching ? tr("Ninguna factura coincide con «{q}».", { q: search.trim() }) : ranged ? tr("Ninguna factura en esas fechas y valores.") : tr("No hay facturas en este filtro.")}
+        </p>
       ) : (
         <div className="space-y-3">
           {shown.map((r) => <BillCard key={r.b.id} {...r} today={props.today} inventory={props.inventory} creditNotesReady={props.creditNotes !== null} onDone={done} onEdit={() => setEditing(r.b)} />)}

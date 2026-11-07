@@ -9,6 +9,8 @@ import { balanced, difference, possibleDuplicates, signed, suggestMatches, type 
 import { INCOME_CATEGORIES } from "../cashflow/types";
 import { useExpenseCategories } from "../settings/categories/useExpenseCategories";
 import { useTr } from "@/app/(admin)/AdminI18n";
+import RangeSortBar, { emptyRange, toRange, type RangeSortState } from "@/app/(admin)/RangeSortBar";
+import { inRange, isRangeSet, sortRows, type ListRange, type ListSort } from "@/utils/lists/rangeSort";
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: Number.isInteger(Math.round(n * 100) / 100) ? 0 : 2 }).format(n);
 const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "short" });
@@ -44,6 +46,8 @@ export default function BankClient({ migrationApplied, statements, statement, li
   const [pickedLines, setPickedLines] = useState<Set<string>>(new Set());
   const [pickedRows, setPickedRows] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  // Dates, amounts (without sign) and order for the bank lines, the Flujo de Caja rows and the reconciled list.
+  const [bar, setBar] = useState<RangeSortState>(emptyRange("fecha-asc"));
   const [mode, setMode] = useState<"" | "create" | "ignore">("");
   const [concept, setConcept] = useState("");
   const [category, setCategory] = useState("");
@@ -140,10 +144,21 @@ export default function BankClient({ migrationApplied, statements, statement, li
   const done = lines.length - pendingLines.length;
   const q = search.trim().toLowerCase();
   const nearest = (r: ReconRow) => (selLines.length ? Math.min(...selLines.map((l) => Math.abs(Date.parse(l.line_date) - Date.parse(r.date)))) : 0);
-  const candidates = freeRows
+  const range = toRange(bar);
+  const ranged = isRangeSet(range);
+  const shownLines = sortRows(
+    pendingLines.filter((l) => pickedLines.has(l.id) || inRange(l.line_date, Math.abs(l.amount), range)),
+    bar.sort,
+    (l) => ({ date: l.line_date, amount: Math.abs(l.amount), tiebreak: String(lines.indexOf(l)).padStart(6, "0") })
+  );
+  const filteredRows = freeRows
     .filter((r) => !q || r.concept.toLowerCase().includes(q) || r.category.toLowerCase().includes(q) || String(r.amount).includes(q.replace(/\D/g, "") || "\u0000"))
-    .filter((r) => pickedRows.has(r.id) || !selLines.length || Math.sign(signed(r)) === Math.sign(lineSum) || lineSum === 0)
-    .sort((a, b) => nearest(a) - nearest(b) || a.date.localeCompare(b.date));
+    .filter((r) => pickedRows.has(r.id) || inRange(r.date, Math.abs(signed(r)), range))
+    .filter((r) => pickedRows.has(r.id) || !selLines.length || Math.sign(signed(r)) === Math.sign(lineSum) || lineSum === 0);
+  // With bank lines picked and the default order, the closest dates come first (what pairs with them).
+  const candidates = selLines.length && bar.sort === "fecha-asc"
+    ? filteredRows.sort((a, b) => nearest(a) - nearest(b) || a.date.localeCompare(b.date))
+    : sortRows(filteredRows, bar.sort, (r) => ({ date: r.date, amount: Math.abs(signed(r)), tiebreak: r.id }));
   const rowLabel = (r: ReconRow) => `${day(r.date)} · ${r.concept}`;
 
   return (
@@ -243,8 +258,11 @@ export default function BankClient({ migrationApplied, statements, statement, li
             ))}
           </div>
 
+          <RangeSortBar value={bar} onChange={setBar} sorts={["fecha-asc", "fecha-desc", "valor-desc", "valor-asc"]}
+            amountHint={tr("Los valores se comparan sin signo: sirven igual para entradas y salidas. Lo que ya elegiste sigue a la vista aunque quede fuera del filtro.")} />
+
           {view === "conciliados" ? (
-            <ConciliatedList lines={lines} matches={matches} rowById={rowById} picked={pickedMatches} setPicked={setPickedMatches} isPending={isPending}
+            <ConciliatedList range={range} sort={bar.sort} lines={lines} matches={matches} rowById={rowById} picked={pickedMatches} setPicked={setPickedMatches} isPending={isPending}
               onUndo={(ids, owned) => {
                 const ask = owned ? tr("Se borrarán también los registros que se crearon desde el extracto. ¿Continuar?") : ids.length > 1 ? tr("¿Deshacer {n} conciliaciones? Sus movimientos vuelven a quedar pendientes.", { n: String(ids.length) }) : null;
                 if (ask && !window.confirm(ask)) return;
@@ -269,9 +287,12 @@ export default function BankClient({ migrationApplied, statements, statement, li
               </div>
               {pendingLines.length === 0 ? (
                 <p className="text-sm text-foreground/50">{tr("Todo el extracto está conciliado.")}</p>
+              ) : shownLines.length === 0 ? (
+                <p className="text-sm text-foreground/50">{tr("Ningún movimiento en esas fechas y valores.")}</p>
               ) : (
                 <ul className="max-h-[640px] divide-y divide-foreground/5 overflow-y-auto text-sm">
-                  {pendingLines.map((l) => (
+                  {ranged && <li className="py-1 text-[11px] text-foreground/50">{tr("{n} de {total} movimientos pendientes", { n: String(shownLines.length), total: String(pendingLines.length) })}</li>}
+                  {shownLines.map((l) => (
                     <li key={l.id} className={`flex items-start gap-3 py-2 ${pickedLines.has(l.id) ? "bg-[#C59F59]/10" : ""}`}>
                       <input type="checkbox" className="mt-1" checked={pickedLines.has(l.id)} onChange={() => toggle(pickedLines, l.id, setPickedLines)} aria-label={l.description} />
                       <div className="min-w-0 flex-1">
@@ -399,7 +420,9 @@ export default function BankClient({ migrationApplied, statements, statement, li
  * Flujo de Caja rows that explain them. Several can be undone at once; the
  * rows created from the statement go with them.
  */
-function ConciliatedList({ lines, matches, rowById, picked, setPicked, isPending, onUndo }: {
+function ConciliatedList({ range, sort, lines, matches, rowById, picked, setPicked, isPending, onUndo }: {
+  range: ListRange;
+  sort: ListSort;
   lines: BankLine[];
   matches: BankMatch[];
   rowById: Map<string, ReconRow>;
@@ -418,11 +441,12 @@ function ConciliatedList({ lines, matches, rowById, picked, setPicked, isPending
       const rs = m.rows.map((r) => ({ ...r, row: rowById.get(r.id) }));
       const known = rs.map((r) => r.row).filter((r): r is ReconRow => !!r);
       const broken = m.kind === "flujo" && known.length === rs.length && rs.length > 0 && !balanced(difference(ls, known));
-      return { m, ls, rs, broken, first: ls.map((l) => l.line_date).sort()[0] ?? "" };
+      return { m, ls, rs, broken, first: ls.map((l) => l.line_date).sort()[0] ?? "", amount: Math.abs(ls.reduce((s, l) => s + l.amount, 0)) || ls.reduce((s, l) => s + Math.abs(l.amount), 0) };
     })
     .filter((g) => g.ls.length && (!kind || g.m.kind === kind))
-    .filter((g) => !q || [...g.ls.map((l) => l.description), ...g.rs.map((r) => r.row?.concept ?? ""), g.m.note ?? ""].some((t) => t.toLowerCase().includes(q)) || g.ls.some((l) => String(Math.abs(l.amount)).includes(q.replace(/\D/g, "") || "\u0000")))
-    .sort((a, b) => a.first.localeCompare(b.first));
+    .filter((g) => picked.has(g.m.id) || inRange(g.first, g.amount, range))
+    .filter((g) => !q || [...g.ls.map((l) => l.description), ...g.rs.map((r) => r.row?.concept ?? ""), g.m.note ?? ""].some((t) => t.toLowerCase().includes(q)) || g.ls.some((l) => String(Math.abs(l.amount)).includes(q.replace(/\D/g, "") || "\u0000")));
+  const sorted = sortRows(groups, sort, (g) => ({ date: g.first, amount: g.amount, tiebreak: g.m.id }));
   const chosen = groups.filter((g) => picked.has(g.m.id));
   const toggle = (id: string) => {
     const next = new Set(picked);
@@ -461,7 +485,7 @@ function ConciliatedList({ lines, matches, rowById, picked, setPicked, isPending
             )}
           </div>
           <ul className="max-h-[720px] space-y-2 overflow-y-auto text-sm">
-            {groups.map(({ m, ls, rs, broken }) => (
+            {sorted.map(({ m, ls, rs, broken }) => (
               <li key={m.id} className={`flex items-start gap-3 rounded-2xl border p-3 ${picked.has(m.id) ? "border-[#C59F59] bg-[#C59F59]/5" : broken ? "border-red-200" : "border-foreground/10"}`}>
                 <input type="checkbox" className="mt-1" checked={picked.has(m.id)} onChange={() => toggle(m.id)} aria-label={tr(KIND_LABEL[m.kind])} />
                 <div className="min-w-0 flex-1 space-y-1">

@@ -7,6 +7,8 @@ export const purchases: Record<string, string> = {
   "Cuenta de cobro No. {n} · {name}": "Billing statement No. {n} · {name}",
   "Factura de compra registrada en Siigo como {name}.": "Purchase invoice registered in Siigo as {name}.",
   "Factura guardada, pero Siigo no la recibió: {error}": "Invoice saved, but Siigo didn't accept it: {error}",
+  "Buscar proveedor, # de factura o producto": "Search supplier, invoice # or product",
+  "{n} resultado(s) en todas las facturas de compra · {total}": "{n} result(s) across all purchase invoices · {total}",
   "Nueva factura de compra": "New purchase invoice",
   "Factura recibida de una empresa: va a Siigo como factura de compra (no documento soporte) y queda por pagar.": "Invoice received from a company: it goes to Siigo as a purchase invoice (not a support document) and is left owed.",
   "Proveedor": "Supplier",

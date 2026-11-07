@@ -167,3 +167,29 @@ export function allocateAdvances(
   }
   return out;
 }
+
+const searchKey = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Whether a purchase invoice matches what was typed: supplier name, its NIT,
+ * the supplier's invoice number ("FE-123", "fe123" or just "123"), the Siigo
+ * number, a line description, or a note.
+ */
+export function billMatches(
+  bill: { supplier_name: string; supplier_identification?: string | null; provider_prefix?: string | null; provider_number: string; siigo_name?: string | null; notes?: string | null; lines?: { description?: string | null }[] },
+  query: string
+): boolean {
+  const q = searchKey(query);
+  if (!q) return true;
+  const texts = [
+    bill.supplier_name,
+    `${bill.provider_prefix ?? ""}${bill.provider_number}`,
+    bill.provider_number,
+    bill.siigo_name ?? "",
+    bill.notes ?? "",
+    ...(bill.lines ?? []).map((l) => l.description ?? ""),
+  ];
+  if (texts.some((t) => searchKey(t).includes(q))) return true;
+  // A NIT is only matched from 5 digits on, so typing an amount or a short number doesn't bring every supplier.
+  return q.length >= 5 && !!bill.supplier_identification && searchKey(bill.supplier_identification).includes(q);
+}
