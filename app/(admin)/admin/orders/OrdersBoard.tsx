@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -38,7 +38,7 @@ import {
   ArrowRight,
   type LucideIcon,
 } from "lucide-react";
-import { updateOrderStatus, updateOrderDueDate, sendPendingOrdersWhatsApp, setOrderPayment } from "../../actions";
+import { updateOrderStatus, updateOrderDueDate, sendPendingOrdersWhatsApp, setOrderPayment, removeDuplicateSalida } from "../../actions";
 import ManualOrderModal from "./ManualOrderModal";
 import {
   type BoardOrder,
@@ -664,6 +664,9 @@ function Card({
         {needsInvoice(order) && (
           <span className="inline-flex items-center gap-0.5 font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded"><AlertTriangle className="w-3 h-3" />{tr("Sin factura")}</span>
         )}
+        {(order.duplicate_salidas?.length ?? 0) > 0 && (
+          <span className="inline-flex items-center gap-0.5 font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded"><AlertTriangle className="w-3 h-3" />{tr("¿Descontada dos veces?")}</span>
+        )}
         {order.invoice && !order.invoice.siigo_name && (
           <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">{tr("Factura por enviar")}</span>
         )}
@@ -855,6 +858,7 @@ function OrderPanel({
             )}
           </dl>
 
+          {(order.duplicate_salidas?.length ?? 0) > 0 && <DuplicateSalidas order={order} />}
           <SiigoInvoiceSection key={order.id} order={order} />
 
           {/* Contact */}
@@ -931,3 +935,46 @@ function OrderPanel({
     </div>
   );
 }
+
+/**
+ * Manual salidas that look like this same sale typed again before the order
+ * existed: the product left the inventory twice. Removing one gives its stock
+ * back; a paid salida's income stays and holds the order's money.
+ */
+function DuplicateSalidas({ order }: { order: BoardOrder }) {
+  const tr = useTr();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const remove = (id: string, label: string) => {
+    if (!window.confirm(tr("Se borrará la salida manual «{label}» y su producto vuelve al inventario. La orden conserva su descuento. ¿Continuar?", { label }))) return;
+    startTransition(async () => {
+      setError("");
+      const res = await removeDuplicateSalida(order.id, id);
+      if (!res.success) return setError(res.error);
+      router.refresh();
+    });
+  };
+  return (
+    <section className="rounded-2xl border border-red-200 bg-red-50/60 p-4 space-y-2">
+      <p className="flex items-center gap-2 text-sm font-bold text-red-800"><AlertTriangle className="w-4 h-4" />{tr("Posible venta descontada dos veces")}</p>
+      <p className="text-xs text-red-900/70">{tr("Esta orden ya descontó estos productos, y además hay salidas manuales en Inventario, sin orden, del mismo producto y cantidad, con el nombre del cliente y a 3 días o menos de la orden. Si es la misma venta, quita la salida manual.")}</p>
+      <ul className="divide-y divide-red-100 text-xs">
+        {order.duplicate_salidas!.map((s) => {
+          const label = `${s.movement_date.slice(0, 10)} · ${s.reason ?? ""} · ${Math.abs(Number(s.quantity))} ${s.product_name}`;
+          return (
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span>{label}{s.income_id ? <span className="text-red-900/60"> · {tr("venta pagada: su ingreso se queda en Flujo de Caja")}</span> : null}</span>
+              <button type="button" disabled={isPending} onClick={() => remove(s.id, label)}
+                className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-2.5 py-1 font-bold text-white hover:bg-red-800 disabled:opacity-50">
+                {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}{tr("Es la misma venta: quitar salida")}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p className="text-xs text-red-700 break-words">{tr.msg(error)}</p>}
+    </section>
+  );
+}
+

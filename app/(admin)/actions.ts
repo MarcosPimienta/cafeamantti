@@ -14,7 +14,8 @@ import {
 } from "./coffeeProfiles";
 import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
-import { buildPendingDeliveriesMessage, getPendingDeliveries } from "@/utils/orders/pendingDeliveries";
+import { buildPendingDeliveriesMessage, getPendingDeliveries, orderCustomer } from "@/utils/orders/pendingDeliveries";
+import { ordersRepeatedBy } from "@/utils/orders/duplicateSalidas";
 import { syncOrderStock, revertOrderStock, orderIsSold } from "@/utils/orders/stock";
 import { orderTaxTotals, pricesIncludeTax } from "@/utils/orders/tax";
 import { loadSiigoSettings } from "@/utils/siigo/server";
@@ -219,6 +220,85 @@ export async function updateProductionBatch(batchId: string, edit: ProductionBat
 
 export async function deleteMovement(id: string) {
   return _asResult(() => _deleteMovement(id));
+}
+
+/**
+ * Orders that already took this product for the customer named in a manual
+ * salida about to be saved ("Venta Marcos"): saving it would deduct the same
+ * sale twice. The form asks before going on.
+ */
+export async function ordersRepeatedBySalida(inventoryId: string, qty: number, date: string, reason?: string) {
+  if (!(await checkIsAdmin())) return { orders: [] as { id: string; customer: string; invoice: string | null; date: string }[] };
+  if (!reason?.trim() || !(qty > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { orders: [] };
+  const supabase = await createClient();
+  const shift = (n: number) => { const t = new Date(`${date}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const { data: moves } = await supabase.from('inventory_movements').select('order_id, inventory_id, quantity').eq('era', 'v2').eq('inventory_id', inventoryId).not('order_id', 'is', null);
+  const orderIds = [...new Set(((moves ?? []) as { order_id: string }[]).map((m) => m.order_id))];
+  if (!orderIds.length) return { orders: [] };
+  const { data: rows } = await supabase.from('orders').select('id, created_at, status, client_id, shipping_info, contact_email')
+    .in('id', orderIds).neq('status', 'cancelled').gte('created_at', `${shift(-8)}T00:00:00Z`).lte('created_at', `${shift(16)}T23:59:59Z`);
+  const list = (rows ?? []) as { id: string; created_at: string; client_id: string | null; shipping_info: unknown; contact_email: string | null }[];
+  if (!list.length) return { orders: [] };
+  const clientIds = [...new Set(list.map((o) => o.client_id).filter(Boolean))] as string[];
+  const [{ data: clients }, { data: invoices }] = await Promise.all([
+    clientIds.length ? supabase.from('clients').select('id, name').in('id', clientIds) : Promise.resolve({ data: [] }),
+    supabase.from('sales_invoices').select('order_id, siigo_name').in('order_id', list.map((o) => o.id)).neq('status', 'anulada'),
+  ]);
+  const clientName = new Map(((clients ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
+  const invoiceOf = new Map(((invoices ?? []) as { order_id: string; siigo_name: string | null }[]).map((i) => [i.order_id, i.siigo_name]));
+  const candidates = list.map((o) => ({
+    id: o.id,
+    created_at: o.created_at,
+    customer: orderCustomer({ ...o, client: o.client_id ? { name: clientName.get(o.client_id) ?? null } : null }),
+    moved: ((moves ?? []) as { order_id: string; inventory_id: string; quantity: number }[]).filter((m) => m.order_id === o.id),
+  }));
+  const salida = { id: 'nueva', inventory_id: inventoryId, quantity: -qty, movement_date: date, reason, income_id: null };
+  return { orders: ordersRepeatedBy(salida, candidates).map((o) => ({ id: o.id, customer: o.customer, invoice: invoiceOf.get(o.id) ?? null, date: o.created_at.slice(0, 10) })) };
+}
+
+/**
+ * The same sale was typed as a manual salida and then as this order, which
+ * deducted the product again: removes the manual salida (its stock comes
+ * back). Its income, if it was a paid sale, stays in Flujo de Caja and now
+ * holds the order's money, so the order doesn't count a second time.
+ */
+export async function removeDuplicateSalida(orderId: string, movementId: string) {
+  return _asResult(async () => {
+    if (!(await checkIsAdmin())) throw new Error('Unauthorized');
+    const supabase = await createClient();
+    const { data: mov, error } = await supabase
+      .from('inventory_movements')
+      .select('id, inventory_id, quantity, reason, movement_date, income_id, order_id, tab_source, type, era')
+      .eq('id', movementId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!mov) throw new Error('Esa salida ya no existe.');
+    if (mov.order_id || mov.tab_source !== 'salida' || mov.type !== 'salida' || mov.era !== 'v2') throw new Error('Solo se puede quitar una salida manual que no pertenezca a ninguna orden.');
+
+    const { data: own, error: ownErr } = await supabase.from('inventory_movements').select('inventory_id, quantity').eq('order_id', orderId);
+    if (ownErr) throw new Error(ownErr.message);
+    const took = ((own ?? []) as { inventory_id: string; quantity: number }[]).filter((m) => m.inventory_id === mov.inventory_id).reduce((s, m) => s - Number(m.quantity), 0);
+    if (took <= 0) throw new Error('La orden no ha descontado ese producto: la salida manual no está repetida.');
+
+    if (mov.income_id) {
+      // The paid sale's income keeps the money; the order stops counting by itself.
+      const { data: order } = await supabase.from('orders').select('cashflow_income_id').eq('id', orderId).maybeSingle();
+      if (order && !order.cashflow_income_id) {
+        const { error: linkErr } = await supabase.from('orders').update({ cashflow_income_id: mov.income_id }).eq('id', orderId);
+        if (linkErr && !/cashflow_income_id/.test(linkErr.message)) throw new Error(linkErr.message);
+      }
+      // The movement goes, the income stays.
+      await supabase.from('inventory_movements').update({ income_id: null }).eq('id', movementId);
+    }
+    const { error: delErr } = await supabase.from('inventory_movements').delete().eq('id', movementId);
+    if (delErr) throw new Error(delErr.message);
+    await logAuditAction('DELETE', 'MOVEMENT', movementId, mov.inventory_id, {
+      old_quantity: mov.quantity, reason: mov.reason, movement_date: mov.movement_date, income_id: mov.income_id,
+      note: `Salida manual repetida: la orden #${orderId.slice(0, 8)} ya descontó este producto`,
+    });
+    for (const path of ['/admin/inventory', '/admin/orders', '/admin/cashflow']) revalidatePath(path);
+    return { success: true as const, newStock: await _stockOf(supabase, mov.inventory_id) };
+  });
 }
 
 export async function deleteRepackBatch(batchId: string) {

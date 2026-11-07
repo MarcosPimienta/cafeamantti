@@ -517,4 +517,6 @@ export const inventory: Record<string, string> = {
   "Salen del costo de cada entrada al inventario: el promedio ponderado desde septiembre. Se actualizan solos con cada entrada o compra.": "They come from the cost of each inventory entry: the weighted average since September. They update themselves with every entry or purchase.",
   "Promedio de {n} entrada(s) · última {c} el {d}": "Average of {n} entry(ies) · last {c} on {d}",
   "Sin entradas con costo: precio provisional": "No entries with a cost: provisional price",
+  "Orden #{id}": "Order #{id}",
+  "Esta venta parece estar ya registrada como orden, y esa orden ya descontó este producto:\n{list}\n\nSi es la misma venta, no registres la salida (se descontaría dos veces). ¿Registrarla de todas formas?": "This sale seems to be recorded already as an order, which already deducted this product:\n{list}\n\nIf it's the same sale, don't record the salida (it would be deducted twice). Record it anyway?",
 };

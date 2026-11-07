@@ -57,6 +57,7 @@ import {
   createEntrada,
   setEntryCost,
   createSalida,
+  ordersRepeatedBySalida,
   createProdConsumo,
   createProdAlta,
   createTostionBatch,
@@ -4014,6 +4015,12 @@ function SalidasTab({
     }
     startTransition(async () => {
       try {
+        // The same sale may already be an order that deducted this product: ask before taking it out twice.
+        const repeated = await ordersRepeatedBySalida(form.inventoryId, parseFloat(form.qty), form.date, form.motivo || undefined);
+        if (repeated.orders.length) {
+          const list = repeated.orders.map((o) => `• ${o.invoice ?? tr("Orden #{id}", { id: o.id.slice(0, 8) })} · ${o.customer} · ${o.date}`).join("\n");
+          if (!window.confirm(tr("Esta venta parece estar ya registrada como orden, y esa orden ya descontó este producto:\n{list}\n\nSi es la misma venta, no registres la salida (se descontaría dos veces). ¿Registrarla de todas formas?", { list }))) return;
+        }
         const res = await createSalida(
           form.inventoryId,
           parseFloat(form.qty),

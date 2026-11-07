@@ -23,6 +23,8 @@ export type BoardOrder = {
   site_name?: string | null;
   /** Its live invoice made in the app (not annulled), if any. */
   invoice?: { siigo_name: string | null; status: string } | null;
+  /** Manual salidas that look like this same sale typed again (the product left twice). */
+  duplicate_salidas?: { id: string; inventory_id: string; quantity: number; movement_date: string; reason: string | null; income_id: string | null; product_name: string }[];
   order_items?: any[];
   [key: string]: any;
 };
