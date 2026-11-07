@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { balanceDue, daysOverdue, invoiceLinesFromOrder, invoiceMatches, paymentProblems, paymentState, type LedgerInvoice } from "../ledger";
+import { balanceDue, daysOverdue, invoiceDate, invoiceInRange, invoiceLinesFromOrder, invoiceMatches, parseAmount, paymentProblems, paymentState, sortInvoices, type InvoiceRange, type LedgerInvoice } from "../ledger";
 import { addDays, buildInvoicePayload, buildVoucherPayload, splitDocumentName, type SiigoSettings } from "@/utils/siigo/mapping";
 
 const credit: LedgerInvoice = { total: 100000, status: "emitida", payment_terms: "credito", due_date: "2026-10-10" };
@@ -169,5 +169,43 @@ describe("searching invoices", () => {
   it("an empty search shows everything; one without number is found by customer", () => {
     expect(invoiceMatches(inv, "  ")).toBe(true);
     expect(invoiceMatches({ siigo_name: null, customer_name: "Grupo Nonna SAS" }, "nonna")).toBe(true);
+  });
+});
+
+describe("filtering and sorting the invoice list", () => {
+  const mk = (id: string, total: number, issue_date: string | null, created_at: string, balance = 0) => ({ id, balance, inv: { total, issue_date, created_at } });
+  const rows = [
+    mk("a", 157500, "2026-10-15", "2026-10-15T10:00:00Z"),
+    mk("b", 4331250, "2026-11-03", "2026-11-03T10:00:00Z", 4331250),
+    mk("c", 84000, null, "2026-11-04T15:00:00Z"),
+    mk("d", 157500, "2026-10-20", "2026-10-20T10:00:00Z", 157500),
+  ];
+  const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
+
+  it("a draft without issue date uses the day it was created", () => {
+    expect(invoiceDate(rows[2].inv)).toBe("2026-11-04");
+  });
+
+  it("reads amounts typed with dots, commas or a peso sign", () => {
+    expect(parseAmount("1.500.000")).toBe(1500000);
+    expect(parseAmount("$ 150,000")).toBe(150000);
+    expect(parseAmount("  ")).toBeNull();
+  });
+
+  it("date and amount limits are inclusive and can be combined", () => {
+    const keep = (r: InvoiceRange) => ids(rows.filter((x) => invoiceInRange(x.inv, r)));
+    expect(keep({ from: "2026-10-20", to: "2026-11-03" })).toEqual(["b", "d"]);
+    expect(keep({ min: 157500, max: 157500 })).toEqual(["a", "d"]);
+    expect(keep({ from: "2026-10-16", max: 200000 })).toEqual(["c", "d"]);
+    expect(keep({})).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("sorts by date, amount or balance both ways, ties newest first", () => {
+    expect(ids(sortInvoices(rows, "fecha-desc"))).toEqual(["c", "b", "d", "a"]);
+    expect(ids(sortInvoices(rows, "fecha-asc"))).toEqual(["a", "d", "b", "c"]);
+    expect(ids(sortInvoices(rows, "valor-desc"))).toEqual(["b", "d", "a", "c"]);
+    expect(ids(sortInvoices(rows, "valor-asc"))).toEqual(["c", "d", "a", "b"]);
+    expect(ids(sortInvoices(rows, "saldo-desc"))).toEqual(["b", "d", "c", "a"]);
+    expect(ids(rows)).toEqual(["a", "b", "c", "d"]);
   });
 });
