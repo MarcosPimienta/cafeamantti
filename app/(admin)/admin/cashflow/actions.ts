@@ -36,10 +36,16 @@ async function _saleLockError(supabase: any, incomeId: string): Promise<string |
     .eq('income_id', incomeId)
     .limit(1);
   if (data && data.length > 0) return 'Este ingreso proviene de una salida de inventario. Edítalo o elimínalo desde Inventario → Salidas.';
-  // The payment of an invoice: it is changed or removed with the payment, in Facturas.
-  const { data: pay, error: payErr } = await supabase.from('invoice_payments').select('id').eq('cashflow_income_id', incomeId).eq('income_owned', true).limit(1);
-  if (!payErr && pay && pay.length > 0) return 'Este ingreso es el pago de una factura. Edítalo o elimínalo desde Facturas (el pago).';
+  // The payment of an invoice: it is removed with the payment, in Facturas.
+  if (await _isPaymentIncome(supabase, incomeId)) return 'Este ingreso es el pago de una factura. Para borrarlo, elimina el pago en Facturas.';
   return null;
+}
+
+/** The income an invoice payment created: its value and date belong to the payment. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function _isPaymentIncome(supabase: any, incomeId: string): Promise<boolean> {
+  const { data, error } = await supabase.from('invoice_payments').select('id').eq('cashflow_income_id', incomeId).eq('income_owned', true).limit(1);
+  return !error && !!data && data.length > 0;
 }
 
 /** From this day (the v2 cutover) only web orders count by themselves; an invoice's money enters with its payments. */
@@ -490,6 +496,25 @@ export async function updateIncomeDirect(
     .eq('id', id)
     .single();
   if (getErr) return { error: getErr.message };
+
+  // An invoice payment's income: its support and concept can change here; its value comes from the payment.
+  if (await _isPaymentIncome(supabase, id)) {
+    const same = (a: unknown, b: unknown) => Number(a ?? 0) === Number(b ?? 0);
+    const moneyChanged =
+      (income.gross_amount !== undefined && !same(income.gross_amount, oldData.gross_amount ?? oldData.amount)) ||
+      (income.amount !== undefined && !same(income.amount, oldData.amount)) ||
+      (income.fee_amount !== undefined && !same(income.fee_amount, oldData.fee_amount)) ||
+      (income.shipping_cost !== undefined && !same(income.shipping_cost, oldData.shipping_cost)) ||
+      (income.tax_amount !== undefined && !same(income.tax_amount, oldData.tax_amount)) ||
+      (income.category !== undefined && income.category !== oldData.category);
+    if (moneyChanged) return { error: 'El valor y la categoría de este ingreso vienen del pago de la factura: cámbialos en Facturas (borra el pago y regístralo de nuevo). Aquí puedes adjuntar el soporte o cambiar el concepto.' };
+    const fields = { image_url: income.image_url !== undefined ? income.image_url ?? null : oldData.image_url, concept: income.concept ?? oldData.concept };
+    const { data: newData, error } = await supabase.from('cashflow_incomes').update(fields).eq('id', id).select().single();
+    if (error) return { error: error.message };
+    await supabase.from('cashflow_audit_logs').insert({ admin_id: user?.id, action_type: 'UPDATE_INCOME', income_id: id, cashflow_id: oldData.cashflow_id, details: { old: { image_url: oldData.image_url, concept: oldData.concept }, new: fields } });
+    revalidatePath('/admin/cashflow');
+    return { success: true, data: newData };
+  }
 
   const lockErr = await _saleLockError(supabase, id);
   if (lockErr) return { error: lockErr };

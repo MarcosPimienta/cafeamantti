@@ -115,3 +115,23 @@ describe("an order already counted by a manual income", () => {
   });
 });
 
+
+describe("the income of an invoice payment", () => {
+  beforeEach(() => {
+    db.rows("daily_cashflows").push({ id: "d4", date: "2026-11-04" });
+    db.rows("cashflow_incomes").push({ id: "pay-inc", cashflow_id: "d4", era: "v2", concept: "Pago FV-2-763 · Marcos Pimienta", category: "Ventas Físicas", amount: 84000, gross_amount: 84000, fee_amount: 0, shipping_cost: 0, tax_amount: 0, net_revenue: 84000, image_url: null });
+    db.rows("invoice_payments").push({ id: "p1", cashflow_income_id: "pay-inc", income_owned: true });
+  });
+
+  it("takes its support and a new concept, but not a new value or category", async () => {
+    const res = await updateIncomeDirect("pay-inc", { concept: "Pago FV-2-763 · Marcos Pimienta", category: "Ventas Físicas", amount: 84000, gross_amount: 84000, fee_amount: 0, shipping_cost: 0, tax_amount: 0, image_url: "https://x/comprobante.png" });
+    expect(res).toMatchObject({ success: true });
+    expect(db.byId("cashflow_incomes", "pay-inc")).toMatchObject({ image_url: "https://x/comprobante.png", amount: 84000 });
+    expect(await updateIncomeDirect("pay-inc", { amount: 90000, gross_amount: 90000 })).toMatchObject({ error: expect.stringMatching(/vienen del pago de la factura/) });
+    expect(db.byId("cashflow_incomes", "pay-inc")!.amount).toBe(84000);
+  });
+
+  it("can't be deleted here: it goes with its payment", async () => {
+    expect(await deleteIncomeDirect("pay-inc")).toMatchObject({ error: expect.stringMatching(/elimina el pago en Facturas/) });
+  });
+});
