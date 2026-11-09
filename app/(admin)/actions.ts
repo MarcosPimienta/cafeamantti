@@ -2762,6 +2762,17 @@ export async function getCostingData() {
     migrated: settingsRow !== null && inv.some((i) => 'standard_cost' in i),
     /** item id → its costed entradas (null before the entry-cost migration). */
     entryCosts,
+    /**
+     * item id → what one stock unit costs: roasted coffee by its cost sheet
+     * (café + tostión + empaque, without dispatch), anything else by what it
+     * cost when it came in. null = unknown.
+     */
+    unitCosts: Object.fromEntries(inv.map((i) => {
+      const line = sheet.lines.find((l) => l.product_code === i.product_code);
+      const roasted = line && line.cafe !== null && line.empaque !== null ? (line.cafe + line.tostion + line.empaque) * line.kgPerUnit : null;
+      const typed = costItems.find((c) => c.id === i.id)?.standard_cost ?? null;
+      return [i.id as string, { name: i.product_name as string, unit: (i.unit as string | null) ?? null, cost: line ? roasted : typed }];
+    })) as Record<string, { name: string; unit: string | null; cost: number | null }>,
   };
 }
 

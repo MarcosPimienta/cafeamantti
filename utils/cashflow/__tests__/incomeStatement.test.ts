@@ -5,9 +5,9 @@ const item = (concept: string, category: string, amount: number) => ({ date: "20
 
 // A month like October: $18,3M in sales, $12,88M of coffee sold.
 const october: MonthInput = {
-  incomes: [{ ...item("RC-1-256 · Contegral", "Ventas Físicas", 18_300_000), fee: 0, shipping: 0, tax: 0 }],
-  cogs: [item("Café verde", "Costo de Ventas (Materia prima, insumos, empaques)", 11_000_000), item("Maquila", "Costos de Producción (Maquila, Servicio de tostión)", 1_880_000)],
-  inventoryCost: 0,
+  sales: [item("Facturas de octubre", "Factura", 18_300_000)],
+  deductions: [],
+  cost: [item("114 bolsas de 2,5 kg × $112.982", "Costo por unidad", 12_880_000)],
   opex: [
     item("Alejandra", "Honorarios Contables (Contador, revisoría)", 2_000_000),
     item("Laura", "Honorarios Administrativos (Consultoría, capacitación)", 500_000),
@@ -42,14 +42,14 @@ describe("estado de resultados", () => {
     expect(interest.items.map((i) => i.concept)).toEqual(["Gloria", "Diana (se suma al préstamo)"]);
   });
 
-  it("IVA, gateway fees and freight come off sales", () => {
-    const s = buildStatement({ ...october, incomes: [{ ...item("Venta web", "Ventas Web", 100_000), fee: 3_560, shipping: 0, tax: 15_966 }] });
-    expect(s.lines.find((l) => l.key === "deductions")!.amount).toBe(-19_526);
-    expect(s.netSales).toBe(80_474);
+  it("credit notes come off sales", () => {
+    const s = buildStatement({ ...october, deductions: [item("Nota crédito NC-1-12", "Nota crédito", 300_000)] });
+    expect(s.lines.find((l) => l.key === "deductions")!.amount).toBe(-300_000);
+    expect(s.netSales).toBe(18_000_000);
   });
 
   it("no margin, no break-even", () => {
-    expect(buildStatement({ ...october, incomes: [] }).breakEven).toBeNull();
+    expect(buildStatement({ ...october, sales: [] }).breakEven).toBeNull();
   });
 });
 
@@ -100,7 +100,7 @@ describe("what the screen draws", () => {
     expect(h.slices.find((x) => x.key === "cost")!.per100).toBe(70.38);
     expect(h.slices.some((x) => x.key === "deductions")).toBe(false);
     expect(h.result.per100).toBe(-1.46);
-    expect(perHundred(buildStatement({ ...october, incomes: [] }))).toBeNull();
+    expect(perHundred(buildStatement({ ...october, sales: [] }))).toBeNull();
   });
 
   it("biggest changes: an expense that grew is bad news", () => {
@@ -111,6 +111,6 @@ describe("what the screen draws", () => {
 
   it("safety margin", () => {
     expect(safetyMargin(s)).toBe(-4.93);
-    expect(safetyMargin(buildStatement({ ...october, incomes: [] }))).toBeNull();
+    expect(safetyMargin(buildStatement({ ...october, sales: [] }))).toBeNull();
   });
 });

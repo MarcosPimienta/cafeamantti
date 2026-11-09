@@ -1,12 +1,14 @@
 'use server';
 
-import { PAID_ORDER_STATUSES } from '@/utils/orders/stock';
+import { orderIsSold, PAID_ORDER_STATUSES } from '@/utils/orders/stock';
 
 import { createClient } from '@/utils/supabase/server';
-import { checkIsAdmin } from '../../actions';
+import { checkIsAdmin, getCostingData } from '../../actions';
 import { orderCustomer } from '@/utils/orders/pendingDeliveries';
 import { accruedInterestInMonth, type Loan, type LoanMove } from '@/utils/loans/ledger';
 import { buildStatement, monthBefore, type Statement, type StatementItem } from '@/utils/cashflow/incomeStatement';
+import { costOfSalidas, linesBase, unexplainedSale } from '@/utils/cashflow/accrual';
+import { orderTaxTotals, pricesIncludeTax } from '@/utils/orders/tax';
 import { revalidatePath } from 'next/cache';
 import {
   DailyCashflow,
@@ -825,6 +827,10 @@ export type IncomeStatementReport = {
     cashToConfirm: { count: number; total: number };
     /** Invoice payments of the month that are not in Flujo de Caja. */
     paymentsOutside: { count: number; total: number };
+    /** Products that left in the month with no known cost (their cost is missing from the statement). */
+    missingCost: { name: string; quantity: number }[];
+    /** Sales taken from manual incomes that no order or invoice explains. */
+    approximated: { count: number; total: number };
   };
 };
 
@@ -837,9 +843,15 @@ const DEPRECIATION_LABEL: Record<string, string> = {
 };
 
 /**
- * The income statement of a month as a table, with the 5 months before it
- * for comparison and trend: sales down to the month's result, interest
- * included (paid, and accrued on the loans that capitalize).
+ * The income statement of a month — profitability, not cash — with the 5
+ * months before it for comparison and trend:
+ * - sales: what was sold in the month before IVA (app invoices by their date,
+ *   orders sold without one, and as an approximation the sales incomes no
+ *   order or invoice explains), less credit notes;
+ * - cost: what left the inventory as a sale × each product's unit cost (the
+ *   purchases of green coffee, roasting and packaging are inventory, not a
+ *   cost of the month they are paid);
+ * - expenses of the month, depreciation, and interest (paid and accrued).
  */
 export async function getIncomeStatement(month: number, year: number): Promise<IncomeStatementReport> {
   if (!(await checkIsAdmin())) throw new Error('Unauthorized');
@@ -849,53 +861,107 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
   const windowStart = `${months[0]}-01`;
   const { period_end: windowEnd } = monthBounds(month, year);
 
-  const [incRes, orderRes, expRes, invRes, capexRes, loansRes, movesRes] = await Promise.all([
-    supabase.from('cashflow_incomes').select('concept, category, gross_amount, amount, fee_amount, shipping_cost, tax_amount, cashflow:cashflow_id!inner ( date )').gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
-    selectPaidOrders(supabase, 'id, total_amount, created_at', (q, dateCol) => q.gte(dateCol, `${windowStart}T00:00:00Z`).lt(dateCol, `${windowEnd}T00:00:00Z`)),
-    supabase.from('cashflow_expenses').select('concept, category, net_amount, expense_type, cashflow:cashflow_id!inner ( date )').in('expense_type', ['COGS', 'OPEX']).gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
-    supabase.from('inventory_logs').select('total_cost, created_at').eq('movement_type', 'CONSUMPTION').gte('created_at', `${windowStart}T00:00:00Z`).lt('created_at', `${windowEnd}T00:00:00Z`),
+  const [invoiceRes, noteRes, orderRes, incRes, ownedRes, receiptRes, salidaRes, sellableRes, expRes, capexRes, loansRes, movesRes, costing] = await Promise.all([
+    supabase.from('sales_invoices').select('id, order_id, lines, shipping, issue_date, created_at, siigo_name, customer_name').neq('status', 'anulada'),
+    supabase.from('credit_notes').select('invoice_id, lines, total, created_at, siigo_name'),
+    supabase.from('orders').select('id, status, payment_status, paid_at, delivered_at, created_at, source, total_amount, prices_include_tax, siigo_invoice, cashflow_income_id, shipping_info, contact_email, client:client_id ( name ), order_items ( price_at_time, quantity, tax_rate )').neq('status', 'cancelled'),
+    supabase.from('cashflow_incomes').select('id, concept, category, gross_amount, amount, tax_amount, cashflow:cashflow_id!inner ( date )').gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
+    supabase.from('invoice_payments').select('cashflow_income_id').eq('income_owned', true),
+    supabase.from('customer_receipts').select('income_id, items'),
+    supabase.from('inventory_movements').select('inventory_id, quantity, movement_date, reason').eq('era', 'v2').eq('type', 'salida').eq('tab_source', 'salida').gte('movement_date', windowStart).lt('movement_date', windowEnd),
+    supabase.from('inventory').select('id, is_sellable'),
+    supabase.from('cashflow_expenses').select('concept, category, net_amount, cashflow:cashflow_id!inner ( date )').eq('expense_type', 'OPEX').gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
     supabase.from('cashflow_expenses').select('net_amount, depreciation_months, created_at, in_service_date, residual_value, asset_use, cashflow:cashflow_id!inner ( date )').eq('expense_type', 'CAPEX').lt('cashflow.date', windowEnd),
     supabase.from('loans').select('*').eq('scheme', 'capitaliza'),
     supabase.from('loan_movements').select('loan_id, move_date, kind, amount'),
+    getCostingData().catch(() => null),
   ]);
   const dateOf = (r: { cashflow?: { date?: string } | { date?: string }[] | null }) => {
     const c = Array.isArray(r.cashflow) ? r.cashflow[0] : r.cashflow;
     return c?.date ?? '';
   };
   const n = (v: unknown) => Number(v ?? 0) || 0;
+  const day = (v: unknown) => String(v ?? '').slice(0, 10);
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const rows = (r: { data: unknown }) => (r.data ?? []) as any[];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const incomes = ((incRes.data ?? []) as any[]).map((r) => ({
-    date: dateOf(r), concept: r.concept ?? '', category: r.category ?? '',
-    amount: n(r.gross_amount ?? r.amount), fee: n(r.fee_amount), shipping: n(r.shipping_cost), tax: n(r.tax_amount),
-  }));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const o of (orderRes.data ?? []) as any[]) {
-    const { fields } = resolveIncomeFields({ gross_amount: n(o.total_amount), amount: n(o.total_amount), category: 'Ventas Web' });
-    incomes.push({ date: String(o.paid_at ?? o.created_at).slice(0, 10), concept: `Venta web #${String(o.id).slice(0, 8)}`, category: 'Ventas Web', amount: fields.gross_amount, fee: fields.fee_amount, shipping: fields.shipping_cost, tax: fields.tax_amount });
+  // ── What was sold (before IVA) ──
+  const sales: (StatementItem & { kind: 'factura' | 'pedido' | 'aprox' })[] = [];
+  const invoicedOrders = new Set<string>();
+  const appInvoiceSiigoIds = new Set<string>();
+  for (const inv of rows(invoiceRes)) {
+    invoicedOrders.add(inv.order_id);
+    sales.push({ kind: 'factura', date: day(inv.issue_date ?? inv.created_at), concept: `Factura ${inv.siigo_name ?? 'por enviar'} · ${inv.customer_name}`, category: 'Factura', amount: linesBase(inv.lines, inv.shipping) });
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const expenses = ((expRes.data ?? []) as any[]).map((r) => ({ type: r.expense_type as string, date: dateOf(r), concept: r.concept ?? '', category: r.category ?? '', amount: n(r.net_amount) }));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const consumptions = ((invRes.data ?? []) as any[]).map((r) => ({ date: String(r.created_at).slice(0, 10), amount: n(r.total_cost) }));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const capex = ((capexRes.data ?? []) as any[]).map(({ cashflow, ...a }) => ({ ...a, purchase_date: (Array.isArray(cashflow) ? cashflow[0] : cashflow)?.date ?? null }));
+  // Invoices made in the app are known to Siigo by their id: a cobro that pays them is not a new sale.
+  const { data: siigoIds } = await supabase.from('sales_invoices').select('siigo_invoice_id').not('siigo_invoice_id', 'is', null);
+  for (const r of (siigoIds ?? []) as { siigo_invoice_id: string }[]) appInvoiceSiigoIds.add(r.siigo_invoice_id);
+
+  const deductions: StatementItem[] = rows(noteRes).map((c) => ({ date: day(c.created_at), concept: `Nota crédito ${c.siigo_name ?? ''}`.trim(), category: 'Nota crédito', amount: c.lines?.length ? linesBase(c.lines) : n(c.total) }));
+
+  // Orders sold without an app invoice (web orders, deliveries not invoiced, invoices made straight in Siigo).
+  const linkedIncomes = new Set<string>();
+  for (const o of rows(orderRes)) {
+    if (o.cashflow_income_id) linkedIncomes.add(o.cashflow_income_id);
+    if (invoicedOrders.has(o.id) || !orderIsSold(o) || n(o.total_amount) <= 0) continue;
+    const base = orderTaxTotals((o.order_items ?? []).map((it: any) => ({ price: n(it.price_at_time), quantity: n(it.quantity), tax_rate: it.tax_rate })), pricesIncludeTax(o.prices_include_tax, undefined)).subtotal;
+    const who = orderCustomer(o);
+    sales.push({
+      kind: 'pedido',
+      date: day(o.delivered_at ?? o.paid_at ?? o.created_at),
+      concept: o.source === 'web' ? `Venta web #${String(o.id).slice(0, 8)} · ${who}` : `Pedido #${String(o.id).slice(0, 8)} · ${who}${o.siigo_invoice ? ` · ${o.siigo_invoice}` : ' (sin factura)'}`,
+      category: o.source === 'web' ? 'Venta web' : 'Pedido',
+      amount: base || n(o.total_amount),
+    });
+  }
+
+  // Sales typed in Flujo de Caja that no order or invoice explains: counted once, as an approximation.
+  const owned = new Set(rows(ownedRes).map((p) => p.cashflow_income_id as string));
+  const appPortion = new Map<string, number>();
+  for (const r of rows(receiptRes)) {
+    if (!r.income_id) continue;
+    const part = (r.items ?? []).filter((i: any) => i.siigo_invoice_id && appInvoiceSiigoIds.has(i.siigo_invoice_id)).reduce((t: number, i: any) => t + n(i.value), 0);
+    appPortion.set(r.income_id, (appPortion.get(r.income_id) ?? 0) + part);
+  }
+  for (const i of rows(incRes)) {
+    if (!/venta|servicio/i.test(i.category ?? '') || owned.has(i.id) || linkedIncomes.has(i.id)) continue;
+    const amount = unexplainedSale({ amount: n(i.gross_amount ?? i.amount), tax: n(i.tax_amount) }, appPortion.get(i.id) ?? 0);
+    if (amount > 0) sales.push({ kind: 'aprox', date: dateOf(i), concept: `${i.concept} (ingreso sin pedido)`, category: 'Ingreso manual', amount });
+  }
+
+  // ── What the coffee that left cost ──
+  const sellable = new Set(rows(sellableRes).filter((i) => i.is_sellable !== false).map((i) => i.id as string));
+  const unitCosts = new Map(Object.entries(costing?.unitCosts ?? {}));
+  const salidas = rows(salidaRes).filter((m) => sellable.has(m.inventory_id)).map((m) => ({ date: day(m.movement_date), inventory_id: m.inventory_id, quantity: n(m.quantity), reason: m.reason ?? null }));
+
+  const expenses = rows(expRes).map((r) => ({ date: dateOf(r), concept: r.concept ?? '', category: r.category ?? '', amount: n(r.net_amount) }));
+  const capex = rows(capexRes).map(({ cashflow, ...a }) => ({ ...a, purchase_date: (Array.isArray(cashflow) ? cashflow[0] : cashflow)?.date ?? null }));
+  /* eslint-enable @typescript-eslint/no-explicit-any */
   const loans = loansRes.error ? [] : ((loansRes.data ?? []) as Loan[]);
   const moves = (movesRes.data ?? []) as LoanMove[];
 
   const inMonth = (d: string, m: string) => d.slice(0, 7) === m;
-  const strip = ({ date, concept, category, amount }: StatementItem & Record<string, unknown>): StatementItem => ({ date, concept, category, amount });
+  const strip = ({ date, concept, category, amount }: StatementItem): StatementItem => ({ date, concept, category, amount });
+  let missingCost: { name: string; quantity: number }[] = [];
+  let approximated = { count: 0, total: 0 };
   const statements = months.map((m) => {
     const [y, mo] = m.split('-').map(Number);
     const { period_start, period_end } = monthBounds(mo, y);
     const dep = summarizeMonthlyPL({ period_start, period_end, manualIncomes: [], webOrders: [], cogsExpenses: [], inventoryConsumptions: [], opexExpenses: [], capexItems: capex, paidExpenses: [] }).depreciation_by_use;
+    const cost = costOfSalidas(salidas.filter((x) => inMonth(x.date, m)), unitCosts);
+    const monthSales = sales.filter((x) => inMonth(x.date, m));
+    if (m === ym) {
+      missingCost = cost.missing;
+      const aprox = monthSales.filter((x) => x.kind === 'aprox');
+      approximated = { count: aprox.length, total: aprox.reduce((t, x) => t + x.amount, 0) };
+    }
     return {
       month: m,
       statement: buildStatement({
-        incomes: incomes.filter((i) => inMonth(i.date, m)),
-        cogs: expenses.filter((e) => e.type === 'COGS' && inMonth(e.date, m)).map(strip),
-        inventoryCost: consumptions.filter((c) => inMonth(c.date, m)).reduce((s, c) => s + c.amount, 0),
-        opex: expenses.filter((e) => e.type === 'OPEX' && inMonth(e.date, m)).map(strip),
+        sales: monthSales.map(strip),
+        deductions: deductions.filter((x) => inMonth(x.date, m)),
+        cost: cost.items,
+        opex: expenses.filter((e) => inMonth(e.date, m)),
         accruedInterest: loans
           .map((l) => ({ date: `${m}-01`, concept: `${l.creditor_name} (interés que se suma al préstamo)`, category: 'Intereses causados', amount: Math.round(accruedInterestInMonth(l, moves, m) * 100) / 100 }))
           .filter((i) => i.amount > 0),
@@ -923,6 +989,8 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
     warnings: {
       cashToConfirm: { count: pendingCash.length, total: pendingCash.reduce((s, i) => s + n(i.total), 0) },
       paymentsOutside: { count: outside.length, total: outside.reduce((s, p) => s + n(p.amount), 0) },
+      missingCost,
+      approximated,
     },
   };
 }

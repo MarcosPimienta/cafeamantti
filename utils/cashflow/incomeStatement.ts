@@ -1,8 +1,8 @@
-// The monthly income statement (estado de resultados) as a table: sales,
-// cost of the coffee sold, gross margin, selling and administration expenses,
-// depreciation, the operating result, then interest and bank costs down to
-// the month's result. Pure functions; the labels are Spanish keys that the
-// screen translates.
+// The monthly income statement (estado de resultados) as a table: what was
+// sold (before IVA), the cost of the coffee that left, gross margin, selling
+// and administration expenses, depreciation, the operating result, then
+// interest and bank costs down to the month's result. Profitability, not
+// cash. Pure functions; the labels are Spanish keys the screen translates.
 
 /** One record behind a line: an income, an expense, an accrual. */
 export type StatementItem = { date: string; concept: string; category: string; amount: number };
@@ -39,12 +39,12 @@ export function expenseGroup(category: string): ExpenseGroup {
 }
 
 export type MonthInput = {
-  /** Every income of the month (manual, payments, web orders), already broken down. */
-  incomes: (StatementItem & { fee: number; shipping: number; tax: number })[];
-  /** COGS expenses (net of IVA). */
-  cogs: StatementItem[];
-  /** Inventory consumed (cost of what left), if any. */
-  inventoryCost: number;
+  /** What was sold in the month, before IVA (invoices, orders, sales without an order). */
+  sales: StatementItem[];
+  /** What comes off sales: credit notes, discounts (positive amounts). */
+  deductions: StatementItem[];
+  /** Cost of the coffee that left: units × unit cost (positive amounts). */
+  cost: StatementItem[];
   /** OPEX expenses (net of IVA). */
   opex: StatementItem[];
   /** Interest that capitalizes into a loan (no money leaves). */
@@ -68,15 +68,10 @@ export type Statement = {
 };
 
 export function buildStatement(m: MonthInput): Statement {
-  const sales = sum(m.incomes);
-  const deductionItems: StatementItem[] = m.incomes
-    .filter((i) => i.fee + i.shipping + i.tax > 0)
-    .map((i) => ({ date: i.date, concept: i.concept, category: i.category, amount: round2(i.fee + i.shipping + i.tax) }));
-  const deductions = sum(deductionItems);
+  const sales = sum(m.sales);
+  const deductions = sum(m.deductions);
   const netSales = round2(sales - deductions);
-
-  const costItems = [...m.cogs, ...(m.inventoryCost > 0 ? [{ date: "", concept: "Consumo de inventario", category: "Inventario", amount: round2(m.inventoryCost) }] : [])];
-  const cost = sum(costItems);
+  const cost = sum(m.cost);
   const gross = round2(netSales - cost);
 
   const by = (g: ExpenseGroup) => m.opex.filter((e) => expenseGroup(e.category) === g);
@@ -91,10 +86,10 @@ export function buildStatement(m: MonthInput): Statement {
     ({ key, label, amount, kind, items: [...items].sort((a, b) => b.amount - a.amount), ...(hint ? { hint } : {}) });
 
   const lines: StatementLine[] = [
-    line("sales", "Ventas", sales, m.incomes.map(({ date, concept, category, amount }) => ({ date, concept, category, amount }))),
-    line("deductions", "IVA, comisiones y fletes", -deductions, deductionItems),
+    line("sales", "Ventas (sin IVA)", sales, m.sales),
+    line("deductions", "Notas crédito y descuentos", -deductions, m.deductions),
     line("net_sales", "Ventas netas", netSales, [], "subtotal"),
-    line("cost", "Costo del café vendido", -cost, costItems, "line", "café, maquila, empaques"),
+    line("cost", "Costo del café vendido", -cost, m.cost, "line", "lo que salió del inventario × su costo"),
     line("gross", "Margen bruto", gross, [], "subtotal"),
     line("selling", "Gastos de ventas", -sum(selling), selling, "line", "transporte, comisiones"),
     line("admin", "Gastos de administración", -sum(admin), admin, "line", "honorarios, contabilidad"),

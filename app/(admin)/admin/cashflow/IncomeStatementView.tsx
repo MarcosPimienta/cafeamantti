@@ -141,7 +141,10 @@ export default function IncomeStatementView({ formatCurrency }: { formatCurrency
   };
 
   const warnings = report?.warnings;
-  const pending = !loading && warnings ? warnings.cashToConfirm.count + warnings.paymentsOutside.count : 0;
+  // What makes this month's profit less sure: coffee that left with no known cost, and sales taken from manual incomes.
+  const missingCost = warnings?.missingCost ?? [];
+  const approximated = warnings?.approximated ?? { count: 0, total: 0 };
+  const pending = !loading && warnings ? missingCost.length + approximated.count : 0;
 
   return (
     <div className="space-y-5">
@@ -166,21 +169,23 @@ export default function IncomeStatementView({ formatCurrency }: { formatCurrency
         </div>
       </div>
 
-      {/* What may still change the month */}
+      <p className="text-xs text-foreground/50">
+        {tr("Rentabilidad, no caja: lo vendido en el mes (sin IVA, por la fecha de la factura o la entrega), menos lo que costó el café que salió del inventario, los gastos del mes, la depreciación y los intereses. Las compras de café, maquila y empaques no se restan cuando se pagan sino cuando ese café se vende.")}
+      </p>
+
+      {/* What makes the month's result less sure */}
       {warnings && pending > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span className="font-bold">{tr("Datos pendientes que cambian el resultado:")}</span>
-            {warnings.cashToConfirm.count > 0 && (
-              <span>{tr("{n} factura(s) de contado sin confirmar ({v})", { n: String(warnings.cashToConfirm.count), v: formatCurrency(warnings.cashToConfirm.total) })}</span>
-            )}
-            {warnings.cashToConfirm.count > 0 && warnings.paymentsOutside.count > 0 && <span aria-hidden="true">·</span>}
-            {warnings.paymentsOutside.count > 0 && (
-              <span>{tr("{n} pago(s) fuera de Flujo de Caja ({v})", { n: String(warnings.paymentsOutside.count), v: formatCurrency(warnings.paymentsOutside.total) })}</span>
-            )}
-          </p>
-          <Link href="/admin/invoices" className="font-bold underline">{tr("Ir a Facturas")}</Link>
+        <div className="space-y-1 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="flex items-center gap-2 font-bold"><AlertTriangle className="w-4 h-4 shrink-0" />{tr("El resultado de este mes es aproximado:")}</p>
+          {missingCost.length > 0 && (
+            <p className="text-xs">
+              • {tr("Salieron productos sin costo conocido, así que su costo no está restado: {items}.", { items: missingCost.map((m) => `${m.quantity.toLocaleString(locale)} ${m.name}`).join(", ") })}{" "}
+              <Link href="/admin/inventory" className="font-bold underline">{tr("Ponerles costo")}</Link>
+            </p>
+          )}
+          {approximated.count > 0 && (
+            <p className="text-xs">• {tr("{n} venta(s) por {v} se tomaron de ingresos manuales sin pedido ni factura (cobros de facturas hechas en Siigo o ventas sueltas). Si alguno ya tiene pedido, lígalo para no contarlo dos veces.", { n: String(approximated.count), v: formatCurrency(approximated.total) })}</p>
+          )}
         </div>
       )}
 
