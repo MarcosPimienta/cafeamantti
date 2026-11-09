@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildStatement, change, expenseGroup, monthBefore, pctOfSales, type MonthInput } from "../incomeStatement";
+import { biggestChanges, buildStatement, byCategory, change, expenseGroup, monthBefore, pctOfSales, perHundred, safetyMargin, waterfall, type MonthInput } from "../incomeStatement";
 
 const item = (concept: string, category: string, amount: number) => ({ date: "2026-10-15", concept, category, amount });
 
@@ -70,5 +70,47 @@ describe("helpers", () => {
     expect(change(5, 0)).toBeNull();
     expect(monthBefore("2026-01", 1)).toBe("2025-12");
     expect(monthBefore("2026-10", 5)).toBe("2026-05");
+  });
+});
+
+describe("what the screen draws", () => {
+  const s = buildStatement(october);
+
+  it("the waterfall walks from sales to the result, subtotals on zero", () => {
+    const w = waterfall(s);
+    const at = (k: string) => w.find((x) => x.key === k)!;
+    expect(at("sales")).toMatchObject({ kind: "up", range: [0, 18_300_000] });
+    expect(at("cost")).toMatchObject({ kind: "down", range: [5_420_000, 18_300_000] });
+    expect(at("gross")).toMatchObject({ kind: "subtotal", range: [0, 5_420_000] });
+    // Interest takes the month below zero: the bar crosses the axis.
+    expect(at("interest").range).toEqual([-267_000, 1_670_000]);
+    expect(at("result")).toMatchObject({ kind: "total", range: [-267_000, 0] });
+  });
+
+  it("adds a line's records up by category", () => {
+    const admin = s.lines.find((l) => l.key === "admin")!;
+    expect(byCategory([...admin.items, item("Otro", "Honorarios Contables (Contador, revisoría)", 100_000)])).toEqual([
+      { category: "Honorarios Contables (Contador, revisoría)", amount: 2_100_000, count: 2 },
+      { category: "Honorarios Administrativos (Consultoría, capacitación)", amount: 500_000, count: 1 },
+    ]);
+  });
+
+  it("every $100 of sales: what each line took and what was left", () => {
+    const h = perHundred(s)!;
+    expect(h.slices.find((x) => x.key === "cost")!.per100).toBe(70.38);
+    expect(h.slices.some((x) => x.key === "deductions")).toBe(false);
+    expect(h.result.per100).toBe(-1.46);
+    expect(perHundred(buildStatement({ ...october, incomes: [] }))).toBeNull();
+  });
+
+  it("biggest changes: an expense that grew is bad news", () => {
+    const before = buildStatement({ ...october, opex: october.opex.map((e) => (e.concept === "Transporte" ? { ...e, amount: 400_000 } : e)) });
+    const [first] = biggestChanges(s, before, 1);
+    expect(first).toMatchObject({ key: "selling", delta: -600_000, good: false });
+  });
+
+  it("safety margin", () => {
+    expect(safetyMargin(s)).toBe(-4.93);
+    expect(safetyMargin(buildStatement({ ...october, incomes: [] }))).toBeNull();
   });
 });

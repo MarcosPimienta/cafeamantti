@@ -6,18 +6,14 @@ import {
   ArrowDownCircle, ArrowUpCircle, BarChart2, History, Plus, Upload,
   Image as ImageIcon, Trash2, X, Loader2, Check, Calendar, AlertTriangle,
   ChevronDown, ChevronUp,
-  Activity, Package, Pencil, Archive, FileSpreadsheet, Landmark,
+  Activity, Package, Pencil, Archive, Landmark,
 } from "lucide-react";
-import {
-  Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ComposedChart, Area,
-} from "recharts";
 import { createClient } from "@/utils/supabase/client";
 import {
   getAllExpenses, getAllIncomes, getCashflowHistory,
   createExpenseDirect, createSplitExpense, deleteExpenseDirect,
   createIncomeDirect, deleteIncomeDirect,
-  getMissingCashflowDays, getIncomeStatement, type IncomeStatementReport,
+  getMissingCashflowDays,
   markDateAsNoMovements,
   updateExpenseDirect, updateIncomeDirect,
   getFixedAssets,
@@ -32,7 +28,8 @@ import BreakdownBars, { KIND_COLOR } from "./BreakdownBars";
 import { expenseBreakdown, incomeBreakdown, previousPeriod } from "./reportBreakdown";
 import { categoryMonths, categoryTypes, namesOf } from "@/utils/expenses/categories";
 import { useTr } from "@/app/(admin)/AdminI18n";
-import { change, pctOfSales, type LineKey } from "@/utils/cashflow/incomeStatement";
+import { ExportButton, exportExcel, nowLabel } from "./ExportButton";
+import IncomeStatementView from "./IncomeStatementView";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -65,24 +62,7 @@ const fmt = (val: number) =>
 
 /** Bogotá's today as 'YYYY-MM-DD'. */
 const todayBogota = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
-const nowLabel = () => new Date().toLocaleString("es-CO", { timeZone: "America/Bogota" });
-
-/** Builds the .xlsx in the browser; xlsx is only downloaded on the first export. */
-async function exportExcel(filename: string, sheets: import("@/utils/excel/workbook").TableSheet[]) {
-  const { downloadWorkbook } = await import("@/utils/excel/workbook");
-  downloadWorkbook(filename, sheets);
-}
 const fileSuffix = (f: ExportFilters) => [f.from, f.to].filter(Boolean).join("_a_") || "completo";
-
-function ExportButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
-  const tr = useTr();
-  return (
-    <button type="button" onClick={onClick} disabled={disabled}
-      className="flex items-center gap-2 px-4 py-2 border border-foreground/15 bg-white text-foreground/70 rounded-lg font-bold text-sm hover:bg-foreground/5 transition-colors disabled:opacity-40">
-      <FileSpreadsheet className="w-4 h-4 text-emerald-700" />{" "}{tr("Exportar a Excel")}
-    </button>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // DROPZONE
@@ -922,215 +902,6 @@ function LinkedOrdersPicker({ date, incomeId, gross, value, onChange }: {
           {sum > gross + 1 && <span className="font-normal"> · {tr("los pedidos suman más: el resto queda por cobrar en sus facturas")}</span>}
           {sum + 1 < gross && <span className="font-normal"> · {tr("el ingreso trae más que los pedidos")}</span>}
         </p>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// P&L REPORT TAB CONTENT
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Estado de resultados: the month as a table (sales down to the month's
- * result, interest included), each line opening into the records behind it,
- * against the month before and with the last 6 months' trend.
- */
-function PLReportView({ formatCurrency }: { formatCurrency: (v: number) => string }) {
-  const tr = useTr();
-  const now = new Date();
-  const [ym, setYm] = useState({ month: now.getMonth() + 1, year: now.getFullYear() });
-  const [report, setReport] = useState<IncomeStatementReport | null>(null);
-  const [loadedFor, setLoadedFor] = useState("");
-  const [open, setOpen] = useState<Set<LineKey>>(new Set());
-  const key = `${ym.year}-${String(ym.month).padStart(2, "0")}`;
-  const loading = loadedFor !== key;
-
-  useEffect(() => {
-    let alive = true;
-    getIncomeStatement(ym.month, ym.year).then((r) => {
-      if (!alive) return;
-      setReport(r);
-      setLoadedFor(`${ym.year}-${String(ym.month).padStart(2, "0")}`);
-    });
-    return () => { alive = false; };
-  }, [ym]);
-
-  const locale = tr.locale === "en" ? "en-US" : "es-CO";
-  const monthName = (m: string, style: "long" | "short" = "long") =>
-    new Date(`${m}-15T12:00:00Z`).toLocaleDateString(locale, { month: style, year: style === "long" ? "numeric" : "2-digit", timeZone: "UTC" });
-  const shift = (d: number) => setYm(({ month, year }) => {
-    const t = new Date(Date.UTC(year, month - 1 + d, 1));
-    return { month: t.getUTCMonth() + 1, year: t.getUTCFullYear() };
-  });
-  const isFuture = ym.year > now.getFullYear() || (ym.year === now.getFullYear() && ym.month >= now.getMonth() + 1);
-
-  const months = report?.months ?? [];
-  const current = months.at(-1)?.statement;
-  const previous = months.at(-2)?.statement;
-  const prevMonth = months.at(-2)?.month;
-  const money = (v: number) => (v < 0 ? `(${formatCurrency(Math.abs(v))})` : formatCurrency(v));
-  const pct = (v: number | null) => (v === null ? "—" : `${v.toLocaleString(locale, { maximumFractionDigits: 1 })}%`);
-  const trend = months.map((m) => ({ name: monthName(m.month, "short"), sales: m.statement.netSales, result: m.statement.result, margin: m.statement.grossMarginPct }));
-
-  const toggle = (k: LineKey) => setOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
-
-  const exportStatement = () => {
-    if (!current || !previous) return;
-    void exportExcel(`estado-de-resultados-${key}`, [{
-      name: tr("Estado de resultados"),
-      title: [[tr("Estado de resultados")], [monthName(key)], [`${tr("Generado")}: ${nowLabel()}`]],
-      columns: [
-        { header: tr("Concepto"), width: 36 },
-        { header: monthName(key), width: 16, format: "money" },
-        { header: tr("% de ventas netas"), width: 16 },
-        { header: prevMonth ? monthName(prevMonth) : "", width: 16, format: "money" },
-      ],
-      rows: current.lines.map((l, i) => [tr(l.label), l.amount, pct(pctOfSales(l.amount, current.netSales)), previous.lines[i].amount]),
-    }]);
-  };
-
-  const gap = current?.breakEven != null ? current.breakEven - current.netSales : null;
-  const cards = current && previous ? [
-    { label: "Ventas netas", value: formatCurrency(current.netSales), delta: change(current.netSales, previous.netSales), series: "sales" as const, tone: "text-foreground" },
-    { label: "Margen bruto", value: pct(current.grossMarginPct), sub: formatCurrency(current.grossMargin), delta: null, series: "margin" as const, tone: current.grossMargin >= 0 ? "text-foreground" : "text-red-600" },
-    { label: "Resultado del mes", value: money(current.result), delta: change(current.result, previous.result), series: "result" as const, tone: current.result >= 0 ? "text-green-700" : "text-red-600" },
-    {
-      label: "Punto de equilibrio",
-      value: current.breakEven == null ? "—" : formatCurrency(current.breakEven),
-      sub: gap == null ? tr("Sin margen bruto este mes") : gap > 0 ? tr("Faltan {v} de ventas netas", { v: formatCurrency(gap) }) : tr("Por encima en {v}", { v: formatCurrency(-gap) }),
-      delta: null, series: null, tone: gap != null && gap > 0 ? "text-amber-700" : "text-green-700",
-    },
-  ] : [];
-
-  return (
-    <div className="space-y-6">
-      {/* Period */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => shift(-1)} aria-label={tr("Mes anterior")} className="p-2 rounded-xl border border-foreground/10 hover:bg-foreground/5"><ChevronDown className="w-4 h-4 rotate-90" /></button>
-          <span className="min-w-[11rem] text-center font-serif text-xl capitalize">{monthName(key)}</span>
-          <button type="button" onClick={() => shift(1)} disabled={isFuture} aria-label={tr("Mes siguiente")} className="p-2 rounded-xl border border-foreground/10 hover:bg-foreground/5 disabled:opacity-30"><ChevronDown className="w-4 h-4 -rotate-90" /></button>
-          {loading && <Loader2 className="w-4 h-4 animate-spin text-[#C59F59]" />}
-        </div>
-        <ExportButton onClick={exportStatement} disabled={loading || !current} />
-      </div>
-
-      {report && !loading && (report.warnings.cashToConfirm.count > 0 || report.warnings.paymentsOutside.count > 0) && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-1">
-          <p className="flex items-center gap-2 font-bold"><AlertTriangle className="w-4 h-4" />{tr("Este mes tiene datos pendientes que cambian el resultado")}</p>
-          {report.warnings.cashToConfirm.count > 0 && (
-            <p className="text-xs">• {tr("{n} factura(s) de contado sin confirmar el pago ({v}): todavía no están en ventas.", { n: String(report.warnings.cashToConfirm.count), v: formatCurrency(report.warnings.cashToConfirm.total) })} <Link href="/admin/invoices" className="font-bold underline">{tr("Ir a Facturas")}</Link></p>
-          )}
-          {report.warnings.paymentsOutside.count > 0 && (
-            <p className="text-xs">• {tr("{n} pago(s) de facturas que no están en Flujo de Caja ({v}).", { n: String(report.warnings.paymentsOutside.count), v: formatCurrency(report.warnings.paymentsOutside.total) })}</p>
-          )}
-        </div>
-      )}
-
-      {!current && loading && (
-        <div className="flex items-center justify-center py-20"><Loader2 className="w-10 h-10 text-[#C59F59] animate-spin" /></div>
-      )}
-
-      {current && previous && (
-        <div className={`space-y-6 transition-opacity ${loading ? "opacity-50" : ""}`}>
-          {/* The figures that matter */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {cards.map((c) => (
-              <div key={c.label} className="bg-white rounded-2xl p-5 border border-foreground/5 shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/40">{tr(c.label)}</p>
-                <p className={`mt-1 text-2xl font-serif font-bold ${c.tone}`}>{c.value}</p>
-                <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
-                  <span className="text-foreground/50">
-                    {c.sub ?? (c.delta === null ? "" : tr("{v} vs. mes anterior", { v: `${c.delta > 0 ? "▲" : c.delta < 0 ? "▼" : ""} ${pct(Math.abs(c.delta))}` }))}
-                  </span>
-                  {c.series && (
-                    <div className="h-8 w-20 shrink-0">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={trend}><Area type="monotone" dataKey={c.series} stroke="#C59F59" fill="#C59F59" fillOpacity={0.12} strokeWidth={1.5} dot={false} isAnimationActive={false} /></ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* The statement */}
-          <div className="bg-white rounded-2xl border border-foreground/5 shadow-sm overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10px] uppercase tracking-widest text-foreground/40 border-b border-foreground/5">
-                  <th className="px-5 py-3 text-left font-bold">{tr("Concepto")}</th>
-                  <th className="px-4 py-3 text-right font-bold capitalize">{monthName(key, "short")}</th>
-                  <th className="px-4 py-3 text-right font-bold">{tr("% ventas")}</th>
-                  <th className="px-4 py-3 text-right font-bold capitalize hidden sm:table-cell">{prevMonth ? monthName(prevMonth, "short") : ""}</th>
-                  <th className="px-5 py-3 text-right font-bold hidden sm:table-cell">{tr("Cambio")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {current.lines.map((l, i) => {
-                  const prev = previous.lines[i]?.amount ?? 0;
-                  const delta = change(l.amount, prev);
-                  const canOpen = l.items.length > 0;
-                  const isOpen = open.has(l.key);
-                  const emphasis = l.kind === "total" ? "bg-foreground/[0.03] font-bold text-base" : l.kind === "subtotal" ? "font-bold border-t border-foreground/10" : "";
-                  const tone = l.kind !== "line" ? (l.amount < 0 ? "text-red-600" : l.kind === "total" ? "text-green-700" : "") : "text-foreground/80";
-                  return (
-                    <React.Fragment key={l.key}>
-                      <tr className={`${emphasis} ${canOpen ? "cursor-pointer hover:bg-foreground/[0.02]" : ""}`} onClick={canOpen ? () => toggle(l.key) : undefined}>
-                        <td className={`px-5 py-2.5 ${l.kind === "line" ? "pl-8" : ""}`}>
-                          <span className="inline-flex items-center gap-1.5">
-                            {canOpen && <ChevronDown className={`w-3.5 h-3.5 text-foreground/40 transition-transform ${isOpen ? "" : "-rotate-90"}`} />}
-                            {l.kind === "line" ? (l.amount < 0 ? "− " : "") : ""}{tr(l.label)}
-                          </span>
-                          {l.hint && <span className="block pl-5 text-[10px] font-normal text-foreground/40">{tr(l.hint)}</span>}
-                        </td>
-                        <td className={`px-4 py-2.5 text-right font-mono ${tone}`}>{money(l.amount)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-foreground/50">{pct(pctOfSales(l.amount, current.netSales))}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-foreground/50 hidden sm:table-cell">{money(prev)}</td>
-                        <td className={`px-5 py-2.5 text-right font-mono text-xs hidden sm:table-cell ${delta === null ? "text-foreground/30" : (l.amount - prev) >= 0 ? "text-green-700" : "text-red-600"}`}>
-                          {delta === null ? "—" : `${l.amount - prev >= 0 ? "▲" : "▼"} ${pct(Math.abs(delta))}`}
-                        </td>
-                      </tr>
-                      {isOpen && l.items.slice(0, 60).map((it, j) => (
-                        <tr key={`${l.key}-${j}`} className="text-xs text-foreground/60 bg-[#fafaf9]">
-                          <td className="pl-14 pr-4 py-1.5" colSpan={1}>
-                            <span className="font-mono text-foreground/40 mr-2">{it.date ? it.date.slice(5) : ""}</span>{it.concept}
-                            <span className="block text-[10px] text-foreground/40">{tr.msg(it.category)}</span>
-                          </td>
-                          <td className="px-4 py-1.5 text-right font-mono">{formatCurrency(it.amount)}</td>
-                          <td colSpan={3} className="hidden sm:table-cell" />
-                        </tr>
-                      ))}
-                      {isOpen && l.items.length > 60 && (
-                        <tr className="text-[11px] text-foreground/40 bg-[#fafaf9]"><td colSpan={5} className="pl-14 py-1.5">{tr("y {n} más", { n: String(l.items.length - 60) })}</td></tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* The last 6 months */}
-          <div className="bg-white rounded-2xl p-6 border border-foreground/5 shadow-sm">
-            <h3 className="text-lg font-serif">{tr("Últimos 6 meses")}</h3>
-            <p className="text-xs text-foreground/50 mb-4">{tr("Barras: ventas netas. Línea: resultado del mes.")}</p>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={trend} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0ede6" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={(v) => `${(v / 1_000_000).toFixed(1)}M`} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v, name) => [formatCurrency(Number(v ?? 0)), name === "sales" ? tr("Ventas netas") : tr("Resultado del mes")]} />
-                  <Bar dataKey="sales" fill="#C59F59" radius={[4, 4, 0, 0]} />
-                  <Area type="monotone" dataKey="result" stroke="#b91c1c" fill="none" strokeWidth={2} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
@@ -2493,7 +2264,7 @@ export default function CashflowClient() {
 
               {reportMode === "cash"
                 ? <CashflowReportView expenses={expenses} incomes={incomes} formatCurrency={formatCurrency} />
-                : <PLReportView formatCurrency={formatCurrency} />}
+                : <IncomeStatementView formatCurrency={formatCurrency} />}
             </div>
           )}
 

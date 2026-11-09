@@ -128,3 +128,102 @@ export function monthBefore(ym: string, n: number): string {
   const t = new Date(Date.UTC(y, m - 1 - n, 1));
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+
+// ─────────────────────────────────────────────────────────────
+// What the screen draws from a statement
+// ─────────────────────────────────────────────────────────────
+
+const lineAt = (s: Statement, key: LineKey) => s.lines.find((l) => l.key === key)?.amount ?? 0;
+
+/** One bar of the waterfall: from `range[0]` to `range[1]` (pesos). */
+export type WaterfallStep = {
+  key: LineKey;
+  label: string;
+  /** What the line does: adds, takes away, or is a running total. */
+  kind: "up" | "down" | "subtotal" | "total";
+  amount: number;
+  range: [number, number];
+};
+
+/**
+ * Sales down to the month's result as floating bars: each line moves the
+ * running total, subtotals stand on zero. Bars are [low, high] so a month in
+ * the red draws below the axis.
+ */
+export function waterfall(s: Statement): WaterfallStep[] {
+  let running = 0;
+  return s.lines.map((l) => {
+    if (l.kind !== "line") {
+      running = l.amount;
+      return { key: l.key, label: l.label, kind: l.kind, amount: l.amount, range: [Math.min(0, l.amount), Math.max(0, l.amount)] as [number, number] };
+    }
+    const from = running;
+    running = round2(running + l.amount);
+    return { key: l.key, label: l.label, kind: l.amount >= 0 ? "up" : "down", amount: l.amount, range: [Math.min(from, running), Math.max(from, running)] as [number, number] };
+  });
+}
+
+export type CategoryTotal = { category: string; amount: number; count: number };
+
+/** The records of a line added up by category, biggest first. */
+export function byCategory(items: StatementItem[]): CategoryTotal[] {
+  const m = new Map<string, CategoryTotal>();
+  for (const it of items) {
+    const c = m.get(it.category) ?? { category: it.category, amount: 0, count: 0 };
+    c.amount = round2(c.amount + it.amount);
+    c.count += 1;
+    m.set(it.category, c);
+  }
+  return [...m.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+}
+
+/** The lines that take money away from sales, in the statement's order. */
+const TAKES: LineKey[] = ["deductions", "cost", "selling", "admin", "depreciation", "interest", "bank"];
+
+export type HundredSlice = { key: LineKey; label: string; amount: number; /** Pesos of every $100 of sales. */ per100: number };
+
+/**
+ * Where every $100 of sales went: what each line took away and what was
+ * left (`result`, negative when the month lost money). Null without sales.
+ */
+export function perHundred(s: Statement): { slices: HundredSlice[]; result: HundredSlice } | null {
+  const sales = lineAt(s, "sales");
+  if (sales <= 0) return null;
+  const slice = (key: LineKey): HundredSlice => {
+    const l = s.lines.find((x) => x.key === key)!;
+    const amount = Math.abs(l.amount);
+    return { key, label: l.label, amount, per100: round2((amount / sales) * 100) };
+  };
+  const result = s.lines.find((l) => l.key === "result")!;
+  return {
+    slices: TAKES.map(slice).filter((x) => x.amount > 0),
+    result: { key: "result", label: result.label, amount: result.amount, per100: round2((result.amount / sales) * 100) },
+  };
+}
+
+export type LineChange = { key: LineKey; label: string; current: number; previous: number; delta: number; /** The month is better off for it. */ good: boolean };
+
+/**
+ * The lines that moved the most against another month, by pesos. Amounts
+ * carry their sign, so a line is good news when it went up: more sales, or
+ * an expense that took less away. Subtotals are left out: they only repeat
+ * the lines above them, and the screen states the result on its own.
+ */
+export function biggestChanges(current: Statement, previous: Statement, n = 3): LineChange[] {
+  return current.lines
+    .filter((l) => l.kind === "line")
+    .map((l) => {
+      const prev = previous.lines.find((p) => p.key === l.key)?.amount ?? 0;
+      const delta = round2(l.amount - prev);
+      return { key: l.key, label: l.label, current: l.amount, previous: prev, delta, good: delta > 0 };
+    })
+    .filter((c) => c.delta !== 0)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, n);
+}
+
+/** Share of net sales that could go before the month stops covering its costs (null without a break-even). */
+export function safetyMargin(s: Statement): number | null {
+  if (s.breakEven == null || !s.netSales) return null;
+  return round2(((s.netSales - s.breakEven) / s.netSales) * 100);
+}
