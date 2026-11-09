@@ -7,7 +7,7 @@ import { checkIsAdmin, getCostingData } from '../../actions';
 import { orderCustomer } from '@/utils/orders/pendingDeliveries';
 import { accruedInterestInMonth, type Loan, type LoanMove } from '@/utils/loans/ledger';
 import { buildStatement, monthBefore, type Statement, type StatementItem } from '@/utils/cashflow/incomeStatement';
-import { costOfSalidas, linesBase, siigoDocBase, type SiigoSalesDoc } from '@/utils/cashflow/accrual';
+import { costOfSalidas, dropVoided, linesBase, siigoDocBase, type SiigoSalesDoc } from '@/utils/cashflow/accrual';
 import { getSiigoClient, siigoConfigFromEnv } from '@/utils/siigo/api';
 import { orderTaxTotals, pricesIncludeTax } from '@/utils/orders/tax';
 import { revalidatePath } from 'next/cache';
@@ -904,12 +904,14 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
       const nameOf = new Map(((clients ?? []) as { name: string; document_number: string | null }[]).map((c) => [String(c.document_number ?? '').replace(/\D/g, '').slice(0, 9), c.name]));
       const who = (d: SiigoSalesDoc) => nameOf.get(String(d.customer?.identification ?? '').replace(/\D/g, '').slice(0, 9)) ?? (d.customer?.identification ? `NIT ${d.customer.identification}` : '');
       const inWindow = (d: SiigoSalesDoc) => !!d.date && d.date >= windowStart && d.date < windowEnd;
-      for (const d of invs.filter(inWindow)) {
+      // The credit notes list ignores its date filter: the window is applied here. An
+      // invoice voided by a note for all of it was never a sale, so both leave the statement.
+      const { invoices: kept, notes: keptNotes } = dropVoided(invs.filter(inWindow), notes.filter(inWindow));
+      for (const d of kept) {
         const v = siigoDocBase(d);
         if (v) sales.push({ date: day(d.date), concept: `${d.name ?? 'Factura'} · ${who(d)}`, category: 'Factura', amount: v });
       }
-      // The credit notes list ignores its date filter: the window is applied here.
-      for (const d of notes.filter(inWindow)) {
+      for (const d of keptNotes) {
         const v = siigoDocBase(d);
         if (v) deductions.push({ date: day(d.date), concept: `${d.name ?? 'Nota crédito'} · ${who(d)}`, category: 'Nota crédito', amount: v });
       }

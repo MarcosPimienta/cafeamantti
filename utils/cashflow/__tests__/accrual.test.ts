@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { costOfSalidas, lineBase, linesBase, siigoDocBase, unexplainedSale } from "../accrual";
+import { costOfSalidas, dropVoided, lineBase, linesBase, siigoDocBase, unexplainedSale } from "../accrual";
 
 describe("sales before IVA", () => {
   it("takes the IVA out of IVA-inclusive lines and leaves before-IVA ones", () => {
@@ -44,6 +44,28 @@ describe("sales as Siigo counts them", () => {
     const invoices = 578_343_386;
     const notes = [560_000, 290_000, 802_286, 280_000_000, 280_000_000, 1_427_775].reduce((a, b) => a + b, 0);
     expect(invoices - notes).toBe(15_263_325);
+  });
+});
+
+describe("an invoice voided by a credit note is not a sale", () => {
+  const doc = (name: string, value: number, invoice?: string) => ({ name, date: "2026-10-22", items: [{ quantity: 1, price: value }], ...(invoice ? { invoice: { name: invoice } } : {}) });
+
+  it("FV-2-738 typed with 5.000 kg and voided with NC-2-42: both leave; the real sales stay", () => {
+    const { invoices, notes } = dropVoided(
+      [doc("FV-2-738", 280_000_000), doc("FV-2-739", 280_000_000), doc("FV-2-743", 150_000)],
+      [doc("NC-2-42", 280_000_000, "FV-2-738"), doc("NC-2-43", 280_000_000, "FV-2-739")]
+    );
+    expect(invoices.map((i) => i.name)).toEqual(["FV-2-743"]);
+    expect(notes).toEqual([]);
+  });
+
+  it("a note for part of an invoice, or for an invoice of another month, stays as a deduction", () => {
+    const { invoices, notes } = dropVoided(
+      [doc("FV-2-750", 450_000)],
+      [doc("NC-2-50", 150_000, "FV-2-750"), doc("NC-2-51", 620_000, "FV-2-689")]
+    );
+    expect(invoices.map((i) => i.name)).toEqual(["FV-2-750"]);
+    expect(notes.map((n) => n.name)).toEqual(["NC-2-50", "NC-2-51"]);
   });
 });
 

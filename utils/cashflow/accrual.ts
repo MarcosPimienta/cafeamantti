@@ -68,9 +68,12 @@ export function unexplainedSale(income: { amount: number; tax: number }, appPort
 
 /** An invoice or credit note as Siigo returns it (only what the statement needs). */
 export type SiigoSalesDoc = {
+  id?: string;
   name?: string;
   date?: string;
   annulled?: boolean;
+  /** On a credit note: the invoice it is against. */
+  invoice?: { id?: string; name?: string };
   customer?: { identification?: string };
   items?: { quantity?: number | string; price?: number | string }[];
 };
@@ -79,5 +82,29 @@ export type SiigoSalesDoc = {
 export function siigoDocBase(d: SiigoSalesDoc): number {
   if (d.annulled) return 0;
   return round2((d.items ?? []).reduce((s, i) => s + num(i.quantity) * num(i.price), 0));
+}
+
+/**
+ * An invoice voided by a credit note for all of it was never a sale: both
+ * leave the statement. Notes for part of an invoice (a discount, a return),
+ * or against an invoice of another period, stay as deductions.
+ */
+export function dropVoided(invoices: SiigoSalesDoc[], notes: SiigoSalesDoc[]): { invoices: SiigoSalesDoc[]; notes: SiigoSalesDoc[] } {
+  const byRef = new Map<string, SiigoSalesDoc>();
+  for (const i of invoices) {
+    if (i.id) byRef.set(`id:${i.id}`, i);
+    if (i.name) byRef.set(`name:${i.name}`, i);
+  }
+  const voided = new Set<SiigoSalesDoc>();
+  const keptNotes: SiigoSalesDoc[] = [];
+  for (const nc of notes) {
+    const inv = (nc.invoice?.id && byRef.get(`id:${nc.invoice.id}`)) || (nc.invoice?.name && byRef.get(`name:${nc.invoice.name}`)) || null;
+    if (inv && !voided.has(inv) && siigoDocBase(nc) >= siigoDocBase(inv) - 1) {
+      voided.add(inv);
+      continue;
+    }
+    keptNotes.push(nc);
+  }
+  return { invoices: invoices.filter((i) => !voided.has(i)), notes: keptNotes };
 }
 
