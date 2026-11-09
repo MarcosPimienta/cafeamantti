@@ -29,6 +29,10 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
   const [terms, setTerms] = useState<Terms>(isPaid(order) ? "contado" : "credito");
   const [termDays, setTermDays] = useState("30");
   const [method, setMethod] = useState<PaymentMethod>(order.epayco_ref_payco ? "web" : "transfer");
+  // Cash sale: did the money already arrive, and when? Then the payment is registered with the invoice.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+  const [received, setReceived] = useState(true);
+  const [receivedOn, setReceivedOn] = useState<string>(order.paid_at ? new Date(order.paid_at).toLocaleDateString("en-CA", { timeZone: "America/Bogota" }) : today);
   // Starts with the order's notes; what stays here is what the customer sees on the invoice.
   const [invoiceNotes, setInvoiceNotes] = useState<string>(order.notes ?? "");
   const [error, setError] = useState("");
@@ -71,9 +75,16 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
     startTransition(async () => {
       setError("");
       setProblems([]);
-      const res = await createInvoice(order.id, { terms, termDays: Number(termDays), method: terms === "contado" ? method : null, notes: invoiceNotes });
+      const res = await createInvoice(order.id, {
+        terms,
+        termDays: Number(termDays),
+        method: terms === "contado" ? method : null,
+        receivedOn: terms === "contado" && received ? receivedOn : null,
+        notes: invoiceNotes,
+      });
       if (!res.success) return setError(res.error);
-      setInvoice({ ...res.invoice, payments: [] });
+      const fresh = await getOrderInvoice(order.id).catch(() => null);
+      setInvoice(fresh?.invoice ?? { ...res.invoice, payments: [] });
       setProblems(res.problems);
       setOpen(false);
     });
@@ -175,6 +186,25 @@ export default function SiigoInvoiceSection({ order }: { order: any }) {
               </label>
             )}
           </div>
+          {terms === "contado" && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl bg-foreground/[0.03] p-3 text-xs">
+              <label className="flex items-center gap-2 font-bold text-foreground/70">
+                <input type="checkbox" checked={received} onChange={(e) => setReceived(e.target.checked)} className="w-4 h-4 accent-[#C59F59]" />
+                {tr("La plata ya llegó")}
+              </label>
+              {received && (
+                <label className="flex items-center gap-2 text-foreground/60">
+                  {tr("el día")}
+                  <input type="date" value={receivedOn} max={today} onChange={(e) => setReceivedOn(e.target.value)} className={field} />
+                </label>
+              )}
+              <span className="basis-full text-[11px] text-foreground/50">
+                {received
+                  ? tr("La factura queda pagada y el pago entra a Flujo de Caja con esa fecha. No hay que registrarlo después.")
+                  : tr("Queda «Pago por confirmar»: cuando llegue la plata, confírmalo en Facturas y entra a Flujo de Caja ese día.")}
+              </span>
+            </div>
+          )}
           <label className="block text-xs text-foreground/60">
             {tr("Observaciones de la factura")}
             <textarea value={invoiceNotes} onChange={(e) => setInvoiceNotes(e.target.value)} rows={2} maxLength={3900}

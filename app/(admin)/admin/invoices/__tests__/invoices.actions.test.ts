@@ -88,6 +88,16 @@ describe("credit sales invoice", () => {
     expect(db.byId("orders", ORDER)!.payment_status).toBe("paid");
   });
 
+  it("a cash sale whose money already arrived is paid and enters Flujo de Caja in the same step", async () => {
+    expect(await createInvoice(ORDER, { terms: "contado", method: "transfer", receivedOn: "2026-10-11" })).toMatchObject({ success: true });
+    const total = Number(invoice().total);
+    expect(db.rows("invoice_payments")).toEqual([expect.objectContaining({ amount: total, payment_date: "2026-10-11", siigo_status: "no_aplica", income_owned: true })]);
+    const income = db.rows("cashflow_incomes")[0];
+    expect(income).toMatchObject({ amount: total });
+    expect(db.byId("daily_cashflows", income.cashflow_id)!.date).toBe("2026-10-11");
+    expect(db.byId("orders", ORDER)!.payment_status).toBe("paid");
+  });
+
   it("each credit payment enters Flujo de Caja on its date, and leaves with it", async () => {
     await createInvoice(ORDER, { terms: "credito" });
     await registerPayment(invoice().id, { date: "2026-10-10", amount: 20000, method: "transfer" });

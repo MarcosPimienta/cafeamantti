@@ -275,6 +275,8 @@ export type NewInvoiceInput = {
   termDays?: number | null;
   /** Cash sale: how it was paid. */
   method?: PaymentMethod | null;
+  /** Cash sale whose money already arrived: that day. The payment is registered with the invoice and enters Flujo de Caja. */
+  receivedOn?: string | null;
   notes?: string | null;
 };
 
@@ -366,6 +368,11 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
       throw err;
     }
     const problems = await invoiceProblems(supabase, { ...created, lines });
+    // A cash sale already paid: its payment goes in now, so it isn't registered twice.
+    if (input.terms === 'contado' && input.receivedOn) {
+      const paid = await registerPayment(created.id, { date: input.receivedOn, amount: Number(created.total), method: (input.method ?? 'transfer') as PaymentMethod });
+      if (!paid.success) problems.push(`La factura se creó, pero el pago no se registró: ${paid.error}. Confírmalo desde Facturas.`);
+    }
     refresh();
     return { invoice: created, problems };
   });
