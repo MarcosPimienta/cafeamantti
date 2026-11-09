@@ -6,6 +6,7 @@ import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin } from '../../actions';
 import { orderCustomer } from '@/utils/orders/pendingDeliveries';
 import { accruedInterestInMonth, type Loan, type LoanMove } from '@/utils/loans/ledger';
+import { buildStatement, monthBefore, type Statement, type StatementItem } from '@/utils/cashflow/incomeStatement';
 import { revalidatePath } from 'next/cache';
 import {
   DailyCashflow,
@@ -813,6 +814,117 @@ export async function getMonthlyPLReport(
     })),
     paidExpenses: paidExpenses ?? [],
   });
+}
+
+/** What the income statement shows for a month, and what may be missing from it. */
+export type IncomeStatementReport = {
+  /** The month asked and the 5 before it, oldest first. */
+  months: { month: string; statement: Statement }[];
+  warnings: {
+    /** Cash invoices of the month whose money hasn't been confirmed. */
+    cashToConfirm: { count: number; total: number };
+    /** Invoice payments of the month that are not in Flujo de Caja. */
+    paymentsOutside: { count: number; total: number };
+  };
+};
+
+const DEPRECIATION_LABEL: Record<string, string> = {
+  produccion: 'Equipos de producción',
+  punto_venta: 'Equipos de punto de venta',
+  comodato: 'Máquinas en comodato',
+  administracion: 'Equipos de administración',
+  sin_destino: 'Activos sin destino indicado',
+};
+
+/**
+ * The income statement of a month as a table, with the 5 months before it
+ * for comparison and trend: sales down to the month's result, interest
+ * included (paid, and accrued on the loans that capitalize).
+ */
+export async function getIncomeStatement(month: number, year: number): Promise<IncomeStatementReport> {
+  if (!(await checkIsAdmin())) throw new Error('Unauthorized');
+  const supabase = await createClient();
+  const ym = `${year}-${String(month).padStart(2, '0')}`;
+  const months = [5, 4, 3, 2, 1, 0].map((n) => monthBefore(ym, n));
+  const windowStart = `${months[0]}-01`;
+  const { period_end: windowEnd } = monthBounds(month, year);
+
+  const [incRes, orderRes, expRes, invRes, capexRes, loansRes, movesRes] = await Promise.all([
+    supabase.from('cashflow_incomes').select('concept, category, gross_amount, amount, fee_amount, shipping_cost, tax_amount, cashflow:cashflow_id!inner ( date )').gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
+    selectPaidOrders(supabase, 'id, total_amount, created_at', (q, dateCol) => q.gte(dateCol, `${windowStart}T00:00:00Z`).lt(dateCol, `${windowEnd}T00:00:00Z`)),
+    supabase.from('cashflow_expenses').select('concept, category, net_amount, expense_type, cashflow:cashflow_id!inner ( date )').in('expense_type', ['COGS', 'OPEX']).gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
+    supabase.from('inventory_logs').select('total_cost, created_at').eq('movement_type', 'CONSUMPTION').gte('created_at', `${windowStart}T00:00:00Z`).lt('created_at', `${windowEnd}T00:00:00Z`),
+    supabase.from('cashflow_expenses').select('net_amount, depreciation_months, created_at, in_service_date, residual_value, asset_use, cashflow:cashflow_id!inner ( date )').eq('expense_type', 'CAPEX').lt('cashflow.date', windowEnd),
+    supabase.from('loans').select('*').eq('scheme', 'capitaliza'),
+    supabase.from('loan_movements').select('loan_id, move_date, kind, amount'),
+  ]);
+  const dateOf = (r: { cashflow?: { date?: string } | { date?: string }[] | null }) => {
+    const c = Array.isArray(r.cashflow) ? r.cashflow[0] : r.cashflow;
+    return c?.date ?? '';
+  };
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const incomes = ((incRes.data ?? []) as any[]).map((r) => ({
+    date: dateOf(r), concept: r.concept ?? '', category: r.category ?? '',
+    amount: n(r.gross_amount ?? r.amount), fee: n(r.fee_amount), shipping: n(r.shipping_cost), tax: n(r.tax_amount),
+  }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const o of (orderRes.data ?? []) as any[]) {
+    const { fields } = resolveIncomeFields({ gross_amount: n(o.total_amount), amount: n(o.total_amount), category: 'Ventas Web' });
+    incomes.push({ date: String(o.paid_at ?? o.created_at).slice(0, 10), concept: `Venta web #${String(o.id).slice(0, 8)}`, category: 'Ventas Web', amount: fields.gross_amount, fee: fields.fee_amount, shipping: fields.shipping_cost, tax: fields.tax_amount });
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const expenses = ((expRes.data ?? []) as any[]).map((r) => ({ type: r.expense_type as string, date: dateOf(r), concept: r.concept ?? '', category: r.category ?? '', amount: n(r.net_amount) }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const consumptions = ((invRes.data ?? []) as any[]).map((r) => ({ date: String(r.created_at).slice(0, 10), amount: n(r.total_cost) }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const capex = ((capexRes.data ?? []) as any[]).map(({ cashflow, ...a }) => ({ ...a, purchase_date: (Array.isArray(cashflow) ? cashflow[0] : cashflow)?.date ?? null }));
+  const loans = loansRes.error ? [] : ((loansRes.data ?? []) as Loan[]);
+  const moves = (movesRes.data ?? []) as LoanMove[];
+
+  const inMonth = (d: string, m: string) => d.slice(0, 7) === m;
+  const strip = ({ date, concept, category, amount }: StatementItem & Record<string, unknown>): StatementItem => ({ date, concept, category, amount });
+  const statements = months.map((m) => {
+    const [y, mo] = m.split('-').map(Number);
+    const { period_start, period_end } = monthBounds(mo, y);
+    const dep = summarizeMonthlyPL({ period_start, period_end, manualIncomes: [], webOrders: [], cogsExpenses: [], inventoryConsumptions: [], opexExpenses: [], capexItems: capex, paidExpenses: [] }).depreciation_by_use;
+    return {
+      month: m,
+      statement: buildStatement({
+        incomes: incomes.filter((i) => inMonth(i.date, m)),
+        cogs: expenses.filter((e) => e.type === 'COGS' && inMonth(e.date, m)).map(strip),
+        inventoryCost: consumptions.filter((c) => inMonth(c.date, m)).reduce((s, c) => s + c.amount, 0),
+        opex: expenses.filter((e) => e.type === 'OPEX' && inMonth(e.date, m)).map(strip),
+        accruedInterest: loans
+          .map((l) => ({ date: `${m}-01`, concept: `${l.creditor_name} (interés que se suma al préstamo)`, category: 'Intereses causados', amount: Math.round(accruedInterestInMonth(l, moves, m) * 100) / 100 }))
+          .filter((i) => i.amount > 0),
+        depreciation: Object.entries(dep).filter(([, v]) => v > 0).map(([k, v]) => ({ date: `${m}-01`, concept: DEPRECIATION_LABEL[k] ?? k, category: 'Depreciación', amount: v })),
+      }),
+    };
+  });
+
+  // What may be missing from the month asked.
+  const { period_start } = monthBounds(month, year);
+  const [{ data: cash }, { data: pays }] = await Promise.all([
+    supabase.from('sales_invoices').select('id, total, created_at, issue_date, payment_terms, status, payments:invoice_payments ( id )').eq('payment_terms', 'contado').neq('status', 'anulada'),
+    supabase.from('invoice_payments').select('amount, payment_date, cashflow_income_id, invoice:invoice_id ( order:order_id ( source, cashflow_income_id ) )').gte('payment_date', period_start).lt('payment_date', windowEnd),
+  ]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pendingCash = ((cash ?? []) as any[]).filter((i) => inMonth(String(i.issue_date ?? i.created_at), ym) && !(i.payments ?? []).length);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const outside = ((pays ?? []) as any[]).filter((p) => {
+    const inv = Array.isArray(p.invoice) ? p.invoice[0] : p.invoice;
+    const order = Array.isArray(inv?.order) ? inv.order[0] : inv?.order;
+    return !p.cashflow_income_id && !order?.cashflow_income_id && order?.source !== 'web';
+  });
+  return {
+    months: statements,
+    warnings: {
+      cashToConfirm: { count: pendingCash.length, total: pendingCash.reduce((s, i) => s + n(i.total), 0) },
+      paymentsOutside: { count: outside.length, total: outside.reduce((s, p) => s + n(p.amount), 0) },
+    },
+  };
 }
 
 /** Interest the loans add to their capital in the month (0 before the loans migration). */
