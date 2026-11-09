@@ -40,13 +40,15 @@ export function paidAmount(payments: LedgerPayment[]): number {
 }
 
 /** What the customer still owes (never negative). A cash sale is paid when invoiced. */
+/**
+ * What the customer still owes. A cash invoice (contado) too: it is paid
+ * when the money is confirmed with its payment, not when it is invoiced.
+ */
 export function balanceDue(invoice: LedgerInvoice, payments: LedgerPayment[]): number {
-  if (invoice.payment_terms === "contado") return 0;
   return Math.max(0, round2(num(invoice.total) - num(invoice.credited) - paidAmount(payments)));
 }
 
 export function paymentState(invoice: LedgerInvoice, payments: LedgerPayment[]): PaymentState {
-  if (invoice.payment_terms === "contado") return "pagada";
   const paid = paidAmount(payments);
   if (paid <= 0) return "pendiente";
   return balanceDue(invoice, payments) <= 0.5 ? "pagada" : "parcial";
@@ -63,7 +65,6 @@ export function daysOverdue(invoice: LedgerInvoice, payments: LedgerPayment[], t
 export function paymentProblems(invoice: LedgerInvoice, payments: LedgerPayment[], amount: number, date: string): string[] {
   const problems: string[] = [];
   if (invoice.status === "anulada") problems.push("La factura está anulada.");
-  if (invoice.payment_terms === "contado") problems.push("La factura es de contado: ya quedó pagada al facturar.");
   if (!(Number.isFinite(amount) && amount > 0)) problems.push("El valor del pago debe ser mayor a cero.");
   else if (amount > balanceDue(invoice, payments) + 0.5) problems.push("El pago supera el saldo de la factura.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) problems.push("Fecha del pago inválida.");

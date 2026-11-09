@@ -35,28 +35,39 @@ async function _saleLockError(supabase: any, incomeId: string): Promise<string |
     .select('id')
     .eq('income_id', incomeId)
     .limit(1);
-  return data && data.length > 0
-    ? 'Este ingreso proviene de una salida de inventario. Edítalo o elimínalo desde Inventario → Salidas.'
-    : null;
+  if (data && data.length > 0) return 'Este ingreso proviene de una salida de inventario. Edítalo o elimínalo desde Inventario → Salidas.';
+  // The payment of an invoice: it is changed or removed with the payment, in Facturas.
+  const { data: pay, error: payErr } = await supabase.from('invoice_payments').select('id').eq('cashflow_income_id', incomeId).eq('income_owned', true).limit(1);
+  if (!payErr && pay && pay.length > 0) return 'Este ingreso es el pago de una factura. Edítalo o elimínalo desde Facturas (el pago).';
+  return null;
 }
 
+/** From this day (the v2 cutover) only web orders count by themselves; an invoice's money enters with its payments. */
+const PAYMENTS_ENTER_FROM = '2026-09-16';
+
 /**
- * Orders whose money came in (payment_status = paid), with paid_at — the
- * day they count in Flujo de Caja. An order whose money is already in a
- * manual income (cashflow_income_id) is left out, so it doesn't count twice.
+ * Orders whose money came in by themselves (payment_status = paid), with
+ * paid_at — the day they count in Flujo de Caja: web orders paid through
+ * ePayco. Orders made by hand count only before the v2 cutover; since then
+ * their money enters as the income of each registered payment (or a manual
+ * income), so the money is counted the day it arrives, once. An order whose
+ * money is already in a manual income (cashflow_income_id) is left out.
  * Before the payment migration: the old rule (paid-like statuses, on their
  * creation date).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function selectPaidOrders(supabase: any, columns: string, scope: (q: any, dateCol: 'paid_at' | 'created_at') => any): Promise<{ data: any[] | null; error: any }> {
-  const paid = () => supabase.from('orders').select(`${columns}, paid_at`).eq('payment_status', 'paid').neq('status', 'cancelled');
+  const paid = () => supabase.from('orders').select(`${columns}, paid_at, source`).eq('payment_status', 'paid').neq('status', 'cancelled');
   let res = await scope(paid().is('cashflow_income_id', null), 'paid_at');
   // Before 20261111000000_order_counted_in_income.sql: every paid order counts.
   if (res.error && /cashflow_income_id/.test(res.error.message)) res = await scope(paid(), 'paid_at');
   if (res.error && /payment_status|paid_at/.test(res.error.message)) {
     return scope(supabase.from('orders').select(columns).in('status', PAID_ORDER_STATUSES), 'created_at');
   }
-  return res;
+  if (res.error) return res;
+  const countsByItself = (o: { source?: string | null; paid_at?: string | null; created_at?: string }) =>
+    o.source === 'web' || String(o.paid_at ?? o.created_at ?? '').slice(0, 10) < PAYMENTS_ENTER_FROM;
+  return { data: (res.data ?? []).filter(countsByItself), error: null };
 }
 
 export async function ensureCashflowDate(date: string) {

@@ -12,6 +12,7 @@ import { checkIsAdmin, setOrderPayment, updateOrderStatus as setOrderStatus } fr
 import { SiigoError, getSiigoClient, idempotencyKey, siigoConfigFromEnv } from '@/utils/siigo/api';
 import { buildInvoicePayload, buildVoucherPayload, cleanIdentification, addDays, buildCreditNotePayload, itemTaxId, lineGross, type AppClient, type SiigoSettings } from '@/utils/siigo/mapping';
 import { ensureSiigoBranch, ensureSiigoCustomer, errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
+import { dropPaymentIncome, ensurePaymentIncome, paymentIncomeLock } from '@/utils/invoices/paymentIncome';
 import { siteLabel, type ClientSite } from '@/utils/clients/sites';
 import { restockCreditNote, syncOrderStock } from '@/utils/orders/stock';
 import { pricesIncludeTax } from '@/utils/orders/tax';
@@ -355,10 +356,10 @@ export async function createInvoice(orderId: string, input: NewInvoiceInput) {
     };
     const { data: created, error: insErr } = await supabase.from('sales_invoices').insert(row).select('*').single();
     if (insErr) throw insErr;
-    // Cash sale: paid now. Credit: the coffee leaves now, paid later.
+    // The coffee leaves when invoiced. The money is paid when its payment is
+    // registered — a cash sale too: the transfer may not have arrived yet.
     try {
-      if (input.terms === 'contado') await markOrderPaid(orderId);
-      else await syncOrderStock(supabase, { orderId, status: order.status, userId });
+      await syncOrderStock(supabase, { orderId, status: order.status, userId });
     } catch (err) {
       // Not enough stock (or similar): no invoice without its stock movement.
       await supabase.from('sales_invoices').delete().eq('id', created.id);
@@ -414,19 +415,27 @@ export async function registerPayment(invoiceId: string, input: PaymentInput) {
     const payments = (inv.payments ?? []) as { amount: number }[];
     const problems = paymentProblems(inv, payments, Number(input.amount), input.date);
     if (problems.length) return { problems, fullyPaid: false };
-    const { error: insErr } = await supabase.from('invoice_payments').insert({
+    const { data: created, error: insErr } = await supabase.from('invoice_payments').insert({
       invoice_id: invoiceId,
       payment_date: input.date,
       amount: Number(input.amount),
       method: input.method,
       notes: input.notes?.trim() || null,
+      // A cash invoice is already paid in Siigo: confirming the money needs no recibo de caja.
+      ...(inv.payment_terms === 'contado' ? { siigo_status: 'no_aplica' } : {}),
       created_by: userId,
-    });
+    }).select('id').single();
     if (insErr) throw insErr;
+    // The money enters Flujo de Caja now, on the payment's date (unless it is already there).
+    try {
+      await ensurePaymentIncome(supabase, created.id);
+    } catch (err) {
+      await supabase.from('invoice_payments').delete().eq('id', created.id);
+      throw err;
+    }
     const all = [...payments, { amount: Number(input.amount) }];
     const fullyPaid = paymentState(inv, all) === 'pagada';
-    // Fully paid: the order is paid on that date (Flujo de Caja counts it then),
-    // whatever its delivery stage.
+    // Fully paid: the order is paid on that date, whatever its delivery stage.
     if (fullyPaid) await markOrderPaid(inv.order_id, input.date);
     refresh();
     return { problems: [] as string[], fullyPaid, balance: balanceDue(inv, all) };
@@ -439,12 +448,21 @@ export async function registerPayment(invoiceId: string, input: PaymentInput) {
 export async function deletePayment(paymentId: string) {
   const { supabase } = await requireAdmin();
   return guard(async () => {
-    const { data: p, error } = await supabase.from('invoice_payments').select('id, siigo_status').eq('id', paymentId).single();
+    let { data: p, error } = await supabase.from('invoice_payments').select('id, siigo_status, cashflow_income_id, income_owned').eq('id', paymentId).single();
+    // Before 20261112000000_payments_enter_cashflow.sql: payments have no income.
+    if (error && /cashflow_income_id|income_owned/.test(error.message)) ({ data: p, error } = await supabase.from('invoice_payments').select('id, siigo_status').eq('id', paymentId).single());
     if (error || !p) throw error ?? new Error('Pago no encontrado.');
     if (p.siigo_status === 'enviado') throw new Error('El pago ya está en Siigo como recibo de caja: anúlalo allá.');
+    const incomeId = (p as { cashflow_income_id?: string | null }).cashflow_income_id ?? null;
+    const owned = !!(p as { income_owned?: boolean }).income_owned;
+    const lock = owned ? await paymentIncomeLock(supabase, incomeId) : null;
+    if (lock) throw new Error(lock);
     const { error: delErr } = await supabase.from('invoice_payments').delete().eq('id', paymentId);
     if (delErr) throw delErr;
+    // Its income leaves Flujo de Caja with it.
+    await dropPaymentIncome(incomeId, owned);
     refresh();
+    revalidatePath('/admin/cashflow');
     return {};
   });
 }

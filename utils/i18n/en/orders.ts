@@ -235,6 +235,7 @@ export const orders: Record<string, string> = {
   "venta pagada: su ingreso se queda en Flujo de Caja": "paid sale: its income stays in Cash Flow",
   "Es la misma venta: quitar salida": "Same sale: remove salida",
   "Se borrará la salida manual «{label}» y su producto vuelve al inventario. La orden conserva su descuento. ¿Continuar?": "The manual salida «{label}» will be deleted and its product returns to stock. The order keeps its deduction. Continue?",
+  "Marcarla pagada no la suma a Flujo de Caja: la plata entra cuando registras el pago en Facturas (o la ligas a un ingreso).": "Marking it paid doesn't add it to Cash Flow: the money enters when you register the payment in Invoices (or link it to an income).",
   "Falta facturar": "Not invoiced yet",
   "No se pudo guardar la fecha": "Could not save the date",
   "Atrasada · ": "Overdue · ",

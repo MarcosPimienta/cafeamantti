@@ -70,11 +70,50 @@ describe("credit sales invoice", () => {
     expect(db.rows("sales_invoices")).toHaveLength(0);
   });
 
-  it("a cash sale marks the order paid", async () => {
+  it("a cash sale takes the coffee out when invoiced, but is paid only when its money is confirmed", async () => {
     expect(await createInvoice(ORDER, { terms: "contado" })).toMatchObject({ success: false, error: "Indica cómo pagó el cliente." });
     expect(await createInvoice(ORDER, { terms: "contado", method: "transfer" })).toMatchObject({ success: true });
-    expect(db.byId("orders", ORDER)).toMatchObject({ status: "pending", payment_status: "paid" });
+    expect(db.byId("orders", ORDER)!.payment_status ?? "pending").toBe("pending");
     expect(stock()).toBe(8);
+    expect(db.rows("cashflow_incomes")).toHaveLength(0);
+
+    // The transfer arrives three days later: confirmed with its date, it enters Flujo de Caja then; no recibo de caja.
+    const total = Number(invoice().total);
+    expect(await registerPayment(invoice().id, { date: "2026-10-17", amount: total, method: "transfer" })).toMatchObject({ success: true, fullyPaid: true });
+    const [pay] = db.rows("invoice_payments");
+    expect(pay).toMatchObject({ siigo_status: "no_aplica", income_owned: true });
+    const income = db.byId("cashflow_incomes", pay.cashflow_income_id)!;
+    expect(income).toMatchObject({ amount: total, category: "Ventas Físicas" });
+    expect(db.byId("daily_cashflows", income.cashflow_id)!.date).toBe("2026-10-17");
+    expect(db.byId("orders", ORDER)!.payment_status).toBe("paid");
+  });
+
+  it("each credit payment enters Flujo de Caja on its date, and leaves with it", async () => {
+    await createInvoice(ORDER, { terms: "credito" });
+    await registerPayment(invoice().id, { date: "2026-10-10", amount: 20000, method: "transfer" });
+    const [pay] = db.rows("invoice_payments");
+    expect(db.byId("cashflow_incomes", pay.cashflow_income_id)!.amount).toBe(20000);
+    expect(await deletePayment(pay.id)).toMatchObject({ success: true });
+    expect(db.rows("cashflow_incomes")).toHaveLength(0);
+  });
+
+  it("no new income when the order's money is already a manual income, nor for a web order", async () => {
+    db.rows("daily_cashflows").push({ id: "d1", date: "2026-10-10" });
+    db.rows("cashflow_incomes").push({ id: "manual", cashflow_id: "d1", amount: 50000 });
+    db.byId("orders", ORDER)!.cashflow_income_id = "manual";
+    await createInvoice(ORDER, { terms: "credito" });
+    await registerPayment(invoice().id, { date: "2026-10-10", amount: 20000, method: "transfer" });
+    expect(db.rows("invoice_payments")[0].cashflow_income_id ?? null).toBeNull();
+    expect(db.rows("cashflow_incomes").map((i) => i.id)).toEqual(["manual"]);
+  });
+
+  it("a payment reconciled with the bank can't be deleted until the reconciliation is undone", async () => {
+    await createInvoice(ORDER, { terms: "credito" });
+    await registerPayment(invoice().id, { date: "2026-10-10", amount: 20000, method: "transfer" });
+    const [pay] = db.rows("invoice_payments");
+    db.rows("bank_match_rows").push({ id: "bm", match_id: "m", income_id: pay.cashflow_income_id });
+    expect(await deletePayment(pay.id)).toMatchObject({ success: false, error: expect.stringMatching(/conciliado con el banco/) });
+    expect(db.byId("invoice_payments", pay.id)).toBeDefined();
   });
 
   it("annulling the draft returns the stock; the invoiced order can't be cancelled meanwhile", async () => {

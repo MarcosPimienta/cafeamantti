@@ -18,8 +18,8 @@ beforeEach(() => {
     { id: "old", cashflow_id: "d01", era: "v2", concept: "Venta de julio", category: "Ventas Físicas", amount: 50000, gross_amount: 50000, created_at: "2026-07-01T15:00:00Z" },
   );
   db.rows("orders").push(
-    { id: "o144", status: "delivered", payment_status: "paid", paid_at: "2026-10-10T17:00:00Z", total_amount: 144000, created_at: "2026-10-08T15:00:00Z", cashflow_income_id: null },
-    { id: "o87", status: "delivered", payment_status: "pending", paid_at: null, total_amount: 87000, created_at: "2026-10-08T15:00:00Z", cashflow_income_id: null },
+    { id: "o144", source: "web", status: "delivered", payment_status: "paid", paid_at: "2026-10-10T17:00:00Z", total_amount: 144000, created_at: "2026-10-08T15:00:00Z", cashflow_income_id: null },
+    { id: "o87", source: "web", status: "delivered", payment_status: "pending", paid_at: null, total_amount: 87000, created_at: "2026-10-08T15:00:00Z", cashflow_income_id: null },
   );
   db.rows("sales_invoices").push(
     { id: "fv770", order_id: "o144", customer_name: "Marcos Pimienta", total: 144000, status: "emitida", issue_date: "2026-11-07", created_at: "2026-11-07T15:00:00Z", payment_terms: "credito", lines: [] },

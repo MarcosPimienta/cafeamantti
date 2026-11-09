@@ -81,18 +81,18 @@ describe("cobros from the bank statement", () => {
     expect(receipts()[0].income_id).toBe(incomes()[0].id);
   });
 
-  it("an app invoice gets the payment (already in Siigo) and its order is paid; it does not enter Flujo de Caja twice", async () => {
+  it("an app invoice gets the payment (already in Siigo) and its order is paid; the whole deposit enters Flujo de Caja once", async () => {
     await registerCollection({ date: "2026-10-26", amount: 352250, method: "transfer", assigned: [{ invoiceId: "sg-734", value: 200000 }, { invoiceId: "sg-687", value: 152250 }] });
-    expect(db.rows("invoice_payments")).toEqual([expect.objectContaining({ invoice_id: "si-1", amount: 200000, siigo_status: "enviado", siigo_voucher_name: "RC-1-301", payment_date: "2026-10-26" })]);
+    expect(incomes()).toEqual([expect.objectContaining({ amount: 352250 })]);
+    expect(db.rows("invoice_payments")).toEqual([expect.objectContaining({ invoice_id: "si-1", amount: 200000, siigo_status: "enviado", siigo_voucher_name: "RC-1-301", payment_date: "2026-10-26", cashflow_income_id: incomes()[0].id, income_owned: false })]);
     expect(db.byId("orders", "ord-1")).toMatchObject({ payment_status: "paid" });
-    expect(incomes()).toEqual([expect.objectContaining({ amount: 152250 })]); // only the invoice made in Siigo
   });
 
   it("a partial payment of an app invoice leaves its order unpaid", async () => {
     await registerCollection({ date: "2026-10-26", amount: 50000, method: "cash", assigned: [{ invoiceId: "sg-734", value: 50000 }] });
     expect(db.byId("orders", "ord-1")).toMatchObject({ payment_status: "pending" });
     expect(h.calls.find((c) => c.path === "/v1/vouchers")!.opts?.body).toMatchObject({ payment: { id: 8400 } });
-    expect(incomes()).toHaveLength(0);
+    expect(incomes()).toEqual([expect.objectContaining({ amount: 50000 })]); // the money that came in, though the invoice still owes
   });
 
   it("a deposit for several sedes makes one recibo per Siigo branch", async () => {
@@ -127,7 +127,7 @@ describe("cobros from the bank statement", () => {
     expect(incomes()).toHaveLength(1);
   });
 
-  it("brings the RCs made in Siigo since September once, without touching Flujo de Caja", async () => {
+  it("brings the RCs made in Siigo since September once; an app invoice's payment enters Flujo de Caja once", async () => {
     h.vouchers = [
       { id: "v249", name: "RC-1-249", date: "2026-10-26", type: "DebtPayment", customer: { identification: "901656887", branch_office: 0 }, payment: { name: "Banco", value: 200000 }, items: [{ due: { prefix: "FV-2", consecutive: 734, date: "2026-11-05" }, value: 200000 }] },
       { id: "v247", name: "RC-1-247", date: "2026-05-20", type: "DebtPayment", customer: { identification: "1039464861" }, payment: { value: 159862.5 }, items: [] },
@@ -137,8 +137,10 @@ describe("cobros from the bank statement", () => {
     expect(receipts()).toEqual([expect.objectContaining({ status: "importado", siigo_id: "v249", siigo_name: "RC-1-249", client_id: "pf", amount: 200000, method: "transfer" })]);
     expect(db.rows("invoice_payments")).toEqual([expect.objectContaining({ invoice_id: "si-1", siigo_voucher_id: "v249", siigo_status: "enviado" })]);
     expect(db.byId("orders", "ord-1")).toMatchObject({ payment_status: "paid" });
-    expect(incomes()).toHaveLength(0);
+    expect(incomes()).toEqual([expect.objectContaining({ amount: 200000 })]);
+    expect(db.rows("invoice_payments")[0]).toMatchObject({ cashflow_income_id: incomes()[0].id, income_owned: true });
     expect(await importSiigoReceipts()).toMatchObject({ success: true, imported: [] });
+    expect(incomes()).toHaveLength(1);
     const res = await getReceipts();
     expect(res.receipts).toHaveLength(1);
   });

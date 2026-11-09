@@ -18,9 +18,9 @@ beforeEach(() => {
   );
   db.rows("clients").push({ id: "c1", name: "Marcos Pimienta" });
   db.rows("orders").push(
-    { id: "o144", status: "delivered", payment_status: "paid", paid_at: "2026-10-10T17:00:00Z", total_amount: 144000, created_at: "2026-10-08T15:00:00Z", client_id: "c1", cashflow_income_id: null },
-    { id: "o87", status: "delivered", payment_status: "pending", paid_at: null, total_amount: 87000, created_at: "2026-10-08T16:00:00Z", client_id: "c1", cashflow_income_id: null },
-    { id: "o84", status: "delivered", payment_status: "paid", paid_at: "2026-10-16T17:00:00Z", total_amount: 84000, created_at: "2026-10-16T15:00:00Z", shipping_info: { recipient_name: "Margarita Uribe" }, cashflow_income_id: null },
+    { id: "o144", source: "web", status: "delivered", payment_status: "paid", paid_at: "2026-10-10T17:00:00Z", total_amount: 144000, created_at: "2026-10-08T15:00:00Z", client_id: "c1", cashflow_income_id: null },
+    { id: "o87", source: "web", status: "delivered", payment_status: "pending", paid_at: null, total_amount: 87000, created_at: "2026-10-08T16:00:00Z", client_id: "c1", cashflow_income_id: null },
+    { id: "o84", source: "web", status: "delivered", payment_status: "paid", paid_at: "2026-10-16T17:00:00Z", total_amount: 84000, created_at: "2026-10-16T15:00:00Z", shipping_info: { recipient_name: "Margarita Uribe" }, cashflow_income_id: null },
     { id: "gone", status: "cancelled", payment_status: "pending", total_amount: 50000, created_at: "2026-10-09T15:00:00Z", cashflow_income_id: null },
     { id: "gift", status: "delivered", payment_status: "paid", total_amount: 0, created_at: "2026-10-09T15:00:00Z", cashflow_income_id: null },
     { id: "may", status: "delivered", payment_status: "paid", total_amount: 99000, created_at: "2026-05-01T15:00:00Z", cashflow_income_id: null },

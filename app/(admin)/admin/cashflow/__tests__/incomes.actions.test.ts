@@ -81,14 +81,23 @@ describe("Flujo de Caja no longer moves inventory", () => {
 });
 
 describe("orders in Flujo de Caja", () => {
-  it("count when paid, on the payment date — a delivered order still owed doesn't", async () => {
+  it("web orders count by themselves when paid, on the payment date — one still owed doesn't", async () => {
     db.rows("orders").push(
-      { id: "a1111111-0000-0000-0000-000000000000", status: "delivered", payment_status: "pending", paid_at: null, total_amount: 500000, created_at: "2026-10-01T15:00:00Z" },
-      { id: "b2222222-0000-0000-0000-000000000000", status: "delivered", payment_status: "paid", paid_at: "2026-10-16T17:00:00Z", total_amount: 300000, created_at: "2026-10-01T15:00:00Z" },
-      { id: "c3333333-0000-0000-0000-000000000000", status: "cancelled", payment_status: "paid", paid_at: "2026-10-02T17:00:00Z", total_amount: 99, created_at: "2026-10-01T15:00:00Z" },
+      { id: "a1111111-0000-0000-0000-000000000000", source: "web", status: "delivered", payment_status: "pending", paid_at: null, total_amount: 500000, created_at: "2026-10-01T15:00:00Z" },
+      { id: "b2222222-0000-0000-0000-000000000000", source: "web", status: "delivered", payment_status: "paid", paid_at: "2026-10-16T17:00:00Z", total_amount: 300000, created_at: "2026-10-01T15:00:00Z" },
+      { id: "c3333333-0000-0000-0000-000000000000", source: "web", status: "cancelled", payment_status: "paid", paid_at: "2026-10-02T17:00:00Z", total_amount: 99, created_at: "2026-10-01T15:00:00Z" },
     );
     const incomes = (await getAllIncomes("v2")).filter((i: { type: string }) => i.type === "auto");
     expect(incomes.map((i: { amount: number; date: string }) => [i.amount, i.date])).toEqual([[300000, "2026-10-16"]]);
+  });
+
+  it("an order made by hand doesn't count by itself since the September cutover: its money enters with its payments", async () => {
+    db.rows("orders").push(
+      { id: "d4444444-0000-0000-0000-000000000000", source: "manual", status: "delivered", payment_status: "paid", paid_at: "2026-11-09T15:00:00Z", total_amount: 70000, created_at: "2026-11-09T15:00:00Z" },
+      { id: "e5555555-0000-0000-0000-000000000000", source: "manual", status: "delivered", payment_status: "paid", paid_at: "2026-09-10T15:00:00Z", total_amount: 40000, created_at: "2026-09-10T15:00:00Z" },
+    );
+    const incomes = (await getAllIncomes("v2")).filter((i: { type: string }) => i.type === "auto");
+    expect(incomes.map((i: { amount: number }) => i.amount)).toEqual([40000]);
   });
 });
 
@@ -97,8 +106,8 @@ describe("an order already counted by a manual income", () => {
     db.rows("daily_cashflows").push({ id: "d10", date: "2026-10-10" });
     db.rows("cashflow_incomes").push({ id: "inc220", cashflow_id: "d10", era: "v2", concept: "Pago cafe sin factura", category: "Ventas Físicas", amount: 220000, gross_amount: 220000, created_at: "2026-10-10T15:00:00Z" });
     db.rows("orders").push(
-      { id: "o144", status: "delivered", payment_status: "paid", paid_at: "2026-10-10T17:00:00Z", total_amount: 144000, created_at: "2026-10-08T15:00:00Z", cashflow_income_id: "inc220" },
-      { id: "o300", status: "delivered", payment_status: "paid", paid_at: "2026-10-16T17:00:00Z", total_amount: 300000, created_at: "2026-10-01T15:00:00Z", cashflow_income_id: null },
+      { id: "o144", source: "web", status: "delivered", payment_status: "paid", paid_at: "2026-10-10T17:00:00Z", total_amount: 144000, created_at: "2026-10-08T15:00:00Z", cashflow_income_id: "inc220" },
+      { id: "o300", source: "web", status: "delivered", payment_status: "paid", paid_at: "2026-10-16T17:00:00Z", total_amount: 300000, created_at: "2026-10-01T15:00:00Z", cashflow_income_id: null },
     );
     const all = await getAllIncomes("v2");
     expect(all.filter((i: { type: string }) => i.type === "auto").map((i: { amount: number }) => i.amount)).toEqual([300000]);

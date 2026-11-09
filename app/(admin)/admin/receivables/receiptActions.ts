@@ -2,9 +2,9 @@
 
 // Cobros: customer deposits from the bank statement, registered in Cuentas
 // por cobrar and assigned invoice by invoice (also invoices made directly in
-// Siigo). Each becomes a Siigo recibo de caja per customer branch; the part
-// that pays invoices made in Siigo enters Flujo de Caja (app invoices enter
-// it when their order is paid). RCs made in Siigo since the cutoff are
+// Siigo). Each becomes a Siigo recibo de caja per customer branch, and the
+// whole deposit enters Flujo de Caja as one income (the app invoices it pays
+// point to it). RCs made in Siigo since the cutoff are
 // imported into the history. Mutations return { success, error }:
 // production hides thrown messages.
 
@@ -12,6 +12,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { checkIsAdmin, setOrderPayment } from '../../actions';
 import { createIncomeDirect, deleteIncomeDirect } from '../cashflow/actions';
+import { ensurePaymentIncome } from '@/utils/invoices/paymentIncome';
 import { getSiigoClient, idempotencyKey, siigoConfigFromEnv, SiigoError } from '@/utils/siigo/api';
 import { buildCollectionVoucherPayload, cleanIdentification } from '@/utils/siigo/mapping';
 import { errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } from '@/utils/siigo/server';
@@ -133,7 +134,7 @@ async function applyToAppInvoices(supabase: Supabase, userId: string | null, r: 
     applied += Number(item.value);
     const { data: already } = await supabase.from('invoice_payments').select('id').eq('invoice_id', inv.id).eq('siigo_voucher_id', r.siigo_id).maybeSingle();
     if (already) continue;
-    const { error } = await supabase.from('invoice_payments').insert({
+    const payment = {
       invoice_id: inv.id,
       payment_date: r.receipt_date,
       amount: Number(item.value),
@@ -143,8 +144,16 @@ async function applyToAppInvoices(supabase: Supabase, userId: string | null, r: 
       siigo_voucher_id: r.siigo_id,
       siigo_voucher_name: r.siigo_name,
       created_by: userId,
-    });
+    };
+    // A cobro registered here already put the whole deposit in Flujo de Caja: the payment points to it.
+    let { data: created, error } = await supabase.from('invoice_payments')
+      .insert(r.income_id ? { ...payment, cashflow_income_id: r.income_id, income_owned: false } : payment)
+      .select('id').single();
+    // Before 20261112000000_payments_enter_cashflow.sql: the payment alone.
+    if (error && /cashflow_income_id|income_owned/.test(error.message)) ({ data: created, error } = await supabase.from('invoice_payments').insert(payment).select('id').single());
     if (error) throw error;
+    // An RC made in Siigo brings no income: the payment gets its own.
+    if (!r.income_id && created) await ensurePaymentIncome(supabase, created.id).catch((e) => { if (!/20261112000000/.test(String(e))) throw e; });
     const [after] = inv.siigo_invoice_id ? await openInvoices([inv.siigo_invoice_id]) : [];
     if (!after && inv.order_id) {
       const res = await setOrderPayment(inv.order_id, true, `${r.receipt_date}T12:00:00-05:00`);
@@ -201,8 +210,6 @@ export async function registerCollection(input: CollectionInput) {
     if (problems.length) throw new Error(problems.join(' · '));
 
     const identification = invoices[0].customer_identification ?? '';
-    const { data: appInvoices } = await supabase.from('sales_invoices').select('siigo_invoice_id').in('siigo_invoice_id', invoices.map((i) => i.id));
-    const inApp = new Set(((appInvoices ?? []) as { siigo_invoice_id: string }[]).map((i) => i.siigo_invoice_id));
     const results: { id: string; sent: boolean; name: string | null; error: string | null }[] = [];
     for (const [branch, items] of receiptsByBranch(assigned, invoices)) {
       const { client, siteId } = await clientAndSite(supabase, identification, branch);
@@ -226,10 +233,10 @@ export async function registerCollection(input: CollectionInput) {
         .select('*')
         .single();
       if (error || !row) throw error ?? new Error('No se pudo guardar el cobro.');
-      // The money came in: invoices made in Siigo enter Flujo de Caja now (app ones, with their order).
-      const outsideApp = Math.round(items.filter((i) => !inApp.has(i.siigo_invoice_id ?? '')).reduce((s, i) => s + i.value, 0) * 100) / 100;
-      if (outsideApp > 0) {
-        const res = await createIncomeDirect(input.date, { concept: receiptConcept(row as Receipt), category: 'Ventas Físicas', amount: outsideApp });
+      // The money came in: the whole deposit enters Flujo de Caja now, once. The
+      // payments it gives the app invoices point to this income (no income of their own).
+      if (amount > 0) {
+        const res = await createIncomeDirect(input.date, { concept: receiptConcept(row as Receipt), category: 'Ventas Físicas', amount });
         if ('error' in res && res.error) throw new Error(res.error);
         const incomeId = (res as { data?: { id: string } }).data?.id ?? null;
         if (incomeId) await supabase.from('customer_receipts').update({ income_id: incomeId }).eq('id', row.id);

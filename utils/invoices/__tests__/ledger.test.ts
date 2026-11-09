@@ -13,11 +13,12 @@ describe("what the customer owes", () => {
     expect(paymentState(credit, [{ amount: 40000 }, { amount: 60000 }])).toBe("pagada");
   });
 
-  it("a cash sale is paid when invoiced and takes no payments", () => {
+  it("a cash sale is owed until its money is confirmed with a payment", () => {
     const cash = { ...credit, payment_terms: "contado" as const };
-    expect(balanceDue(cash, [])).toBe(0);
-    expect(paymentState(cash, [])).toBe("pagada");
-    expect(paymentProblems(cash, [], 1000, "2026-10-14")).toContain("La factura es de contado: ya quedó pagada al facturar.");
+    expect(balanceDue(cash, [])).toBe(100000);
+    expect(paymentState(cash, [])).toBe("pendiente");
+    expect(paymentProblems(cash, [], 100000, "2026-10-14")).toEqual([]);
+    expect(paymentState(cash, [{ amount: 100000 }])).toBe("pagada");
   });
 
   it("overdue only when issued, past the due date and still owed", () => {

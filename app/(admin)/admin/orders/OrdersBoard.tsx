@@ -829,6 +829,11 @@ function OrderPanel({
                   {isPaid(order) ? tr("Marcar sin pagar") : tr("Marcar pagado")}
                 </button>
               )}
+              {order.source !== "web" && order.status !== "cancelled" && (
+                <span className="w-full text-[11px] text-foreground/50">
+                  {tr("Marcarla pagada no la suma a Flujo de Caja: la plata entra cuando registras el pago en Facturas (o la ligas a un ingreso).")}
+                </span>
+              )}
             </dd>
 
             <dt className="text-foreground/40">{tr("Total")}</dt>

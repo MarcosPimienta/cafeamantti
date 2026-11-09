@@ -17,7 +17,9 @@ type Payment = {
   amount: number;
   method: PaymentMethod;
   notes: string | null;
-  siigo_status: "pendiente" | "enviado" | "error";
+  /** no_aplica: a cash invoice's confirmed payment (Siigo already has it as paid). */
+  siigo_status: "pendiente" | "enviado" | "error" | "no_aplica";
+  cashflow_income_id?: string | null;
   siigo_voucher_name: string | null;
   siigo_error: string | null;
 };
@@ -88,7 +90,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
   );
   const live = info.filter((x) => x.inv.status !== "anulada");
   const pendingInvoices = live.filter((x) => x.inv.status === "borrador" || x.inv.status === "error").length;
-  const pendingPayments = live.reduce((n, x) => n + (x.inv.status === "emitida" ? x.inv.payments.filter((p) => p.siigo_status !== "enviado").length : 0), 0);
+  const pendingPayments = live.reduce((n, x) => n + (x.inv.status === "emitida" ? x.inv.payments.filter((p) => p.siigo_status === "pendiente" || p.siigo_status === "error").length : 0), 0);
   const waitingPayments = live.reduce((n, x) => n + (x.inv.status !== "emitida" ? x.inv.payments.length : 0), 0);
   const receivable = live.reduce((s, x) => s + x.balance, 0);
   const overdue = live.reduce((s, x) => s + (x.overdue > 0 ? x.balance : 0), 0);
@@ -101,7 +103,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
     if (!invoiceInRange(inv, range)) return false;
     if (searching) return invoiceMatches(inv, search);
     switch (filter) {
-      case "siigo": return inv.status === "borrador" || inv.status === "error" || (inv.status === "emitida" && inv.payments.some((p) => p.siigo_status !== "enviado"));
+      case "siigo": return inv.status === "borrador" || inv.status === "error" || (inv.status === "emitida" && inv.payments.some((p) => p.siigo_status === "pendiente" || p.siigo_status === "error"));
       case "cobrar": return inv.status !== "anulada" && balance > 0.5;
       case "vencidas": return late > 0;
       case "pagadas": return inv.status !== "anulada" && balance <= 0.5;
@@ -294,7 +296,8 @@ function InvoiceCard({ inv, balance, overdue, state, today, incomeLinkReady, onC
         {credit && !inv.due_date && inv.status !== "anulada" && <span>{tr("Vence {n} días después de enviarla a Siigo", { n: String(inv.term_days) })}</span>}
         {inv.status !== "anulada" && credit && <span>{tr("Pagado {paid} · Saldo {balance}", { paid: cop(paid), balance: cop(balance) })}</span>}
         {!!inv.credited && <span>{tr("Notas crédito {total}", { total: cop(inv.credited) })}</span>}
-        {inv.status !== "anulada" && <span className="font-bold">{tr.msg(state === "pagada" ? "Pagada" : state === "parcial" ? "Pago parcial" : "Sin pagos")}</span>}
+        {inv.status !== "anulada" && <span className={`font-bold ${!credit && state !== "pagada" ? "text-amber-700" : ""}`}>{tr.msg(state === "pagada" ? "Pagada" : state === "parcial" ? "Pago parcial" : credit ? "Sin pagos" : "Pago por confirmar")}</span>}
+        {inv.status !== "anulada" && !credit && state !== "pagada" && <span>{tr("Saldo {balance}", { balance: cop(balance) })}</span>}
         {inv.siigo_status && <span>{tr.msg(DIAN_LABEL[inv.siigo_status] ?? inv.siigo_status)}</span>}
       </div>
 
@@ -310,9 +313,10 @@ function InvoiceCard({ inv, balance, overdue, state, today, incomeLinkReady, onC
                 {p.notes ? ` · ${p.notes}` : ""}
               </span>
               <span className="flex items-center gap-2">
-                <span className={p.siigo_status === "enviado" ? "text-green-700" : p.siigo_status === "error" ? "text-red-600" : "text-foreground/50"}>
-                  {p.siigo_status === "enviado" ? tr("Recibo {name}", { name: p.siigo_voucher_name ?? "" }) : p.siigo_status === "error" ? tr("Error al enviar") : tr("Por enviar a Siigo")}
+                <span className={p.siigo_status === "enviado" || p.siigo_status === "no_aplica" ? "text-green-700" : p.siigo_status === "error" ? "text-red-600" : "text-foreground/50"}>
+                  {p.siigo_status === "enviado" ? tr("Recibo {name}", { name: p.siigo_voucher_name ?? "" }) : p.siigo_status === "no_aplica" ? tr("Pago confirmado (contado, sin recibo de caja)") : p.siigo_status === "error" ? tr("Error al enviar") : tr("Por enviar a Siigo")}
                 </span>
+                {p.cashflow_income_id && <span className="text-blue-700" title={tr("Este pago está en Flujo de Caja como ingreso, con su fecha")}>{tr("En Flujo de Caja")}</span>}
                 {p.siigo_status !== "enviado" && (
                   <button type="button" disabled={isPending} onClick={() => run(() => deletePayment(p.id), tr("¿Eliminar este pago?"))} aria-label={tr("Eliminar pago")} className="text-foreground/40 hover:text-red-600 disabled:opacity-40">
                     <Trash2 className="w-3.5 h-3.5" />
@@ -344,12 +348,12 @@ function InvoiceCard({ inv, balance, overdue, state, today, incomeLinkReady, onC
 
       {crediting && <CreditNoteModal invoice={inv} onClose={() => setCrediting(false)} onDone={() => { setCrediting(false); onChanged(); }} />}
 
-      {paying && <PaymentForm invoiceId={inv.id} balance={balance} today={today} onDone={() => { setPaying(false); onChanged(); }} onCancel={() => setPaying(false)} />}
+      {paying && <PaymentForm invoiceId={inv.id} balance={balance} today={today} defaultMethod={credit ? "transfer" : inv.payment_method ?? "transfer"} confirming={!credit} onDone={() => { setPaying(false); onChanged(); }} onCancel={() => setPaying(false)} />}
 
       <div className="flex flex-wrap gap-3">
-        {credit && inv.status !== "anulada" && balance > 0.5 && !paying && (
+        {inv.status !== "anulada" && balance > 0.5 && !paying && (
           <button type="button" onClick={() => setPaying(true)} className="inline-flex items-center gap-1 text-xs font-bold text-[#C59F59] hover:underline">
-            <Plus className="w-3.5 h-3.5" />{" "}{tr("Registrar pago")}
+            <Plus className="w-3.5 h-3.5" />{" "}{credit ? tr("Registrar pago") : tr("Confirmar que llegó el pago")}
           </button>
         )}
         {inv.siigo_public_url && (
@@ -390,11 +394,11 @@ function InvoiceCard({ inv, balance, overdue, state, today, incomeLinkReady, onC
   );
 }
 
-function PaymentForm({ invoiceId, balance, today, onDone, onCancel }: { invoiceId: string; balance: number; today: string; onDone: () => void; onCancel: () => void }) {
+function PaymentForm({ invoiceId, balance, today, defaultMethod = "transfer", confirming = false, onDone, onCancel }: { invoiceId: string; balance: number; today: string; defaultMethod?: PaymentMethod; confirming?: boolean; onDone: () => void; onCancel: () => void }) {
   const tr = useTr();
   const [date, setDate] = useState(today);
   const [amount, setAmount] = useState(String(Math.round(balance)));
-  const [method, setMethod] = useState<PaymentMethod>("transfer");
+  const [method, setMethod] = useState<PaymentMethod>(defaultMethod);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -410,9 +414,14 @@ function PaymentForm({ invoiceId, balance, today, onDone, onCancel }: { invoiceI
   const input = "px-3 py-2 rounded-lg border border-foreground/10 bg-white text-sm";
   return (
     <div className="rounded-xl border border-foreground/10 p-3 space-y-2">
+      <p className="text-[11px] text-foreground/50">
+        {confirming
+          ? tr("Factura de contado: confirma el día en que la plata llegó a la cuenta. Entra a Flujo de Caja con esa fecha; en Siigo no se hace recibo de caja.")
+          : tr("El pago entra a Flujo de Caja con esta fecha y valor, y se envía a Siigo como recibo de caja.")}
+      </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="text-xs text-foreground/60">
-          {tr("Fecha del pago")}
+          {confirming ? tr("Fecha en que llegó") : tr("Fecha del pago")}
           <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} className={`${input} block mt-1`} />
         </label>
         <label className="text-xs text-foreground/60">
