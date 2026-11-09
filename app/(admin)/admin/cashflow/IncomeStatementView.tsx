@@ -141,10 +141,10 @@ export default function IncomeStatementView({ formatCurrency }: { formatCurrency
   };
 
   const warnings = report?.warnings;
-  // What makes this month's profit less sure: coffee that left with no known cost, and sales taken from manual incomes.
+  // What makes this month's profit less sure: coffee that left with no known cost, or Siigo not answering.
   const missingCost = warnings?.missingCost ?? [];
-  const approximated = warnings?.approximated ?? { count: 0, total: 0 };
-  const pending = !loading && warnings ? missingCost.length + approximated.count : 0;
+  const noSiigo = !!warnings && warnings.salesFromSiigo === false;
+  const pending = !loading && warnings ? missingCost.length + (noSiigo ? 1 : 0) : 0;
 
   return (
     <div className="space-y-5">
@@ -170,7 +170,7 @@ export default function IncomeStatementView({ formatCurrency }: { formatCurrency
       </div>
 
       <p className="text-xs text-foreground/50">
-        {tr("Rentabilidad, no caja: lo vendido en el mes (sin IVA, por la fecha de la factura o la entrega), menos lo que costó el café que salió del inventario, los gastos del mes, la depreciación y los intereses. Las compras de café, maquila y empaques no se restan cuando se pagan sino cuando ese café se vende.")}
+        {tr("Rentabilidad, no caja: las ventas del mes como las cuenta Siigo (facturas menos notas crédito, sin IVA) más los pedidos vendidos sin factura, menos lo que costó el café que salió del inventario, los gastos del mes, la depreciación y los intereses. Los cobros no son ventas, y las compras de café, maquila y empaques se restan cuando ese café se vende.")}
       </p>
 
       {/* What makes the month's result less sure */}
@@ -183,8 +183,8 @@ export default function IncomeStatementView({ formatCurrency }: { formatCurrency
               <Link href="/admin/inventory" className="font-bold underline">{tr("Ponerles costo")}</Link>
             </p>
           )}
-          {approximated.count > 0 && (
-            <p className="text-xs">• {tr("{n} venta(s) por {v} se tomaron de ingresos manuales sin pedido ni factura (cobros de facturas hechas en Siigo o ventas sueltas). Si alguno ya tiene pedido, lígalo para no contarlo dos veces.", { n: String(approximated.count), v: formatCurrency(approximated.total) })}</p>
+          {noSiigo && (
+            <p className="text-xs">• {tr("Siigo no respondió: las ventas son solo las facturas y pedidos de la app, sin las facturas hechas directamente en Siigo.")}</p>
           )}
         </div>
       )}

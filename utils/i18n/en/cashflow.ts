@@ -455,9 +455,10 @@ export const cashflow: Record<string, string> = {
   "Venta web": "Web sale",
   "Ingreso manual": "Manual income",
   "Costo por unidad": "Unit cost",
-  "Rentabilidad, no caja: lo vendido en el mes (sin IVA, por la fecha de la factura o la entrega), menos lo que costó el café que salió del inventario, los gastos del mes, la depreciación y los intereses. Las compras de café, maquila y empaques no se restan cuando se pagan sino cuando ese café se vende.": "Profitability, not cash: what was sold in the month (before VAT, by invoice or delivery date), less what the coffee that left inventory cost, the month's expenses, depreciation and interest. Coffee, roasting and packaging purchases are not subtracted when paid but when that coffee is sold.",
   "El resultado de este mes es aproximado:": "This month's result is approximate:",
   "Salieron productos sin costo conocido, así que su costo no está restado: {items}.": "Products with no known cost left inventory, so their cost isn't subtracted: {items}.",
   "Ponerles costo": "Set their cost",
-  "{n} venta(s) por {v} se tomaron de ingresos manuales sin pedido ni factura (cobros de facturas hechas en Siigo o ventas sueltas). Si alguno ya tiene pedido, lígalo para no contarlo dos veces.": "{n} sale(s) for {v} were taken from manual incomes with no order or invoice (payments of invoices made in Siigo, or one-off sales). If one already has an order, link it so it isn't counted twice.",
+  "Rentabilidad, no caja: las ventas del mes como las cuenta Siigo (facturas menos notas crédito, sin IVA) más los pedidos vendidos sin factura, menos lo que costó el café que salió del inventario, los gastos del mes, la depreciación y los intereses. Los cobros no son ventas, y las compras de café, maquila y empaques se restan cuando ese café se vende.": "Profitability, not cash: the month's sales as Siigo counts them (invoices less credit notes, before VAT) plus orders sold without an invoice, less what the coffee that left inventory cost, the month's expenses, depreciation and interest. Collections are not sales, and coffee, roasting and packaging purchases are subtracted when that coffee is sold.",
+  "Siigo no respondió: las ventas son solo las facturas y pedidos de la app, sin las facturas hechas directamente en Siigo.": "Siigo didn't answer: sales are only the app's invoices and orders, without the invoices made directly in Siigo.",
+  "Pedido sin factura": "Order without invoice",
 };

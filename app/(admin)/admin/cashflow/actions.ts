@@ -7,7 +7,8 @@ import { checkIsAdmin, getCostingData } from '../../actions';
 import { orderCustomer } from '@/utils/orders/pendingDeliveries';
 import { accruedInterestInMonth, type Loan, type LoanMove } from '@/utils/loans/ledger';
 import { buildStatement, monthBefore, type Statement, type StatementItem } from '@/utils/cashflow/incomeStatement';
-import { costOfSalidas, linesBase, unexplainedSale } from '@/utils/cashflow/accrual';
+import { costOfSalidas, linesBase, siigoDocBase, type SiigoSalesDoc } from '@/utils/cashflow/accrual';
+import { getSiigoClient, siigoConfigFromEnv } from '@/utils/siigo/api';
 import { orderTaxTotals, pricesIncludeTax } from '@/utils/orders/tax';
 import { revalidatePath } from 'next/cache';
 import {
@@ -829,8 +830,8 @@ export type IncomeStatementReport = {
     paymentsOutside: { count: number; total: number };
     /** Products that left in the month with no known cost (their cost is missing from the statement). */
     missingCost: { name: string; quantity: number }[];
-    /** Sales taken from manual incomes that no order or invoice explains. */
-    approximated: { count: number; total: number };
+    /** Sales came from Siigo (false: Siigo didn't answer, so only the app's invoices and orders). */
+    salesFromSiigo: boolean;
   };
 };
 
@@ -845,9 +846,9 @@ const DEPRECIATION_LABEL: Record<string, string> = {
 /**
  * The income statement of a month — profitability, not cash — with the 5
  * months before it for comparison and trend:
- * - sales: what was sold in the month before IVA (app invoices by their date,
- *   orders sold without one, and as an approximation the sales incomes no
- *   order or invoice explains), less credit notes;
+ * - sales: what was sold in the month before IVA, as Siigo counts it (its
+ *   invoices less its credit notes), plus orders sold without any invoice and
+ *   app invoices not in Siigo yet — money collected is not a sale;
  * - cost: what left the inventory as a sale × each product's unit cost (the
  *   purchases of green coffee, roasting and packaging are inventory, not a
  *   cost of the month they are paid);
@@ -861,13 +862,10 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
   const windowStart = `${months[0]}-01`;
   const { period_end: windowEnd } = monthBounds(month, year);
 
-  const [invoiceRes, noteRes, orderRes, incRes, ownedRes, receiptRes, salidaRes, sellableRes, expRes, capexRes, loansRes, movesRes, costing] = await Promise.all([
-    supabase.from('sales_invoices').select('id, order_id, lines, shipping, issue_date, created_at, siigo_name, customer_name').neq('status', 'anulada'),
+  const [invoiceRes, noteRes, orderRes, salidaRes, sellableRes, expRes, capexRes, loansRes, movesRes, costing] = await Promise.all([
+    supabase.from('sales_invoices').select('id, order_id, status, lines, shipping, issue_date, created_at, siigo_name, customer_name').neq('status', 'anulada'),
     supabase.from('credit_notes').select('invoice_id, lines, total, created_at, siigo_name'),
     supabase.from('orders').select('id, status, payment_status, paid_at, delivered_at, created_at, source, total_amount, prices_include_tax, siigo_invoice, cashflow_income_id, shipping_info, contact_email, client:client_id ( name ), order_items ( price_at_time, quantity, tax_rate )').neq('status', 'cancelled'),
-    supabase.from('cashflow_incomes').select('id, concept, category, gross_amount, amount, tax_amount, cashflow:cashflow_id!inner ( date )').gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
-    supabase.from('invoice_payments').select('cashflow_income_id').eq('income_owned', true),
-    supabase.from('customer_receipts').select('income_id, items'),
     supabase.from('inventory_movements').select('inventory_id, quantity, movement_date, reason').eq('era', 'v2').eq('type', 'salida').eq('tab_source', 'salida').gte('movement_date', windowStart).lt('movement_date', windowEnd),
     supabase.from('inventory').select('id, is_sellable'),
     supabase.from('cashflow_expenses').select('concept, category, net_amount, cashflow:cashflow_id!inner ( date )').eq('expense_type', 'OPEX').gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
@@ -885,52 +883,68 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const rows = (r: { data: unknown }) => (r.data ?? []) as any[];
 
-  // ── What was sold (before IVA) ──
-  const sales: (StatementItem & { kind: 'factura' | 'pedido' | 'aprox' })[] = [];
+  // ── What was sold (before IVA), as Siigo counts it ──
+  // Siigo has every invoice (the app's and those made straight there) and its
+  // credit notes; the month's sales are its invoices less its notes, before
+  // IVA. Added to that: sales that never got an invoice (orders sold without
+  // one) and app invoices not in Siigo yet. Money collected is not a sale.
+  const sales: StatementItem[] = [];
+  const deductions: StatementItem[] = [];
+  const lastDay = (() => { const t = new Date(`${windowEnd}T12:00:00Z`); t.setUTCDate(t.getUTCDate() - 1); return t.toISOString().slice(0, 10); })();
+  let siigoOk = false;
+  if (siigoConfigFromEnv()) {
+    try {
+      const siigo = getSiigoClient();
+      const [invs, notes] = await Promise.all([
+        siigo.listAll<SiigoSalesDoc>('/v1/invoices', { date_start: windowStart, date_end: lastDay }),
+        siigo.listAll<SiigoSalesDoc>('/v1/credit-notes', { date_start: windowStart, date_end: lastDay }),
+      ]);
+      // Customer names by NIT, for the drill-down.
+      const { data: clients } = await supabase.from('clients').select('name, document_number');
+      const nameOf = new Map(((clients ?? []) as { name: string; document_number: string | null }[]).map((c) => [String(c.document_number ?? '').replace(/\D/g, '').slice(0, 9), c.name]));
+      const who = (d: SiigoSalesDoc) => nameOf.get(String(d.customer?.identification ?? '').replace(/\D/g, '').slice(0, 9)) ?? (d.customer?.identification ? `NIT ${d.customer.identification}` : '');
+      const inWindow = (d: SiigoSalesDoc) => !!d.date && d.date >= windowStart && d.date < windowEnd;
+      for (const d of invs.filter(inWindow)) {
+        const v = siigoDocBase(d);
+        if (v) sales.push({ date: day(d.date), concept: `${d.name ?? 'Factura'} · ${who(d)}`, category: 'Factura', amount: v });
+      }
+      // The credit notes list ignores its date filter: the window is applied here.
+      for (const d of notes.filter(inWindow)) {
+        const v = siigoDocBase(d);
+        if (v) deductions.push({ date: day(d.date), concept: `${d.name ?? 'Nota crédito'} · ${who(d)}`, category: 'Nota crédito', amount: v });
+      }
+      siigoOk = true;
+    } catch (err) {
+      console.error('getIncomeStatement: Siigo', err);
+    }
+  }
+
+  // App invoices: in Siigo once issued (counted above); drafts and failed ones are sales Siigo doesn't have yet.
   const invoicedOrders = new Set<string>();
-  const appInvoiceSiigoIds = new Set<string>();
   for (const inv of rows(invoiceRes)) {
     invoicedOrders.add(inv.order_id);
-    sales.push({ kind: 'factura', date: day(inv.issue_date ?? inv.created_at), concept: `Factura ${inv.siigo_name ?? 'por enviar'} · ${inv.customer_name}`, category: 'Factura', amount: linesBase(inv.lines, inv.shipping) });
+    if (siigoOk && inv.status === 'emitida') continue;
+    sales.push({ date: day(inv.issue_date ?? inv.created_at), concept: `Factura ${inv.siigo_name ?? 'por enviar a Siigo'} · ${inv.customer_name}`, category: 'Factura', amount: linesBase(inv.lines, inv.shipping) });
   }
-  // Invoices made in the app are known to Siigo by their id: a cobro that pays them is not a new sale.
-  const { data: siigoIds } = await supabase.from('sales_invoices').select('siigo_invoice_id').not('siigo_invoice_id', 'is', null);
-  for (const r of (siigoIds ?? []) as { siigo_invoice_id: string }[]) appInvoiceSiigoIds.add(r.siigo_invoice_id);
+  if (!siigoOk) {
+    // Without Siigo: the app's own credit notes, on invoices still counted.
+    const liveInvoices = new Set(rows(invoiceRes).map((i) => i.id as string));
+    for (const c of rows(noteRes).filter((c) => liveInvoices.has(c.invoice_id))) {
+      deductions.push({ date: day(c.created_at), concept: `Nota crédito ${c.siigo_name ?? ''}`.trim(), category: 'Nota crédito', amount: c.lines?.length ? linesBase(c.lines) : n(c.total) });
+    }
+  }
 
-  // Only notes on invoices still counted as sales: a note that voided an invoice already left out (anulada) takes nothing off.
-  const liveInvoices = new Set(rows(invoiceRes).map((i) => i.id as string));
-  const deductions: StatementItem[] = rows(noteRes)
-    .filter((c) => liveInvoices.has(c.invoice_id))
-    .map((c) => ({ date: day(c.created_at), concept: `Nota crédito ${c.siigo_name ?? ''}`.trim(), category: 'Nota crédito', amount: c.lines?.length ? linesBase(c.lines) : n(c.total) }));
-
-  // Orders sold without an app invoice (web orders, deliveries not invoiced, invoices made straight in Siigo).
-  const linkedIncomes = new Set<string>();
+  // Orders sold that no invoice covers (consumidor final, web): sales Siigo never saw.
   for (const o of rows(orderRes)) {
-    if (o.cashflow_income_id) linkedIncomes.add(o.cashflow_income_id);
-    if (invoicedOrders.has(o.id) || !orderIsSold(o) || n(o.total_amount) <= 0) continue;
+    if (invoicedOrders.has(o.id) || o.siigo_invoice || !orderIsSold(o) || n(o.total_amount) <= 0) continue;
     const base = orderTaxTotals((o.order_items ?? []).map((it: any) => ({ price: n(it.price_at_time), quantity: n(it.quantity), tax_rate: it.tax_rate })), pricesIncludeTax(o.prices_include_tax, undefined)).subtotal;
-    const who = orderCustomer(o);
+    const name = orderCustomer(o);
     sales.push({
-      kind: 'pedido',
       date: day(o.delivered_at ?? o.paid_at ?? o.created_at),
-      concept: o.source === 'web' ? `Venta web #${String(o.id).slice(0, 8)} · ${who}` : `Pedido #${String(o.id).slice(0, 8)} · ${who}${o.siigo_invoice ? ` · ${o.siigo_invoice}` : ' (sin factura)'}`,
-      category: o.source === 'web' ? 'Venta web' : 'Pedido',
+      concept: o.source === 'web' ? `Venta web #${String(o.id).slice(0, 8)} · ${name}` : `Pedido #${String(o.id).slice(0, 8)} · ${name} (sin factura)`,
+      category: o.source === 'web' ? 'Venta web' : 'Pedido sin factura',
       amount: base || n(o.total_amount),
     });
-  }
-
-  // Sales typed in Flujo de Caja that no order or invoice explains: counted once, as an approximation.
-  const owned = new Set(rows(ownedRes).map((p) => p.cashflow_income_id as string));
-  const appPortion = new Map<string, number>();
-  for (const r of rows(receiptRes)) {
-    if (!r.income_id) continue;
-    const part = (r.items ?? []).filter((i: any) => i.siigo_invoice_id && appInvoiceSiigoIds.has(i.siigo_invoice_id)).reduce((t: number, i: any) => t + n(i.value), 0);
-    appPortion.set(r.income_id, (appPortion.get(r.income_id) ?? 0) + part);
-  }
-  for (const i of rows(incRes)) {
-    if (!/venta|servicio/i.test(i.category ?? '') || owned.has(i.id) || linkedIncomes.has(i.id)) continue;
-    const amount = unexplainedSale({ amount: n(i.gross_amount ?? i.amount), tax: n(i.tax_amount) }, appPortion.get(i.id) ?? 0);
-    if (amount > 0) sales.push({ kind: 'aprox', date: dateOf(i), concept: `${i.concept} (ingreso sin pedido)`, category: 'Ingreso manual', amount });
   }
 
   // ── What the coffee that left cost ──
@@ -945,24 +959,18 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
   const moves = (movesRes.data ?? []) as LoanMove[];
 
   const inMonth = (d: string, m: string) => d.slice(0, 7) === m;
-  const strip = ({ date, concept, category, amount }: StatementItem): StatementItem => ({ date, concept, category, amount });
   let missingCost: { name: string; quantity: number }[] = [];
-  let approximated = { count: 0, total: 0 };
   const statements = months.map((m) => {
     const [y, mo] = m.split('-').map(Number);
     const { period_start, period_end } = monthBounds(mo, y);
     const dep = summarizeMonthlyPL({ period_start, period_end, manualIncomes: [], webOrders: [], cogsExpenses: [], inventoryConsumptions: [], opexExpenses: [], capexItems: capex, paidExpenses: [] }).depreciation_by_use;
     const cost = costOfSalidas(salidas.filter((x) => inMonth(x.date, m)), unitCosts);
     const monthSales = sales.filter((x) => inMonth(x.date, m));
-    if (m === ym) {
-      missingCost = cost.missing;
-      const aprox = monthSales.filter((x) => x.kind === 'aprox');
-      approximated = { count: aprox.length, total: aprox.reduce((t, x) => t + x.amount, 0) };
-    }
+    if (m === ym) missingCost = cost.missing;
     return {
       month: m,
       statement: buildStatement({
-        sales: monthSales.map(strip),
+        sales: monthSales,
         deductions: deductions.filter((x) => inMonth(x.date, m)),
         cost: cost.items,
         opex: expenses.filter((e) => inMonth(e.date, m)),
@@ -994,7 +1002,7 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
       cashToConfirm: { count: pendingCash.length, total: pendingCash.reduce((s, i) => s + n(i.total), 0) },
       paymentsOutside: { count: outside.length, total: outside.reduce((s, p) => s + n(p.amount), 0) },
       missingCost,
-      approximated,
+      salesFromSiigo: siigoOk,
     },
   };
 }

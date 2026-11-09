@@ -65,3 +65,19 @@ export function unexplainedSale(income: { amount: number; tax: number }, appPort
   const share = num(income.amount) ? total / num(income.amount) : 0;
   return round2(total - num(income.tax) * share);
 }
+
+/** An invoice or credit note as Siigo returns it (only what the statement needs). */
+export type SiigoSalesDoc = {
+  name?: string;
+  date?: string;
+  annulled?: boolean;
+  customer?: { identification?: string };
+  items?: { quantity?: number | string; price?: number | string }[];
+};
+
+/** A Siigo invoice's or credit note's value before IVA: quantity × price of its items (Siigo's own sales report adds the same). */
+export function siigoDocBase(d: SiigoSalesDoc): number {
+  if (d.annulled) return 0;
+  return round2((d.items ?? []).reduce((s, i) => s + num(i.quantity) * num(i.price), 0));
+}
+

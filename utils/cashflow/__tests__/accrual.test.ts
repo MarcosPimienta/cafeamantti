@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { costOfSalidas, lineBase, linesBase, unexplainedSale } from "../accrual";
+import { costOfSalidas, lineBase, linesBase, siigoDocBase, unexplainedSale } from "../accrual";
 
 describe("sales before IVA", () => {
   it("takes the IVA out of IVA-inclusive lines and leaves before-IVA ones", () => {
@@ -32,3 +32,18 @@ describe("cost of the coffee that left", () => {
     expect(missing).toEqual([{ name: "Café Tostado Chiroso 250g", quantity: 2 }]);
   });
 });
+
+describe("sales as Siigo counts them", () => {
+  it("an invoice is worth its items before IVA; an annulled one, nothing", () => {
+    expect(siigoDocBase({ items: [{ quantity: 1, price: 150000 }, { quantity: 2, price: 140000 }] })).toBe(430000);
+    expect(siigoDocBase({ annulled: true, items: [{ quantity: 1, price: 150000 }] })).toBe(0);
+  });
+
+  it("October 2026: invoices less credit notes give Siigo's $15.263.325", () => {
+    // The two invoices typed with 5.000 kg ($280M each before IVA) and the notes that voided them cancel out.
+    const invoices = 578_343_386;
+    const notes = [560_000, 290_000, 802_286, 280_000_000, 280_000_000, 1_427_775].reduce((a, b) => a + b, 0);
+    expect(invoices - notes).toBe(15_263_325);
+  });
+});
+
