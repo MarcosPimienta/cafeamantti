@@ -897,7 +897,11 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
   const { data: siigoIds } = await supabase.from('sales_invoices').select('siigo_invoice_id').not('siigo_invoice_id', 'is', null);
   for (const r of (siigoIds ?? []) as { siigo_invoice_id: string }[]) appInvoiceSiigoIds.add(r.siigo_invoice_id);
 
-  const deductions: StatementItem[] = rows(noteRes).map((c) => ({ date: day(c.created_at), concept: `Nota crédito ${c.siigo_name ?? ''}`.trim(), category: 'Nota crédito', amount: c.lines?.length ? linesBase(c.lines) : n(c.total) }));
+  // Only notes on invoices still counted as sales: a note that voided an invoice already left out (anulada) takes nothing off.
+  const liveInvoices = new Set(rows(invoiceRes).map((i) => i.id as string));
+  const deductions: StatementItem[] = rows(noteRes)
+    .filter((c) => liveInvoices.has(c.invoice_id))
+    .map((c) => ({ date: day(c.created_at), concept: `Nota crédito ${c.siigo_name ?? ''}`.trim(), category: 'Nota crédito', amount: c.lines?.length ? linesBase(c.lines) : n(c.total) }));
 
   // Orders sold without an app invoice (web orders, deliveries not invoiced, invoices made straight in Siigo).
   const linkedIncomes = new Set<string>();

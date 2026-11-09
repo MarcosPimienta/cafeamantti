@@ -2764,12 +2764,14 @@ export async function getCostingData() {
     entryCosts,
     /**
      * item id → what one stock unit costs: roasted coffee by its cost sheet
-     * (café + tostión + empaque, without dispatch), anything else by what it
-     * cost when it came in. null = unknown.
+     * (café + tostión + empaque, without dispatch; a packaging without a
+     * price counts as 0), anything else by what it cost when it came in.
+     * null = unknown.
      */
     unitCosts: Object.fromEntries(inv.map((i) => {
       const line = sheet.lines.find((l) => l.product_code === i.product_code);
-      const roasted = line && line.cafe !== null && line.empaque !== null ? (line.cafe + line.tostion + line.empaque) * line.kgPerUnit : null;
+      // The coffee is what matters: a packaging without a price only leaves its own (small) part out.
+      const roasted = line && line.cafe !== null ? (line.cafe + line.tostion + (line.empaque ?? 0)) * line.kgPerUnit : null;
       const typed = costItems.find((c) => c.id === i.id)?.standard_cost ?? null;
       return [i.id as string, { name: i.product_name as string, unit: (i.unit as string | null) ?? null, cost: line ? roasted : typed }];
     })) as Record<string, { name: string; unit: string | null; cost: number | null }>,

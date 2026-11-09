@@ -42,7 +42,7 @@ const C = {
 /** Short names under the waterfall's bars. */
 const SHORT: Record<LineKey, string> = {
   sales: "Ventas",
-  deductions: "IVA y comisiones",
+  deductions: "Notas crédito",
   net_sales: "Ventas netas",
   cost: "Costo del café",
   gross: "Margen bruto",
