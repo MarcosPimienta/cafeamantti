@@ -6,7 +6,7 @@ import {
   ExternalLink, FileText, CheckCircle2, Clock, Wallet, X, Check 
 } from "lucide-react";
 import { 
-  getCuentasCobro, getClients, getSuppliers, createCuentaCobro, 
+  getCuentasCobro, getClients, getSuppliers, createCuentaCobro, getStockProducts, type CuentaCobroItem, 
   deleteCuentaCobro, registerCuentaCobroExpense, registerCuentaCobroIncome
 } from "./actions";
 import { formatCOP, numeroALetras, imageUrlToBase64, formatDateSpanish } from "@/utils/pdf/cuentasCobroHelpers";
@@ -25,6 +25,8 @@ export default function CuentasCobroPage() {
   const [list, setList] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  // Products that keep stock: a supplier's item can bring one into the inventory.
+  const [stockProducts, setStockProducts] = useState<{ id: string; product_code: string; product_name: string; unit: string | null }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<'all' | 'pendiente' | 'firmada'>('all');
@@ -49,7 +51,7 @@ export default function CuentasCobroPage() {
   const [debtorEmail, setDebtorEmail] = useState("");
   const [debtorPhone, setDebtorPhone] = useState("");
   const [concept, setConcept] = useState("");
-  const [items, setItems] = useState<any[]>([{ description: "", quantity: 1, unit_price: 0, total_price: 0 }]);
+  const [items, setItems] = useState<any[]>([{ description: "", quantity: 1, unit_price: 0, total_price: 0, inventory_id: null, inventory_qty: null }]);
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
 
   // Form: Register Expense/Income
@@ -86,11 +88,13 @@ export default function CuentasCobroPage() {
   // Load list, CRM clients, and Suppliers
   async function loadData() {
     setIsLoading(true);
-    const [cList, clientsList, suppliersList] = await Promise.all([
+    const [cList, clientsList, suppliersList, products] = await Promise.all([
       getCuentasCobro(), 
       getClients(), 
-      getSuppliers()
+      getSuppliers(),
+      getStockProducts(),
     ]);
+    setStockProducts(products);
     setList(cList);
     setClients(clientsList);
     setSuppliers(suppliersList);
@@ -141,7 +145,7 @@ export default function CuentasCobroPage() {
   };
 
   const addItemRow = () => {
-    setItems([...items, { description: "", quantity: 1, unit_price: 0, total_price: 0 }]);
+    setItems([...items, { description: "", quantity: 1, unit_price: 0, total_price: 0, inventory_id: null, inventory_qty: null }]);
   };
 
   const removeItemRow = (index: number) => {
@@ -203,7 +207,7 @@ export default function CuentasCobroPage() {
       setDebtorEmail("");
       setDebtorPhone("");
       setConcept("");
-      setItems([{ description: "", quantity: 1, unit_price: 0, total_price: 0 }]);
+      setItems([{ description: "", quantity: 1, unit_price: 0, total_price: 0, inventory_id: null, inventory_qty: null }]);
       await loadData();
     } else {
       alert(tr.msg(res.error || tr("Error al crear la cuenta de cobro.")));
@@ -417,7 +421,14 @@ export default function CuentasCobroPage() {
                     <td className="p-4 text-foreground/75 text-xs font-mono">
                       {cc.type === 'ingreso' ? cc.debtor_document : cc.issuer_document}
                     </td>
-                    <td className="p-4 text-foreground/70 max-w-xs truncate">{cc.concept || tr("Servicios Prestados")}</td>
+                    <td className="p-4 text-foreground/70 max-w-xs truncate">
+                      {cc.concept || tr("Servicios Prestados")}
+                      {stockedLabel(cc.items, stockProducts) && (
+                        <span className="block text-[10px] text-[#9a7a3c] truncate">
+                          {tr("Entró al inventario: {items}.", { items: stockedLabel(cc.items, stockProducts) })}
+                        </span>
+                      )}
+                    </td>
                     <td className="p-4 font-bold text-[#C59F59]">{formatCOP(cc.total_amount)}</td>
                     <td className="p-4">
                       {cc.status === 'firmada' ? (
@@ -723,7 +734,7 @@ export default function CuentasCobroPage() {
 
                 <div className="space-y-3">
                   {items.map((item, idx) => (
-                    <div key={idx} className="flex flex-col md:flex-row gap-3 items-end bg-[#fafaf9] p-3 rounded-2xl border border-foreground/5">
+                    <div key={idx} className="flex flex-col md:flex-row md:flex-wrap gap-3 items-end bg-[#fafaf9] p-3 rounded-2xl border border-foreground/5">
                       <div className="flex-1 w-full space-y-1">
                         <label className="text-[10px] font-bold text-foreground/50">{tr("Descripción *")}</label>
                         <input
@@ -769,6 +780,39 @@ export default function CuentasCobroPage() {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                      )}
+                      {formType === 'gasto' && (
+                        /* What this item brings into stock (café verde, pergamino, empaques…). */
+                        <div className="basis-full w-full flex flex-wrap items-center gap-2 text-xs text-foreground/60">
+                          <span>{tr("Entra al inventario:")}</span>
+                          <select
+                            value={item.inventory_id ?? ""}
+                            onChange={(e) => {
+                              const updated = [...items];
+                              const id = e.target.value || null;
+                              updated[idx] = { ...updated[idx], inventory_id: id, inventory_qty: id ? (updated[idx].inventory_qty ?? (Number(updated[idx].quantity || 0) || null)) : null };
+                              setItems(updated);
+                            }}
+                            aria-label={tr("Producto que entra al inventario")}
+                            className="w-full sm:w-72 px-2 py-1.5 bg-white border border-foreground/10 rounded-lg text-xs focus:outline-none"
+                          >
+                            <option value="">{tr("— No mueve inventario —")}</option>
+                            {stockProducts.map((p) => <option key={p.id} value={p.id}>{p.product_name} ({p.product_code})</option>)}
+                          </select>
+                          {item.inventory_id && (
+                            <>
+                              <input
+                                type="number" min={0} step="any"
+                                value={item.inventory_qty ?? ""}
+                                onChange={(e) => handleItemChange(idx, 'inventory_qty', e.target.value === "" ? null : Number(e.target.value))}
+                                placeholder={tr("Cantidad")}
+                                aria-label={tr("Cantidad que entra")}
+                                className="w-28 px-2 py-1.5 bg-white border border-foreground/10 rounded-lg text-xs focus:outline-none"
+                              />
+                              <span>{stockProducts.find((p) => p.id === item.inventory_id)?.unit ?? ""}</span>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -905,3 +949,15 @@ export default function CuentasCobroPage() {
     </div>
   );
 }
+
+/** "598 kg Café Verde, 50 unidad Bolsa 250g": what a cuenta de cobro brought into the inventory. */
+function stockedLabel(items: CuentaCobroItem[] | null | undefined, products: { id: string; product_name: string; unit: string | null }[]): string {
+  return (items ?? [])
+    .filter((i) => i.inventory_id)
+    .map((i) => {
+      const p = products.find((x) => x.id === i.inventory_id);
+      return `${i.inventory_qty ?? ""} ${p?.unit ?? ""} ${p?.product_name ?? ""}`.replace(/\s+/g, " ").trim();
+    })
+    .join(", ");
+}
+

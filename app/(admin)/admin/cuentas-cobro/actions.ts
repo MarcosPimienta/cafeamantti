@@ -4,6 +4,129 @@ import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { createExpenseDirect, createIncomeDirect } from '../cashflow/actions';
 import { ExpenseType } from '../cashflow/types';
+import { entryTypeFor, tracksStock } from '@/utils/inventory/categories';
+import { refreshStandardCost } from '@/utils/inventory/costServer';
+import { isGrindTracked } from '@/app/(admin)/coffeeProfiles';
+
+const MIGRATION_INVENTORY_HINT = 'Falta aplicar la migración 20261113000000_cuenta_cobro_inventory.sql';
+
+/** An item of a cuenta de cobro; a supplier's can bring a product into the inventory. */
+export type CuentaCobroItem = {
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  /** Product that enters the inventory with this item (cuentas de gasto only). */
+  inventory_id?: string | null;
+  /** How much of it enters, in the product's unit (kg, unidades…). */
+  inventory_qty?: number | null;
+};
+
+/** Products that keep stock, to pick in an item. */
+export async function getStockProducts() {
+  const supabase = await createClient();
+  try {
+    await checkAdmin(supabase);
+    const { data, error } = await supabase.from('inventory').select('id, product_code, product_name, unit, category').order('product_name');
+    if (error) return [];
+    return ((data ?? []) as { id: string; product_code: string; product_name: string; unit: string | null; category: string | null }[])
+      .filter((p) => tracksStock(p.category ?? undefined, p.product_code));
+  } catch {
+    return [];
+  }
+}
+
+/** A client's cuenta de cobro carries no products: only a supplier's brings stock. */
+const withoutStock = (items: CuentaCobroItem[]): CuentaCobroItem[] => items.map((i) => ({ ...i, inventory_id: undefined, inventory_qty: undefined }));
+
+/** Items that bring stock, checked before anything is written. */
+function stockProblems(items: CuentaCobroItem[]): string[] {
+  return items
+    .filter((i) => i.inventory_id && !(Number(i.inventory_qty) > 0))
+    .map((i) => `Indica cuánto entra al inventario de «${i.description || 'el ítem'}».`);
+}
+
+type DB = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Writes the entradas of a cuenta de cobro's items (all or none), at the
+ * unit cost the item says. Returns the movement ids.
+ */
+async function stockItems(
+  supabase: DB,
+  userId: string | null,
+  ccId: string,
+  items: CuentaCobroItem[],
+  opts: { date: string; label: string; supplier: string }
+): Promise<string[]> {
+  const wanted = items.filter((i) => i.inventory_id && Number(i.inventory_qty) > 0);
+  if (!wanted.length) return [];
+  const { data: products, error } = await supabase
+    .from('inventory')
+    .select('id, product_code, product_name, category')
+    .in('id', wanted.map((i) => i.inventory_id as string));
+  if (error) throw error;
+  const written: string[] = [];
+  try {
+    for (const item of wanted) {
+      const p = (products ?? []).find((x) => x.id === item.inventory_id);
+      if (!p) throw new Error('Producto del inventario no encontrado.');
+      if (!tracksStock(p.category, p.product_code)) throw new Error(`"${p.product_name}" no lleva inventario (servicio o venta por pedido).`);
+      const qty = Number(item.inventory_qty);
+      const unitCost = Math.round((Number(item.total_price) / qty) * 100) / 100;
+      const { data: mov, error: movErr } = await supabase
+        .from('inventory_movements')
+        .insert({
+          inventory_id: p.id,
+          type: 'entrada',
+          quantity: qty,
+          reason: opts.label,
+          responsable: opts.supplier,
+          entry_type: entryTypeFor(p.category ?? ''),
+          tab_source: 'entrada',
+          movement_date: opts.date,
+          molienda: isGrindTracked(p.product_code) ? 'grano' : null,
+          created_by: userId,
+          cuenta_cobro_id: ccId,
+          ...(Number.isFinite(unitCost) && unitCost > 0 ? { unit_cost: unitCost } : {}),
+        })
+        .select('id')
+        .single();
+      if (movErr && /cuenta_cobro_id/.test(movErr.message)) throw new Error(MIGRATION_INVENTORY_HINT);
+      if (movErr || !mov) throw movErr ?? new Error('No se pudo registrar la entrada.');
+      written.push(mov.id);
+      await refreshStandardCost(supabase, p.id);
+    }
+  } catch (err) {
+    for (const id of written.reverse()) await supabase.from('inventory_movements').delete().eq('id', id);
+    throw err;
+  }
+  return written;
+}
+
+/** Ids of the entradas a cuenta de cobro wrote (none before its migration). */
+async function stockOf(supabase: DB, ccId: string): Promise<string[]> {
+  const { data, error } = await supabase.from('inventory_movements').select('id').eq('cuenta_cobro_id', ccId);
+  if (error) return [];
+  return ((data ?? []) as { id: string }[]).map((m) => m.id);
+}
+
+/** Removes entradas; refused (and nothing removed) if that stock was already used. */
+async function removeStock(supabase: DB, ids: string[]) {
+  const removed: Record<string, unknown>[] = [];
+  for (const id of ids) {
+    const { data: row } = await supabase.from('inventory_movements').select('*').eq('id', id).maybeSingle();
+    const { error } = await supabase.from('inventory_movements').delete().eq('id', id);
+    if (error) {
+      // Put back what was already removed, so the cuenta de cobro keeps all its stock.
+      for (const r of removed.reverse()) await supabase.from('inventory_movements').insert(r);
+      throw new Error(/Stock insuficiente/.test(error.message)
+        ? `No se puede: el producto que entró con esta cuenta de cobro ya se usó (${error.message})`
+        : error.message);
+    }
+    if (row) removed.push(row);
+  }
+}
 
 // Helper to verify if current user is admin
 async function checkAdmin(supabase: any) {
@@ -189,12 +312,7 @@ export async function createCuentaCobro(
     issuer_phone: string;
     concept?: string;
   },
-  items: Array<{
-    description: string;
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-  }>,
+  items: CuentaCobroItem[],
   debtorData?: {
     debtor_name?: string;
     debtor_document?: string;
@@ -206,6 +324,12 @@ export async function createCuentaCobro(
   const supabase = await createClient();
   try {
     await checkAdmin(supabase);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    // Only a supplier's cuenta de cobro brings products in.
+    if (type !== 'gasto') items = withoutStock(items);
+    const problems = stockProblems(items);
+    if (problems.length) return { success: false, error: problems.join(' · ') };
 
     const total_amount = items.reduce((acc, item) => acc + Number(item.total_price), 0);
 
@@ -237,10 +361,23 @@ export async function createCuentaCobro(
 
     if (error) throw error;
 
+    // What it brings enters the inventory now; if it can't, the cuenta de cobro isn't kept.
+    try {
+      await stockItems(supabase, user?.id ?? null, data.id, items, {
+        date: data.issue_date ?? issueDate ?? new Date().toISOString().slice(0, 10),
+        label: `Cuenta de cobro No. ${data.number} · ${issuerData.issuer_name}`,
+        supplier: issuerData.issuer_name,
+      });
+    } catch (stockErr) {
+      await supabase.from('cuentas_cobro').delete().eq('id', data.id);
+      throw stockErr;
+    }
+
     // Auto-register supplier or client if not present
     await autoRegisterSupplierOrClient(supabase, type, issuerData, debtorData);
 
     revalidatePath('/admin/cuentas-cobro');
+    revalidatePath('/admin/inventory');
     return { success: true, id: data.id };
   } catch (err: any) {
     console.error('Error creating cuenta_cobro:', err.message);
@@ -261,12 +398,7 @@ export async function updateCuentaCobro(
     issuer_phone: string;
     concept?: string;
   },
-  items: Array<{
-    description: string;
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-  }>,
+  items: CuentaCobroItem[],
   debtorData?: {
     debtor_name?: string;
     debtor_document?: string;
@@ -288,6 +420,26 @@ export async function updateCuentaCobro(
 
     if (current && current.status !== 'pendiente') {
       return { success: false, error: 'No se puede modificar una cuenta de cobro ya firmada.' };
+    }
+    if (type !== 'gasto') items = withoutStock(items);
+    const problems = stockProblems(items);
+    if (problems.length) return { success: false, error: problems.join(' · ') };
+
+    // The inventory follows the edit: new entradas first, then the old ones go
+    // (refused if their stock was used — then nothing changes).
+    const { data: cc } = await supabase.from('cuentas_cobro').select('number, issue_date').eq('id', id).single();
+    const { data: { user } } = await supabase.auth.getUser();
+    const old = await stockOf(supabase, id);
+    const fresh = await stockItems(supabase, user?.id ?? null, id, items, {
+      date: issueDate ?? cc?.issue_date ?? new Date().toISOString().slice(0, 10),
+      label: `Cuenta de cobro No. ${cc?.number ?? ''} · ${issuerData.issuer_name}`,
+      supplier: issuerData.issuer_name,
+    });
+    try {
+      await removeStock(supabase, old);
+    } catch (stockErr) {
+      for (const mid of fresh) await supabase.from('inventory_movements').delete().eq('id', mid);
+      throw stockErr;
     }
 
     const total_amount = items.reduce((acc, item) => acc + Number(item.total_price), 0);
@@ -337,6 +489,9 @@ export async function deleteCuentaCobro(id: string) {
   try {
     await checkAdmin(supabase);
 
+    // Its entradas leave the inventory first (refused if that stock was used).
+    await removeStock(supabase, await stockOf(supabase, id));
+
     const { error } = await supabase
       .from('cuentas_cobro')
       .delete()
@@ -345,6 +500,7 @@ export async function deleteCuentaCobro(id: string) {
     if (error) throw error;
 
     revalidatePath('/admin/cuentas-cobro');
+    revalidatePath('/admin/inventory');
     return { success: true };
   } catch (err: any) {
     console.error('Error deleting cuenta_cobro:', err.message);
