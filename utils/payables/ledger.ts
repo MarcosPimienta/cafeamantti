@@ -69,9 +69,33 @@ export function paidOf(payments: { amount: number | string }[]): number {
   return round2(payments.reduce((s, p) => s + num(p.amount), 0));
 }
 
-/** What is still owed (never negative). */
-export function payableBalance(total: number | string, payments: { amount: number | string }[]): number {
-  return Math.max(0, round2(num(total) - paidOf(payments)));
+/** What is still owed (never negative), after the supplier's partial credit notes. */
+export function payableBalance(total: number | string, payments: { amount: number | string }[], credited: number | string = 0): number {
+  return Math.max(0, round2(num(total) - num(credited) - paidOf(payments)));
+}
+
+/** Sum of an invoice's partial credit notes. */
+export function creditedOf(notes: { total: number | string; partial?: boolean | null }[] | null | undefined): number {
+  return round2((notes ?? []).filter((n) => n.partial).reduce((s, n) => s + num(n.total), 0));
+}
+
+/**
+ * A partial credit note: what it leaves the invoice worth, and the part of
+ * what was already paid that the supplier now holds (saldo a favor).
+ */
+export function partialCreditEffect(total: number, creditedBefore: number, paid: number, amount: number): { newValue: number; excess: number } {
+  const newValue = round2(total - creditedBefore - amount);
+  const before = Math.max(0, round2(paid - (total - creditedBefore)));
+  return { newValue, excess: Math.max(0, round2(Math.max(0, paid - newValue) - before)) };
+}
+
+export function partialCreditProblems(total: number, creditedBefore: number, amount: number): string[] {
+  const p: string[] = [];
+  const left = round2(total - creditedBefore);
+  if (!(Number.isFinite(amount) && amount > 0)) p.push("El valor de la nota crédito debe ser mayor a cero.");
+  else if (amount > left + 0.5) p.push("La nota crédito supera lo que queda de la factura.");
+  else if (amount > left - 0.5) p.push("La nota crédito es por todo lo que queda de la factura: usa «Toda la factura» para anularla.");
+  return p;
 }
 
 export function payablePaymentProblems(balance: number, amount: number, date: string): string[] {

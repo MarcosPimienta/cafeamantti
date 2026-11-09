@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { allocatePayment, billMatches, billProblems, billTotals, payableBalance, payablePaymentProblems, type BillLine } from "../ledger";
+import { allocatePayment, billMatches, billProblems, billTotals, creditedOf, partialCreditEffect, partialCreditProblems, payableBalance, payablePaymentProblems, type BillLine } from "../ledger";
 import { buildPaymentReceiptPayload, buildPurchaseBillPayload, type SiigoSettings } from "@/utils/siigo/mapping";
 
 const line = (patch: Partial<BillLine>): BillLine => ({ category: "Costo de Ventas (Materia prima, insumos, empaques)", account: "52954001", description: "Empaques", base: 325000, tax_id: 13156, tax_rate: 19, retention_id: null, retention_rate: 0, ...patch });
@@ -111,3 +111,29 @@ describe("searching purchase invoices", () => {
   it.each(["3693", "café", "9012", "erco"])("not by %s", (q) => expect(billMatches(bill, q)).toBe(false));
   it("an empty search keeps everything", () => expect(billMatches(bill, " ")).toBe(true));
 });
+
+describe("partial credit notes from a supplier", () => {
+  it("lower what is owed", () => {
+    expect(payableBalance(1899899, [], 299899)).toBe(1600000);
+    expect(payableBalance(1000, [{ amount: 900 }], 200)).toBe(0);
+    expect(creditedOf([{ total: 100, partial: true }, { total: 50, partial: true }, { total: 999, partial: false }])).toBe(150);
+  });
+
+  it("on an unpaid invoice nothing goes to saldo a favor; on a paid one the excess does", () => {
+    expect(partialCreditEffect(1899899, 0, 0, 299899)).toEqual({ newValue: 1600000, excess: 0 });
+    // VEM-74082, paid in full: a discount of $474.776 is money the supplier now holds.
+    expect(partialCreditEffect(4274776, 0, 4274776, 474776)).toEqual({ newValue: 3800000, excess: 474776 });
+    // Paid in part: only what passes the new value.
+    expect(partialCreditEffect(4274776, 0, 3025224, 1474776)).toEqual({ newValue: 2800000, excess: 225224 });
+    // A second note counts only its own excess.
+    expect(partialCreditEffect(1000, 200, 900, 100)).toEqual({ newValue: 700, excess: 100 });
+  });
+
+  it("must be above zero and below what is left; all of it is a void, not a partial note", () => {
+    expect(partialCreditProblems(1000, 0, 0)).toHaveLength(1);
+    expect(partialCreditProblems(1000, 200, 900)[0]).toMatch(/supera/);
+    expect(partialCreditProblems(1000, 200, 800)[0]).toMatch(/Toda la factura/);
+    expect(partialCreditProblems(1000, 200, 300)).toEqual([]);
+  });
+});
+

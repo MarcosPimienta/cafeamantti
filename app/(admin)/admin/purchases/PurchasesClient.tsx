@@ -9,7 +9,7 @@ import BillForm, { type EditableBill } from "./BillForm";
 import PayablePaymentForm from "./PayablePaymentForm";
 import BillCreditNoteForm from "./BillCreditNoteForm";
 import AdvancesPanel, { type AdvanceMove } from "./AdvancesPanel";
-import { billMatches, payableBalance, paidOf, type BillLine, type PayableMethod } from "@/utils/payables/ledger";
+import { billMatches, creditedOf, payableBalance, paidOf, type BillLine, type PayableMethod } from "@/utils/payables/ledger";
 import { inRange, isRangeSet, sortRows } from "@/utils/lists/rangeSort";
 import RangeSortBar, { emptyRange, toRange, type RangeSortState } from "@/app/(admin)/RangeSortBar";
 import { useTr } from "@/app/(admin)/AdminI18n";
@@ -47,7 +47,7 @@ type Bill = {
   payments: PayablePayment[];
 };
 /** The supplier's credit note that voided the invoice. */
-type CreditNote = { id: string; bill_id: string; number: string; issue_date: string; paid: number; goods_returned: boolean; reason: string | null; siigo_name: string | null };
+type CreditNote = { id: string; bill_id: string; number: string; issue_date: string; total: number; paid: number; goods_returned: boolean; reason: string | null; siigo_name: string | null; partial?: boolean };
 type Filter = "pendientes" | "vencidas" | "pagadas" | "todas" | "anuladas";
 const METHOD_LABEL: Record<PayableMethod, string> = { bank: "Banco", cash: "Efectivo", advance: "Saldo a favor" };
 
@@ -72,7 +72,9 @@ export default function PurchasesClient(props: {
   const tr = useTr();
   const router = useRouter();
   const bills = (props.bills as Bill[]).filter((b) => b.status !== "anulada");
-  const noteOf = new Map((props.creditNotes ?? []).map((n) => [n.bill_id, n]));
+  // The note that voided an invoice, and the partial ones that lowered it.
+  const noteOf = new Map((props.creditNotes ?? []).filter((n) => !n.partial).map((n) => [n.bill_id, n]));
+  const partialsOf = (billId: string) => (props.creditNotes ?? []).filter((n) => n.partial && n.bill_id === billId);
   const voided = (props.bills as Bill[]).filter((b) => b.status === "anulada" && noteOf.has(b.id));
   const [filter, setFilter] = useState<Filter>("pendientes");
   const [creating, setCreating] = useState(false);
@@ -86,9 +88,10 @@ export default function PurchasesClient(props: {
   }
 
   const rows = bills.map((b) => {
-    const balance = payableBalance(b.total, b.payments);
+    const partials = partialsOf(b.id);
+    const balance = payableBalance(b.total, b.payments, creditedOf(partials));
     const overdue = balance > 0.5 && b.due_date < props.today;
-    return { b, balance, overdue };
+    return { b, balance, overdue, partials };
   });
   const owed = rows.reduce((s, r) => s + r.balance, 0);
   const late = rows.reduce((s, r) => s + (r.overdue ? r.balance : 0), 0);
@@ -205,7 +208,7 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
   );
 }
 
-function BillCard({ b, balance, overdue, today, inventory, creditNotesReady, onDone, onEdit }: { b: Bill; balance: number; overdue: boolean; today: string; inventory: { id: string; product_name: string; unit: string | null }[]; creditNotesReady: boolean; onDone: (msg: string) => void; onEdit: () => void }) {
+function BillCard({ b, balance, overdue, partials, today, inventory, creditNotesReady, onDone, onEdit }: { b: Bill; balance: number; overdue: boolean; partials: CreditNote[]; today: string; inventory: { id: string; product_name: string; unit: string | null }[]; creditNotesReady: boolean; onDone: (msg: string) => void; onEdit: () => void }) {
   const tr = useTr();
   const [paying, setPaying] = useState(false);
   const [crediting, setCrediting] = useState(false);
@@ -256,6 +259,27 @@ function BillCard({ b, balance, overdue, today, inventory, creditNotesReady, onD
           })}
         </p>
       )}
+      {partials.length > 0 && (
+        <ul className="text-xs divide-y divide-foreground/5 rounded-xl bg-amber-50/50 px-3">
+          {partials.map((n) => (
+            <li key={n.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span>
+                <strong>{tr("Nota crédito {nc}", { nc: n.number })}</strong> · {n.issue_date}{n.reason ? ` · ${n.reason}` : ""}
+                {Number(n.paid) > 0.5 && <span className="text-foreground/60"> · {tr("{amount} quedó como saldo a favor", { amount: cop(Number(n.paid)) })}</span>}
+                {n.siigo_name && <span className="text-foreground/60"> · {tr("En Siigo: {name}", { name: n.siigo_name })}</span>}
+              </span>
+              <span className="flex items-center gap-2">
+                <strong>−{cop(Number(n.total))}</strong>
+                <button type="button" disabled={isPending}
+                  onClick={() => run(() => deleteBillCreditNote(n.id), tr("Nota crédito deshecha."), tr("¿Deshacer la nota crédito {nc}? La factura vuelve a deber ese valor.", { nc: n.number }))}
+                  aria-label={tr("Deshacer nota crédito")} className="text-foreground/40 hover:text-red-600 disabled:opacity-40">
+                  <Undo2 className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       <PaymentList payments={b.payments} onDone={onDone} />
       <div className="flex flex-wrap gap-3">
         {balance > 0.5 && (
@@ -286,7 +310,7 @@ function BillCard({ b, balance, overdue, today, inventory, creditNotesReady, onD
       </div>
       {error && <p className="text-xs text-red-600 break-words">{tr.msg(error)}</p>}
       {crediting && (
-        <BillCreditNoteForm billId={b.id} title={`${b.supplier_name} · ${tr("Factura {n}", { n: invoiceNo })}`} total={Number(b.total)} paid={paidOf(b.payments)} supplier={b.supplier_name}
+        <BillCreditNoteForm billId={b.id} title={`${b.supplier_name} · ${tr("Factura {n}", { n: invoiceNo })}`} total={Number(b.total)} credited={creditedOf(partials)} paid={paidOf(b.payments)} supplier={b.supplier_name}
           hasStock={b.lines.some((l) => l.inventory_id && Number(l.inventory_qty) > 0)} today={today}
           onClose={() => setCrediting(false)} onDone={(msg) => { setCrediting(false); onDone(msg); }} />
       )}

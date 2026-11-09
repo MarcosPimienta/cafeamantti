@@ -22,7 +22,7 @@ vi.mock("@/utils/siigo/api", async (importOriginal) => {
   return { ...real, getSiigoClient: () => siigo, siigoConfigFromEnv: () => ({ username: "u", accessKey: "k", partnerId: "CafeAmantti" }) };
 });
 
-import { annulBill, createBill, deleteAdvance, deleteBillCreditNote, deletePayablePayment, getAdvanceBalance, getPurchases, registerAdvance, registerAdvanceRefund, registerBillCreditNote, registerPayablePayment, retryBill, retryPayablePayment, updateBill } from "../actions";
+import { annulBill, createBill, deleteAdvance, deleteBillCreditNote, deletePayablePayment, getAdvanceBalance, getPurchases, registerAdvance, registerAdvanceRefund, registerBillCreditNote, registerPartialBillCreditNote, registerPayablePayment, retryBill, retryPayablePayment, updateBill } from "../actions";
 
 const SETTINGS = { purchase_document_id: 18133, purchase_payment_id: 4183, payment_receipt_document_id: 18132, payout_bank_id: 4182, payout_cash_id: 4177, expense_accounts: {}, fixed_asset_codes: {} };
 const CC = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
@@ -451,5 +451,52 @@ describe("a supplier's credit note that voids the whole invoice", () => {
   it("checks the number and the date", async () => {
     expect(await registerBillCreditNote(bill().id, { ...note, number: " " })).toMatchObject({ success: false, error: "Escribe el número de la nota crédito del proveedor." });
     expect(await registerBillCreditNote(bill().id, { ...note, date: "2026-10-01" })).toMatchObject({ success: false, error: "La nota crédito no puede ser anterior a la factura." });
+  });
+});
+
+describe("a supplier's credit note for part of the invoice", () => {
+  // $325.000 + IVA 19% = $386.750; the supplier takes $86.750 off (a discount).
+  const note = { number: "nc-200", date: "2026-10-28", amount: 86750, reason: "Descuento" };
+  const moves = () => db.rows("supplier_advances");
+
+  beforeEach(async () => {
+    h.responses["POST /v1/purchases"] = { id: "fc-1", name: "FC-1-240" };
+    h.responses["POST /v1/payment-receipts"] = { id: "rp-1", name: "RP-1-90" };
+    await createBill(input);
+  });
+
+  it("unpaid: the invoice stays and owes less; a payment can't pass the new balance; nothing goes to Siigo", async () => {
+    h.calls = [];
+    expect(await registerPartialBillCreditNote(bill().id, note)).toMatchObject({ success: true, excess: 0, owed: 300000 });
+    expect(bill().status).toBe("registrada");
+    expect(db.rows("purchase_credit_notes")[0]).toMatchObject({ number: "NC-200", total: 86750, partial: true, paid: 0 });
+    expect(h.calls).toHaveLength(0);
+    expect(await registerPayablePayment({ billId: bill().id }, { date: "2026-10-29", amount: 386750, method: "bank" })).toMatchObject({ success: false, error: expect.stringMatching(/supera el saldo/) });
+    expect(await registerPayablePayment({ billId: bill().id }, { date: "2026-10-29", amount: 300000, method: "bank" })).toMatchObject({ success: true });
+  });
+
+  it("already paid: the excess becomes saldo a favor and stops being a cost; undoing it puts everything back", async () => {
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-20", amount: 386750, method: "bank" });
+    const [row] = expenses();
+    expect(await registerPartialBillCreditNote(bill().id, note)).toMatchObject({ success: true, excess: 86750, owed: 0 });
+    expect(db.byId("cashflow_expenses", row.id)).toMatchObject({ amount: 300000, expense_type: "COGS" });
+    expect(expenses().find((e) => e.id !== row.id)).toMatchObject({ amount: 86750, expense_type: "ANTICIPO", cashflow_id: row.cashflow_id, concept: expect.stringMatching(/^Saldo a favor por nota crédito NC-200/) });
+    expect(moves()).toEqual([expect.objectContaining({ kind: "anticipo", amount: 86750, siigo_status: "no_aplica" })]);
+    // The payment can't go while the note holds part of it.
+    const pay = db.rows("payable_payments")[0];
+    pay.siigo_status = "pendiente"; // not in Siigo yet, so only the note stops it
+    expect(await deletePayablePayment(pay.id)).toMatchObject({ success: false, error: expect.stringMatching(/deshazla primero/) });
+
+    expect(await deleteBillCreditNote(db.rows("purchase_credit_notes")[0].id)).toMatchObject({ success: true });
+    expect(expenses()).toEqual([expect.objectContaining({ id: row.id, amount: 386750, expense_type: "COGS" })]);
+    expect(moves()).toHaveLength(0);
+    expect(bill().status).toBe("registrada");
+  });
+
+  it("all that is left is a void, not a partial note; and a void isn't allowed once there are partial ones", async () => {
+    expect(await registerPartialBillCreditNote(bill().id, { ...note, amount: 386750 })).toMatchObject({ success: false, error: expect.stringMatching(/Toda la factura/) });
+    await registerPartialBillCreditNote(bill().id, note);
+    expect(await registerPartialBillCreditNote(bill().id, { ...note, number: "nc-201", amount: 400000 })).toMatchObject({ success: false, error: expect.stringMatching(/supera lo que queda/) });
+    expect(await registerBillCreditNote(bill().id, { number: "nc-202", date: "2026-10-28", goodsReturned: false })).toMatchObject({ success: false, error: expect.stringMatching(/notas crédito parciales/) });
   });
 });

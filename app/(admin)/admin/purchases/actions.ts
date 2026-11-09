@@ -22,7 +22,7 @@ import { entryTypeFor, tracksStock } from '@/utils/inventory/categories';
 import { lineUnitCost } from '@/utils/inventory/entryCost';
 import { refreshStandardCost } from '@/utils/inventory/costServer';
 import { isGrindTracked } from '@/app/(admin)/coffeeProfiles';
-import { advanceBalance, advanceUseProblems, allocateAdvances, allocatePayment, billProblems, billTotals, payableBalance, payablePaymentProblems, splitPayment, type BillLine, type PayableMethod } from '@/utils/payables/ledger';
+import { advanceBalance, advanceUseProblems, allocateAdvances, allocatePayment, billProblems, billTotals, partialCreditEffect, partialCreditProblems, payableBalance, payablePaymentProblems, splitPayment, type BillLine, type PayableMethod } from '@/utils/payables/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261025000000_purchases_payables.sql';
 /** Siigo requires the supplier invoice's prefix; without one the accountant uses "FC". */
@@ -465,6 +465,7 @@ export async function registerBillCreditNote(billId: string, input: BillCreditNo
     if (error || !bill) throw error ?? new Error('Factura de compra no encontrada.');
     if (bill.status === 'anulada') throw new Error('La factura ya está anulada.');
     if (input.date < bill.issue_date) throw new Error('La nota crédito no puede ser anterior a la factura.');
+    if ((await creditedOnBill(supabase, billId)) > 0) throw new Error('La factura ya tiene notas crédito parciales: registra otra parcial por lo que queda, o deshaz las parciales primero.');
     const label = `${bill.provider_prefix ?? ''}${bill.provider_prefix ? '-' : ''}${bill.provider_number}`;
 
     const { data: note, error: noteErr } = await supabase.from('purchase_credit_notes').insert({
@@ -565,6 +566,162 @@ export async function registerBillCreditNote(billId: string, input: BillCreditNo
   });
 }
 
+const MIGRATION_PARTIAL_NOTES_HINT = 'Falta aplicar la migración 20261114000000_partial_purchase_credit_notes.sql';
+
+/** What the supplier's partial credit notes took off an invoice (0 before their migration). */
+async function creditedOnBill(supabase: Supabase, billId: string): Promise<number> {
+  const { data, error } = await supabase.from('purchase_credit_notes').select('total').eq('bill_id', billId).eq('partial', true);
+  if (error) return 0;
+  return round2(((data ?? []) as { total: number }[]).reduce((s, n) => s + Number(n.total), 0));
+}
+
+export type PartialCreditNoteInput = {
+  number: string;
+  date: string;
+  /** Value of the note, IVA included, as the supplier's document says. */
+  amount: number;
+  reason?: string | null;
+  siigoName?: string | null;
+};
+
+/**
+ * A supplier's credit note for part of a purchase invoice (a discount, a
+ * corrected price, one item of several). The invoice stays and owes less.
+ * If it was already paid beyond its new value, that excess becomes saldo a
+ * favor with the supplier, and the newest payment rows in Flujo de Caja give
+ * that part up as a cost (split into an ANTICIPO row). The accountant
+ * registers the note in Siigo; nothing is sent.
+ */
+export async function registerPartialBillCreditNote(billId: string, input: PartialCreditNoteInput) {
+  const { supabase, userId } = await requireAdmin();
+  return guard(async () => {
+    const number = input.number.trim().toUpperCase().replace(/\s+/g, '');
+    const amount = round2(Number(input.amount));
+    const problems: string[] = [];
+    if (!number) problems.push('Escribe el número de la nota crédito del proveedor.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) problems.push('Fecha inválida.');
+    else if (input.date > todayBogota()) problems.push('La fecha no puede ser futura.');
+    if (problems.length) throw new Error(problems.join(' · '));
+
+    const { data: bill, error } = await supabase.from('purchase_bills').select('*').eq('id', billId).single();
+    if (error || !bill) throw error ?? new Error('Factura de compra no encontrada.');
+    if (bill.status === 'anulada') throw new Error('La factura ya está anulada.');
+    if (input.date < bill.issue_date) throw new Error('La nota crédito no puede ser anterior a la factura.');
+    const total = Number(bill.total);
+    const creditedBefore = await creditedOnBill(supabase, billId);
+    const amountProblems = partialCreditProblems(total, creditedBefore, amount);
+    if (amountProblems.length) throw new Error(amountProblems.join(' · '));
+
+    const { data: payments, error: payErr } = await supabase.from('payable_payments').select('id, amount, expense_ids, payment_date, created_at').eq('bill_id', billId);
+    if (payErr) throw payErr;
+    const paid = round2((payments ?? []).reduce((s, p) => s + Number(p.amount), 0));
+    const { excess } = partialCreditEffect(total, creditedBefore, paid, amount);
+    const label = `${bill.provider_prefix ?? ''}${bill.provider_prefix ? '-' : ''}${bill.provider_number}`;
+
+    const { data: note, error: noteErr } = await supabase.from('purchase_credit_notes').insert({
+      bill_id: billId,
+      number,
+      issue_date: input.date,
+      total: amount,
+      reason: input.reason?.trim() || null,
+      goods_returned: false,
+      previous_status: bill.status,
+      siigo_name: input.siigoName?.trim().toUpperCase() || null,
+      partial: true,
+      created_by: userId,
+    }).select('id').single();
+    if (noteErr) {
+      if (/partial|split_rows|duplicate|unique/i.test(noteErr.message)) throw new Error(MIGRATION_PARTIAL_NOTES_HINT);
+      if (/purchase_credit_notes/.test(noteErr.message) && /exist|relation|schema/i.test(noteErr.message)) throw new Error(MIGRATION_CREDIT_NOTES_HINT);
+      throw noteErr;
+    }
+
+    const undo: (() => Promise<unknown>)[] = [async () => supabase.from('purchase_credit_notes').delete().eq('id', note.id)];
+    try {
+      const split: { id: string; cashflow_id: string; amount: number; net_amount: number | null; tax_amount: number | null; new_id: string }[] = [];
+      const converted: Record<string, unknown>[] = [];
+      if (excess > 0.5) {
+        // The newest payment rows give up the excess as a cost: it is money the supplier holds now.
+        const ids = [...new Set((payments ?? []).sort((a, b) => String(b.payment_date).localeCompare(String(a.payment_date)) || String(b.created_at).localeCompare(String(a.created_at))).flatMap((p) => (p.expense_ids ?? []) as string[]))];
+        const { data: rows, error: rowsErr } = ids.length ? await supabase.from('cashflow_expenses').select('*').in('id', ids) : { data: [], error: null };
+        if (rowsErr) throw rowsErr;
+        const ordered = ids.map((id) => ((rows ?? []) as Record<string, unknown>[]).find((r) => r.id === id)).filter((r): r is Record<string, unknown> => !!r && r.expense_type !== 'ANTICIPO');
+        let left = excess;
+        for (const r of ordered) {
+          if (left <= 0.5) break;
+          const rowAmount = Number(r.amount);
+          const part = round2(Math.min(left, rowAmount));
+          left = round2(left - part);
+          const concept = `Saldo a favor por nota crédito ${number} · ${String(r.concept)}`.slice(0, 200);
+          if (part >= rowAmount - 0.5) {
+            // The whole row: it changes type, as when a note voids the invoice.
+            converted.push(Object.fromEntries([['id', r.id], ['cashflow_id', r.cashflow_id], ...CONVERTED_FIELDS.map((f) => [f, r[f] ?? null])]));
+            undo.push(() => restoreRows(supabase, userId, [converted[converted.length - 1]]));
+            const fields = { concept, category: ADVANCE_CATEGORY, expense_type: 'ANTICIPO', depreciation_months: null };
+            const { error: upErr } = await supabase.from('cashflow_expenses').update(fields).eq('id', r.id);
+            if (upErr) throw upErr;
+            await supabase.from('cashflow_audit_logs').insert({ admin_id: userId, action_type: 'UPDATE_EXPENSE', expense_id: r.id, cashflow_id: r.cashflow_id, details: { old: r, new: fields, reason: `Nota crédito parcial ${number} de la factura de compra ${label}` } });
+            continue;
+          }
+          // Part of the row: it keeps the rest as a cost, and a new row holds the saldo a favor.
+          const share = part / rowAmount;
+          const tax = r.tax_amount == null ? null : round2(Number(r.tax_amount) * share);
+          const net = r.net_amount == null ? null : round2(Number(r.net_amount) * share);
+          const { data: created, error: insErr } = await supabase.from('cashflow_expenses').insert({
+            cashflow_id: r.cashflow_id,
+            era: r.era ?? 'v2',
+            concept,
+            category: ADVANCE_CATEGORY,
+            expense_type: 'ANTICIPO',
+            amount: part,
+            net_amount: net,
+            tax_amount: tax,
+            supplier_id: r.supplier_id ?? null,
+            created_by: userId,
+          }).select('id').single();
+          if (insErr || !created) throw insErr ?? new Error('No se pudo registrar el saldo a favor.');
+          undo.push(async () => supabase.from('cashflow_expenses').delete().eq('id', created.id));
+          const before = { amount: rowAmount, net_amount: r.net_amount == null ? null : Number(r.net_amount), tax_amount: r.tax_amount == null ? null : Number(r.tax_amount) };
+          const after = {
+            amount: round2(rowAmount - part),
+            net_amount: before.net_amount == null ? null : round2(before.net_amount - (net ?? 0)),
+            tax_amount: before.tax_amount == null ? null : round2(before.tax_amount - (tax ?? 0)),
+          };
+          const { error: upErr } = await supabase.from('cashflow_expenses').update(after).eq('id', r.id);
+          if (upErr) throw upErr;
+          undo.push(async () => supabase.from('cashflow_expenses').update(before).eq('id', r.id));
+          split.push({ id: r.id as string, cashflow_id: r.cashflow_id as string, ...before, new_id: created.id });
+          await supabase.from('cashflow_audit_logs').insert({ admin_id: userId, action_type: 'UPDATE_EXPENSE', expense_id: r.id, cashflow_id: r.cashflow_id, details: { old: before, new: after, reason: `Nota crédito parcial ${number}: ${part} pasa a saldo a favor` } });
+        }
+
+        const { error: advErr } = await supabase.from('supplier_advances').insert({
+          supplier_id: bill.supplier_id,
+          supplier_name: bill.supplier_name,
+          supplier_identification: bill.supplier_identification,
+          kind: 'anticipo',
+          move_date: input.date,
+          amount: excess,
+          notes: `Nota crédito parcial ${number} · factura ${label}`,
+          siigo_status: 'no_aplica',
+          siigo_name: input.siigoName?.trim().toUpperCase() || null,
+          purchase_credit_note_id: note.id,
+          created_by: userId,
+        });
+        if (advErr) throw advErr;
+      }
+
+      const { error: noteUp } = await supabase.from('purchase_credit_notes').update({ paid: excess, converted, split_rows: split }).eq('id', note.id);
+      if (noteUp) throw noteUp;
+      refresh();
+      revalidatePath('/admin/cashflow');
+      return { excess, owed: payableBalance(total, payments ?? [], creditedBefore + amount) };
+    } catch (err) {
+      for (const step of undo.reverse()) await step();
+      throw err;
+    }
+  });
+}
+
 /** Undoes a supplier's credit note registered by mistake, if its saldo a favor was not used. */
 export async function deleteBillCreditNote(noteId: string) {
   const { supabase, userId } = await requireAdmin();
@@ -579,12 +736,19 @@ export async function deleteBillCreditNote(noteId: string) {
     }
     await restock(supabase, (note.unstocked ?? []) as Record<string, unknown>[]);
     await restoreRows(supabase, userId, (note.converted ?? []) as Record<string, unknown>[]);
+    // A partial note's split rows: the payment row gets its whole amount back, the saldo a favor row goes.
+    for (const r of (note.split_rows ?? []) as { id: string; cashflow_id: string; amount: number; net_amount: number | null; tax_amount: number | null; new_id: string }[]) {
+      await supabase.from('cashflow_expenses').delete().eq('id', r.new_id);
+      await supabase.from('cashflow_expenses').update({ amount: r.amount, net_amount: r.net_amount, tax_amount: r.tax_amount }).eq('id', r.id);
+      await supabase.from('cashflow_audit_logs').insert({ admin_id: userId, action_type: 'UPDATE_EXPENSE', expense_id: r.id, cashflow_id: r.cashflow_id, details: { new: { amount: r.amount }, reason: 'Se deshizo la nota crédito parcial del proveedor' } });
+    }
     for (const p of (note.payments ?? []) as { id: string; siigo_status: string }[]) {
       await supabase.from('payable_payments').update({ siigo_status: p.siigo_status }).eq('id', p.id);
       await supabase.from('supplier_advances').update({ siigo_status: p.siigo_status }).eq('payment_id', p.id).eq('kind', 'cruce');
     }
     await supabase.from('supplier_advances').delete().eq('purchase_credit_note_id', noteId);
-    await supabase.from('purchase_bills').update({ status: note.previous_status, updated_at: new Date().toISOString() }).eq('id', note.bill_id);
+    // A partial note never voided the invoice.
+    if (!note.partial) await supabase.from('purchase_bills').update({ status: note.previous_status, updated_at: new Date().toISOString() }).eq('id', note.bill_id);
     const { error: delErr } = await supabase.from('purchase_credit_notes').delete().eq('id', noteId);
     if (delErr) throw delErr;
     refresh();
@@ -652,7 +816,8 @@ async function loadDocument(supabase: Supabase, target: PayableTarget, category?
       supplierName: bill.supplier_name,
       supplierIdentification: bill.supplier_identification,
       label: `factura ${bill.provider_prefix}${bill.provider_number}${bill.siigo_name ? ` (${bill.siigo_name})` : ''}`,
-      total: Number(bill.total),
+      // What the supplier's partial credit notes took off is no longer owed.
+      total: round2(Number(bill.total) - (await creditedOnBill(supabase, bill.id))),
       payments: bill.payments ?? [],
       lines: bill.lines as BillLine[],
       due: bill.siigo_id ? { prefix: bill.provider_prefix, consecutive: bill.provider_number, date: bill.due_date } : null,
@@ -1189,9 +1354,15 @@ export async function retryPayablePayment(paymentId: string) {
 export async function deletePayablePayment(paymentId: string) {
   const { supabase } = await requireAdmin();
   return guard(async () => {
-    const { data: p, error } = await supabase.from('payable_payments').select('id, siigo_status, expense_ids').eq('id', paymentId).single();
+    const { data: p, error } = await supabase.from('payable_payments').select('id, siigo_status, expense_ids, bill_id').eq('id', paymentId).single();
     if (error || !p) throw error ?? new Error('Pago no encontrado.');
     if (p.siigo_status === 'enviado') throw new Error('El egreso ya está en Siigo: anúlalo allá primero.');
+    if (p.bill_id) {
+      // A partial credit note moved part of this payment to saldo a favor: undo the note first.
+      const { data: notes } = await supabase.from('purchase_credit_notes').select('number, paid, partial').eq('bill_id', p.bill_id);
+      const holding = ((notes ?? []) as { number: string; paid: number; partial?: boolean }[]).filter((n) => n.partial && Number(n.paid) > 0.5);
+      if (holding.length) throw new Error(`La nota crédito ${holding.map((n) => n.number).join(', ')} dejó parte de este pago como saldo a favor: deshazla primero.`);
+    }
     // The excess it left as saldo a favor goes with it (the cruce rows go by cascade).
     const { data: moves } = await supabase.from('supplier_advances').select('id, kind, amount, siigo_status, supplier_identification, expense_id').eq('payment_id', paymentId);
     await canRemoveAdvances(supabase, (moves ?? []).filter((m) => m.kind === 'anticipo'));
