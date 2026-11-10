@@ -135,6 +135,9 @@ export async function syncOrderStock(supabase: DB, opts: SyncOptions): Promise<"
   }
 
   if (!linked.length) return "unchanged";
+  // "Inventario por revisar": a manual salida may already be this sale; the order waits.
+  const { data: review } = await supabase.from("orders").select("stock_review").eq("id", orderId).maybeSingle();
+  if (review?.stock_review) return "unchanged";
   const { data: order } = await supabase.from("orders").select("source").eq("id", orderId).maybeSingle();
   const reason = orderMovementReason(orderId, order?.source);
   const movementDate = new Date().toISOString();

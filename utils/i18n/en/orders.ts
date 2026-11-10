@@ -299,4 +299,17 @@ export const orders: Record<string, string> = {
   "Elige la sede del cliente.": "Choose the client's location.",
   "Sede": "Location",
   "— Elige la sede —": "— Choose the location —",
+  // Inventario por revisar
+  "Inventario por revisar": "Inventory to review",
+  "{n} pedido(s) con inventario por revisar: falta saber qué salida fue esa venta": "{n} order(s) with inventory to review: which salida was that sale is unknown",
+  "Ver solo esos": "Show only those",
+  "Esta venta no ha descontado inventario por sí sola, porque es probable que alguien ya sacó sus productos a mano en Inventario → Salidas. Escoge la salida que fue esta venta; si ninguna lo fue, descuenta ahora.": "This sale hasn't deducted inventory by itself, because someone probably already took its products out by hand in Inventory → Salidas. Pick the salida that was this sale; if none was, deduct now.",
+  "Falta salida para: {items}": "Missing salida for: {items}",
+  "No era esta": "Not this one",
+  "No hay salidas manuales sin pedido de esos productos a 20 días o menos.": "No manual salidas without an order for those products within 20 days.",
+  "nombra al cliente": "names the customer",
+  "otra cantidad": "different quantity",
+  "Es esta salida": "This is the salida",
+  "Se descontará del inventario hoy lo que le falta a este pedido. Hazlo solo si ninguna salida manual fue esta venta. ¿Continuar?": "What this order still lacks will be deducted from inventory today. Do it only if no manual salida was this sale. Continue?",
+  "Ninguna fue esta venta: descontar ahora": "None was this sale: deduct now",
 };

@@ -15,7 +15,8 @@ import {
 import { ensureCashflowDate } from "./admin/cashflow/actions";
 import { sendWhatsApp } from "@/utils/whatsapp";
 import { buildPendingDeliveriesMessage, getPendingDeliveries, orderCustomer } from "@/utils/orders/pendingDeliveries";
-import { ordersRepeatedBy } from "@/utils/orders/duplicateSalidas";
+import { ordersRepeatedBy, type ManualSalida } from "@/utils/orders/duplicateSalidas";
+import { missingUnits, salidaCandidates, CANDIDATE_DAYS, type SalidaCandidate } from "@/utils/orders/stockReview";
 import { syncOrderStock, revertOrderStock, orderIsSold } from "@/utils/orders/stock";
 import { orderTaxTotals, pricesIncludeTax } from "@/utils/orders/tax";
 import { loadSiigoSettings } from "@/utils/siigo/server";
@@ -298,6 +299,160 @@ export async function removeDuplicateSalida(orderId: string, movementId: string)
     });
     for (const path of ['/admin/inventory', '/admin/orders', '/admin/cashflow']) revalidatePath(path);
     return { success: true as const, newStock: await _stockOf(supabase, mov.inventory_id) };
+  });
+}
+
+// ── "Inventario por revisar": which salida was this sale ────────────────
+
+type DB = Awaited<ReturnType<typeof createClient>>;
+
+/** The order, what it still lacks, and the manual salidas that could be it. */
+async function _stockReviewOf(supabase: DB, orderId: string) {
+  const { data: order, error } = await supabase
+    .from('orders')
+    .select('id, created_at, status, stock_review, cashflow_income_id, client_id, shipping_info, contact_email, order_items ( inventory_id, quantity, product_id )')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!order) throw new Error('Ese pedido ya no existe.');
+  const { data: client } = order.client_id ? await supabase.from('clients').select('name').eq('id', order.client_id).maybeSingle() : { data: null };
+  const customer = [orderCustomer({ ...order, client }), (order.shipping_info as { site?: string } | null)?.site].filter(Boolean).join(' · ');
+  const { data: own, error: ownErr } = await supabase.from('inventory_movements').select('id, inventory_id, quantity, reason, movement_date').eq('order_id', orderId);
+  if (ownErr) throw new Error(ownErr.message);
+  const items = ((order.order_items ?? []) as { inventory_id: string | null; quantity: number }[]);
+  const review = { created_at: order.created_at as string, customer, items };
+  const missing = missingUnits(review, (own ?? []) as { inventory_id: string; quantity: number }[]);
+  return { order, customer, review, own: (own ?? []) as { id: string; inventory_id: string; quantity: number; reason: string | null; movement_date: string }[], missing };
+}
+
+export type StockReviewInfo = {
+  customer: string;
+  /** Products and units still without a salida. */
+  missing: { inventory_id: string; name: string; units: number }[];
+  /** Salidas already linked to the order. */
+  linked: { id: string; name: string; quantity: number; reason: string | null; date: string }[];
+  candidates: (SalidaCandidate & { name: string })[];
+};
+
+/** For the order panel: what the order lacks and which manual salidas could be its sale. */
+export async function getStockReview(orderId: string) {
+  return _asResult(async () => {
+    if (!(await checkIsAdmin())) throw new Error('Unauthorized');
+    const supabase = await createClient();
+    const { review, own, missing, customer } = await _stockReviewOf(supabase, orderId);
+    const day = review.created_at.slice(0, 10);
+    const shift = (n: number) => { const t = new Date(`${day}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+    const ids = [...new Set([...missing.keys(), ...own.map((m) => m.inventory_id)])];
+    const [{ data: manual, error }, { data: names }] = await Promise.all([
+      missing.size
+        ? supabase.from('inventory_movements').select('id, inventory_id, quantity, movement_date, reason, income_id')
+          .eq('era', 'v2').eq('type', 'salida').eq('tab_source', 'salida').is('order_id', null).is('cuenta_cobro_id', null)
+          .in('inventory_id', [...missing.keys()]).gte('movement_date', shift(-CANDIDATE_DAYS)).lte('movement_date', `${shift(CANDIDATE_DAYS)}T23:59:59`)
+        : Promise.resolve({ data: [], error: null }),
+      ids.length ? supabase.from('inventory').select('id, product_name').in('id', ids) : Promise.resolve({ data: [] }),
+    ]);
+    if (error) throw new Error(error.message);
+    const nameOf = new Map(((names ?? []) as { id: string; product_name: string }[]).map((n) => [n.id, n.product_name]));
+    const info: StockReviewInfo = {
+      customer,
+      missing: [...missing].map(([id, units]) => ({ inventory_id: id, name: nameOf.get(id) ?? 'Producto', units })),
+      linked: own.map((m) => ({ id: m.id, name: nameOf.get(m.inventory_id) ?? 'Producto', quantity: Math.abs(Number(m.quantity)), reason: m.reason, date: String(m.movement_date).slice(0, 10) })),
+      candidates: salidaCandidates(review, missing, (manual ?? []) as ManualSalida[]).map((c) => ({ ...c, name: nameOf.get(c.inventory_id) ?? 'Producto' })),
+    };
+    return { success: true as const, info };
+  });
+}
+
+/**
+ * "Es esta salida": a manual salida was this order's sale. It becomes the
+ * order's (no stock moves: it already left), so the order never deducts it
+ * again; if it was a paid sale, its income holds the order's money. The
+ * review ends once every product is covered.
+ */
+export async function linkSalidaToOrder(orderId: string, movementId: string) {
+  return _asResult(async () => {
+    if (!(await checkIsAdmin())) throw new Error('Unauthorized');
+    const supabase = await createClient();
+    const { data: mov, error } = await supabase
+      .from('inventory_movements')
+      .select('id, inventory_id, quantity, reason, movement_date, income_id, order_id, cuenta_cobro_id, tab_source, type, era')
+      .eq('id', movementId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!mov) throw new Error('Esa salida ya no existe.');
+    if (mov.order_id || mov.cuenta_cobro_id || mov.tab_source !== 'salida' || mov.type !== 'salida' || mov.era !== 'v2') throw new Error('Solo se puede asignar una salida manual que no pertenezca a otro pedido.');
+    const { order, missing } = await _stockReviewOf(supabase, orderId);
+    if (!missing.has(mov.inventory_id)) throw new Error('El pedido no tiene ese producto pendiente de salida.');
+
+    const { error: linkErr } = await supabase.from('inventory_movements').update({ order_id: orderId }).eq('id', movementId);
+    if (linkErr) throw new Error(linkErr.message);
+    if (mov.income_id && !order.cashflow_income_id) {
+      await supabase.from('orders').update({ cashflow_income_id: mov.income_id }).eq('id', orderId);
+    }
+    const left = new Map(missing);
+    left.set(mov.inventory_id, (left.get(mov.inventory_id) ?? 0) - Math.abs(Number(mov.quantity)));
+    const done = [...left.values()].every((v) => v <= 1e-9);
+    if (done && order.stock_review) await supabase.from('orders').update({ stock_review: false }).eq('id', orderId);
+    await logAuditAction('UPDATE', 'MOVEMENT', movementId, mov.inventory_id, {
+      reason: mov.reason, movement_date: mov.movement_date,
+      note: `Salida manual asignada al pedido #${orderId.slice(0, 8)} (era esa venta)`,
+    });
+    for (const path of ['/admin/inventory', '/admin/orders', '/admin/cashflow']) revalidatePath(path);
+    return { success: true as const, done };
+  });
+}
+
+/** Undoes "Es esta salida": the salida is manual again and the order goes back to review. */
+export async function unlinkSalidaFromOrder(orderId: string, movementId: string) {
+  return _asResult(async () => {
+    if (!(await checkIsAdmin())) throw new Error('Unauthorized');
+    const supabase = await createClient();
+    const { data: mov, error } = await supabase.from('inventory_movements').select('id, inventory_id, reason, order_id').eq('id', movementId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!mov || mov.order_id !== orderId) throw new Error('Esa salida no es de este pedido.');
+    // The order's own salidas ("Orden Manual #…", "Venta Siigo #…") are not manual ones: they go with the order.
+    if (/^(orden|venta siigo|venta web)\b/i.test(String(mov.reason ?? '').trim())) throw new Error('Esa salida la hizo el pedido mismo; no se puede desligar.');
+    const { error: e1 } = await supabase.from('inventory_movements').update({ order_id: null }).eq('id', movementId);
+    if (e1) throw new Error(e1.message);
+    await supabase.from('orders').update({ stock_review: true }).eq('id', orderId);
+    await logAuditAction('UPDATE', 'MOVEMENT', movementId, mov.inventory_id, { reason: mov.reason, note: `Salida desligada del pedido #${orderId.slice(0, 8)}` });
+    for (const path of ['/admin/inventory', '/admin/orders']) revalidatePath(path);
+    return { success: true as const };
+  });
+}
+
+/** No manual salida was this sale: the order takes out what it still lacks, now. */
+export async function deductReviewedOrderNow(orderId: string) {
+  return _asResult(async () => {
+    if (!(await checkIsAdmin())) throw new Error('Unauthorized');
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { order, own, missing } = await _stockReviewOf(supabase, orderId);
+    if (!missing.size) throw new Error('El pedido ya tiene salida para todos sus productos.');
+    let written = 0;
+    if (!own.length) {
+      // Nothing linked: the normal path, all products at once.
+      await supabase.from('orders').update({ stock_review: false }).eq('id', orderId);
+      const r = await syncOrderStock(supabase, { orderId, status: order.status, userId: user?.id ?? null, allowNegative: true });
+      written = r === 'deducted' ? missing.size : 0;
+      if (r !== 'deducted') {
+        await supabase.from('orders').update({ stock_review: true }).eq('id', orderId);
+        throw new Error('El pedido no está vendido (ni pagado, ni entregado, ni facturado): no hay nada que descontar todavía.');
+      }
+    } else {
+      // Part came from manual salidas: only what is still missing leaves.
+      for (const [inventoryId, units] of missing) {
+        const { error } = await supabase.from('inventory_movements').insert({
+          inventory_id: inventoryId, type: 'salida', quantity: -units, reason: `Orden #${orderId.slice(0, 8)} (lo que faltaba)`,
+          created_by: user?.id ?? null, movement_date: new Date().toISOString(), tab_source: 'salida', era: 'v2', order_id: orderId,
+        });
+        if (error) throw new Error(error.message);
+        written++;
+      }
+      await supabase.from('orders').update({ stock_review: false }).eq('id', orderId);
+    }
+    for (const path of ['/admin/inventory', '/admin/orders']) revalidatePath(path);
+    return { success: true as const, written };
   });
 }
 

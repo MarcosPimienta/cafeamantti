@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -38,7 +38,7 @@ import {
   ArrowRight,
   type LucideIcon,
 } from "lucide-react";
-import { updateOrderStatus, updateOrderDueDate, sendPendingOrdersWhatsApp, setOrderPayment, removeDuplicateSalida } from "../../actions";
+import { updateOrderStatus, updateOrderDueDate, sendPendingOrdersWhatsApp, setOrderPayment, removeDuplicateSalida, getStockReview, linkSalidaToOrder, unlinkSalidaFromOrder, deductReviewedOrderNow, type StockReviewInfo } from "../../actions";
 import ManualOrderModal from "./ManualOrderModal";
 import {
   type BoardOrder,
@@ -125,6 +125,7 @@ export default function OrdersBoard({
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [onlyUnpaid, setOnlyUnpaid] = useState(false);
   const [onlyUninvoiced, setOnlyUninvoiced] = useState(false);
+  const [onlyReview, setOnlyReview] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   // ?order=<id> opens that order's panel (links from Facturas).
@@ -152,6 +153,7 @@ export default function OrdersBoard({
       if (onlyOverdue && dueState(o, today) !== "overdue") return false;
       if (onlyUnpaid && (isPaid(o) || o.status === "cancelled")) return false;
       if (onlyUninvoiced && !needsInvoice(o)) return false;
+      if (onlyReview && !o.stock_review) return false;
       if (!term) return true;
       const hay = [
         o.id,
@@ -167,12 +169,12 @@ export default function OrdersBoard({
         .toLowerCase();
       return hay.includes(term);
     });
-  }, [orders, search, onlyOverdue, onlyUnpaid, onlyUninvoiced, today]);
+  }, [orders, search, onlyOverdue, onlyUnpaid, onlyUninvoiced, onlyReview, today]);
 
   const byColumn = useMemo(
     // A search also looks through closed orders: that is how the history is found.
-    () => groupOrdersByStatus(filtered, COLUMNS.map((c) => c.id), { showClosed: showClosed || !!search.trim() }),
-    [filtered, showClosed, search]
+    () => groupOrdersByStatus(filtered, COLUMNS.map((c) => c.id), { showClosed: showClosed || !!search.trim() || onlyReview }),
+    [filtered, showClosed, search, onlyReview]
   );
   const hiddenClosed = showClosed || search.trim() ? 0 : filtered.filter(isClosed).length;
   const closedNote = hiddenClosed ? tr("{n} cerradas ocultas", { n: String(hiddenClosed) }) : undefined;
@@ -185,6 +187,7 @@ export default function OrdersBoard({
   const unpaidValue = unpaid.reduce((s, o) => s + Number(o.total_amount || 0) + Number(o.tax_amount || 0), 0);
   const uninvoiced = orders.filter(needsInvoice);
   const uninvoicedValue = uninvoiced.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+  const toReview = orders.filter((o) => o.stock_review && o.status !== "cancelled");
   const visibleColumns = COLUMNS.filter((c) => c.id !== "cancelled" || showCancelled);
   const activeMobileCol = visibleColumns.some((c) => c.id === mobileCol) ? mobileCol : visibleColumns[0].id;
   const mobileOrders = byColumn.get(activeMobileCol) ?? [];
@@ -313,6 +316,20 @@ export default function OrdersBoard({
             {tr("{n} pedido(s) sin factura · {total}", { n: String(uninvoiced.length), total: cop(uninvoicedValue) })}
           </span>
           <span className="text-xs font-bold underline">{onlyUninvoiced ? tr("Ver todos los pedidos") : tr("Ver solo los que faltan por facturar")}</span>
+        </button>
+      )}
+
+      {toReview.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setOnlyReview(!onlyReview)}
+          className={`w-full flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-left text-sm ${onlyReview ? "border-amber-300 bg-amber-100 text-amber-900" : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"}`}
+        >
+          <span className="flex items-center gap-2 font-bold">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {tr("{n} pedido(s) con inventario por revisar: falta saber qué salida fue esa venta", { n: String(toReview.length) })}
+          </span>
+          <span className="text-xs font-bold underline">{onlyReview ? tr("Ver todos los pedidos") : tr("Ver solo esos")}</span>
         </button>
       )}
 
@@ -667,6 +684,9 @@ function Card({
         {(order.duplicate_salidas?.length ?? 0) > 0 && (
           <span className="inline-flex items-center gap-0.5 font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded"><AlertTriangle className="w-3 h-3" />{tr("¿Descontada dos veces?")}</span>
         )}
+        {order.stock_review && order.status !== "cancelled" && (
+          <span className="inline-flex items-center gap-0.5 font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded"><AlertTriangle className="w-3 h-3" />{tr("Inventario por revisar")}</span>
+        )}
         {order.invoice && !order.invoice.siigo_name && (
           <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">{tr("Factura por enviar")}</span>
         )}
@@ -864,6 +884,7 @@ function OrderPanel({
           </dl>
 
           {(order.duplicate_salidas?.length ?? 0) > 0 && <DuplicateSalidas order={order} />}
+          {order.stock_review && order.status !== "cancelled" && <StockReview key={`review-${order.id}`} order={order} />}
           <SiigoInvoiceSection key={order.id} order={order} />
 
           {/* Contact */}
@@ -938,6 +959,99 @@ function OrderPanel({
         </div>
       </aside>
     </div>
+  );
+}
+
+/**
+ * "Inventario por revisar": the sale happened (e.g. invoiced straight in
+ * Siigo) but which salida took its products out is not known. Pick the
+ * manual salida that was this sale, or deduct now if none was.
+ */
+function StockReview({ order }: { order: BoardOrder }) {
+  const tr = useTr();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [info, setInfo] = useState<StockReviewInfo | null>(null);
+  const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    getStockReview(order.id).then((res) => {
+      if (!alive) return;
+      if (res.success) setInfo(res.info);
+      else setError(res.error);
+    });
+    return () => { alive = false; };
+  }, [order.id, tick]);
+
+  const run = (fn: () => Promise<{ success: boolean; error?: string }>, ask?: string) => {
+    if (ask && !window.confirm(ask)) return;
+    startTransition(async () => {
+      setError("");
+      const res = await fn();
+      if (!res.success) return setError(res.error ?? "");
+      setTick((t) => t + 1);
+      router.refresh();
+    });
+  };
+  const units = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
+
+  return (
+    <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+      <p className="flex items-center gap-2 text-sm font-bold text-amber-900"><AlertTriangle className="w-4 h-4" />{tr("Inventario por revisar")}</p>
+      <p className="text-xs text-amber-900/70">{tr("Esta venta no ha descontado inventario por sí sola, porque es probable que alguien ya sacó sus productos a mano en Inventario → Salidas. Escoge la salida que fue esta venta; si ninguna lo fue, descuenta ahora.")}</p>
+      {!info && !error && <Loader2 className="w-4 h-4 animate-spin text-amber-700" />}
+      {info && (
+        <>
+          {info.missing.length > 0 && (
+            <p className="text-xs font-bold text-amber-900">
+              {tr("Falta salida para: {items}", { items: info.missing.map((m) => `${units(m.units)} ${m.name}`).join(", ") })}
+            </p>
+          )}
+          {info.linked.length > 0 && (
+            <ul className="divide-y divide-amber-100 text-xs">
+              {info.linked.map((l) => (
+                <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                  <span className="text-green-800">✓ {l.date} · {l.reason ?? ""} · {units(l.quantity)} {l.name}</span>
+                  <button type="button" disabled={isPending} onClick={() => run(() => unlinkSalidaFromOrder(order.id, l.id))}
+                    className="text-[11px] font-bold text-amber-800 underline disabled:opacity-50">{tr("No era esta")}</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {info.missing.length > 0 && (
+            info.candidates.length === 0 ? (
+              <p className="text-xs text-amber-900/70">{tr("No hay salidas manuales sin pedido de esos productos a 20 días o menos.")}</p>
+            ) : (
+              <ul className="divide-y divide-amber-100 text-xs">
+                {info.candidates.slice(0, 8).map((c) => (
+                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <span>
+                      {String(c.movement_date).slice(0, 10)} · <b>{c.reason ?? ""}</b> · {units(Math.abs(Number(c.quantity)))} {c.name}
+                      {c.named && <span className="ml-1 rounded bg-green-100 px-1 font-bold text-green-800">{tr("nombra al cliente")}</span>}
+                      {!c.sameQty && <span className="ml-1 text-amber-800">{tr("otra cantidad")}</span>}
+                    </span>
+                    <button type="button" disabled={isPending} onClick={() => run(() => linkSalidaToOrder(order.id, c.id))}
+                      className="inline-flex items-center gap-1 rounded-lg bg-amber-700 px-2.5 py-1 font-bold text-white hover:bg-amber-800 disabled:opacity-50">
+                      {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}{tr("Es esta salida")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
+          )}
+          {info.missing.length > 0 && (
+            <button type="button" disabled={isPending}
+              onClick={() => run(() => deductReviewedOrderNow(order.id), tr("Se descontará del inventario hoy lo que le falta a este pedido. Hazlo solo si ninguna salida manual fue esta venta. ¿Continuar?"))}
+              className="text-xs font-bold text-amber-900 underline disabled:opacity-50">
+              {tr("Ninguna fue esta venta: descontar ahora")}
+            </button>
+          )}
+        </>
+      )}
+      {error && <p className="text-xs text-red-700 break-words">{tr.msg(error)}</p>}
+    </section>
   );
 }
 
