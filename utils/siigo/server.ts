@@ -12,7 +12,13 @@ export const todayBogota = () => new Date(Date.now() - 5 * 3600 * 1000).toISOStr
 
 export function errorText(err: unknown): string {
   if (err instanceof SiigoError) return err.message;
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof Error) return err.message;
+  // Supabase errors are plain objects: their message (and details) say what the database refused.
+  if (err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string") {
+    const e = err as { message: string; details?: string | null };
+    return e.details ? `${e.message} (${e.details})` : e.message;
+  }
+  return String(err);
 }
 
 export async function siigoLog(

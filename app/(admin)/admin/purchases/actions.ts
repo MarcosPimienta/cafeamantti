@@ -432,7 +432,11 @@ export async function annulBill(billId: string) {
 
 const MIGRATION_CREDIT_NOTES_HINT = 'Falta aplicar la migración 20261109000000_purchase_credit_notes.sql';
 /** Flujo de Caja fields a credit note changes on the payments' rows (kept to undo it). */
-const CONVERTED_FIELDS = ['concept', 'category', 'expense_type', 'depreciation_months'] as const;
+// What a credit note changes on a payment's Flujo de Caja row (kept to undo it). A fixed
+// asset's row also drops its asset fields: an ANTICIPO row can't carry them.
+const CONVERTED_FIELDS = ['concept', 'category', 'expense_type', 'depreciation_months', 'asset_kind', 'asset_use', 'in_service_date', 'residual_value'] as const;
+/** The fields that turn a payment's row into saldo a favor. */
+const asAdvance = (concept: string) => ({ concept, category: ADVANCE_CATEGORY, expense_type: 'ANTICIPO', depreciation_months: null, asset_kind: null, asset_use: null, in_service_date: null, residual_value: 0 });
 
 export type BillCreditNoteInput = {
   number: string;
@@ -508,12 +512,7 @@ export async function registerBillCreditNote(billId: string, input: BillCreditNo
         .map((r) => Object.fromEntries([['id', r.id], ['cashflow_id', r.cashflow_id], ...CONVERTED_FIELDS.map((f) => [f, r[f] ?? null])]));
       undo.push(() => restoreRows(supabase, userId, converted));
       for (const r of converted) {
-        const fields = {
-          concept: `Saldo a favor por nota crédito ${number} · ${String(r.concept)}`.slice(0, 200),
-          category: ADVANCE_CATEGORY,
-          expense_type: 'ANTICIPO',
-          depreciation_months: null,
-        };
+        const fields = asAdvance(`Saldo a favor por nota crédito ${number} · ${String(r.concept)}`.slice(0, 200));
         const { error: upErr } = await supabase.from('cashflow_expenses').update(fields).eq('id', r.id);
         if (upErr) throw upErr;
         await supabase.from('cashflow_audit_logs').insert({ admin_id: userId, action_type: 'UPDATE_EXPENSE', expense_id: r.id, cashflow_id: r.cashflow_id, details: { old: r, new: fields, reason: `Nota crédito ${number} de la factura de compra ${label}` } });
@@ -657,7 +656,7 @@ export async function registerPartialBillCreditNote(billId: string, input: Parti
             // The whole row: it changes type, as when a note voids the invoice.
             converted.push(Object.fromEntries([['id', r.id], ['cashflow_id', r.cashflow_id], ...CONVERTED_FIELDS.map((f) => [f, r[f] ?? null])]));
             undo.push(() => restoreRows(supabase, userId, [converted[converted.length - 1]]));
-            const fields = { concept, category: ADVANCE_CATEGORY, expense_type: 'ANTICIPO', depreciation_months: null };
+            const fields = asAdvance(concept);
             const { error: upErr } = await supabase.from('cashflow_expenses').update(fields).eq('id', r.id);
             if (upErr) throw upErr;
             await supabase.from('cashflow_audit_logs').insert({ admin_id: userId, action_type: 'UPDATE_EXPENSE', expense_id: r.id, cashflow_id: r.cashflow_id, details: { old: r, new: fields, reason: `Nota crédito parcial ${number} de la factura de compra ${label}` } });
@@ -771,7 +770,7 @@ async function restock(supabase: Supabase, movements: Record<string, unknown>[])
 /** Gives the payments' Flujo de Caja rows back the fields a credit note changed. */
 async function restoreRows(supabase: Supabase, userId: string | null, rows: Record<string, unknown>[]) {
   for (const r of rows) {
-    const fields = Object.fromEntries(CONVERTED_FIELDS.map((f) => [f, r[f] ?? null]));
+    const fields = Object.fromEntries(CONVERTED_FIELDS.map((f) => [f, r[f] ?? (f === 'residual_value' ? 0 : null)]));
     await supabase.from('cashflow_expenses').update(fields).eq('id', r.id);
     await supabase.from('cashflow_audit_logs').insert({ admin_id: userId, action_type: 'UPDATE_EXPENSE', expense_id: r.id, cashflow_id: r.cashflow_id ?? null, details: { new: fields, reason: 'Se deshizo la nota crédito del proveedor' } });
   }

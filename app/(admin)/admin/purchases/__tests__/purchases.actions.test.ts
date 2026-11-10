@@ -500,3 +500,27 @@ describe("a supplier's credit note for part of the invoice", () => {
     expect(await registerBillCreditNote(bill().id, { number: "nc-202", date: "2026-10-28", goodsReturned: false })).toMatchObject({ success: false, error: expect.stringMatching(/notas crédito parciales/) });
   });
 });
+
+describe("a credit note on cafeteras already paid (fixed assets)", () => {
+  it("the part that becomes saldo a favor drops its asset fields, and gets them back when the note is undone", async () => {
+    const MAQ = "Maquinaria y Equipo (PUC 1520)";
+    h.responses["POST /v1/purchases"] = { id: "fc-9", name: "FC-1-243" };
+    h.responses["POST /v1/payment-receipts"] = { id: "rp-9", name: "RP-1-88" };
+    const krups = { category: MAQ, account: "1524100101", description: "COFFEE CRUSH", base: 1000000, tax_id: null, tax_rate: 0, retention_id: null, retention_rate: 0, depreciation_months: 12, asset_use: "comodato" };
+    await createBill({ ...input, providerPrefix: "VEM", providerNumber: "74082", lines: [krups, krups, krups] });
+    await registerPayablePayment({ billId: bill().id }, { date: "2026-10-05", amount: 3000000, method: "bank" });
+    const before = expenses().map((e) => ({ ...e }));
+    // A third of the invoice comes back: one cafetera's worth of payment rows, whole.
+    expect(await registerPartialBillCreditNote(bill().id, { number: "NC-2555350", date: "2026-10-20", amount: 1000000, reason: "Devolución de producto" })).toMatchObject({ success: true, excess: 1000000 });
+    const advanced = expenses().filter((e) => e.expense_type === "ANTICIPO");
+    expect(advanced.reduce((t, e) => t + Number(e.amount), 0)).toBe(1000000);
+    for (const e of advanced) expect(e).toMatchObject({ asset_kind: null, asset_use: null, in_service_date: null, residual_value: 0, depreciation_months: null });
+    expect(expenses().filter((e) => e.expense_type === "CAPEX").reduce((t, e) => t + Number(e.amount), 0)).toBe(2000000);
+
+    expect(await deleteBillCreditNote(db.rows("purchase_credit_notes")[0].id)).toMatchObject({ success: true });
+    const back = expenses();
+    expect(back).toHaveLength(before.length);
+    for (const e of before) expect(back.find((x) => x.id === e.id)).toMatchObject({ amount: e.amount, expense_type: "CAPEX", asset_use: "comodato", depreciation_months: 12 });
+  });
+});
+
