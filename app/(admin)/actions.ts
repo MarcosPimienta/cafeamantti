@@ -2773,8 +2773,8 @@ export async function getCostingData() {
       // The coffee is what matters: a packaging without a price only leaves its own (small) part out.
       const roasted = line && line.cafe !== null ? (line.cafe + line.tostion + (line.empaque ?? 0)) * line.kgPerUnit : null;
       const typed = costItems.find((c) => c.id === i.id)?.standard_cost ?? null;
-      return [i.id as string, { name: i.product_name as string, unit: (i.unit as string | null) ?? null, cost: line ? roasted : typed }];
-    })) as Record<string, { name: string; unit: string | null; cost: number | null }>,
+      return [i.id as string, { name: i.product_name as string, unit: (i.unit as string | null) ?? null, cost: line ? roasted : typed, kg: line ? line.kgPerUnit : null }];
+    })) as Record<string, { name: string; unit: string | null; cost: number | null; kg: number | null }>,
   };
 }
 

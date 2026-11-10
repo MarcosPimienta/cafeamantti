@@ -3,7 +3,7 @@
 import React, { useState, useTransition, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
-  ArrowDownCircle, ArrowUpCircle, BarChart2, History, Plus, Upload,
+  ArrowDownCircle, ArrowUpCircle, BarChart2, History, UsersRound, Plus, Upload,
   Image as ImageIcon, Trash2, X, Loader2, Check, Calendar, AlertTriangle,
   ChevronDown, ChevronUp,
   Activity, Package, Pencil, Archive, Landmark,
@@ -30,6 +30,7 @@ import { categoryMonths, categoryTypes, namesOf } from "@/utils/expenses/categor
 import { useTr } from "@/app/(admin)/AdminI18n";
 import { ExportButton, exportExcel, nowLabel } from "./ExportButton";
 import IncomeStatementView from "./IncomeStatementView";
+import CustomerProfitView from "./CustomerProfitView";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -1456,7 +1457,7 @@ export default function CashflowClient() {
   const tr = useTr();
   const PREDEFINED_CATEGORIES = namesOf(useExpenseCategories());
   const [activeTab,      setActiveTab]      = useState<TabId>("gastos");
-  const [reportMode,     setReportMode]     = useState<"cash" | "pl">("cash");
+  const [reportMode,     setReportMode]     = useState<"cash" | "pl" | "clientes">("cash");
   const [era,            setEra]            = useState<'v1' | 'v2'>('v2');
   const [expenses,       setExpenses]       = useState<any[]>([]);
   const [incomes,        setIncomes]        = useState<any[]>([]);
@@ -2239,7 +2240,7 @@ export default function CashflowClient() {
           {activeTab === "reportes" && (
             <div className="space-y-6">
               {/* Mode toggle */}
-              <div className="inline-flex bg-[#f9f7f0] border border-foreground/5 p-1 rounded-2xl gap-1">
+              <div className="inline-flex flex-wrap bg-[#f9f7f0] border border-foreground/5 p-1 rounded-2xl gap-1">
                 <button
                   onClick={() => setReportMode("cash")}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
@@ -2260,11 +2261,21 @@ export default function CashflowClient() {
                   <BarChart2 className="w-4 h-4" />
                   {tr("Estado de Resultados (P&L Contable)")}
                 </button>
+                <button
+                  onClick={() => setReportMode("clientes")}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    reportMode === "clientes"
+                      ? "bg-white text-[#C59F59] shadow-sm border border-foreground/5"
+                      : "text-foreground/50 hover:text-foreground"
+                  }`}>
+                  <UsersRound className="w-4 h-4" />
+                  {tr("Rentabilidad por cliente")}
+                </button>
               </div>
 
-              {reportMode === "cash"
-                ? <CashflowReportView expenses={expenses} incomes={incomes} formatCurrency={formatCurrency} />
-                : <IncomeStatementView formatCurrency={formatCurrency} />}
+              {reportMode === "cash" && <CashflowReportView expenses={expenses} incomes={incomes} formatCurrency={formatCurrency} />}
+              {reportMode === "pl" && <IncomeStatementView formatCurrency={formatCurrency} />}
+              {reportMode === "clientes" && <CustomerProfitView formatCurrency={formatCurrency} />}
             </div>
           )}
 

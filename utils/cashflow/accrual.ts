@@ -75,7 +75,7 @@ export type SiigoSalesDoc = {
   /** On a credit note: the invoice it is against. */
   invoice?: { id?: string; name?: string };
   customer?: { identification?: string };
-  items?: { quantity?: number | string; price?: number | string }[];
+  items?: { code?: string; description?: string; quantity?: number | string; price?: number | string }[];
 };
 
 /** A Siigo invoice's or credit note's value before IVA: quantity × price of its items (Siigo's own sales report adds the same). */
