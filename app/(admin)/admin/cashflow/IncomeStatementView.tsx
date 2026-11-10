@@ -48,6 +48,7 @@ const SHORT: Record<LineKey, string> = {
   gross: "Margen bruto",
   selling: "Gastos de ventas",
   admin: "Administración",
+  ebitda: "EBITDA",
   depreciation: "Depreciación",
   operating: "Operativo",
   interest: "Intereses",
@@ -291,6 +292,10 @@ function DetailView({ month, prevMonth, current, previous, months, fmt }: {
           <p className={`mt-1 text-2xl font-serif font-bold ${current.result < 0 ? "text-[#ffb4a8]" : ""}`}>{fmt.money(current.result)}</p>
           <p className="mt-1 text-[11px] text-[#d8cfc2]">
             {tr("{v} de ventas netas", { v: fmt.pct(pctOfSales(current.result, current.netSales)) })} · {fmt.monthName(prevMonth, "short")}: {fmt.money(previous.result)}
+          </p>
+          <p className="mt-2 border-t border-white/10 pt-2 text-[11px] text-[#d8cfc2]">
+            EBITDA: <span className={`font-bold ${current.ebitda < 0 ? "text-[#ffb4a8]" : "text-[#9fd3a8]"}`}>{fmt.money(current.ebitda)}</span>
+            {" "}({fmt.pct(pctOfSales(current.ebitda, current.netSales))})
           </p>
         </div>
         <div className={`${card} p-5`}>

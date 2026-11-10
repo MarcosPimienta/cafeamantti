@@ -384,6 +384,7 @@ export const cashflow: Record<string, string> = {
   "transporte, comisiones": "transport, commissions",
   "Gastos de administración": "Administrative expenses",
   "honorarios, contabilidad": "fees, accounting",
+  "antes de depreciación, intereses e impuestos": "before depreciation, interest and taxes",
   "Depreciación de equipos": "Equipment depreciation",
   "Resultado operativo": "Operating result",
   "Intereses de préstamos": "Loan interest",

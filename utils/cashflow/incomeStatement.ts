@@ -1,6 +1,6 @@
 // The monthly income statement (estado de resultados) as a table: what was
 // sold (before IVA), the cost of the coffee that left, gross margin, selling
-// and administration expenses, depreciation, the operating result, then
+// and administration expenses, EBITDA, depreciation, the operating result, then
 // interest and bank costs down to the month's result. Profitability, not
 // cash. Pure functions; the labels are Spanish keys the screen translates.
 
@@ -10,7 +10,7 @@ export type StatementItem = { date: string; concept: string; category: string; a
 export type LineKey =
   | "sales" | "deductions" | "net_sales"
   | "cost" | "gross"
-  | "selling" | "admin" | "depreciation" | "operating"
+  | "selling" | "admin" | "ebitda" | "depreciation" | "operating"
   | "interest" | "bank" | "result";
 
 export type StatementLine = {
@@ -62,6 +62,8 @@ export type Statement = {
   netSales: number;
   grossMargin: number;
   grossMarginPct: number;
+  /** Before interest, depreciation (and taxes): what the operation itself leaves. */
+  ebitda: number;
   result: number;
   /** Net sales that would leave the month at 0 (null when the coffee leaves no margin). */
   breakEven: number | null;
@@ -79,7 +81,8 @@ export function buildStatement(m: MonthInput): Statement {
   const admin = by("admin");
   const interest = [...by("interest"), ...m.accruedInterest];
   const bank = by("bank");
-  const operating = round2(gross - sum(selling) - sum(admin) - sum(m.depreciation));
+  const ebitda = round2(gross - sum(selling) - sum(admin));
+  const operating = round2(ebitda - sum(m.depreciation));
   const result = round2(operating - sum(interest) - sum(bank));
 
   const line = (key: LineKey, label: string, amount: number, items: StatementItem[] = [], kind: StatementLine["kind"] = "line", hint?: string): StatementLine =>
@@ -93,6 +96,7 @@ export function buildStatement(m: MonthInput): Statement {
     line("gross", "Margen bruto", gross, [], "subtotal"),
     line("selling", "Gastos de ventas", -sum(selling), selling, "line", "transporte, comisiones"),
     line("admin", "Gastos de administración", -sum(admin), admin, "line", "honorarios, contabilidad"),
+    line("ebitda", "EBITDA", ebitda, [], "subtotal", "antes de depreciación, intereses e impuestos"),
     line("depreciation", "Depreciación de equipos", -sum(m.depreciation), m.depreciation),
     line("operating", "Resultado operativo", operating, [], "subtotal"),
     line("interest", "Intereses de préstamos", -sum(interest), interest),
@@ -104,7 +108,7 @@ export function buildStatement(m: MonthInput): Statement {
   // Fixed costs over the margin each peso of sales leaves.
   const fixed = sum(selling) + sum(admin) + sum(m.depreciation) + sum(interest) + sum(bank);
   const breakEven = gross > 0 && netSales > 0 ? round2(fixed / (gross / netSales)) : null;
-  return { lines, netSales, grossMargin: gross, grossMarginPct, result, breakEven };
+  return { lines, netSales, grossMargin: gross, grossMarginPct, ebitda, result, breakEven };
 }
 
 /** Share of net sales (null without sales). */

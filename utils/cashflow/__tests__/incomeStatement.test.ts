@@ -29,6 +29,8 @@ describe("estado de resultados", () => {
     expect(at("gross")).toBe(5_420_000);
     expect(at("selling")).toBe(-1_250_000);
     expect(at("admin")).toBe(-2_500_000);
+    expect(at("ebitda")).toBe(1_670_000);
+    expect(s.ebitda).toBe(1_670_000);
     expect(at("operating")).toBe(1_670_000);
     expect(at("interest")).toBe(-1_937_000);
     expect(at("result")).toBe(-267_000);
@@ -46,6 +48,14 @@ describe("estado de resultados", () => {
     const s = buildStatement({ ...october, deductions: [item("Nota crédito NC-1-12", "Nota crédito", 300_000)] });
     expect(s.lines.find((l) => l.key === "deductions")!.amount).toBe(-300_000);
     expect(s.netSales).toBe(18_000_000);
+  });
+
+  it("EBITDA leaves depreciation out; the operating result takes it", () => {
+    const s = buildStatement({ ...october, depreciation: [item("KRUPS en comodato", "Depreciación", 533_538)] });
+    const at = (k: string) => s.lines.find((l) => l.key === k)!.amount;
+    expect(at("ebitda")).toBe(1_670_000);
+    expect(at("operating")).toBe(1_136_462);
+    expect(s.lines.map((l) => l.key).indexOf("ebitda")).toBe(s.lines.map((l) => l.key).indexOf("depreciation") - 1);
   });
 
   it("no margin, no break-even", () => {
