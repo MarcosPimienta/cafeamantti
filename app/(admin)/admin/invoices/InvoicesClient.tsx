@@ -7,6 +7,7 @@ import { AlertTriangle, CheckCircle2, ExternalLink, FileMinus, Landmark, Loader2
 import { annulInvoice, deletePayment, getIncomeCandidates, refreshInvoice, registerPayment, sendPendingToSiigo, setOrderCountedIn, stampInvoice, type CountedIncome } from "./actions";
 import { CREDIT_REASONS, balanceDue, daysOverdue, invoiceInRange, invoiceMatches, paidAmount, paymentState, sortInvoices, type CreditReason, type InvoiceSort, type InvoiceLine, type InvoiceStatus, type PaymentMethod } from "@/utils/invoices/ledger";
 import CreditNoteModal from "./CreditNoteModal";
+import CreditNotesView from "./CreditNotesView";
 import { useTr } from "@/app/(admin)/AdminI18n";
 import RangeSortBar, { emptyRange, toRange, type RangeSortState } from "@/app/(admin)/RangeSortBar";
 import { isRangeSet } from "@/utils/lists/rangeSort";
@@ -54,7 +55,7 @@ type Invoice = {
   counted_in?: CountedIncome | null;
 };
 type CreditNote = { id: string; reason: CreditReason; total: number; origin: "app" | "siigo"; siigo_name: string | null; siigo_status: string | null; lines: (InvoiceLine & { restock?: boolean })[]; created_at: string };
-type Filter = "siigo" | "cobrar" | "vencidas" | "pagadas" | "anuladas" | "todas";
+type Filter = "siigo" | "cobrar" | "vencidas" | "pagadas" | "anuladas" | "con_nc" | "todas";
 type Report = { invoicesSent: string[]; invoicesFailed: { customer: string; error: string }[]; vouchersSent: string[]; vouchersFailed: { error: string }[] };
 
 const cop = (n: number) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
@@ -71,6 +72,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
     () => (raw as Invoice[]).map((inv) => ({ ...inv, credited: (inv.credit_notes ?? []).reduce((s, n) => s + Number(n.total), 0) })),
     [raw]
   );
+  const [view, setView] = useState<"facturas" | "notas">("facturas");
   const [filter, setFilter] = useState<Filter>("todas");
   const [search, setSearch] = useState("");
   const [bar, setBar] = useState<RangeSortState>(emptyRange("fecha-desc"));
@@ -108,6 +110,7 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
       case "vencidas": return late > 0;
       case "pagadas": return inv.status !== "anulada" && balance <= 0.5;
       case "anuladas": return inv.status === "anulada";
+      case "con_nc": return (inv.credit_notes ?? []).length > 0;
       default: return inv.status !== "anulada";
     }
   });
@@ -135,11 +138,39 @@ export default function InvoicesClient({ invoices: raw, migrationApplied, today,
     ["cobrar", "Por cobrar"],
     ["vencidas", "Vencidas"],
     ["pagadas", "Pagadas"],
+    ["con_nc", "Con nota crédito"],
     ["anuladas", "Anuladas"],
   ];
 
+  const tabs = (
+    <div role="tablist" aria-label={tr("Facturas y notas crédito")} className="inline-flex rounded-full border border-foreground/15 p-1">
+      {([["facturas", "Facturas"], ["notas", "Notas crédito"]] as const).map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          role="tab"
+          aria-selected={view === v}
+          onClick={() => setView(v)}
+          className={`px-4 py-1.5 rounded-full text-sm font-bold ${view === v ? "bg-foreground text-background" : "text-foreground/60 hover:bg-foreground/5"}`}
+        >
+          {tr(label)}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (view === "notas") {
+    return (
+      <div className="space-y-6">
+        {tabs}
+        <CreditNotesView onOpenInvoice={(name) => { setView("facturas"); setSearch(name); }} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {tabs}
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label={tr("Por cobrar (cartera)")} value={cop(receivable)} />
         <Stat label={tr("Vencido")} value={cop(overdue)} warn={overdue > 0} />

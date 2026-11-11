@@ -16,6 +16,7 @@ import { dropPaymentIncome, ensurePaymentIncome, paymentIncomeLock } from '@/uti
 import { siteLabel, type ClientSite } from '@/utils/clients/sites';
 import { restockCreditNote, syncOrderStock } from '@/utils/orders/stock';
 import { pricesIncludeTax } from '@/utils/orders/tax';
+import { mergeCreditNotes, type AppCreditNote, type CreditNoteRow, type SiigoCreditNoteDoc } from '@/utils/invoices/creditNotesList';
 import { CREDIT_REASONS, balanceDue, creditNoteLines, invoiceLinesFromOrder, paymentProblems, relinkLines, paymentState, type CreditInput, type CreditNoteLine, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261019000000_sales_invoices.sql';
@@ -157,6 +158,39 @@ export async function getInvoices() {
     counted_in: counted.byOrder.get(inv.order_id as string) ?? null,
   }));
   return { invoices, migrationApplied: true, today: todayBogota(), incomeLinkReady: counted.ready };
+}
+
+// ── All credit notes ────────────────────────────────────────
+
+/**
+ * Every credit note since `since` (a year back by default): Siigo's list,
+ * which also has the ones made straight in Siigo, joined with the app's.
+ * Without Siigo, the app's alone (`siigoOk` false says so).
+ */
+export async function getCreditNotesList(since?: string): Promise<Result<{ rows: CreditNoteRow[]; siigoOk: boolean }>> {
+  const { supabase } = await requireAdmin();
+  return guard(async () => {
+    const from = since ?? addDays(todayBogota(), -365);
+    const [{ data: appRows, error }, { data: clients }] = await Promise.all([
+      supabase.from('credit_notes').select('id, reason, total, origin, siigo_id, siigo_name, siigo_status, notes, created_at, invoice:invoice_id ( id, siigo_name, customer_name )').gte('created_at', from),
+      supabase.from('clients').select('name, document_number'),
+    ]);
+    if (error) throw error;
+    const app = ((appRows ?? []) as unknown as (AppCreditNote & { invoice: AppCreditNote['invoice'] | AppCreditNote['invoice'][] })[])
+      .map((n) => ({ ...n, invoice: Array.isArray(n.invoice) ? n.invoice[0] ?? null : n.invoice }));
+    const names = new Map(((clients ?? []) as { name: string; document_number: string | null }[]).map((c) => [String(c.document_number ?? '').replace(/\D/g, '').slice(0, 9), c.name]));
+    let siigo: SiigoCreditNoteDoc[] = [];
+    let siigoOk = false;
+    if (siigoConfigFromEnv()) {
+      try {
+        siigo = await getSiigoClient().listAll<SiigoCreditNoteDoc>('/v1/credit-notes', { created_start: from });
+        siigoOk = true;
+      } catch (err) {
+        console.error('getCreditNotesList: Siigo', errorText(err));
+      }
+    }
+    return { rows: mergeCreditNotes(siigo, app, (nit) => names.get(nit.replace(/\D/g, '').slice(0, 9)) ?? null), siigoOk };
+  });
 }
 
 // ── Order already counted in Flujo de Caja ──────────────────
