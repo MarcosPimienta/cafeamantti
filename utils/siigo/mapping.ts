@@ -1040,3 +1040,14 @@ export function buildSupportDocumentStampPayload(ds: SiigoSupportDocument) {
     stamp: { send: true },
   };
 }
+
+/**
+ * A Siigo document type as it is numbered on paper (NC-2, FV-2…), and whether
+ * it is electronic: several types share one name ("Nota Crédito"), and only
+ * the electronic one can go against an electronic invoice.
+ */
+export function docTypeLabel(prefix: string, d: { name: string; code?: string | number | null; electronic_type?: string | null }): string {
+  const code = d.code !== undefined && d.code !== null && String(d.code) !== "" ? `${prefix}-${d.code}` : null;
+  const electronic = d.electronic_type ? (/^no/i.test(d.electronic_type) ? "no electrónica" : "electrónica") : null;
+  return [code, d.name, electronic].filter(Boolean).join(" · ");
+}

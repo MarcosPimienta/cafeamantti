@@ -18,6 +18,7 @@ import {
   compareProducts,
   normalizeSiigoSettings,
   siigoCodeOf,
+  docTypeLabel,
   inventoryRowFromSiigo,
   serviceTypeUpdate,
   siigoInvoicesToRows,
@@ -78,6 +79,7 @@ export async function getSiigoSetup() {
 }
 
 type Named = { id: number; name: string; active?: boolean };
+type DocType = Named & { code?: string | number; electronic_type?: string };
 
 /** Checks the credentials and brings the lists to choose from. */
 export async function testSiigoConnection() {
@@ -86,36 +88,36 @@ export async function testSiigoConnection() {
     const siigo = getSiigoClient();
     const get = <T,>(path: string, query?: Record<string, string>) => siigo.request<T>('GET', path, { query });
     const [invoiceTypes, purchaseTypes, users, salesPayments, purchasePayments, taxes, accountGroups, voucherTypes, voucherPayments, supportTypes, creditNoteTypes, receiptTypes, journalTypes] = await Promise.all([
-      get<Named[]>('/v1/document-types', { type: 'FV' }),
-      get<Named[]>('/v1/document-types', { type: 'FC' }),
+      get<DocType[]>('/v1/document-types', { type: 'FV' }),
+      get<DocType[]>('/v1/document-types', { type: 'FC' }),
       get<{ results?: { id: number; first_name: string; last_name: string; active: boolean }[] }>('/v1/users'),
       get<(Named & { due_date?: boolean })[]>('/v1/payment-types', { document_type: 'FV' }),
       get<(Named & { due_date?: boolean })[]>('/v1/payment-types', { document_type: 'FC' }),
       get<(Named & { type?: string; percentage?: number })[]>('/v1/taxes'),
       get<Named[]>('/v1/account-groups'),
-      get<Named[]>('/v1/document-types', { type: 'RC' }),
+      get<DocType[]>('/v1/document-types', { type: 'RC' }),
       get<(Named & { due_date?: boolean })[]>('/v1/payment-types', { document_type: 'RC' }),
-      get<Named[]>('/v1/document-types', { type: 'DS' }),
-      get<Named[]>('/v1/document-types', { type: 'NC' }),
-      get<Named[]>('/v1/document-types', { type: 'RP' }),
-      get<Named[]>('/v1/document-types', { type: 'CC' }),
+      get<DocType[]>('/v1/document-types', { type: 'DS' }),
+      get<DocType[]>('/v1/document-types', { type: 'NC' }),
+      get<DocType[]>('/v1/document-types', { type: 'RP' }),
+      get<DocType[]>('/v1/document-types', { type: 'CC' }),
     ]);
     const active = <T extends { active?: boolean }>(xs: T[] | null | undefined) => (xs ?? []).filter((x) => x.active !== false);
     return {
       catalogs: {
-        invoiceTypes: active(invoiceTypes).map((d) => ({ id: d.id, name: d.name })),
-        purchaseTypes: active(purchaseTypes).map((d) => ({ id: d.id, name: d.name })),
+        invoiceTypes: active(invoiceTypes).map((d) => ({ id: d.id, name: docTypeLabel('FV', d) })),
+        purchaseTypes: active(purchaseTypes).map((d) => ({ id: d.id, name: docTypeLabel('FC', d) })),
         sellers: active(users?.results).map((u) => ({ id: u.id, name: `${u.first_name} ${u.last_name}`.trim() })),
         salesPayments: active(salesPayments).map((p) => ({ id: p.id, name: p.name, dueDate: !!p.due_date })),
         purchasePayments: active(purchasePayments).map((p) => ({ id: p.id, name: p.name, dueDate: !!p.due_date })),
         taxes: active(taxes).filter((t) => t.type === 'IVA').map((t) => ({ id: t.id, name: t.name, percentage: t.percentage ?? null })),
         accountGroups: active(accountGroups).map((g) => ({ id: g.id, name: g.name })),
-        voucherTypes: active(voucherTypes).map((d) => ({ id: d.id, name: d.name })),
+        voucherTypes: active(voucherTypes).map((d) => ({ id: d.id, name: docTypeLabel('RC', d) })),
         voucherPayments: active(voucherPayments).map((p) => ({ id: p.id, name: p.name })),
-        supportTypes: active(supportTypes).map((d) => ({ id: d.id, name: d.name })),
-        creditNoteTypes: active(creditNoteTypes).map((d) => ({ id: d.id, name: d.name })),
-        receiptTypes: active(receiptTypes).map((d) => ({ id: d.id, name: d.name })),
-        journalTypes: active(journalTypes).map((d) => ({ id: d.id, name: d.name })),
+        supportTypes: active(supportTypes).map((d) => ({ id: d.id, name: docTypeLabel('DS', d) })),
+        creditNoteTypes: active(creditNoteTypes).map((d) => ({ id: d.id, name: docTypeLabel('NC', d) })),
+        receiptTypes: active(receiptTypes).map((d) => ({ id: d.id, name: docTypeLabel('RP', d) })),
+        journalTypes: active(journalTypes).map((d) => ({ id: d.id, name: docTypeLabel('CC', d) })),
         retentions: active(taxes)
           .filter((t) => t.type === 'Retefuente')
           .map((t) => ({ id: t.id, name: t.name, percentage: t.percentage ?? null }))

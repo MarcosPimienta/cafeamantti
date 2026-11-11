@@ -17,6 +17,7 @@ import {
   serviceTypeUpdate,
   API_ROW_MAPPING,
   type SiigoSettings,
+  docTypeLabel,
 } from "../mapping";
 import { processSiigoRows } from "../parser";
 import { daneCodeFor } from "../daneCities";
@@ -306,5 +307,13 @@ describe("services, parts and IVA per product", () => {
       tax_classification: "Taxed", tax_included: false, taxes: [{ id: 9754 }],
       prices: [{ currency_code: "COP", price_list: [{ position: 1, value: 250000 }] }], unit: "94", reference: "MT-1",
     });
+  });
+});
+
+describe("docTypeLabel", () => {
+  it("tells apart document types that share a name", () => {
+    expect(docTypeLabel("NC", { name: "Nota Crédito", code: 1, electronic_type: "NoElectronic" })).toBe("NC-1 · Nota Crédito · no electrónica");
+    expect(docTypeLabel("NC", { name: "Nota Crédito", code: 2, electronic_type: "ElectronicCreditNote" })).toBe("NC-2 · Nota Crédito · electrónica");
+    expect(docTypeLabel("FV", { name: "Factura" })).toBe("Factura");
   });
 });
