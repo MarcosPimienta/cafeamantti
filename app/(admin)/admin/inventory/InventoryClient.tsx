@@ -57,7 +57,6 @@ import {
   createEntrada,
   setEntryCost,
   createSalida,
-  ordersRepeatedBySalida,
   createProdConsumo,
   createProdAlta,
   createTostionBatch,
@@ -96,7 +95,7 @@ import {
 import CostosTab from "./CostosTab";
 import { COSTED_SINCE, needsCost } from "@/utils/inventory/entryCost";
 import QuantityInput from "./QuantityInput";
-import { EXIT_KINDS, EXIT_KIND_LABEL, EXIT_KIND_TO, guessExitKind, isExitKind, type ExitKind } from "@/utils/inventory/exitKind";
+import { EXIT_KINDS, EXIT_KIND_LABEL, EXIT_KIND_TO, SELECTABLE_EXIT_KINDS, guessExitKind, isExitKind, looksLikeSale, type ExitKind } from "@/utils/inventory/exitKind";
 import {
   MOLIENDAS,
   MOLIENDA_LABELS,
@@ -239,7 +238,7 @@ const EXIT_KIND_STYLE: Record<ExitKind, string> = {
   muestra: "bg-violet-100 text-violet-700",
   regalo: "bg-pink-100 text-pink-700",
   consumo_interno: "bg-sky-100 text-sky-700",
-  merma: "bg-orange-100 text-orange-700",
+  perdida: "bg-orange-100 text-orange-700",
   ajuste: "bg-slate-100 text-slate-600",
 };
 
@@ -264,7 +263,7 @@ function ExitKindPicker({ value, onChange, idPrefix, only }: { value: ExitKind |
   const tr = useTr();
   return (
     <div role="radiogroup" aria-labelledby={`${idPrefix}-kind-label`} className="flex flex-wrap gap-2">
-      {(only ?? EXIT_KINDS).map((k) => (
+      {(only ?? SELECTABLE_EXIT_KINDS).map((k) => (
         <button
           key={k}
           type="button"
@@ -1627,7 +1626,7 @@ function EditMovementModal({
           {isManualSalida && (
             <div>
               <p id={`edit-${record.id}-kind-label`} className={labelCls}>{tr("¿Para qué salió?")}</p>
-              <ExitKindPicker idPrefix={`edit-${record.id}`} value={exitKind} onChange={setExitKind} only={initialSale !== null ? ["venta"] : undefined} />
+              <ExitKindPicker idPrefix={`edit-${record.id}`} value={exitKind} onChange={setExitKind} only={initialSale !== null ? ["venta"] : exitKindOf(record).kind === "venta" ? ["venta", ...SELECTABLE_EXIT_KINDS] : undefined} />
               {!isExitKind(record.exit_kind) && exitKindOf(record).kind && (
                 <p className="text-[11px] text-foreground/40 mt-1">{tr("Sugerido según el motivo. Guarda para confirmarlo.")}</p>
               )}
@@ -4020,8 +4019,6 @@ function SalidasTab({
     motivo: "",
     responsable: "",
     molienda: "" as Molienda | "",
-    esVenta: false,
-    valor: "",
     exitKind: "" as ExitKind | "",
     exitTo: "",
   };
@@ -4107,7 +4104,7 @@ function SalidasTab({
       setFeedback({ type: "error", msg: tr("Elige el tipo de salida: ¿para qué salió el café?") });
       return;
     }
-    if (form.exitKind !== "venta" && EXIT_KIND_TO[form.exitKind] && !form.exitTo.trim()) {
+    if (EXIT_KIND_TO[form.exitKind] && !form.exitTo.trim()) {
       setFeedback({ type: "error", msg: tr("Escribe para quién fue la salida") });
       return;
     }
@@ -4115,21 +4112,8 @@ function SalidasTab({
       setFeedback({ type: "error", msg: tr("Selecciona la molienda (Grano o Molido)") });
       return;
     }
-    const valor = parseFloat(form.valor);
-    if (form.esVenta && !(valor > 0)) {
-      setFeedback({ type: "error", msg: tr("Ingresa el valor cobrado de la venta") });
-      return;
-    }
     startTransition(async () => {
       try {
-        // The same sale may already be an order that deducted this product: ask before taking it out twice.
-        const repeated = form.exitKind === "venta"
-          ? await ordersRepeatedBySalida(form.inventoryId, parseFloat(form.qty), form.date, form.motivo || form.exitTo || undefined)
-          : { orders: [] as Awaited<ReturnType<typeof ordersRepeatedBySalida>>["orders"] };
-        if (repeated.orders.length) {
-          const list = repeated.orders.map((o) => `• ${o.invoice ?? tr("Orden #{id}", { id: o.id.slice(0, 8) })} · ${o.customer} · ${o.date}`).join("\n");
-          if (!window.confirm(tr("Esta venta parece estar ya registrada como orden, y esa orden ya descontó este producto:\n{list}\n\nSi es la misma venta, no registres la salida (se descontaría dos veces). ¿Registrarla de todas formas?", { list }))) return;
-        }
         const res = await createSalida(
           form.inventoryId,
           parseFloat(form.qty),
@@ -4137,7 +4121,7 @@ function SalidasTab({
           form.motivo || undefined,
           form.responsable || undefined,
           form.molienda || undefined,
-          form.esVenta ? { amount: valor } : null,
+          null,
           { kind: form.exitKind as ExitKind, to: form.exitTo || null }
         );
 
@@ -4147,12 +4131,7 @@ function SalidasTab({
         }
 
         onStockUpdate(form.inventoryId, res.newStock ?? 0);
-        setFeedback({
-          type: "success",
-          msg: form.esVenta
-            ? tr("✓ Venta registrada: stock descontado e ingreso creado en Flujo de Caja")
-            : tr("✓ Salida registrada exitosamente"),
-        });
+        setFeedback({ type: "success", msg: tr("✓ Salida registrada exitosamente") });
         setForm(initForm);
         loadHistory();
       } catch (err: unknown) {
@@ -4185,8 +4164,15 @@ function SalidasTab({
         <div className="mb-6">
           <h2 className="text-xl font-serif">{tr("Registrar Salida")}</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            {tr("Registra lo que sale del inventario y para qué salió. Las ventas normales entran como pedido y se descuentan solas: aquí van muestras, regalos, ferias, consumo interno, merma y ajustes. El tipo decide dónde va su costo en el estado de resultados.")}
+            {tr("Registra el café que sale sin venderse y para qué salió: muestras, regalos, consumo interno, producto dañado o perdido y ajustes de conteo. El tipo decide dónde va su costo en el estado de resultados.")}
           </p>
+        </div>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C59F59]/30 bg-[#C59F59]/10 px-4 py-3 text-sm">
+          <span>
+            <b>{tr("¿Es una venta?")}</b>{" "}
+            {tr("Regístrala como pedido, también las de feria o mostrador: el pedido descuenta el café, registra el cobro y se factura.")}
+          </span>
+          <a href="/admin/orders" className="font-bold text-[#8a6a2f] underline whitespace-nowrap">{tr("Ir a Pedidos →")}</a>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="mb-5">
@@ -4196,14 +4182,20 @@ function SalidasTab({
             <ExitKindPicker
               idPrefix="sal"
               value={form.exitKind}
-              onChange={(k) => setForm({ ...form, exitKind: k, esVenta: k === "venta" ? form.esVenta : false, valor: k === "venta" ? form.valor : "" })}
+              onChange={(k) => setForm({ ...form, exitKind: k })}
             />
             {form.exitKind && (
               <p className="text-[11px] text-foreground/40 mt-2">
-                {form.exitKind === "venta" && tr("Va al costo de ventas. Si ya hay un pedido de esta venta, no registres la salida: el pedido ya descontó el café.")}
                 {(form.exitKind === "muestra" || form.exitKind === "regalo") && tr("Va a gastos de ventas, al costo del café.")}
                 {form.exitKind === "consumo_interno" && tr("Va a gastos de administración, al costo del café.")}
-                {(form.exitKind === "merma" || form.exitKind === "ajuste") && tr("Va al costo de ventas, en una línea aparte del café vendido.")}
+                {form.exitKind === "perdida" && tr("Bolsa rota, vencida o extraviada. La merma de trilla y tostión no va aquí: ya queda en cada lote de producción.")}
+                {form.exitKind === "ajuste" && tr("Diferencias del conteo físico. Va al costo de ventas, en una línea aparte del café vendido.")}
+              </p>
+            )}
+            {looksLikeSale(`${form.motivo} ${form.exitTo}`) && (
+              <p className="mt-2 text-xs font-bold text-red-600">
+                {tr("Esto parece una venta. Las ventas se registran como pedido, no como salida.")}{" "}
+                <a href="/admin/orders" className="underline">{tr("Ir a Pedidos →")}</a>
               </p>
             )}
           </div>
@@ -4211,8 +4203,7 @@ function SalidasTab({
             {form.exitKind && EXIT_KIND_TO[form.exitKind] && (
               <div>
                 <label htmlFor="sal-to" className={labelCls}>
-                  {tr(EXIT_KIND_TO[form.exitKind]!)}{" "}
-                  {form.exitKind !== "venta" ? <span className="text-red-400">*</span> : <span className="normal-case font-normal">{tr("(opcional)")}</span>}
+                  {tr(EXIT_KIND_TO[form.exitKind]!)}{" "}<span className="text-red-400">*</span>
                 </label>
                 <input
                   id="sal-to"
@@ -4285,7 +4276,7 @@ function SalidasTab({
                 type="text"
                 value={form.motivo}
                 onChange={(e) => setForm({ ...form, motivo: e.target.value })}
-                placeholder={tr("ej. Evento de lanzamiento, bolsa rota...")}
+                placeholder={tr("ej. Evento de lanzamiento, bolsa rota en el envío...")}
                 className={inputCls}
               />
             </div>
@@ -4305,43 +4296,6 @@ function SalidasTab({
               />
             </div>
           </div>
-          {form.exitKind === "venta" && (
-          <div className="mb-5 p-4 rounded-2xl bg-[#fdfbf7] border border-foreground/5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
-            <label htmlFor="sal-venta" className="flex items-center gap-3 cursor-pointer md:col-span-1">
-              <input
-                id="sal-venta"
-                type="checkbox"
-                checked={form.esVenta}
-                onChange={(e) => setForm({ ...form, esVenta: e.target.checked, valor: e.target.checked ? form.valor : "" })}
-                className="w-4 h-4 accent-[#C59F59]"
-              />
-              <span className="text-sm">
-                <span className="font-bold">{tr("Venta pagada")}</span>
-                <span className="block text-xs text-foreground/50">
-                  {tr("Registra el ingreso en Flujo de Caja (Ventas Físicas)")}
-                </span>
-              </span>
-            </label>
-            {form.esVenta && (
-              <div>
-                <label htmlFor="sal-valor" className={labelCls}>
-                  {tr("Valor cobrado (COP)")}{" "}<span className="text-red-400">*</span>
-                </label>
-                <input
-                  id="sal-valor"
-                  type="number"
-                  min="1"
-                  step="any"
-                  value={form.valor}
-                  onChange={(e) => setForm({ ...form, valor: e.target.value })}
-                  placeholder={tr("ej. 45000")}
-                  className={inputCls}
-                  required
-                />
-              </div>
-            )}
-          </div>
-          )}
           <FeedbackBanner feedback={feedback} />
           <button
             type="submit"
@@ -4392,7 +4346,7 @@ function SalidasTab({
                   >
                     <span className="block font-bold">{k === "none" ? tr("Sin clasificar") : tr(EXIT_KIND_LABEL[k])}</span>
                     <span className="text-foreground/50">
-                      {tr("{n} salidas · {u} unidades", { n: c.count, u: Number(c.units.toFixed(2)).toLocaleString("es-CO") })}
+                      {c.count === 1 ? tr("1 salida · {u} unidades", { u: Number(c.units.toFixed(2)).toLocaleString("es-CO") }) : tr("{n} salidas · {u} unidades", { n: c.count, u: Number(c.units.toFixed(2)).toLocaleString("es-CO") })}
                       {c.toConfirm > 0 && <> · {tr("{n} por confirmar", { n: c.toConfirm })}</>}
                     </span>
                   </button>

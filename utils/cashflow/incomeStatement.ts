@@ -92,7 +92,7 @@ export function buildStatement(m: MonthInput): Statement {
     line("sales", "Ventas (sin IVA)", sales, m.sales),
     line("deductions", "Notas crédito y descuentos", -deductions, m.deductions),
     line("net_sales", "Ventas netas", netSales, [], "subtotal"),
-    line("cost", "Costo del café vendido", -cost, m.cost, "line", "café vendido y merma × su costo"),
+    line("cost", "Costo del café vendido", -cost, m.cost, "line", "café vendido, dañado y ajustes × su costo"),
     line("gross", "Margen bruto", gross, [], "subtotal"),
     line("selling", "Gastos de ventas", -sum(selling), selling, "line", "transporte, comisiones, muestras"),
     line("admin", "Gastos de administración", -sum(admin), admin, "line", "honorarios, contabilidad, consumo interno"),

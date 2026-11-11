@@ -1,17 +1,21 @@
 // What a salida was for (inventory_movements.exit_kind) and where its cost
-// goes in the income statement. A sale is cost of sales; samples and gifts
-// are selling expenses; coffee drunk by the team is an admin expense; waste
-// and count adjustments stay in cost, apart from what was sold.
+// goes in the income statement. Sales are not salidas: they are orders, which
+// deduct their own stock ("venta" stays for order salidas and the manual sale
+// salidas from before). Roasting and hulling loss (merma) is not a salida
+// either: production batches record it and it is in the cost per kg already.
 
-export const EXIT_KINDS = ["venta", "muestra", "regalo", "consumo_interno", "merma", "ajuste"] as const;
+export const EXIT_KINDS = ["venta", "muestra", "regalo", "consumo_interno", "perdida", "ajuste"] as const;
 export type ExitKind = (typeof EXIT_KINDS)[number];
+
+/** What the salida form lets you pick: everything but a sale. */
+export const SELECTABLE_EXIT_KINDS: ExitKind[] = ["muestra", "regalo", "consumo_interno", "perdida", "ajuste"];
 
 export const EXIT_KIND_LABEL: Record<ExitKind, string> = {
   venta: "Venta",
   muestra: "Muestra / degustación",
   regalo: "Regalo / cortesía",
   consumo_interno: "Consumo interno",
-  merma: "Merma",
+  perdida: "Daño / pérdida",
   ajuste: "Ajuste de conteo",
 };
 
@@ -21,15 +25,21 @@ export const EXIT_KIND_TO: Record<ExitKind, string | null> = {
   muestra: "Para quién (prospecto o evento)",
   regalo: "Para quién",
   consumo_interno: "Quién lo consumió",
-  merma: null,
+  perdida: null,
   ajuste: null,
 };
+
+const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/** A reason that describes a sale (the form sends those to Pedidos). */
+export function looksLikeSale(text: string | null | undefined): boolean {
+  return /\b(ventas?|vend[a-z]*|factur[a-z]*)\b/.test(fold(text ?? ""));
+}
 
 export function isExitKind(v: unknown): v is ExitKind {
   return typeof v === "string" && (EXIT_KINDS as readonly string[]).includes(v);
 }
 
-const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 /**
  * The kind a salida's free-text reason points to, for salidas registered
@@ -41,7 +51,7 @@ export function guessExitKind(reason: string | null | undefined, orderId?: strin
   if (!r.trim()) return null;
   if (/\b(muestras?|degustacion(es)?|cata)\b/.test(r)) return "muestra";
   if (/\b(regalos?|cortesia|obsequios?|donacion)\b/.test(r)) return "regalo";
-  if (/\b(merma|danad[oa]s?|dano|vencid[oa]s?|rot[oa]s?|perdid[oa]s?)\b/.test(r)) return "merma";
+  if (/\b(merma|danad[oa]s?|dano|vencid[oa]s?|rot[oa]s?|perdid[oa]s?|perdida|robad[oa]s?)\b/.test(r)) return "perdida";
   if (/\b(ajuste|conteo|inventario fisico|diferencia)\b/.test(r)) return "ajuste";
   if (/\b(consumo (interno|administracion|oficina|socios?)|oficina|reunion)\b/.test(r)) return "consumo_interno";
   if (/\b(venta|vendid[oa]|factura|fv-|orden|pedido|feria)\b/.test(r)) return "venta";
@@ -63,7 +73,7 @@ export function exitCostCategory(kind: ExitKind | null): string {
     case "muestra": return "Muestras y degustaciones (al costo)";
     case "regalo": return "Regalos y cortesías (al costo)";
     case "consumo_interno": return "Consumo interno de café (al costo)";
-    case "merma": return "Merma";
+    case "perdida": return "Producto dañado o perdido";
     case "ajuste": return "Ajuste de inventario";
     default: return "Salidas sin clasificar";
   }

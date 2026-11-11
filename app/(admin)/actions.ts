@@ -1918,7 +1918,8 @@ export async function createSalida(
   try {
     // What the salida was for decides where its cost goes in the income statement.
     if (exit && !isExitKind(exit.kind)) throw new Error('Tipo de salida inválido.');
-    if (sale && exit && exit.kind !== 'venta') throw new Error('Una venta pagada es una salida de tipo Venta.');
+    // Sales are orders: they deduct their own stock, take the payment and get invoiced.
+    if (exit?.kind === 'venta') throw new Error('Las ventas se registran como pedido (Pedidos → Nuevo pedido), no como salida.');
     // Without a kind (older callers) it is read from the sale or the reason.
     const kind: ExitKind | null = exit?.kind ?? (sale ? 'venta' : guessExitKind(reason));
     const grind = await _resolveMolienda(supabase, inventoryId, molienda);
@@ -3298,18 +3299,22 @@ export async function updateMovement(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: mov, error: selErr } = await supabase
+  const { data: movRow, error: selErr } = await supabase
     .from('inventory_movements')
-    .select('inventory_id, quantity, income_id')
+    .select('*')
     .eq('id', id)
     .single();
-  if (selErr || !mov) throw new Error('Movimiento no encontrado');
+  if (selErr || !movRow) throw new Error('Movimiento no encontrado');
+  const mov = movRow as { inventory_id: string; quantity: number; income_id: string | null; reason: string | null; exit_kind?: string | null };
   if (mov.income_id && saleAmount !== undefined && !(saleAmount > 0)) {
     throw new Error('El valor cobrado debe ser mayor a cero.');
   }
 
   if (exit?.kind && !isExitKind(exit.kind)) throw new Error('Tipo de salida inválido.');
   if (mov.income_id && exit?.kind && exit.kind !== 'venta') throw new Error('Una venta pagada es una salida de tipo Venta.');
+  if (exit?.kind === 'venta' && !mov.income_id && mov.exit_kind !== 'venta' && guessExitKind(mov.reason) !== 'venta') {
+    throw new Error('Las ventas se registran como pedido (Pedidos → Nuevo pedido), no como salida.');
+  }
   const grind = await _resolveMolienda(supabase, mov.inventory_id, molienda);
 
   const { error } = await supabase

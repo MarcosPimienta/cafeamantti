@@ -7,9 +7,9 @@ ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS exit_to TEXT;
 
 ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_exit_kind_check;
 ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_exit_kind_check
-  CHECK (exit_kind IS NULL OR exit_kind IN ('venta', 'muestra', 'regalo', 'consumo_interno', 'merma', 'ajuste'));
+  CHECK (exit_kind IS NULL OR exit_kind IN ('venta', 'muestra', 'regalo', 'consumo_interno', 'perdida', 'ajuste'));
 
-COMMENT ON COLUMN inventory_movements.exit_kind IS 'Salida kind: venta | muestra | regalo | consumo_interno | merma | ajuste (NULL = sin clasificar)';
+COMMENT ON COLUMN inventory_movements.exit_kind IS 'Salida kind: venta (pedidos e históricas) | muestra | regalo | consumo_interno | perdida | ajuste (NULL = sin clasificar)';
 COMMENT ON COLUMN inventory_movements.exit_to IS 'Who the salida went to (customer, prospect, event, person)';
 
 -- Orders always leave as sales.

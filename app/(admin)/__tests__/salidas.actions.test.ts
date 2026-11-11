@@ -25,6 +25,24 @@ describe("createSalida — plain salida (muestra, merma)", () => {
     expect(db.rows("cashflow_incomes")).toHaveLength(0);
   });
 
+  it("saves what it was for and who got it", async () => {
+    await createSalida("inv-cold", 2, "2026-10-05", undefined, undefined, undefined, null, { kind: "muestra", to: "Alcaldía de Medellín" });
+    expect(db.rows("inventory_movements")[0]).toMatchObject({ exit_kind: "muestra", exit_to: "Alcaldía de Medellín" });
+  });
+
+  it("reads the kind from the reason when none is given", async () => {
+    await createSalida("inv-cold", 3, "2026-10-05", "Muestra feria");
+    expect(db.rows("inventory_movements")[0]).toMatchObject({ exit_kind: "muestra" });
+  });
+
+  it("refuses a sale: sales are orders", async () => {
+    const res = await createSalida("inv-cold", 1, "2026-10-05", undefined, undefined, undefined, null, { kind: "venta" });
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/pedido/);
+    expect(db.rows("inventory_movements")).toHaveLength(0);
+    expect(stock("inv-cold")).toBe(12);
+  });
+
   it("roasted coffee must say Grano or Molido before anything is written", async () => {
     const res = await createSalida("inv-250", 2, "2026-10-05");
     expect(res.success).toBe(false);

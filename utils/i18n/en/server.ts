@@ -287,4 +287,5 @@ export const server: Record<string, string> = {
   "Para crear la sede {name} en Siigo: {problems}": "To create the location {name} in Siigo: {problems}",
   "Tipo de salida inválido.": "Invalid outflow kind.",
   "Una venta pagada es una salida de tipo Venta.": "A paid sale is an outflow of kind Sale.",
+  "Las ventas se registran como pedido (Pedidos → Nuevo pedido), no como salida.": "Sales are recorded as orders (Orders → New order), not as outflows.",
 };
