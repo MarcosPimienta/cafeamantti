@@ -285,4 +285,6 @@ export const server: Record<string, string> = {
   "Cliente no encontrado.": "Client not found.",
   "El cliente no tiene NIT: agrégalo antes de crear sus sedes en Siigo.": "The client has no NIT: add it before creating its locations in Siigo.",
   "Para crear la sede {name} en Siigo: {problems}": "To create the location {name} in Siigo: {problems}",
+  "Tipo de salida inválido.": "Invalid outflow kind.",
+  "Una venta pagada es una salida de tipo Venta.": "A paid sale is an outflow of kind Sale.",
 };

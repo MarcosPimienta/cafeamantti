@@ -31,7 +31,7 @@ export type UnitCost = { name: string; unit: string | null; cost: number | null 
  * The cost of what left: units × unit cost, one item per product. Products
  * without a known cost are listed apart so the screen can say so.
  */
-export function costOfSalidas(salidas: Salida[], costs: Map<string, UnitCost>): { items: StatementItem[]; missing: { name: string; quantity: number }[] } {
+export function costOfSalidas(salidas: Salida[], costs: Map<string, UnitCost>, category = "Costo por unidad"): { items: StatementItem[]; missing: { name: string; quantity: number }[] } {
   const by = new Map<string, number>();
   for (const s of salidas) by.set(s.inventory_id, (by.get(s.inventory_id) ?? 0) + Math.abs(num(s.quantity)));
   const items: StatementItem[] = [];
@@ -46,7 +46,7 @@ export function costOfSalidas(salidas: Salida[], costs: Map<string, UnitCost>): 
     items.push({
       date: "",
       concept: `${q.toLocaleString("es-CO")} ${c.unit ?? ""} ${c.name} × $${Math.round(c.cost).toLocaleString("es-CO")}`.replace(/\s+/g, " "),
-      category: "Costo por unidad",
+      category,
       amount: round2(q * c.cost),
     });
   }

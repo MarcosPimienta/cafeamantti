@@ -7,6 +7,7 @@ import { checkIsAdmin, getCostingData } from '../../actions';
 import { orderCustomer } from '@/utils/orders/pendingDeliveries';
 import { accruedInterestInMonth, type Loan, type LoanMove } from '@/utils/loans/ledger';
 import { buildStatement, monthBefore, type Statement, type StatementItem } from '@/utils/cashflow/incomeStatement';
+import { exitCostCategory, exitCostLine, guessExitKind, isExitKind, type ExitKind } from '@/utils/inventory/exitKind';
 import { costOfSalidas, dropVoided, linesBase, siigoDocBase, type SiigoSalesDoc } from '@/utils/cashflow/accrual';
 import { getSiigoClient, siigoConfigFromEnv } from '@/utils/siigo/api';
 import { orderTaxTotals, pricesIncludeTax } from '@/utils/orders/tax';
@@ -866,7 +867,7 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
     supabase.from('sales_invoices').select('id, order_id, status, lines, shipping, issue_date, created_at, siigo_name, customer_name').neq('status', 'anulada'),
     supabase.from('credit_notes').select('invoice_id, lines, total, created_at, siigo_name'),
     supabase.from('orders').select('id, status, payment_status, paid_at, delivered_at, created_at, source, total_amount, prices_include_tax, siigo_invoice, cashflow_income_id, shipping_info, contact_email, client:client_id ( name ), order_items ( price_at_time, quantity, tax_rate )').neq('status', 'cancelled'),
-    supabase.from('inventory_movements').select('inventory_id, quantity, movement_date, reason').eq('era', 'v2').eq('type', 'salida').eq('tab_source', 'salida').gte('movement_date', windowStart).lt('movement_date', windowEnd),
+    salidasOfWindow(supabase, windowStart, windowEnd),
     supabase.from('inventory').select('id, is_sellable'),
     supabase.from('cashflow_expenses').select('concept, category, net_amount, cashflow:cashflow_id!inner ( date )').eq('expense_type', 'OPEX').gte('cashflow.date', windowStart).lt('cashflow.date', windowEnd),
     supabase.from('cashflow_expenses').select('net_amount, depreciation_months, created_at, in_service_date, residual_value, asset_use, cashflow:cashflow_id!inner ( date )').eq('expense_type', 'CAPEX').lt('cashflow.date', windowEnd),
@@ -952,7 +953,24 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
   // ── What the coffee that left cost ──
   const sellable = new Set(rows(sellableRes).filter((i) => i.is_sellable !== false).map((i) => i.id as string));
   const unitCosts = new Map(Object.entries(costing?.unitCosts ?? {}));
-  const salidas = rows(salidaRes).filter((m) => sellable.has(m.inventory_id)).map((m) => ({ date: day(m.movement_date), inventory_id: m.inventory_id, quantity: n(m.quantity), reason: m.reason ?? null }));
+  // Each salida's cost goes where its kind says: sold coffee and waste to cost,
+  // samples and gifts to selling expenses, coffee the team drinks to admin.
+  // Salidas from before the kind existed are read from their reason.
+  const salidas = rows(salidaRes).filter((m) => sellable.has(m.inventory_id)).map((m) => ({
+    date: day(m.movement_date), inventory_id: m.inventory_id, quantity: n(m.quantity), reason: m.reason ?? null,
+    kind: isExitKind(m.exit_kind) ? m.exit_kind : guessExitKind(m.reason, m.order_id),
+  }));
+  const costByKind = (list: typeof salidas) => {
+    const byKind = new Map<ExitKind | null, typeof salidas>();
+    for (const x of list) byKind.set(x.kind, [...(byKind.get(x.kind) ?? []), x]);
+    const out = { cost: [] as StatementItem[], selling: [] as StatementItem[], admin: [] as StatementItem[], missing: [] as { name: string; quantity: number }[] };
+    for (const [kind, xs] of byKind) {
+      const c = costOfSalidas(xs, unitCosts, exitCostCategory(kind));
+      out[exitCostLine(kind)].push(...c.items);
+      out.missing.push(...c.missing);
+    }
+    return out;
+  };
 
   const expenses = rows(expRes).map((r) => ({ date: dateOf(r), concept: r.concept ?? '', category: r.category ?? '', amount: n(r.net_amount) }));
   const capex = rows(capexRes).map(({ cashflow, ...a }) => ({ ...a, purchase_date: (Array.isArray(cashflow) ? cashflow[0] : cashflow)?.date ?? null }));
@@ -966,7 +984,7 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
     const [y, mo] = m.split('-').map(Number);
     const { period_start, period_end } = monthBounds(mo, y);
     const dep = summarizeMonthlyPL({ period_start, period_end, manualIncomes: [], webOrders: [], cogsExpenses: [], inventoryConsumptions: [], opexExpenses: [], capexItems: capex, paidExpenses: [] }).depreciation_by_use;
-    const cost = costOfSalidas(salidas.filter((x) => inMonth(x.date, m)), unitCosts);
+    const cost = costByKind(salidas.filter((x) => inMonth(x.date, m)));
     const monthSales = sales.filter((x) => inMonth(x.date, m));
     if (m === ym) missingCost = cost.missing;
     return {
@@ -974,8 +992,8 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
       statement: buildStatement({
         sales: monthSales,
         deductions: deductions.filter((x) => inMonth(x.date, m)),
-        cost: cost.items,
-        opex: expenses.filter((e) => inMonth(e.date, m)),
+        cost: cost.cost,
+        opex: [...expenses.filter((e) => inMonth(e.date, m)), ...cost.selling, ...cost.admin],
         accruedInterest: loans
           .map((l) => ({ date: `${m}-01`, concept: `${l.creditor_name} (interés que se suma al préstamo)`, category: 'Intereses causados', amount: Math.round(accruedInterestInMonth(l, moves, m) * 100) / 100 }))
           .filter((i) => i.amount > 0),
@@ -1007,6 +1025,14 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
       salesFromSiigo: siigoOk,
     },
   };
+}
+
+/** The window's manual and order salidas, with their kind (without it before its migration). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function salidasOfWindow(supabase: any, from: string, to: string) {
+  const q = (cols: string) => supabase.from('inventory_movements').select(cols).eq('era', 'v2').eq('type', 'salida').eq('tab_source', 'salida').gte('movement_date', from).lt('movement_date', to);
+  const res = await q('inventory_id, quantity, movement_date, reason, order_id, exit_kind');
+  return res.error && /exit_kind/.test(res.error.message) ? q('inventory_id, quantity, movement_date, reason, order_id') : res;
 }
 
 /** Interest the loans add to their capital in the month (0 before the loans migration). */

@@ -27,6 +27,7 @@ import { entryCostProblem, summarizeEntryCosts } from "@/utils/inventory/entryCo
 import { refreshStandardCost } from "@/utils/inventory/costServer";
 import { planRepack, KG_EPS, round3, type RepackLine } from "@/utils/inventory/repack";
 import { buildProductKardex, buildGeneralKardex } from "@/utils/inventory/kardex";
+import { guessExitKind, isExitKind, type ExitKind } from "@/utils/inventory/exitKind";
 import {
   buildCostSheet,
   DEFAULT_COST_SETTINGS,
@@ -1524,6 +1525,9 @@ async function _insertMovement(
     repack_batch_id?: string | null;
     /** What one stock unit cost, before IVA (entradas). */
     unit_cost?: number | null;
+    /** What a manual salida was for, and who got it. */
+    exit_kind?: ExitKind | null;
+    exit_to?: string | null;
   } = {}
 ) {
   const { data, error } = await supabase.from('inventory_movements').insert({
@@ -1542,6 +1546,7 @@ async function _insertMovement(
     repack_batch_id: opts.repack_batch_id ?? null,
     // Only sent when there is one: works before the entry-cost migration.
     ...(opts.unit_cost !== undefined && opts.unit_cost !== null ? { unit_cost: opts.unit_cost } : {}),
+    ...(opts.exit_kind ? { exit_kind: opts.exit_kind, exit_to: opts.exit_to ?? null } : {}),
   }).select('id').single();
   if (error) throw new Error(error.message);
   return data.id;
@@ -1709,6 +1714,13 @@ export async function getMovementsByTab(tabSource: string, era: 'v1' | 'v2' = 'v
 
   // unit_cost (the entrada's cost) exists once its migration runs. Literal
   // selects keep the rows typed.
+  const WITH_KIND = `
+      id, inventory_id, type, quantity, reason, lote,
+      movement_date, responsable, entry_type, tab_source, molienda, created_at,
+      production_batch_id, income_id, unit_cost, order_id, exit_kind, exit_to,
+      inventory ( product_code, product_name, unit ),
+      income:income_id ( gross_amount )
+    ` as const;
   const WITH_COST = `
       id, inventory_id, type, quantity, reason, lote,
       movement_date, responsable, entry_type, tab_source, molienda, created_at,
@@ -1723,17 +1735,19 @@ export async function getMovementsByTab(tabSource: string, era: 'v1' | 'v2' = 'v
       inventory ( product_code, product_name, unit ),
       income:income_id ( gross_amount )
     ` as const;
-  const query = (cost: boolean) => supabase
+  const query = (cols: 'kind' | 'cost' | 'base') => supabase
     .from('inventory_movements')
-    .select(cost ? WITH_COST : WITHOUT_COST)
+    .select(cols === 'kind' ? WITH_KIND : cols === 'cost' ? WITH_COST : WITHOUT_COST)
     .eq('tab_source', tabSource)
     .eq('era', era)
     .order('movement_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(200);
 
-  let res = await query(true);
-  if (res.error && /unit_cost/.test(res.error.message)) res = await query(false);
+  // exit_kind / exit_to / unit_cost exist once their migrations run.
+  let res = await query('kind');
+  if (res.error && /exit_kind|exit_to|order_id/.test(res.error.message)) res = await query('cost');
+  if (res.error && /unit_cost/.test(res.error.message)) res = await query('base');
   if (res.error) {
     console.error('getMovementsByTab error:', res.error);
     return [];
@@ -1745,6 +1759,7 @@ type MovementWithCost = {
   id: string; inventory_id: string; type: string; quantity: number; reason: string | null; lote: string | null;
   movement_date: string | null; responsable: string | null; entry_type: string | null; tab_source: string | null; molienda: string | null; created_at: string;
   production_batch_id: string | null; income_id: string | null; unit_cost?: number | null;
+  order_id?: string | null; exit_kind?: string | null; exit_to?: string | null;
   inventory: { product_code: string; product_name: string; unit: string | null } | null;
   income: { gross_amount: number } | null;
 };
@@ -1889,7 +1904,8 @@ export async function createSalida(
   reason?: string,
   responsable?: string,
   molienda?: string | null,
-  sale?: { amount: number } | null
+  sale?: { amount: number } | null,
+  exit?: { kind: ExitKind; to?: string | null }
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1900,6 +1916,11 @@ export async function createSalida(
   let incomeId: string | null = null;
   let mId: string | null = null;
   try {
+    // What the salida was for decides where its cost goes in the income statement.
+    if (exit && !isExitKind(exit.kind)) throw new Error('Tipo de salida inválido.');
+    if (sale && exit && exit.kind !== 'venta') throw new Error('Una venta pagada es una salida de tipo Venta.');
+    // Without a kind (older callers) it is read from the sale or the reason.
+    const kind: ExitKind | null = exit?.kind ?? (sale ? 'venta' : guessExitKind(reason));
     const grind = await _resolveMolienda(supabase, inventoryId, molienda);
 
     if (sale) {
@@ -1925,11 +1946,13 @@ export async function createSalida(
       tab_source: 'salida',
       molienda: grind,
       income_id: incomeId,
+      exit_kind: kind,
+      exit_to: exit?.to?.trim() || null,
     });
     mId = movementId;
 
     const newStock = await _stockOf(supabase, inventoryId);
-    await logAuditAction("CREATE", "MOVEMENT", movementId, inventoryId, { qty: -qty, reason, responsable, molienda: grind, income_id: incomeId, sale_amount: sale?.amount });
+    await logAuditAction("CREATE", "MOVEMENT", movementId, inventoryId, { qty: -qty, reason, responsable, molienda: grind, income_id: incomeId, sale_amount: sale?.amount, exit_kind: kind, exit_to: exit?.to ?? null });
     revalidatePath('/admin/inventory');
     if (incomeId) revalidatePath('/admin/cashflow');
     return { success: true, newStock };
@@ -3266,7 +3289,8 @@ export async function updateMovement(
   responsable?: string,
   entry_type?: string,
   molienda?: string | null,
-  saleAmount?: number
+  saleAmount?: number,
+  exit?: { kind: ExitKind | null; to?: string | null }
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -3284,6 +3308,8 @@ export async function updateMovement(
     throw new Error('El valor cobrado debe ser mayor a cero.');
   }
 
+  if (exit?.kind && !isExitKind(exit.kind)) throw new Error('Tipo de salida inválido.');
+  if (mov.income_id && exit?.kind && exit.kind !== 'venta') throw new Error('Una venta pagada es una salida de tipo Venta.');
   const grind = await _resolveMolienda(supabase, mov.inventory_id, molienda);
 
   const { error } = await supabase
@@ -3295,6 +3321,7 @@ export async function updateMovement(
       responsable: responsable ?? null,
       entry_type: entry_type || null,
       molienda: grind,
+      ...(exit ? { exit_kind: exit.kind, exit_to: exit.to?.trim() || null } : {}),
     })
     .eq('id', id);
   if (error) throw new Error(error.message);
@@ -3316,7 +3343,7 @@ export async function updateMovement(
   await logAuditAction("UPDATE", "MOVEMENT", id, mov.inventory_id, { 
     old_quantity: mov.quantity, 
     new_quantity: newQty,
-    reason, responsable, molienda: grind, sale_amount: saleAmount
+    reason, responsable, molienda: grind, sale_amount: saleAmount, ...(exit ? { exit_kind: exit.kind, exit_to: exit.to ?? null } : {})
   });
   
   revalidatePath('/admin/inventory');

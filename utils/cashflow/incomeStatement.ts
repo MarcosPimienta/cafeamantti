@@ -34,7 +34,7 @@ export function expenseGroup(category: string): ExpenseGroup {
   const c = fold(category);
   if (/interes/.test(c)) return "interest";
   if (/bancari|gmf|4x1000|cuatro por mil/.test(c)) return "bank";
-  if (/comision(es)? de venta|vendedor|referid|publicidad|mercadeo|marketing|fletes?|envio|domicilio|transporte|viaje|muestra|degustacion|evento|feria/.test(c)) return "selling";
+  if (/comision(es)? de venta|vendedor|referid|publicidad|mercadeo|marketing|fletes?|envio|domicilio|transporte|viaje|muestra|degustacion|regalo|cortesia|obsequio|evento|feria/.test(c)) return "selling";
   return "admin";
 }
 
@@ -92,10 +92,10 @@ export function buildStatement(m: MonthInput): Statement {
     line("sales", "Ventas (sin IVA)", sales, m.sales),
     line("deductions", "Notas crédito y descuentos", -deductions, m.deductions),
     line("net_sales", "Ventas netas", netSales, [], "subtotal"),
-    line("cost", "Costo del café vendido", -cost, m.cost, "line", "lo que salió del inventario × su costo"),
+    line("cost", "Costo del café vendido", -cost, m.cost, "line", "café vendido y merma × su costo"),
     line("gross", "Margen bruto", gross, [], "subtotal"),
-    line("selling", "Gastos de ventas", -sum(selling), selling, "line", "transporte, comisiones"),
-    line("admin", "Gastos de administración", -sum(admin), admin, "line", "honorarios, contabilidad"),
+    line("selling", "Gastos de ventas", -sum(selling), selling, "line", "transporte, comisiones, muestras"),
+    line("admin", "Gastos de administración", -sum(admin), admin, "line", "honorarios, contabilidad, consumo interno"),
     line("ebitda", "EBITDA", ebitda, [], "subtotal", "antes de depreciación, intereses e impuestos"),
     line("depreciation", "Depreciación de equipos", -sum(m.depreciation), m.depreciation),
     line("operating", "Resultado operativo", operating, [], "subtotal"),

@@ -96,6 +96,7 @@ import {
 import CostosTab from "./CostosTab";
 import { COSTED_SINCE, needsCost } from "@/utils/inventory/entryCost";
 import QuantityInput from "./QuantityInput";
+import { EXIT_KINDS, EXIT_KIND_LABEL, EXIT_KIND_TO, guessExitKind, isExitKind, type ExitKind } from "@/utils/inventory/exitKind";
 import {
   MOLIENDAS,
   MOLIENDA_LABELS,
@@ -142,6 +143,10 @@ interface MovementRecord {
   income_id?: string | null;
   /** Entradas: what one unit cost, before IVA. */
   unit_cost?: number | null;
+  /** Salidas: the order that took it, what it was for and who got it. */
+  order_id?: string | null;
+  exit_kind?: string | null;
+  exit_to?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   income?: any;
   created_at: string;
@@ -223,6 +228,58 @@ function fmtCOP(n: number) {
 }
 
 /** Value collected for a paid-sale salida (its linked cashflow income). */
+/** The kind a salida has, or the one its reason points to (guessed = not saved yet). */
+function exitKindOf(r: MovementRecord): { kind: ExitKind | null; guessed: boolean } {
+  if (isExitKind(r.exit_kind)) return { kind: r.exit_kind, guessed: false };
+  return { kind: guessExitKind(r.reason, r.order_id), guessed: true };
+}
+
+const EXIT_KIND_STYLE: Record<ExitKind, string> = {
+  venta: "bg-green-100 text-green-700",
+  muestra: "bg-violet-100 text-violet-700",
+  regalo: "bg-pink-100 text-pink-700",
+  consumo_interno: "bg-sky-100 text-sky-700",
+  merma: "bg-orange-100 text-orange-700",
+  ajuste: "bg-slate-100 text-slate-600",
+};
+
+function ExitKindBadge({ record }: { record: MovementRecord }) {
+  const tr = useTr();
+  const { kind, guessed } = exitKindOf(record);
+  if (!kind) {
+    return <span className="inline-block px-2 py-0.5 text-[10px] font-black rounded-full bg-red-50 text-red-600 border border-dashed border-red-300">{tr("Sin clasificar")}</span>;
+  }
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 text-[10px] font-black rounded-full ${EXIT_KIND_STYLE[kind]} ${guessed ? "border border-dashed border-current opacity-70" : ""}`}
+      title={guessed ? tr("Deducido del motivo; edítala para confirmarlo") : undefined}
+    >
+      {tr(EXIT_KIND_LABEL[kind])}{guessed ? " ?" : ""}
+    </span>
+  );
+}
+
+/** The kinds as buttons; one must be picked. */
+function ExitKindPicker({ value, onChange, idPrefix, only }: { value: ExitKind | ""; onChange: (k: ExitKind) => void; idPrefix: string; only?: ExitKind[] }) {
+  const tr = useTr();
+  return (
+    <div role="radiogroup" aria-labelledby={`${idPrefix}-kind-label`} className="flex flex-wrap gap-2">
+      {(only ?? EXIT_KINDS).map((k) => (
+        <button
+          key={k}
+          type="button"
+          role="radio"
+          aria-checked={value === k}
+          onClick={() => onChange(k)}
+          className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${value === k ? "bg-[#C59F59] text-white border-[#C59F59]" : "bg-white border-foreground/10 text-foreground/60 hover:border-[#C59F59]"}`}
+        >
+          {tr(EXIT_KIND_LABEL[k])}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function saleAmountOf(record: MovementRecord): number | null {
   if (!record.income_id) return null;
   const inc = Array.isArray(record.income) ? record.income[0] : record.income;
@@ -1524,6 +1581,10 @@ function EditMovementModal({
   );
   const initialSale = saleAmountOf(record);
   const [saleAmount, setSaleAmount] = useState(initialSale !== null ? String(initialSale) : "");
+  // A manual salida says what it was for; an order's salida is always a sale.
+  const isManualSalida = record.tab_source === "salida" && record.quantity < 0 && !record.order_id;
+  const [exitKind, setExitKind] = useState<ExitKind | "">(exitKindOf(record).kind ?? "");
+  const [exitTo, setExitTo] = useState(record.exit_to ?? "");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
@@ -1537,10 +1598,11 @@ function EditMovementModal({
     if (needsMolienda && !molienda) { setError(tr("Selecciona la molienda (Grano o Molido)")); return; }
     const parsedSale = parseFloat(saleAmount);
     if (initialSale !== null && !(parsedSale > 0)) { setError(tr("Valor cobrado inválido")); return; }
+    if (isManualSalida && !exitKind) { setError(tr("Elige el tipo de salida: ¿para qué salió el café?")); return; }
     const signedQty = origSign * parsedQty;
     startTransition(async () => {
       try {
-        const res = await updateMovement(record.id, signedQty, date, reason || undefined, responsable || undefined, record.entry_type || undefined, molienda || undefined, initialSale !== null ? parsedSale : undefined);
+        const res = await updateMovement(record.id, signedQty, date, reason || undefined, responsable || undefined, record.entry_type || undefined, molienda || undefined, initialSale !== null ? parsedSale : undefined, isManualSalida && exitKind ? { kind: exitKind, to: exitTo || null } : undefined);
         onSuccess(res.inventoryId, res.newStock);
         onClose();
       } catch (err: unknown) {
@@ -1562,6 +1624,18 @@ function EditMovementModal({
         <form onSubmit={handleSubmit} className="p-8 space-y-4">
           <div><label className={labelCls}>{tr("Fecha")}</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required /></div>
           <div><label className={labelCls}>{tr("Cantidad (valor absoluto)")}</label><QuantityInput value={qty} onChange={setQty} baseUnit={getRelation(record.inventory)?.unit} ariaLabel="Cantidad" required /></div>
+          {isManualSalida && (
+            <div>
+              <p id={`edit-${record.id}-kind-label`} className={labelCls}>{tr("¿Para qué salió?")}</p>
+              <ExitKindPicker idPrefix={`edit-${record.id}`} value={exitKind} onChange={setExitKind} only={initialSale !== null ? ["venta"] : undefined} />
+              {!isExitKind(record.exit_kind) && exitKindOf(record).kind && (
+                <p className="text-[11px] text-foreground/40 mt-1">{tr("Sugerido según el motivo. Guarda para confirmarlo.")}</p>
+              )}
+            </div>
+          )}
+          {isManualSalida && exitKind && EXIT_KIND_TO[exitKind] && (
+            <div><label className={labelCls}>{tr(EXIT_KIND_TO[exitKind]!)}</label><input type="text" value={exitTo} onChange={(e) => setExitTo(e.target.value)} className={inputCls} /></div>
+          )}
           <div><label className={labelCls}>{tr("Motivo / Notas")}</label><input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={tr("Motivo...")} className={inputCls} /></div>
           <div><label className={labelCls}>{tr("Responsable")}</label><input type="text" value={responsable} onChange={(e) => setResponsable(e.target.value)} placeholder={tr("Nombre...")} className={inputCls} /></div>
           {needsMolienda && (
@@ -3948,9 +4022,13 @@ function SalidasTab({
     molienda: "" as Molienda | "",
     esVenta: false,
     valor: "",
+    exitKind: "" as ExitKind | "",
+    exitTo: "",
   };
   const [form, setForm] = useState(initForm);
   const [records, setRecords] = useState<MovementRecord[]>([]);
+  // The history can show one kind only ("" = all, "none" = not classified).
+  const [kindFilter, setKindFilter] = useState<ExitKind | "none" | "">("");
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{
@@ -3962,7 +4040,28 @@ function SalidasTab({
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
 
-  const sortedRecords = useMemo(() => sortRecordsList(records, sortField, sortAsc), [records, sortField, sortAsc]);
+  const filteredRecords = useMemo(
+    () => (kindFilter ? records.filter((r) => (exitKindOf(r).kind ?? "none") === kindFilter) : records),
+    [records, kindFilter]
+  );
+  const sortedRecords = useMemo(() => sortRecordsList(filteredRecords, sortField, sortAsc), [filteredRecords, sortField, sortAsc]);
+
+  // This month's salidas by kind: what left and what for.
+  const monthSummary = useMemo(() => {
+    const ym = today().slice(0, 7);
+    const by = new Map<ExitKind | "none", { count: number; units: number; toConfirm: number }>();
+    for (const r of records) {
+      if (String(r.movement_date ?? r.created_at).slice(0, 7) !== ym) continue;
+      const { kind, guessed } = exitKindOf(r);
+      const k = kind ?? "none";
+      const c = by.get(k) ?? { count: 0, units: 0, toConfirm: 0 };
+      c.count += 1;
+      c.units += Math.abs(Number(r.quantity) || 0);
+      if (guessed && kind) c.toConfirm += 1;
+      by.set(k, c);
+    }
+    return by;
+  }, [records]);
   const paginatedRecords = sortedRecords.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   function handleSort(field: string) {
@@ -4004,6 +4103,14 @@ function SalidasTab({
       setFeedback({ type: "error", msg: tr("Completa los campos obligatorios") });
       return;
     }
+    if (!form.exitKind) {
+      setFeedback({ type: "error", msg: tr("Elige el tipo de salida: ¿para qué salió el café?") });
+      return;
+    }
+    if (form.exitKind !== "venta" && EXIT_KIND_TO[form.exitKind] && !form.exitTo.trim()) {
+      setFeedback({ type: "error", msg: tr("Escribe para quién fue la salida") });
+      return;
+    }
     if (isGrindTracked(selectedItem?.product_code) && !form.molienda) {
       setFeedback({ type: "error", msg: tr("Selecciona la molienda (Grano o Molido)") });
       return;
@@ -4016,7 +4123,9 @@ function SalidasTab({
     startTransition(async () => {
       try {
         // The same sale may already be an order that deducted this product: ask before taking it out twice.
-        const repeated = await ordersRepeatedBySalida(form.inventoryId, parseFloat(form.qty), form.date, form.motivo || undefined);
+        const repeated = form.exitKind === "venta"
+          ? await ordersRepeatedBySalida(form.inventoryId, parseFloat(form.qty), form.date, form.motivo || form.exitTo || undefined)
+          : { orders: [] as Awaited<ReturnType<typeof ordersRepeatedBySalida>>["orders"] };
         if (repeated.orders.length) {
           const list = repeated.orders.map((o) => `• ${o.invoice ?? tr("Orden #{id}", { id: o.id.slice(0, 8) })} · ${o.customer} · ${o.date}`).join("\n");
           if (!window.confirm(tr("Esta venta parece estar ya registrada como orden, y esa orden ya descontó este producto:\n{list}\n\nSi es la misma venta, no registres la salida (se descontaría dos veces). ¿Registrarla de todas formas?", { list }))) return;
@@ -4028,7 +4137,8 @@ function SalidasTab({
           form.motivo || undefined,
           form.responsable || undefined,
           form.molienda || undefined,
-          form.esVenta ? { amount: valor } : null
+          form.esVenta ? { amount: valor } : null,
+          { kind: form.exitKind as ExitKind, to: form.exitTo || null }
         );
 
         if (!res.success) {
@@ -4075,11 +4185,45 @@ function SalidasTab({
         <div className="mb-6">
           <h2 className="text-xl font-serif">{tr("Registrar Salida")}</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            {tr("Registra una salida de stock: ventas directas, muestras, merma, etc. Si es una venta pagada, márcala para que el ingreso quede en el Flujo de Caja con la misma fecha de pago.")}
+            {tr("Registra lo que sale del inventario y para qué salió. Las ventas normales entran como pedido y se descuentan solas: aquí van muestras, regalos, ferias, consumo interno, merma y ajustes. El tipo decide dónde va su costo en el estado de resultados.")}
           </p>
         </div>
         <form onSubmit={handleSubmit}>
+          <div className="mb-5">
+            <p id="sal-kind-label" className={labelCls}>
+              {tr("¿Para qué salió?")}{" "}<span className="text-red-400">*</span>
+            </p>
+            <ExitKindPicker
+              idPrefix="sal"
+              value={form.exitKind}
+              onChange={(k) => setForm({ ...form, exitKind: k, esVenta: k === "venta" ? form.esVenta : false, valor: k === "venta" ? form.valor : "" })}
+            />
+            {form.exitKind && (
+              <p className="text-[11px] text-foreground/40 mt-2">
+                {form.exitKind === "venta" && tr("Va al costo de ventas. Si ya hay un pedido de esta venta, no registres la salida: el pedido ya descontó el café.")}
+                {(form.exitKind === "muestra" || form.exitKind === "regalo") && tr("Va a gastos de ventas, al costo del café.")}
+                {form.exitKind === "consumo_interno" && tr("Va a gastos de administración, al costo del café.")}
+                {(form.exitKind === "merma" || form.exitKind === "ajuste") && tr("Va al costo de ventas, en una línea aparte del café vendido.")}
+              </p>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
+            {form.exitKind && EXIT_KIND_TO[form.exitKind] && (
+              <div>
+                <label htmlFor="sal-to" className={labelCls}>
+                  {tr(EXIT_KIND_TO[form.exitKind]!)}{" "}
+                  {form.exitKind !== "venta" ? <span className="text-red-400">*</span> : <span className="normal-case font-normal">{tr("(opcional)")}</span>}
+                </label>
+                <input
+                  id="sal-to"
+                  type="text"
+                  value={form.exitTo}
+                  onChange={(e) => setForm({ ...form, exitTo: e.target.value })}
+                  placeholder={form.exitKind === "consumo_interno" ? tr("ej. Oficina, Laura...") : tr("ej. Alcaldía de Medellín, Feria Café...")}
+                  className={inputCls}
+                />
+              </div>
+            )}
             <div>
               <label htmlFor="sal-date" className={labelCls}>
                 {tr("Fecha")}{" "}<span className="text-red-400">*</span>
@@ -4134,14 +4278,14 @@ function SalidasTab({
             </div>
             <div>
               <label htmlFor="sal-motivo" className={labelCls}>
-                {tr("Motivo (opcional)")}
+                {tr("Notas (opcional)")}
               </label>
               <input
                 id="sal-motivo"
                 type="text"
                 value={form.motivo}
                 onChange={(e) => setForm({ ...form, motivo: e.target.value })}
-                placeholder={tr("ej. Venta, Muestra, Merma...")}
+                placeholder={tr("ej. Evento de lanzamiento, bolsa rota...")}
                 className={inputCls}
               />
             </div>
@@ -4161,6 +4305,7 @@ function SalidasTab({
               />
             </div>
           </div>
+          {form.exitKind === "venta" && (
           <div className="mb-5 p-4 rounded-2xl bg-[#fdfbf7] border border-foreground/5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
             <label htmlFor="sal-venta" className="flex items-center gap-3 cursor-pointer md:col-span-1">
               <input
@@ -4196,6 +4341,7 @@ function SalidasTab({
               </div>
             )}
           </div>
+          )}
           <FeedbackBanner feedback={feedback} />
           <button
             type="submit"
@@ -4218,7 +4364,7 @@ function SalidasTab({
           <h3 className="font-serif text-lg">
             {tr("Historial")}{" "}
             <span className="text-foreground/40 text-base font-sans">
-              · {records.length}
+              · {filteredRecords.length}
             </span>
           </h3>
           <button
@@ -4228,8 +4374,40 @@ function SalidasTab({
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
-        {loading || records.length === 0 ? (
-          <HistoryLoadingOrEmpty loading={loading} empty={records.length === 0} />
+        {era === "v2" && monthSummary.size > 0 && (
+          <div className="px-6 py-4 border-b border-foreground/5">
+            <p className={labelCls}>{tr("Este mes, por tipo")}</p>
+            <div className="flex flex-wrap gap-2">
+              {([...EXIT_KINDS, "none"] as const).map((k) => {
+                const c = monthSummary.get(k);
+                if (!c) return null;
+                const active = kindFilter === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => { setKindFilter(active ? "" : k); setCurrentPage(1); }}
+                    aria-pressed={active}
+                    className={`text-left px-3 py-2 rounded-xl border text-xs transition-colors ${active ? "border-[#C59F59] bg-[#C59F59]/10" : k === "none" ? "border-red-200 bg-red-50/50 hover:border-red-400" : "border-foreground/10 hover:border-[#C59F59]"}`}
+                  >
+                    <span className="block font-bold">{k === "none" ? tr("Sin clasificar") : tr(EXIT_KIND_LABEL[k])}</span>
+                    <span className="text-foreground/50">
+                      {tr("{n} salidas · {u} unidades", { n: c.count, u: Number(c.units.toFixed(2)).toLocaleString("es-CO") })}
+                      {c.toConfirm > 0 && <> · {tr("{n} por confirmar", { n: c.toConfirm })}</>}
+                    </span>
+                  </button>
+                );
+              })}
+              {kindFilter && (
+                <button type="button" onClick={() => setKindFilter("")} className="px-3 py-2 text-xs font-bold text-[#C59F59] hover:underline">
+                  {tr("Ver todas")}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {loading || filteredRecords.length === 0 ? (
+          <HistoryLoadingOrEmpty loading={loading} empty={filteredRecords.length === 0} />
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -4241,6 +4419,7 @@ function SalidasTab({
                   <SortableTh label={tr("Producto")} field="inventory.product_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label={tr("Cantidad")} field="quantity" className="text-right" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label={tr("Molienda")} field="molienda" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
+                  <th className={thCls}>{tr("Tipo")}</th>
                   <SortableTh label={tr("Motivo")} field="reason" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <SortableTh label={tr("Responsable")} field="responsable" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
                   <th className={thCls}>{tr("Acciones")}</th>
@@ -4268,6 +4447,10 @@ function SalidasTab({
                       <td className={tdCls}>
                         <MoliendaBadge value={r.molienda} />
                       </td>
+                      <td className={tdCls}>
+                        <ExitKindBadge record={r} />
+                        {r.exit_to && <span className="block text-[11px] text-foreground/50 mt-1">{r.exit_to}</span>}
+                      </td>
                       <td className={`${tdCls} text-foreground/50`}>
                         {tr.msg(r.reason) || "—"}
                         {r.income_id && (
@@ -4293,7 +4476,7 @@ function SalidasTab({
           </div>
           <PaginationControls
             currentPage={currentPage}
-            totalItems={records.length}
+            totalItems={filteredRecords.length}
             onPageChange={setCurrentPage}
           />
         </>
