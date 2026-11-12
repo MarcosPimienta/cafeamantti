@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, Loader2, X } from "lucide-react";
-import { registerCollection } from "./receiptActions";
-import { collectionProblems, type OpenInvoice } from "@/utils/invoices/collections";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
+import { AlertTriangle, Loader2, Plus, X } from "lucide-react";
+import { getRetentionOptions, registerCollection } from "./receiptActions";
+import { collectionProblems, computeRetention, retentionTotal, type CollectionRetention, type OpenInvoice, type RetentionOption } from "@/utils/invoices/collections";
 import type { ReceivableInvoice } from "@/utils/invoices/receivables";
 import { siteName, type SiteInfo } from "@/utils/invoices/receivablesExcel";
 import { useTr } from "@/app/(admin)/AdminI18n";
@@ -33,6 +33,15 @@ export default function CollectionForm({ invoices, debtors, clientKey: initialCl
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
+  /** Withholdings the customer applied, per invoice. */
+  const [rets, setRets] = useState<Record<string, CollectionRetention[]>>({});
+  /** The invoice whose "add withholding" picker is open. */
+  const [picking, setPicking] = useState<string | null>(null);
+  const [options, setOptions] = useState<RetentionOption[]>([]);
+  const [optionsError, setOptionsError] = useState("");
+  useEffect(() => {
+    getRetentionOptions().then((r) => { setOptions(r.options); setOptionsError(r.error ?? ""); }).catch(() => setOptionsError("No se pudieron leer las retenciones de Siigo."));
+  }, []);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -40,17 +49,23 @@ export default function CollectionForm({ invoices, debtors, clientKey: initialCl
     () => invoices.filter((i) => keyOf(i) === clientKey && i.balance > 0.5).sort((a, b) => (a.due_date ?? a.issue_date).localeCompare(b.due_date ?? b.issue_date) || a.name.localeCompare(b.name)),
     [invoices, clientKey, keyOf]
   );
-  const openInvoices: OpenInvoice[] = open.map((i) => ({ id: i.id, name: i.name, due_date: i.due_date, balance: i.balance, branch_office: i.branch_office ?? 0, customer_identification: i.customer_identification }));
-  const assigned = open.map((i) => ({ invoiceId: i.id, value: Number(values[i.id] || 0) })).filter((a) => a.value > 0);
+  const openInvoices: OpenInvoice[] = open.map((i) => ({ id: i.id, name: i.name, due_date: i.due_date, balance: i.balance, branch_office: i.branch_office ?? 0, customer_identification: i.customer_identification, subtotal: i.subtotal, iva: i.iva }));
+  const retsOf = (id: string) => rets[id] ?? [];
+  const assigned = open
+    .map((i) => ({ invoiceId: i.id, value: Number(values[i.id] || 0), retentions: retsOf(i.id) }))
+    .filter((a) => a.value > 0 || a.retentions.length > 0);
   const total = round2(assigned.reduce((s, a) => s + a.value, 0));
+  const withheld = round2(assigned.reduce((s, a) => s + retentionTotal(a), 0));
+  const setRet = (id: string, list: CollectionRetention[]) => setRets({ ...rets, [id]: list });
   const left = round2(Number(amount || 0) - total);
-  const branches = new Set(open.filter((i) => Number(values[i.id] || 0) > 0).map((i) => i.branch_office ?? 0));
+  const branches = new Set(open.filter((i) => assigned.some((x) => x.invoiceId === i.id)).map((i) => i.branch_office ?? 0));
   const problems = clientKey ? collectionProblems({ date, amount: Number(amount || 0), method, assigned }, openInvoices, today) : [tr("Elige el cliente.")];
 
   const save = () =>
     startTransition(async () => {
       setError("");
       const res = await registerCollection({ date, amount: Number(amount), method, notes, assigned });
+      const warnings = res.success ? res.receipts.map((r) => r.warning).filter((w): w is string => !!w) : [];
       if (!res.success) return setError(res.error);
       const sent = res.receipts.filter((r) => r.sent).map((r) => r.name ?? "");
       const failed = res.receipts.filter((r) => !r.sent);
@@ -58,6 +73,7 @@ export default function CollectionForm({ invoices, debtors, clientKey: initialCl
         [
           sent.length ? tr("Cobro registrado en Siigo: {names}.", { names: sent.join(", ") }) : "",
           failed.length ? tr("Siigo no recibió {n} recibo(s): {error}. Quedó en el historial para reintentar.", { n: String(failed.length), error: tr.msg(failed[0].error ?? "") }) : "",
+          ...warnings.map((w) => tr.msg(w)),
         ].filter(Boolean).join(" ")
       );
     });
@@ -77,7 +93,7 @@ export default function CollectionForm({ invoices, debtors, clientKey: initialCl
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 [&>*]:min-w-0">
           <label className="md:col-span-2 text-xs font-bold text-foreground/60 space-y-1">
             <span>{tr("Cliente")}</span>
-            <select value={clientKey} onChange={(e) => { setClientKey(e.target.value); setValues({}); }} className={field}>
+            <select value={clientKey} onChange={(e) => { setClientKey(e.target.value); setValues({}); setRets({}); setPicking(null); }} className={field}>
               <option value="">{tr("— Elige —")}</option>
               {debtors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -106,30 +122,74 @@ export default function CollectionForm({ invoices, debtors, clientKey: initialCl
         {clientKey && (
           <div className="space-y-2">
             <p className="text-xs font-bold text-foreground/60">{tr("Facturas con saldo: escribe cuánto del abono va a cada una")}</p>
+            <p className="text-[11px] text-foreground/50">{tr("¿El cliente pagó menos porque aplicó retención? Agrégala en «+ Retención»: también paga la factura, aunque no entre dinero.")}</p>
             {open.length === 0 ? (
               <p className="text-sm text-foreground/50">{tr("Este cliente no tiene facturas con saldo.")}</p>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-foreground/10">
-                <table className="w-full min-w-[560px] text-xs">
+                <table className="w-full min-w-[640px] text-xs">
                   <thead className="bg-foreground/[0.03] text-left text-foreground/50">
-                    <tr><th className="px-3 py-2">{tr("Factura")}</th><th className="px-3 py-2">{tr("Sede")}</th><th className="px-3 py-2">{tr("Vence")}</th><th className="px-3 py-2 text-right">{tr("Saldo")}</th><th className="px-3 py-2 text-right">{tr("Abono")}</th></tr>
+                    <tr><th className="px-3 py-2">{tr("Factura")}</th><th className="px-3 py-2">{tr("Sede")}</th><th className="px-3 py-2">{tr("Vence")}</th><th className="px-3 py-2 text-right">{tr("Saldo")}</th><th className="px-3 py-2 text-right">{tr("Retención")}</th><th className="px-3 py-2 text-right">{tr("Abono")}</th></tr>
                   </thead>
                   <tbody>
-                    {open.map((i) => (
-                      <tr key={i.id} className="border-t border-foreground/5">
-                        <td className="px-3 py-1.5 font-mono">{i.name}</td>
-                        <td className="px-3 py-1.5">{siteName(i.site_id, sites)}</td>
-                        <td className="px-3 py-1.5">{i.due_date}</td>
-                        <td className="px-3 py-1.5 text-right">{cop(i.balance)}</td>
-                        <td className="px-3 py-1.5 text-right">
-                          <span className="inline-flex items-center gap-1.5">
-                            <button type="button" onClick={() => setValues({ ...values, [i.id]: String(i.balance) })} className="text-[10px] font-bold text-[#C59F59] hover:underline">{tr("Saldar")}</button>
-                            <input type="number" min={0} step="any" value={values[i.id] ?? ""} onChange={(e) => setValues({ ...values, [i.id]: e.target.value })}
-                              aria-label={tr("Abono a {name}", { name: i.name })} className="w-32 px-2 py-1 bg-white border border-foreground/10 rounded-lg text-xs text-right" />
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {open.map((i) => {
+                      const list = retsOf(i.id);
+                      const ret = retentionTotal({ retentions: list });
+                      const used = new Set(list.map((r) => r.type));
+                      return (
+                        <React.Fragment key={i.id}>
+                          <tr className="border-t border-foreground/5">
+                            <td className="px-3 py-1.5 font-mono">{i.name}</td>
+                            <td className="px-3 py-1.5">{siteName(i.site_id, sites)}</td>
+                            <td className="px-3 py-1.5">{i.due_date}</td>
+                            <td className="px-3 py-1.5 text-right">{cop(i.balance)}</td>
+                            <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                              {ret > 0 && <span className="mr-1.5 font-bold text-[#8a6a2f]">{cop(ret)}</span>}
+                              <button type="button" onClick={() => setPicking(picking === i.id ? null : i.id)} disabled={!options.length}
+                                className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#C59F59] hover:underline disabled:opacity-40">
+                                <Plus className="w-3 h-3" />{tr("Retención")}
+                              </button>
+                            </td>
+                            <td className="px-3 py-1.5 text-right">
+                              <span className="inline-flex items-center gap-1.5">
+                                <button type="button" onClick={() => setValues({ ...values, [i.id]: String(round2(Math.max(0, i.balance - ret))) })} className="text-[10px] font-bold text-[#C59F59] hover:underline">{tr("Saldar")}</button>
+                                <input type="number" min={0} step="any" value={values[i.id] ?? ""} onChange={(e) => setValues({ ...values, [i.id]: e.target.value })}
+                                  aria-label={tr("Abono a {name}", { name: i.name })} className="w-32 px-2 py-1 bg-white border border-foreground/10 rounded-lg text-xs text-right" />
+                              </span>
+                            </td>
+                          </tr>
+                          {(list.length > 0 || picking === i.id) && (
+                            <tr className="bg-[#fdfbf7]">
+                              <td colSpan={6} className="px-3 py-2">
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  {list.map((r, k) => (
+                                    <span key={r.id} className="inline-flex items-center gap-1.5 rounded-lg border border-[#C59F59]/30 bg-white px-2 py-1">
+                                      <span className="font-bold">{r.name}</span>
+                                      <span className="text-foreground/40">{tr("sobre {base}", { base: cop(r.base) })}</span>
+                                      <input type="number" min={0} step="any" value={r.value}
+                                        onChange={(e) => setRet(i.id, list.map((x, j) => (j === k ? { ...x, value: Number(e.target.value) || 0 } : x)))}
+                                        aria-label={tr("Valor de la {name} de {invoice}", { name: r.name, invoice: i.name })} className="w-24 px-2 py-0.5 border border-foreground/10 rounded text-right" />
+                                      <button type="button" onClick={() => setRet(i.id, list.filter((_, j) => j !== k))} aria-label={tr("Quitar")} className="text-foreground/40 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                                    </span>
+                                  ))}
+                                  {picking === i.id && (
+                                    <select autoFocus defaultValue="" aria-label={tr("Tipo de retención")} className="px-2 py-1 bg-white border border-foreground/10 rounded-lg"
+                                      onChange={(e) => {
+                                        const opt = options.find((o) => String(o.id) === e.target.value);
+                                        if (opt) setRet(i.id, [...list, computeRetention(opt, i)]);
+                                        setPicking(null);
+                                      }}>
+                                      <option value="" disabled>{tr("— Tipo de retención —")}</option>
+                                      {options.filter((o) => !used.has(o.type)).map((o) => <option key={o.id} value={o.id}>{o.name}{o.type === "ReteICA" ? " ‰" : ""}</option>)}
+                                    </select>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -138,6 +198,12 @@ export default function CollectionForm({ invoices, debtors, clientKey: initialCl
               {tr("Asignado {total} de {amount}", { total: cop(total), amount: cop(Number(amount || 0)) })}
               {Math.abs(left) > 0.5 ? ` · ${left > 0 ? tr("faltan {v}", { v: cop(left) }) : tr("sobran {v}", { v: cop(-left) })}` : ""}
             </p>
+            {withheld > 0 && (
+              <p className="text-[11px] text-right text-foreground/60">
+                {tr("Retenciones {ret} · las facturas bajan {applied} (abono + retención)", { ret: cop(withheld), applied: cop(round2(total + withheld)) })}
+              </p>
+            )}
+            {optionsError && <p className="text-[11px] text-amber-700">{tr("No se pudieron leer las retenciones de Siigo.")}</p>}
             {branches.size > 1 && <p className="text-[11px] text-foreground/50">{tr("Paga facturas de {n} sucursales en Siigo: se crea un recibo de caja por cada una.", { n: String(branches.size) })}</p>}
           </div>
         )}

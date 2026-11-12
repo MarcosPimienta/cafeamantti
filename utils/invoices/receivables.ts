@@ -20,6 +20,10 @@ export type ReceivableInvoice = {
   balance: number;
   /** The customer's Siigo branch (sucursal) it was issued to. */
   branch_office?: number;
+  /** Value before taxes (Retefuente and ReteICA are on it). */
+  subtotal?: number;
+  /** IVA charged (ReteIVA is on it). */
+  iva?: number;
 };
 
 export type ReceivableLine = {

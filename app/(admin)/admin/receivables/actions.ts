@@ -13,6 +13,7 @@ import { cleanIdentification } from '@/utils/siigo/mapping';
 import { addDays } from '@/utils/siigo/mapping';
 import { errorText, todayBogota } from '@/utils/siigo/server';
 import { siteFromObservations, type ReceivableInvoice } from '@/utils/invoices/receivables';
+import { invoiceAmounts, type SiigoInvoiceLine } from '@/utils/invoices/collections';
 
 /** How far back to look for unpaid invoices. */
 const LOOKBACK_DAYS = 400;
@@ -27,6 +28,7 @@ type SiigoInvoice = {
   observations?: string;
   customer?: { identification?: string; branch_office?: number };
   payments?: { due_date?: string }[];
+  items?: SiigoInvoiceLine[];
 };
 type Site = { id: string; client_id: string; name: string; address: string | null; city: string | null; siigo_branch_office: number | null };
 
@@ -91,6 +93,7 @@ export async function getReceivables() {
         total: Number(inv.total ?? 0),
         balance,
         branch_office: branch,
+        ...invoiceAmounts(inv.items, Number(inv.total ?? 0)),
       });
     }
     return { invoices, clients: (clients ?? []) as { id: string; name: string; document_number: string | null }[], sites: allSites, today, error: null };

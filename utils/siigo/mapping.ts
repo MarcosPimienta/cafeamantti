@@ -647,7 +647,15 @@ export function buildVoucherPayload(payment: AppPayment, invoice: EmittedInvoice
  * invoices of the same customer branch, also invoices made directly in Siigo.
  */
 export function buildCollectionVoucherPayload(
-  r: { receipt_date: string; amount: number; method: "transfer" | "cash"; customer_identification: string; branch_office: number; notes?: string | null; items: { name: string; due_date: string | null; value: number }[] },
+  r: {
+    receipt_date: string;
+    amount: number;
+    method: "transfer" | "cash";
+    customer_identification: string;
+    branch_office: number;
+    notes?: string | null;
+    items: { name: string; due_date: string | null; value: number; retentions?: { id: number; name: string; base: number; value: number }[] | null }[];
+  },
   settings: SiigoSettings
 ) {
   const problems: string[] = [];
@@ -656,13 +664,27 @@ export function buildCollectionVoucherPayload(
   if (!paymentId) problems.push("Elige la forma de pago de los recibos de caja para este medio en Ajustes → Siigo.");
   const { identification } = cleanIdentification(r.customer_identification);
   if (!identification) problems.push("El cliente no tiene identificación.");
+  let withheld = 0;
   const items = r.items.map((i) => {
     const due = splitDocumentName(i.name);
     if (!due) problems.push(`No se reconoce el número de la factura ${i.name}.`);
-    return { due: { prefix: due?.prefix ?? "", consecutive: due?.consecutive ?? 0, quote: 1, date: i.due_date ?? r.receipt_date }, value: round2(num(i.value)) };
+    // A withholding pays the invoice too: the item is all it takes off the
+    // balance (money + withholdings) and Siigo books each withholding on it.
+    const taxes = (i.retentions ?? []).filter((t) => num(t.value) > 0).map((t) => ({ id: t.id, base: round2(num(t.base)), value: round2(num(t.value)) }));
+    const retained = round2(taxes.reduce((s, t) => s + t.value, 0));
+    withheld = round2(withheld + retained);
+    return {
+      due: { prefix: due?.prefix ?? "", consecutive: due?.consecutive ?? 0, quote: 1, date: i.due_date ?? r.receipt_date },
+      ...(taxes.length ? { taxes } : {}),
+      value: round2(num(i.value) + retained),
+    };
   });
-  const value = round2(items.reduce((s, i) => s + i.value, 0));
+  // The money that came in: what the items take off, less the withholdings.
+  const value = round2(items.reduce((s, i) => s + i.value, 0) - withheld);
   if (Math.abs(value - round2(num(r.amount))) > 0.5) problems.push("Lo asignado a las facturas no cuadra con el valor del recibo.");
+  const retentionNote = r.items
+    .flatMap((i) => (i.retentions ?? []).filter((t) => num(t.value) > 0).map((t) => `${t.name} ${round2(num(t.value))} a ${i.name}`))
+    .join(", ");
   const payload = {
     document: { id: settings.voucher_document_id ?? 0 },
     date: r.receipt_date,
@@ -670,7 +692,7 @@ export function buildCollectionVoucherPayload(
     customer: { identification, branch_office: r.branch_office ?? 0 },
     items,
     payment: { id: paymentId ?? 0, value },
-    observations: [`Abono de ${r.items.map((i) => i.name).join(", ")} · Café Amantti`, r.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
+    observations: [`Abono de ${r.items.map((i) => i.name).join(", ")} · Café Amantti`, retentionNote ? `Retenciones: ${retentionNote}` : "", r.notes ?? ""].filter(Boolean).join(" · ").slice(0, 4000),
   };
   return { payload, problems };
 }

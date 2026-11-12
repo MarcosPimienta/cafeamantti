@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { collectionProblems, itemsOfVoucher, receiptConcept, receiptsByBranch, vouchersToImport, type OpenInvoice } from "../collections";
+import { collectionProblems, computeRetention, invoiceAmounts, itemsOfVoucher, normalizeRetentions, receiptConcept, receiptsByBranch, vouchersToImport, type OpenInvoice, type RetentionOption } from "../collections";
 import { buildCollectionVoucherPayload, type SiigoSettings } from "@/utils/siigo/mapping";
 
 const inv = (o: Partial<OpenInvoice>): OpenInvoice => ({ id: "a", name: "FV-2-524", due_date: "2026-03-13", balance: 479587.5, branch_office: 0, customer_identification: "901656887", ...o });
@@ -67,5 +67,54 @@ describe("cobros (customer deposits)", () => {
       { siigo_invoice_id: null, name: "FV-2-702", due_date: "2026-10-21", value: 310162.5 },
     ]);
     expect(receiptConcept({ siigo_name: "RC-1-249", customer_name: "ELEVATE", items: [{ siigo_invoice_id: null, name: "FV-2-702", due_date: null, value: 1 }] })).toBe("RC-1-249 · ELEVATE · FV-2-702");
+  });
+
+  describe("withholdings (retenciones)", () => {
+    // FV-2-724 (Grupo NONNA): 6 × 140.400 + IVA 5 % = 884.520.
+    const RETE: RetentionOption = { id: 9760, type: "Retefuente", name: "Retefuente 2.5%", percentage: 2.5 };
+    const ICA: RetentionOption = { id: 9763, type: "ReteICA", name: "ReteICA 9.66", percentage: 9.66 };
+    const RIVA: RetentionOption = { id: 9768, type: "ReteIVA", name: "ReteIVA 15%", percentage: 15 };
+    const amounts = invoiceAmounts([{ quantity: 6, price: 140400, taxes: [{ type: "IVA", value: 42120 }] }], 884520);
+    const nonna = inv({ id: "n", name: "FV-2-724", balance: 884520, customer_identification: "901774397", ...amounts });
+
+    it("takes the base from the invoice and computes each kind (ReteICA per thousand)", () => {
+      expect(amounts).toEqual({ subtotal: 842400, iva: 42120 });
+      expect(computeRetention(RETE, nonna)).toMatchObject({ base: 842400, value: 21060 });
+      expect(computeRetention(ICA, nonna)).toMatchObject({ base: 842400, value: 8138 });
+      expect(computeRetention(RIVA, nonna)).toMatchObject({ base: 42120, value: 6318 });
+      expect(invoiceAmounts([{ quantity: 1, price: 100 }], 105)).toEqual({ subtotal: 100, iva: 5 });
+    });
+
+    it("money plus withholding settles the invoice; the deposit is only the money", () => {
+      const rete = computeRetention(RETE, nonna);
+      const c = { date: "2026-11-05", amount: 863460, method: "transfer", assigned: [{ invoiceId: "n", value: 863460, retentions: [rete] }] };
+      expect(collectionProblems(c, [nonna], "2026-11-12")).toEqual([]);
+      expect(collectionProblems({ ...c, amount: 884520, assigned: [{ invoiceId: "n", value: 884520, retentions: [rete] }] }, [nonna], "2026-11-12")).toEqual([
+        "FV-2-724: el abono más la retención supera su saldo (884520).",
+      ]);
+      expect(collectionProblems({ ...c, assigned: [{ invoiceId: "n", value: 863460, retentions: [rete, { ...rete }] }] }, [nonna], "2026-11-12")).toContain("FV-2-724: hay dos retenciones del mismo tipo.");
+      // The money came before and only the withholding is left: a $0 receipt settles it.
+      const left = inv({ ...nonna, balance: 21060 });
+      expect(collectionProblems({ ...c, amount: 0, assigned: [{ invoiceId: "n", value: 0, retentions: [rete] }] }, [left], "2026-11-12")).toEqual([]);
+      expect(collectionProblems({ ...c, amount: 0, assigned: [{ invoiceId: "n", value: 0 }] }, [left], "2026-11-12")).toContain("Escribe el valor del abono.");
+    });
+
+    it("the RC sends the withholding as a tax of the invoice and the payment as the money", () => {
+      const rete = computeRetention(RETE, nonna);
+      const items = receiptsByBranch([{ invoiceId: "n", value: 863460, retentions: [rete] }], [nonna]).get(0)!;
+      expect(items[0]).toMatchObject({ value: 863460, retentions: [{ id: 9760, base: 842400, value: 21060 }] });
+      const settings = { voucher_document_id: 18127, voucher_transfer_id: 8399 } as SiigoSettings;
+      const { payload, problems } = buildCollectionVoucherPayload({ receipt_date: "2026-11-05", amount: 863460, method: "transfer", customer_identification: "901774397", branch_office: 0, items }, settings);
+      expect(problems).toEqual([]);
+      expect(payload.items).toEqual([{ due: { prefix: "FV-2", consecutive: 724, quote: 1, date: "2026-03-13" }, taxes: [{ id: 9760, base: 842400, value: 21060 }], value: 884520 }]);
+      expect(payload.payment).toEqual({ id: 8399, value: 863460 });
+      expect(payload.observations).toContain("Retenciones: Retefuente 2.5% 21060 a FV-2-724");
+    });
+
+    it("the server keeps only Siigo's withholdings, on the invoice's own base", () => {
+      const sent = [{ ...computeRetention(RETE, nonna), base: 1, percentage: 99 }];
+      expect(normalizeRetentions(sent, [RETE], nonna)).toEqual([{ ...RETE, base: 842400, value: 21060 }]);
+      expect(() => normalizeRetentions([{ ...computeRetention(RETE, nonna), id: 1 }], [RETE], nonna)).toThrow("no existe en Siigo");
+    });
   });
 });
