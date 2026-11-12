@@ -17,6 +17,7 @@ import { siteLabel, type ClientSite } from '@/utils/clients/sites';
 import { restockCreditNote, syncOrderStock } from '@/utils/orders/stock';
 import { pricesIncludeTax } from '@/utils/orders/tax';
 import { mergeCreditNotes, type AppCreditNote, type CreditNoteRow, type SiigoCreditNoteDoc } from '@/utils/invoices/creditNotesList';
+import { GENERIC_ERROR_ES, findSentInvoice, isGenericSiigoError, orderTag, type SiigoInvoiceDoc } from '@/utils/invoices/sentInvoice';
 import { CREDIT_REASONS, balanceDue, creditNoteLines, invoiceLinesFromOrder, paymentProblems, relinkLines, paymentState, type CreditInput, type CreditNoteLine, type InvoiceLine, type PaymentMethod } from '@/utils/invoices/ledger';
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261019000000_sales_invoices.sql';
@@ -109,7 +110,7 @@ async function siteOf(supabase: Supabase, siteId: string | null | undefined): Pr
   return (data as ClientSite | null) ?? null;
 }
 
-type SiigoInvoiceOut = { id: string; name?: string; prefix?: string; number?: number; public_url?: string; stamp?: { status?: string; cufe?: string; errors?: string } };
+type SiigoInvoiceOut = { id: string; name?: string; date?: string; prefix?: string; number?: number; public_url?: string; stamp?: { status?: string; cufe?: string; errors?: string } };
 
 /** An unsent invoice with its products' current Siigo links, saved when they changed. */
 async function withCurrentLinks<T extends { id: string; lines: unknown }>(supabase: Supabase, inv: T): Promise<T> {
@@ -122,6 +123,29 @@ async function withCurrentLinks<T extends { id: string; lines: unknown }>(supaba
   if (next === lines) return inv;
   await supabase.from('sales_invoices').update({ lines: next }).eq('id', inv.id);
   return { ...inv, lines: next };
+}
+
+/**
+ * The invoice Siigo already made for this app invoice, if any: Siigo can
+ * answer a POST with an error and create the invoice anyway. Looks from the
+ * day before the app invoice was created. Never throws (null on doubt).
+ */
+async function sentInvoiceOf(supabase: Supabase, inv: { order_id: string; total: number; created_at?: string | null }, identification: string | null): Promise<SiigoInvoiceOut | null> {
+  try {
+    const created = inv.created_at ? new Date(inv.created_at) : new Date();
+    const since = new Date(created.getTime() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const tag = orderTag(inv.order_id);
+    const docs = (await getSiigoClient().listAll<SiigoInvoiceDoc>('/v1/invoices', { created_start: since })).filter((d) => (d.observations ?? '').includes(tag));
+    if (!docs.length) return null;
+    const { data } = await supabase.from('sales_invoices').select('siigo_invoice_id').in('siigo_invoice_id', docs.map((d) => d.id));
+    const taken = new Set((data ?? []).map((r) => r.siigo_invoice_id as string));
+    const found = findSentInvoice(docs, { orderId: inv.order_id, identification, total: Number(inv.total) }, taken);
+    if (!found) return null;
+    return { id: found.id, name: found.name, date: found.date, public_url: found.public_url, stamp: found.stamp ?? undefined };
+  } catch (err) {
+    console.error('sentInvoiceOf:', errorText(err));
+    return null;
+  }
 }
 
 /** Sum of an invoice's credit notes (0 before their migration). */
@@ -546,12 +570,24 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
         const branchOffice = site && client && named ? await ensureSiigoBranch(supabase, userId, client, site) : 0;
         const { payload, problems } = siigoPayload(inv, identification, settings, today, { branchOffice, label: site ? siteLabel(site) : null });
         if (problems.length) throw new Error(problems.join(' · '));
-        const out = await siigo.request<SiigoInvoiceOut>('POST', '/v1/invoices', {
-          body: payload,
-          // Same key for the same invoice: a retry never creates a second one.
-          idempotencyKey: idempotencyKey('INV', inv.id),
-        });
-        const dueDate = credit ? addDays(today, inv.term_days) : today;
+        // A failed send may have reached Siigo anyway: take that invoice instead of making another.
+        let out = inv.status === 'error' ? await sentInvoiceOf(supabase, inv, identification) : null;
+        if (!out) {
+          try {
+            out = await siigo.request<SiigoInvoiceOut>('POST', '/v1/invoices', {
+              body: payload,
+              // Same key for the same invoice: a retry never creates a second one.
+              idempotencyKey: idempotencyKey('INV', inv.id),
+            });
+          } catch (postErr) {
+            // Siigo's reasonless error: it may have created the invoice all the same.
+            if (!isGenericSiigoError(errorText(postErr))) throw postErr;
+            out = await sentInvoiceOf(supabase, inv, identification);
+            if (!out) throw new Error(GENERIC_ERROR_ES);
+          }
+        }
+        const issued = out.date?.slice(0, 10) || today;
+        const dueDate = credit ? addDays(issued, inv.term_days) : issued;
         const siigoFields = {
           siigo_invoice_id: out.id,
           siigo_status: out.stamp?.status ?? (settings.stamp_dian ? 'Pending' : 'Draft'),
@@ -559,7 +595,7 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
           siigo_public_url: out.public_url ?? null,
           siigo_error: out.stamp?.errors || null,
         };
-        await updateRow(supabase, 'sales_invoices', inv.id, { ...siigoFields, siigo_name: out.name ?? null, status: 'emitida', issue_date: today, due_date: dueDate, customer_identification: identification, branch_office: branchOffice, updated_at: new Date().toISOString() });
+        await updateRow(supabase, 'sales_invoices', inv.id, { ...siigoFields, siigo_name: out.name ?? null, status: 'emitida', issue_date: issued, due_date: dueDate, customer_identification: identification, branch_office: branchOffice, updated_at: new Date().toISOString() });
         // The order shows its invoice as before.
         await updateRow(supabase, 'orders', inv.order_id, { ...siigoFields, siigo_invoice: out.name ?? null }).catch((e) => console.error('order siigo fields:', errorText(e)));
         await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, siigo_id: out.id, siigo_name: out.name ?? null, status: 'ok', message: out.stamp?.status ?? null });

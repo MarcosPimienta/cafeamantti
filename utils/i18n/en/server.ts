@@ -7,6 +7,7 @@ export const server: Record<string, string> = {
   "El cliente tiene pedidos, facturas, cotizaciones o comodatos: no se puede eliminar.": "The customer has orders, invoices, quotes or loaned machines: it cannot be deleted.",
   "No autorizado.": "Not authorized.",
   // Siigo payloads
+  "Siigo no aceptó la factura y no dijo por qué. A veces está lento y la crea unos minutos después: espera un momento y dale a «Enviar solo esta» otra vez; la app revisa primero si ya quedó creada en Siigo.": "Siigo did not accept the invoice and gave no reason. Sometimes it is slow and creates it a few minutes later: wait a moment and press «Send only this one» again; the app first checks whether it was already created in Siigo.",
   "{name}: falta la cédula o NIT.": "{name}: missing ID number or NIT.",
   "{name}: falta el código DANE de la ciudad (5 dígitos, ej. 05001 Medellín).": "{name}: missing the city DANE code (5 digits, e.g. 05001 Medellín).",
   "{name}: falta la dirección.": "{name}: missing the address.",
