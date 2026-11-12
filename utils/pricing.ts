@@ -17,11 +17,14 @@ const PROFILE_BY_ID: Record<string, StoreProfile> = {
   curator: "chiroso",
 };
 
-/** Retail price per bag (COP, includes $10.000 of base shipping). */
+/**
+ * Retail price per bag (COP, "precio cliente final", shipping included;
+ * $10.000 of it is the base shipping). Price list of 2026-11-12.
+ */
 export const STORE_PRICES: Record<StoreProfile, Record<StoreWeight, number>> = {
-  premium: { "250g": 35000, "500g": 63000, "2.5kg": 165000 },
-  honey: { "250g": 48000, "500g": 86400, "2.5kg": 240000 },
-  chiroso: { "250g": 65000, "500g": 117000, "2.5kg": 320000 },
+  premium: { "250g": 41800, "500g": 76000, "2.5kg": 304000 },
+  honey: { "250g": 66500, "500g": 114000, "2.5kg": 456000 },
+  chiroso: { "250g": 62700, "500g": 114000, "2.5kg": 437000 },
 };
 
 /** Sizes the online store actually sells per profile. */

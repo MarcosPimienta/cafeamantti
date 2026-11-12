@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCart } from "@/app/context/CartContext";
+import { STORE_PRICES } from "@/utils/pricing";
 
 function CheckoutResponseContent() {
   const searchParams = useSearchParams();
@@ -172,7 +173,7 @@ function CheckoutResponseContent() {
                     </span>
                   </div>
                   <span className="text-xs font-serif text-[#C2A878] font-bold">
-                    {formatCurrency(txData?.x_amount || 35000)} / envío
+                    {formatCurrency(txData?.x_amount || STORE_PRICES.premium["250g"])} / envío
                   </span>
                 </div>
 

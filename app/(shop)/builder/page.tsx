@@ -23,7 +23,7 @@ import { useSearchParams } from "next/navigation";
 import { upsertSubscription, getSubscription, getSubscriptionStock } from "./actions";
 import { CheckoutModal } from "@/app/components/CheckoutModal";
 import { calculateMetropolitanShipping } from "@/utils/shipping";
-import { calculateCoffeePrice } from "@/utils/pricing";
+import { calculateCoffeePrice, STORE_PRICES } from "@/utils/pricing";
 
 // Prices live in utils/pricing (shared with the server, which charges them).
 export { calculateCoffeePrice } from "@/utils/pricing";
@@ -32,21 +32,21 @@ const PLANS = [
   {
     id: "essential",
     name: "Premium",
-    price: 35000,
+    price: STORE_PRICES.premium["250g"],
     image: "/images/Premium_Bag.jpeg",
     description: "El café esencial con perfil clásico colombiano, balanceado y constante.",
   },
   {
     id: "alchemy",
     name: "Honey Process",
-    price: 48000,
+    price: STORE_PRICES.honey["250g"],
     image: "/images/Honey_Bag.jpeg",
     description: "Perfil dulce y exótico que conserva el mucílago natural de la cereza.",
   },
   {
     id: "curator",
     name: "Chiroso",
-    price: 65000,
+    price: STORE_PRICES.chiroso["250g"],
     image: "/images/Especial_Bag.jpeg",
     description: "Pequeños lotes de variedades exóticas y procesos experimentales.",
   },
@@ -63,21 +63,21 @@ const CUSTOM_PRODUCTS = [
   {
     id: "essential",
     name: "Premium",
-    basePrice: 35000,
+    basePrice: STORE_PRICES.premium["250g"],
     image: "/images/Premium_Bag.jpeg",
     codePrefix: "CAFT"
   },
   {
     id: "alchemy",
     name: "Honey Process",
-    basePrice: 48000,
+    basePrice: STORE_PRICES.honey["250g"],
     image: "/images/Honey_Bag.jpeg",
     codePrefix: "CAFT-HON"
   },
   {
     id: "curator",
     name: "Chiroso",
-    basePrice: 65000,
+    basePrice: STORE_PRICES.chiroso["250g"],
     image: "/images/Especial_Bag.jpeg",
     codePrefix: "CAFT-MIC"
   }

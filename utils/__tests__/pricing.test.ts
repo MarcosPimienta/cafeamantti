@@ -3,12 +3,12 @@ import { storePrice, calculateCoffeePrice, inventoryCodeFor, storeProfileOf, STO
 
 describe("store price list", () => {
   it.each([
-    ["firma", "250g", 35000],
-    ["firma", "2.5kg", 165000],
-    ["honey", "500g", 86400],
-    ["microlot", "250g", 65000],
-    ["essential", "500g", 63000], // subscription plan ids share the list
-    ["curator", "500g", 117000],
+    ["firma", "250g", 41800],
+    ["firma", "2.5kg", 304000],
+    ["honey", "500g", 114000],
+    ["microlot", "250g", 62700],
+    ["essential", "500g", 76000], // subscription plan ids share the list
+    ["curator", "500g", 114000],
   ])("%s %s costs %i", (id, w, price) => {
     expect(storePrice(id, w)).toBe(price);
   });
@@ -22,7 +22,7 @@ describe("store price list", () => {
 
   it("the display price keeps the builder's old behaviour (all sizes, fallback)", () => {
     expect(calculateCoffeePrice("alchemy", "2.5kg")).toBe(STORE_PRICES.honey["2.5kg"]);
-    expect(calculateCoffeePrice("unknown", "250g")).toBe(35000);
+    expect(calculateCoffeePrice("unknown", "250g")).toBe(41800);
   });
 
   it("maps a store line to its inventory product", () => {
