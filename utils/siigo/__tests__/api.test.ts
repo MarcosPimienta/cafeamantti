@@ -53,6 +53,24 @@ describe("SiigoClient", () => {
     expect(sleep).toHaveBeenNthCalledWith(2, 4000);
   });
 
+  it("retries a login Siigo refuses under load (403 on /auth)", async () => {
+    const { client, calls, sleep } = setup([() => json(403, {}), () => json(403, {}), token(), () => json(200, { ok: 1 })]);
+    expect(await client.request("GET", "/v1/taxes")).toEqual({ ok: 1 });
+    expect(calls.filter((c) => c.url.endsWith("/auth"))).toHaveLength(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on 403 after the retries", async () => {
+    const { client } = setup([403, 403, 403, 403].map((s) => () => json(s, {})));
+    await expect(client.request("GET", "/v1/taxes")).rejects.toThrow(/Autenticación con Siigo: El usuario API de Siigo no tiene permiso/);
+  });
+
+  it("concurrent requests share one login", async () => {
+    const { client, calls } = setup([token(), () => json(200, { a: 1 }), () => json(200, { b: 2 })]);
+    await Promise.all([client.request("GET", "/v1/taxes"), client.request("GET", "/v1/users")]);
+    expect(calls.filter((c) => c.url.endsWith("/auth"))).toHaveLength(1);
+  });
+
   it("sends Idempotency-Key only on POST", async () => {
     const { client, calls } = setup([token(), () => json(201, { id: "inv" }), () => json(200, {})]);
     await client.request("POST", "/v1/invoices", { body: { a: 1 }, idempotencyKey: "FVabc" });

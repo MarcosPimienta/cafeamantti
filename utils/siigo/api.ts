@@ -9,7 +9,8 @@
 //
 // Rules from Siigo's docs that shape this client:
 // - POST /auth returns a token valid 24 h → cached and renewed before expiry
-//   (and once more if a request still gets 401).
+//   (and once more if a request still gets 401). Concurrent requests share
+//   one login, and a login refused for load (403/429/5xx) is retried.
 // - At most 100 requests per minute per company (10 in the sandbox) → 429s
 //   are retried with exponential backoff.
 // - Creating documents can take long at peak hours → 120 s timeout.
@@ -114,23 +115,44 @@ export class SiigoClient {
     }
   }
 
+  private pendingAuth: Promise<string> | null = null;
+
+  /**
+   * The bearer token. Concurrent callers share one login, and a login Siigo
+   * turns away for load (403/429/5xx, as /auth does on bursts) is retried
+   * with backoff; 401 means bad credentials and fails at once.
+   */
   private async authenticate(force = false): Promise<string> {
     // Renew 10 minutes before Siigo's 24 h expiry.
     if (!force && this.token && this.now() < this.tokenExpiresAt - 10 * 60_000) return this.token;
-    const res = await this.call("/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Partner-Id": this.config.partnerId },
-      body: JSON.stringify({ username: this.config.username, access_key: this.config.accessKey }),
+    if (this.pendingAuth) return this.pendingAuth;
+    this.pendingAuth = this.login().finally(() => {
+      this.pendingAuth = null;
     });
-    const body = await res.json().catch(() => null);
-    if (!res.ok || !body?.access_token) {
+    return this.pendingAuth;
+  }
+
+  private async login(): Promise<string> {
+    for (let attempt = 0; ; attempt++) {
+      const res = await this.call("/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Partner-Id": this.config.partnerId },
+        body: JSON.stringify({ username: this.config.username, access_key: this.config.accessKey }),
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok && body?.access_token) {
+        this.token = body.access_token as string;
+        // Docs say "milliseconds" but the value (86400) is seconds: 24 h.
+        this.tokenExpiresAt = this.now() + Number(body.expires_in ?? 86400) * 1000;
+        return this.token;
+      }
+      if ([403, 429, 500, 502, 503, 504].includes(res.status) && attempt < MAX_RETRIES) {
+        await this.sleep(2 ** attempt * 2000);
+        continue;
+      }
       const { message, errors } = describeSiigoErrors(res.status, body);
       throw new SiigoError(`Autenticación con Siigo: ${message}`, res.status, errors);
     }
-    this.token = body.access_token as string;
-    // Docs say "milliseconds" but the value (86400) is seconds: 24 h.
-    this.tokenExpiresAt = this.now() + Number(body.expires_in ?? 86400) * 1000;
-    return this.token;
   }
 
   async request<T = unknown>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, opts: RequestOptions = {}): Promise<T> {
