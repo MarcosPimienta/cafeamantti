@@ -3098,25 +3098,12 @@ function TostionTab({
 
 // ─── Producción Altas Tab ─────────────────────────────────────────────────────
 
-const FINISHED_CODES = [
-  "CAFT-001",
-  "CAFT-125G",
-  "CAFT-250G",
-  "CAFT-500G",
-  "CAFT-2K5",
-  // Honey Process Limitado
-  "CAFT-HON-001",
-  "CAFT-HON-125G",
-  "CAFT-HON-250G",
-  "CAFT-HON-500G",
-  // Microlote del Mes
-  "CAFT-MIC-001",
-  "CAFT-MIC-125G",
-  "CAFT-MIC-250G",
-  "CAFT-MIC-500G",
-  // Cold Brew
-  "CAFC-340ML",
-];
+/**
+ * Products an alta can produce: roasted coffee (any profile) whose code gives
+ * its weight (CAFT-…-250G, CAFT-MIC-2K5, CAFT-HON-001…), so a new size shows
+ * up as soon as it is created with a well-formed code, plus Cold Brew.
+ */
+const isFinishedProduct = (code: string) => unitWeightKg(code) !== null || code === "CAFC-340ML";
 
 function ProdAltasTab({
   inventory,
@@ -3343,7 +3330,7 @@ function ProdAltasTab({
                   });
                 }}
                 inventory={inventory}
-                filter={(i) => FINISHED_CODES.includes(i.product_code)}
+                filter={(i) => isFinishedProduct(i.product_code)}
                 placeholder={tr("Seleccionar café tostado...")}
               />
             </div>
