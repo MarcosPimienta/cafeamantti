@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FileDown, Save, X } from 'lucide-react';
+import { Plus, FileDown, Save, Play } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { generateProposalPDF } from '@/utils/pdf/quoteGenerator';
-import { ProposalHTMLTemplate } from '../ProposalHTMLTemplate';
-import type { ProposalData } from '../ProposalHTMLTemplate';
+import { ProposalDeck, PresentMode, SLIDE_W } from '../ProposalSlides';
+import type { ProposalData } from '@/utils/proposals/slides';
 import BlockCard, { ProposalBlock, BlockType } from './blocks/BlockCard';
 import RichTextBlock from './blocks/RichTextBlock';
 import PriceTableBlock from './blocks/PriceTableBlock';
@@ -29,14 +28,19 @@ const DEFAULT_BLOCKS: ProposalBlock[] = [
 // Convert old-format sections to blocks (retrocompat)
 function migrateContent(content: any[]): ProposalBlock[] {
   return content.map((section: any, idx: number) => ({
+    ...section,
     id: section.id || `migrated_${idx}`,
     type: section.type || 'rich-text',
     title: section.title || '',
-    text: section.text,
-    items: section.items,
-    checklistItems: section.checklistItems,
   }));
 }
+
+/** Storage paths of the photos the blocks use (not the app's own /images). */
+function photoPaths(blocks: ProposalBlock[]): string[] {
+  return blocks.flatMap((b) => [b.imageUrl, ...(b.items ?? []).map((i) => i.imageUrl)]).filter((p): p is string => !!p && !p.startsWith('/') && !/^https?:/.test(p));
+}
+
+const PREVIEW_W = 448;
 
 interface ProposalFormProps {
   clients: any[];
@@ -83,6 +87,17 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
     initialProposal?.content ? migrateContent(initialProposal.content) : DEFAULT_BLOCKS
   );
 
+  // Signed URLs of the slide and product photos, by storage path
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+  const addPreview = useCallback((path: string, url: string) => setPreviews((p) => ({ ...p, [path]: url })), []);
+  useEffect(() => {
+    const paths = photoPaths(initialProposal?.content ? migrateContent(initialProposal.content) : []);
+    if (!paths.length) return;
+    import('@/utils/supabase/storage').then(({ getProposalAssetSignedUrls }) => getProposalAssetSignedUrls(paths)).then((urls) => setPreviews((p) => ({ ...urls, ...p })));
+  }, [initialProposal?.content]);
+  const [presenting, setPresenting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
   // Load signed URLs for existing assets on mount
   useEffect(() => {
     async function loadSignedUrls() {
@@ -125,13 +140,17 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
     date: currentDate || '...',
     title,
     subtitle: subtitle.replace('Cliente', client?.name || 'Cliente'),
-    content: blocks,
+    content: blocks.map((b) => ({
+      ...b,
+      imageUrl: signedOrLocal(b.imageUrl, previews),
+      items: b.items?.map((i) => ({ ...i, imageUrl: signedOrLocal(i.imageUrl, previews) })),
+    })),
     sellerName: sellerName || translate(docLang, 'Asesor Amantti'),
     allyLogoUrl: allyLogoSignedUrl || undefined,
     backgroundImageUrl: backgroundSignedUrl || undefined,
     backgroundOpacity,
     lang: docLang,
-  }), [client, currentDate, title, subtitle, blocks, sellerName, allyLogoSignedUrl, backgroundSignedUrl, backgroundOpacity, docLang]);
+  }), [client, currentDate, title, subtitle, blocks, previews, sellerName, allyLogoSignedUrl, backgroundSignedUrl, backgroundOpacity, docLang]);
 
   // Debounce preview updates by 300ms
   useEffect(() => {
@@ -188,9 +207,11 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
   };
 
   const handleDownloadPDF = async () => {
+    setExporting(true);
     try {
       const data = buildProposalData();
-      const blob = await generateProposalPDF(data, `Propuesta_${client?.name || 'Comercial'}.pdf`);
+      const { generateProposalSlidesPDF } = await import('@/utils/pdf/proposalSlides');
+      const blob = await generateProposalSlidesPDF(data);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -200,6 +221,8 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
     } catch (err) {
       console.error(err);
       alert(tr("Error generando PDF"));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -241,6 +264,8 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
       setIsSubmitting(false);
     }
   };
+
+  const closePresent = useCallback(() => setPresenting(false), []);
 
   const blockIds = useMemo(() => blocks.map(b => b.id), [blocks]);
 
@@ -388,10 +413,10 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
                         onDelete={() => deleteBlock(index)}
                       >
                         {block.type === 'rich-text' && (
-                          <RichTextBlock block={block} onUpdate={(updated) => updateBlock(index, updated)} />
+                          <RichTextBlock block={block} onUpdate={(updated) => updateBlock(index, updated)} previews={previews} onSigned={addPreview} />
                         )}
                         {block.type === 'price-table' && (
-                          <PriceTableBlock block={block} onUpdate={(updated) => updateBlock(index, updated)} />
+                          <PriceTableBlock block={block} onUpdate={(updated) => updateBlock(index, updated)} previews={previews} onSigned={addPreview} />
                         )}
                         {block.type === 'checklist' && (
                           <ChecklistBlock block={block} onUpdate={(updated) => updateBlock(index, updated)} />
@@ -428,11 +453,20 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
             <DocLanguagePicker value={docLang} onChange={setDocLang} />
             <button
               type="button"
+              onClick={() => setPresenting(true)}
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[#C59F59] text-[#292524] rounded-xl font-bold hover:bg-[#B38E4D] transition-colors"
+            >
+              <Play className="w-5 h-5" />
+              {tr("Presentar")}
+            </button>
+            <button
+              type="button"
               onClick={handleDownloadPDF}
-              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-foreground/5 text-foreground/70 rounded-xl font-bold hover:bg-foreground/10 transition-colors"
+              disabled={exporting}
+              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-foreground/5 text-foreground/70 rounded-xl font-bold hover:bg-foreground/10 transition-colors disabled:opacity-50"
             >
               <FileDown className="w-5 h-5" />
-              {tr("Descargar PDF")}
+              {exporting ? tr("Generando PDF...") : tr("Descargar PDF")}
             </button>
           </div>
         </div>
@@ -445,13 +479,19 @@ export default function ProposalForm({ clients, initialProposal, sellerName }: P
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             </div>
             <div className="p-4 overflow-auto max-h-[calc(100vh-140px)]">
-              <div className="origin-top-left scale-[0.55] w-[816px]" style={{ transformOrigin: 'top left' }}>
-                {debouncedPreview && <ProposalHTMLTemplate data={debouncedPreview} />}
-              </div>
+              {debouncedPreview && <ProposalDeck data={debouncedPreview} scale={PREVIEW_W / SLIDE_W} gap={14} />}
             </div>
           </div>
         </div>
       </div>
+      {presenting && <PresentMode data={buildProposalData()} onClose={closePresent} />}
     </form>
   );
+}
+
+/** A photo's URL for the slides: the signed one, the app's own image, or none yet. */
+function signedOrLocal(path: string | undefined, previews: Record<string, string>): string | undefined {
+  if (!path) return undefined;
+  if (path.startsWith('/') || /^(https?|data):/.test(path)) return path;
+  return previews[path];
 }

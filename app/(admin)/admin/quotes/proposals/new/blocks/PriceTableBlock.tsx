@@ -4,10 +4,14 @@ import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { ProposalBlock, PriceTableItem } from './BlockCard';
 import { useTr } from "@/app/(admin)/AdminI18n";
+import PhotoPicker from './PhotoPicker';
 
 interface PriceTableBlockProps {
   block: ProposalBlock;
   onUpdate: (block: ProposalBlock) => void;
+  /** Signed URLs of uploaded photos, by storage path. */
+  previews: Record<string, string>;
+  onSigned: (path: string, url: string) => void;
 }
 
 function calculateMargin(cost: number, pvp: number): string {
@@ -16,13 +20,13 @@ function calculateMargin(cost: number, pvp: number): string {
   return `${margin.toFixed(1)}%`;
 }
 
-export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProps) {
+export default function PriceTableBlock({ block, onUpdate, previews, onSigned }: PriceTableBlockProps) {
   const tr = useTr();
   const items = block.items || [{ item: '', cost: 0, pvp: 0 }];
   const displayPvp = block.showPvp !== false;
   const displayMargin = displayPvp && block.showMargin !== false;
 
-  const updateItem = (index: number, field: keyof PriceTableItem, value: string | number) => {
+  const updateItem = (index: number, field: keyof PriceTableItem, value: string | number | undefined) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     onUpdate({ ...block, items: newItems });
@@ -83,6 +87,7 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
               {displayMargin && (
                 <th className="px-4 py-2.5 text-right font-semibold w-20">{tr("Margen")}</th>
               )}
+              <th className="px-2 py-2.5 w-12 font-semibold">{tr("Foto")}</th>
               <th className="px-2 py-2.5 w-10"></th>
             </tr>
           </thead>
@@ -129,6 +134,18 @@ export default function PriceTableBlock({ block, onUpdate }: PriceTableBlockProp
                     </span>
                   </td>
                 )}
+                <td className="px-2 py-2">
+                  <PhotoPicker
+                    compact
+                    path={row.imageUrl}
+                    preview={row.imageUrl ? previews[row.imageUrl] : undefined}
+                    label={tr("Foto del producto")}
+                    onChange={(path, url) => {
+                      if (path && url) onSigned(path, url);
+                      updateItem(i, 'imageUrl', path);
+                    }}
+                  />
+                </td>
                 <td className="px-2 py-2 text-center">
                   <button
                     type="button"

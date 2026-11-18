@@ -6,24 +6,18 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2, Type, Table, CheckSquare } from 'lucide-react';
 import { useTr } from "@/app/(admin)/AdminI18n";
 
-export type BlockType = 'rich-text' | 'price-table' | 'checklist';
+import type { ProposalBlock, SlideLayout } from '@/utils/proposals/slides';
+export type { ProposalBlock, PriceTableItem, SlideLayout } from '@/utils/proposals/slides';
 
-export interface ProposalBlock {
-  id: string;
-  type: BlockType;
-  title: string;
-  text?: string;
-  items?: PriceTableItem[];
-  checklistItems?: string[];
-  showPvp?: boolean;
-  showMargin?: boolean;
-}
+export type BlockType = ProposalBlock['type'];
 
-export interface PriceTableItem {
-  item: string;
-  cost: number;
-  pvp: number;
-}
+const LAYOUT_OPTIONS: { value: SlideLayout; label: string }[] = [
+  { value: 'auto', label: 'Automático' },
+  { value: 'split', label: 'Texto con foto' },
+  { value: 'columns', label: 'Columnas' },
+  { value: 'list', label: 'Lista' },
+  { value: 'close', label: 'Cierre' },
+];
 
 const TYPE_OPTIONS: { value: BlockType; label: string; icon: React.ReactNode }[] = [
   { value: 'rich-text', label: 'Texto', icon: <Type className="w-3.5 h-3.5" /> },
@@ -111,6 +105,20 @@ export default function BlockCard({ block, onUpdate, onDelete, children }: Block
         </div>
 
         <div className="flex-1" />
+
+        {block.type !== 'price-table' && (
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground/40">
+            <span className="hidden md:inline">{tr("Diapositiva")}</span>
+            <select
+              value={block.layout ?? 'auto'}
+              onChange={(e) => onUpdate({ ...block, layout: e.target.value as SlideLayout })}
+              className="bg-foreground/[0.04] border-none rounded-md text-xs font-semibold text-foreground/60 py-1.5 pl-2 pr-6 focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
+              title={tr("Cómo se ve este bloque en la presentación")}
+            >
+              {LAYOUT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{tr(o.label)}</option>)}
+            </select>
+          </label>
+        )}
 
         <button
           type="button"

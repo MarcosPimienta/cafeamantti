@@ -3,13 +3,17 @@
 import React, { useRef, useEffect } from 'react';
 import type { ProposalBlock } from './BlockCard';
 import { useTr } from "@/app/(admin)/AdminI18n";
+import PhotoPicker from './PhotoPicker';
 
 interface RichTextBlockProps {
   block: ProposalBlock;
   onUpdate: (block: ProposalBlock) => void;
+  /** Signed URLs of uploaded photos, by storage path. */
+  previews: Record<string, string>;
+  onSigned: (path: string, url: string) => void;
 }
 
-export default function RichTextBlock({ block, onUpdate }: RichTextBlockProps) {
+export default function RichTextBlock({ block, onUpdate, previews, onSigned }: RichTextBlockProps) {
   const tr = useTr();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -38,6 +42,18 @@ export default function RichTextBlock({ block, onUpdate }: RichTextBlockProps) {
         placeholder={tr("Escribe el contenido de esta sección...")}
         className="w-full p-4 bg-foreground/[0.02] border border-foreground/5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C59F59]/10 transition-all text-sm leading-relaxed resize-none min-h-[100px]"
       />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <PhotoPicker
+          path={block.imageUrl}
+          preview={block.imageUrl ? previews[block.imageUrl] : undefined}
+          label={tr("Foto de la diapositiva")}
+          onChange={(path, url) => {
+            if (path && url) onSigned(path, url);
+            onUpdate({ ...block, imageUrl: path });
+          }}
+        />
+        <span className="text-[11px] text-foreground/35">{tr("Viñetas con • o - ; «Título: texto» para columnas con título.")}</span>
+      </div>
     </div>
   );
 }

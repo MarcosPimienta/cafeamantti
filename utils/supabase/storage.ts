@@ -124,3 +124,19 @@ export async function getTechSheetAssetSignedUrl(path: string): Promise<string |
   return data.signedUrl;
 }
 
+
+/**
+ * Signed URLs (1 hour) for several files of the proposal-assets bucket at
+ * once, keyed by path. Paths that fail are left out.
+ */
+export async function getProposalAssetSignedUrls(paths: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (!unique.length) return {};
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage.from('proposal-assets').createSignedUrls(unique, 3600);
+  if (error || !data) {
+    console.error('Signed URLs error:', error);
+    return {};
+  }
+  return Object.fromEntries(data.filter((d) => d.signedUrl && d.path).map((d) => [d.path as string, d.signedUrl]));
+}
