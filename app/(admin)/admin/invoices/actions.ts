@@ -602,7 +602,9 @@ export async function sendPendingToSiigo(invoiceIds?: string[]) {
         report.invoicesSent.push(out.name ?? out.id);
       } catch (err) {
         const msg = message(err);
-        await supabase.from('sales_invoices').update({ status: 'error', siigo_error: msg, updated_at: new Date().toISOString() }).eq('id', inv.id);
+        // Another send of the same invoice may have just issued it (double click,
+        // two tabs): a failure here must not mark that one as failed.
+        await supabase.from('sales_invoices').update({ status: 'error', siigo_error: msg, updated_at: new Date().toISOString() }).eq('id', inv.id).neq('status', 'emitida');
         await siigoLog(supabase, userId, { entity: 'invoice', local_id: inv.order_id, status: 'error', message: msg });
         report.invoicesFailed.push({ id: inv.id, customer: inv.customer_name, error: msg });
       }
