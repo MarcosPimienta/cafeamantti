@@ -55,6 +55,8 @@ export interface Product {
   price: number;
   pvp: number;
   photo?: string;
+  /** Horizontal focus of the photo in the card ("40%"), so the bag stays in frame. */
+  focus?: string;
   art?: ProductArt;
   roast?: "dark" | "medium";
 }
@@ -75,7 +77,7 @@ export type Slide =
 
 export const DEFAULT_BACKGROUND = "/images/Main_Background.jpg";
 const COVER_PHOTO = "/images/Chemex_Especial_Bag.jpg";
-const SPLIT_PHOTOS = ["/images/Premium_Krups.jpg", "/images/Honey_FrenchPress.jpg", "/images/BG02.jpeg", "/images/GranosCafe.jpeg", "/images/Three_Bags.jpeg", "/images/BG01.jpg"];
+const SPLIT_PHOTOS = ["/images/BG02.jpeg", "/images/GranosCafe.jpeg", "/images/Three_Bags.jpeg", "/images/BG01.jpg"];
 
 const BULLET = /^\s*(?:[•\-*·▪◦]|\d{1,2}[.)])\s+/;
 
@@ -163,26 +165,34 @@ export function parseProduct(row: PriceTableItem): Product {
 
   const all = (row.item ?? "").toLowerCase();
   let photo: string | undefined;
+  let focus: string | undefined;
   let art: ProductArt | undefined;
   let roast: Product["roast"];
   if (/\bkit\b|ancheta|regalo/.test(all)) art = "gift";
   else if (/arom[áa]tica|infusi|t[ée]\b/.test(all)) art = "leaf";
   else if (/liofil|instant|soluble/.test(all)) art = "cup";
   else if (/institucional/.test(all)) {
-    art = "roast-dark";
+    photo = "/images/Institucional_Greca.jpg";
+    focus = "60%";
     roast = "dark";
-  } else if (/honey/.test(all)) photo = "/images/Honey_Bag.jpeg";
-  else if (/especial/.test(all)) photo = "/images/Especial_Bag.jpeg";
-  else if (/premium/.test(all)) {
-    photo = "/images/Premium_Bag.jpeg";
+  } else if (/honey/.test(all)) {
+    photo = "/images/Honey_FrenchPress.jpg";
+    focus = "65%";
+  } else if (/especial/.test(all)) {
+    photo = "/images/Chemex_Especial_Bag.jpg";
+    focus = "60%";
+  } else if (/premium/.test(all)) {
+    photo = "/images/Premium_Krups.jpg";
+    focus = "40%";
     roast = "medium";
   } else photo = "/images/Three_Bags.jpeg";
   if (row.imageUrl) {
     photo = row.imageUrl;
+    focus = undefined;
     art = undefined;
   }
 
-  return { name, detail, note, tax, price: Number(row.cost) || 0, pvp: Number(row.pvp) || 0, photo, art, roast };
+  return { name, detail, note, tax, price: Number(row.cost) || 0, pvp: Number(row.pvp) || 0, photo, focus, art, roast };
 }
 
 const textLength = (b: ProposalBlock) => (b.text ?? "").length;

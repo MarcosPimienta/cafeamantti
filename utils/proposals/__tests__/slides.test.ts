@@ -34,8 +34,10 @@ describe("reading a price row", () => {
 
   it("shortens the coffee name and reads the parenthesis and the IVA", () => {
     const p = parseProduct({ item: "Café Amantti institucional 2,5 kg (grano o molido), tostión más oscura y sabor intenso · IVA 5 %", cost: 125000, pvp: 0 });
-    expect(p).toMatchObject({ name: "Institucional 2,5 kg", detail: "Grano o molido, tostión más oscura y sabor intenso", tax: "IVA 5 %", roast: "dark", art: "roast-dark" });
-    expect(parseProduct({ item: "Café Amantti Premium 2,5 kg (grano o molido)", cost: 1, pvp: 0 })).toMatchObject({ name: "Premium 2,5 kg", detail: "Grano o molido", roast: "medium", photo: "/images/Premium_Bag.jpeg" });
+    expect(p).toMatchObject({ name: "Institucional 2,5 kg", detail: "Grano o molido, tostión más oscura y sabor intenso", tax: "IVA 5 %", roast: "dark", photo: "/images/Institucional_Greca.jpg" });
+    expect(parseProduct({ item: "Café Amantti Premium 2,5 kg (grano o molido)", cost: 1, pvp: 0 })).toMatchObject({ name: "Premium 2,5 kg", detail: "Grano o molido", roast: "medium", photo: "/images/Premium_Krups.jpg", focus: "40%" });
+    expect(parseProduct({ item: "Café Amantti Especial 250 g", cost: 1, pvp: 0 }).photo).toBe("/images/Chemex_Especial_Bag.jpg");
+    expect(parseProduct({ item: "Café Amantti Honey 250 g", cost: 1, pvp: 0 }).photo).toBe("/images/Honey_FrenchPress.jpg");
   });
 
   it("keeps names that would be empty or odd without the brand", () => {

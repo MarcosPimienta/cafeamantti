@@ -102,7 +102,7 @@ function ProductCard({ p, showPvp, compact, tr }: { p: Product; showPvp: boolean
   return (
     <div style={{ background: PANEL, border: `1px solid ${LINE}`, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ height: compact ? 150 : 172, flex: 'none' }}>
-        {p.art && !p.photo ? <Art kind={p.art} tr={tr} /> : <div style={photo(p.photo ?? '', { height: '100%' })} />}
+        {p.art && !p.photo ? <Art kind={p.art} tr={tr} /> : <div style={photo(p.photo ?? '', { height: '100%', ...(p.focus ? { backgroundPosition: `${p.focus} center` } : {}) })} />}
       </div>
       <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
         <div style={{ fontFamily: DISPLAY, fontStyle: 'italic', fontWeight: 400, fontSize: compact ? 23 : 26, lineHeight: 1.15, color: BEIGE }}>{p.name}</div>
