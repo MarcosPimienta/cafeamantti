@@ -82,7 +82,7 @@ describe("building the deck", () => {
   it("opens with the cover, gives each block a slide and skips empty blocks", () => {
     const slides = buildSlides(data);
     expect(slides.map((s) => s.kind)).toEqual(["cover", "split", "products", "table", "split"]);
-    expect(slides[0]).toMatchObject({ kind: "cover", clientName: "Sunteca", allyLogoUrl: "https://signed/logo.png", photo: "/images/Chemex%26Cup.png" });
+    expect(slides[0]).toMatchObject({ kind: "cover", clientName: "Sunteca", allyLogoUrl: "https://signed/logo.png", photo: "/images/Chemex_Especial_Bag.jpg" });
   });
 
   it("a forced layout and an uploaded photo win; price rows without text are left out", () => {

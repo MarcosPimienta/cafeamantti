@@ -74,8 +74,8 @@ export type Slide =
   | { kind: "close"; title: string; paragraphs: string[]; photo: string; sellerName?: string };
 
 export const DEFAULT_BACKGROUND = "/images/Main_Background.jpg";
-const COVER_PHOTO = "/images/Chemex%26Cup.png";
-const SPLIT_PHOTOS = ["/images/BG02.jpeg", "/images/GranosCafe.jpeg", "/images/Three_Bags.jpeg", "/images/BG01.jpg"];
+const COVER_PHOTO = "/images/Chemex_Especial_Bag.jpg";
+const SPLIT_PHOTOS = ["/images/Premium_Krups.jpg", "/images/Honey_FrenchPress.jpg", "/images/BG02.jpeg", "/images/GranosCafe.jpeg", "/images/Three_Bags.jpeg", "/images/BG01.jpg"];
 
 const BULLET = /^\s*(?:[•\-*·▪◦]|\d{1,2}[.)])\s+/;
 
