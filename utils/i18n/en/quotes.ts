@@ -285,6 +285,8 @@ export const quotes: Record<string, string> = {
   "Publicado": "Published",
   "¿Estás seguro de eliminar esta propuesta?": "Delete this proposal?",
   "Error al eliminar la propuesta": "Error deleting the proposal",
+  "Duplicar": "Duplicate",
+  "Error al duplicar la propuesta": "Error duplicating the proposal",
   "El archivo es demasiado grande. Máximo 2MB.": "The file is too large. Maximum 2 MB.",
   "Subir logo del aliado": "Upload partner logo",
   "Subir imagen de fondo": "Upload background image",

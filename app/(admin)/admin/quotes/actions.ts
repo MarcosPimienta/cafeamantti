@@ -295,6 +295,46 @@ export async function updateProposal(id: string, data: any) {
   }
 }
 
+/**
+ * A copy of a proposal as a new draft, to adapt it for another client. It
+ * keeps the client, texts, prices and photos (the stored files are shared,
+ * not copied); the title gets " (copia)" so both can be told apart in the list.
+ */
+export async function duplicateProposal(id: string) {
+  const supabase = await createClient();
+  try {
+    const { data: src, error: readErr } = await supabase.from('proposals').select('*').eq('id', id).single();
+    if (readErr) throw readErr;
+    if (!src) throw new Error('La propuesta no existe.');
+
+    const { data: copy, error } = await supabase
+      .from('proposals')
+      .insert({
+        client_id: src.client_id ?? null,
+        custom_client_name: src.custom_client_name ?? null,
+        custom_client_document: src.custom_client_document ?? null,
+        custom_client_email: src.custom_client_email ?? null,
+        custom_client_phone: src.custom_client_phone ?? null,
+        title: `${src.title ?? ''} (copia)`.trim(),
+        subtitle: src.subtitle,
+        content: src.content,
+        status: 'Borrador',
+        ally_logo_url: src.ally_logo_url ?? null,
+        background_image_url: src.background_image_url ?? null,
+        background_opacity: src.background_opacity ?? 0.15,
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+
+    revalidatePath('/admin/quotes');
+    return { success: true, id: copy.id as string };
+  } catch (err: any) {
+    console.error('Error duplicating proposal:', err);
+    return { success: false, error: err.message };
+  }
+}
+
 export async function deleteProposal(id: string) {
   const supabase = await createClient();
   try {
