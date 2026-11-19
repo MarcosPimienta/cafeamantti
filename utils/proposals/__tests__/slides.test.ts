@@ -29,7 +29,9 @@ describe("reading a price row", () => {
       cost: 59000,
       pvp: 0,
     });
-    expect(p).toMatchObject({ name: "Kit Clásico", detail: "Café Amantti 250 g (grano o molido) + frasco de galletas, en caja de madera con cinta", note: "Desde 120 kits: $56.000 c/u", price: 59000, art: "gift" });
+    expect(p).toMatchObject({ name: "Kit Clásico", detail: "Café Amantti 250 g (grano o molido) + frasco de galletas, en caja de madera con cinta", note: "Desde 120 kits: $56.000 c/u", price: 59000, photo: "/images/Kit_Clasico.jpg" });
+    expect(parseProduct({ item: "Kit Premium: dos cafés", cost: 1, pvp: 0 }).photo).toBe("/images/Kit_Premium.jpg");
+    expect(parseProduct({ item: "Kit Ejecutivo", cost: 1, pvp: 0 })).toMatchObject({ art: "gift", photo: undefined });
   });
 
   it("shortens the coffee name and reads the parenthesis and the IVA", () => {
@@ -42,7 +44,7 @@ describe("reading a price row", () => {
 
   it("keeps names that would be empty or odd without the brand", () => {
     expect(parseProduct({ item: "Café Amantti 250g", cost: 1, pvp: 0 }).name).toBe("Café Amantti 250g");
-    expect(parseProduct({ item: "Aromáticas surtidas (Caja de 60 unidades)", cost: 1, pvp: 0 })).toMatchObject({ name: "Aromáticas surtidas", detail: "Caja de 60 unidades", art: "leaf" });
+    expect(parseProduct({ item: "Aromáticas surtidas (Caja de 60 unidades)", cost: 1, pvp: 0 })).toMatchObject({ name: "Aromáticas surtidas", detail: "Caja de 60 unidades", photo: "/images/Aromaticas_Oficina.jpg" });
   });
 
   it("an uploaded photo wins over the drawn art", () => {

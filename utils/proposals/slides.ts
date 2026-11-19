@@ -122,6 +122,12 @@ function headed(item: string): { heading?: string; text: string } {
   return m ? { heading: m[1].trim(), text: m[2].trim() } : { text: item };
 }
 
+const KIT_PHOTOS: [RegExp, string, string][] = [
+  [/kit detalle/, "/images/Kit_Detalle.jpg", "55%"],
+  [/kit cl[áa]sico/, "/images/Kit_Clasico.jpg", "60%"],
+  [/kit premium/, "/images/Kit_Premium.jpg", "53%"],
+];
+
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Reads a price-table row ("Kit Clásico: café 250 g … Desde 120 kits: $56.000 c/u · IVA 19 %"). */
@@ -168,9 +174,15 @@ export function parseProduct(row: PriceTableItem): Product {
   let focus: string | undefined;
   let art: ProductArt | undefined;
   let roast: Product["roast"];
-  if (/\bkit\b|ancheta|regalo/.test(all)) art = "gift";
-  else if (/arom[áa]tica|infusi|t[ée]\b/.test(all)) art = "leaf";
-  else if (/liofil|instant|soluble/.test(all)) art = "cup";
+  if (/\bkit\b|ancheta|regalo/.test(all)) {
+    // The kits of the Christmas proposal have their own photo; any other kit gets the drawing.
+    const kit = KIT_PHOTOS.find(([re]) => re.test(all));
+    if (kit) [, photo, focus] = kit;
+    else art = "gift";
+  } else if (/arom[áa]tica|infusi|t[ée]\b/.test(all)) {
+    photo = "/images/Aromaticas_Oficina.jpg";
+    focus = "42%";
+  } else if (/liofil|instant|soluble/.test(all)) art = "cup";
   else if (/institucional/.test(all)) {
     photo = "/images/Institucional_Greca.jpg";
     focus = "60%";
