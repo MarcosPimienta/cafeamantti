@@ -182,8 +182,11 @@ export function parseProduct(row: PriceTableItem): Product {
   } else if (/arom[áa]tica|infusi|t[ée]\b/.test(all)) {
     photo = "/images/Aromaticas_Oficina.jpg";
     focus = "42%";
-  } else if (/liofil|instant|soluble/.test(all)) art = "cup";
-  else if (/institucional/.test(all)) {
+  } else if (/liofil/.test(all)) art = "cup";
+  else if (/instant|soluble/.test(all)) {
+    photo = "/images/Instantaneo_Oficina.jpg";
+    focus = "50%";
+  } else if (/institucional/.test(all)) {
     photo = "/images/Institucional_Greca.jpg";
     focus = "60%";
     roast = "dark";

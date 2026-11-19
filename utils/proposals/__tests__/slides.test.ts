@@ -47,6 +47,11 @@ describe("reading a price row", () => {
     expect(parseProduct({ item: "Aromáticas surtidas (Caja de 60 unidades)", cost: 1, pvp: 0 })).toMatchObject({ name: "Aromáticas surtidas", detail: "Caja de 60 unidades", photo: "/images/Aromaticas_Oficina.jpg" });
   });
 
+  it("instant coffee has its photo; freeze-dried keeps the drawn cup", () => {
+    expect(parseProduct({ item: "Café instantáneo 500 g", cost: 1, pvp: 0 }).photo).toBe("/images/Instantaneo_Oficina.jpg");
+    expect(parseProduct({ item: "Café liofilizado 500 g", cost: 1, pvp: 0 })).toMatchObject({ art: "cup", photo: undefined });
+  });
+
   it("an uploaded photo wins over the drawn art", () => {
     expect(parseProduct({ item: "Kit Detalle", cost: 1, pvp: 0, imageUrl: "https://x/kit.png" })).toMatchObject({ photo: "https://x/kit.png", art: undefined });
   });
