@@ -15,3 +15,4 @@ export { supportDocuments } from "./supportDocuments";
 export { creditNotes } from "./creditNotes";
 export { purchases } from "./purchases";
 export { bank } from "./bank";
+export { logistics } from "./logistics";

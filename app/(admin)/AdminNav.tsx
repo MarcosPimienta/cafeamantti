@@ -18,6 +18,7 @@ import {
   HandCoins,
   Landmark,
   Scale,
+  Truck,
 } from "lucide-react";
 import { useTr } from "./AdminI18n";
 
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { href: "/admin/orders/import", label: "Cargar Siigo", Icon: UploadCloud },
   { href: "/admin/inventory", label: "Inventario", Icon: Package },
   { href: "/admin/comodatos", label: "Comodatos", Icon: Handshake },
+  { href: "/admin/logistics", label: "Logística", Icon: Truck },
   { href: "/admin/subscriptions", label: "Suscripciones", Icon: Coffee },
   { href: "/admin/users", label: "Usuarios", Icon: Users },
   { href: "/admin/customers", label: "Clientes (B2B)", Icon: Users },
