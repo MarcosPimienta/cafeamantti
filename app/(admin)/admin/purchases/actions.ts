@@ -281,6 +281,7 @@ const normalizeLines = (lines: BillLine[], issueDate: string, capex: string[]): 
     description: (l.description || l.category).trim(),
     inventory_id: l.inventory_id || null,
     inventory_qty: l.inventory_id ? Number(l.inventory_qty) || 0 : null,
+    inventory_warehouse_id: l.inventory_id && l.inventory_warehouse_id ? l.inventory_warehouse_id : null,
     depreciation_months: capex.includes(l.category) ? Math.floor(Number(l.depreciation_months)) || null : null,
     in_service_date: capex.includes(l.category) ? l.in_service_date || issueDate : null,
     asset_use: capex.includes(l.category) && l.asset_use && l.asset_use in ASSET_USES ? l.asset_use : null,
@@ -324,6 +325,8 @@ async function stockBillLines(
         molienda: isGrindTracked(p.product_code) ? 'grano' : null,
         created_by: userId,
         purchase_bill_id: billId,
+        // Sent only when chosen: works before the warehouses migration (the column defaults to the main bodega).
+        ...(l.inventory_warehouse_id ? { warehouse_id: l.inventory_warehouse_id } : {}),
         // What the invoice line says one unit cost (before IVA).
         ...(lineUnitCost(l.base, qty) !== null ? { unit_cost: lineUnitCost(l.base, qty) } : {}),
       };

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, Loader2, Plus, Trash2, X } from "lucide-react";
 import { createBill, getPurchaseTaxes, updateBill } from "./actions";
+import { useWarehouses } from "../inventory/bodegas/useWarehouses";
 import { billProblems, billTotals, type BillLine } from "@/utils/payables/ledger";
 import { useTr } from "@/app/(admin)/AdminI18n";
 import { ASSET_USES } from "../cashflow/types";
@@ -51,6 +52,7 @@ export default function BillForm({
   onDone: (notice: string) => void;
 }) {
   const tr = useTr();
+  const wh = useWarehouses();
   const [supplierId, setSupplierId] = useState(bill?.supplier_id ?? "");
   const [prefix, setPrefix] = useState(bill?.provider_prefix ?? "");
   const [number, setNumber] = useState(bill?.provider_number ?? "");
@@ -208,7 +210,7 @@ export default function BillForm({
             /* What this line brings into stock (materia prima, empaques…). */
             <div className="flex flex-wrap items-center gap-2 text-xs text-foreground/60">
               <span>{tr("Entra al inventario:")}</span>
-              <select value={l.inventory_id ?? ""} onChange={(e) => setLine(i, { inventory_id: e.target.value || null, inventory_qty: e.target.value ? l.inventory_qty ?? null : null })}
+              <select value={l.inventory_id ?? ""} onChange={(e) => setLine(i, { inventory_id: e.target.value || null, inventory_qty: e.target.value ? l.inventory_qty ?? null : null, inventory_warehouse_id: e.target.value ? l.inventory_warehouse_id ?? null : null })}
                 className={`${inline} w-full sm:w-72`} aria-label={tr("Producto que entra al inventario")}>
                 <option value="">{tr("— No mueve inventario —")}</option>
                 {inventory.map((p) => <option key={p.id} value={p.id}>{p.product_name} ({p.product_code})</option>)}
@@ -218,6 +220,20 @@ export default function BillForm({
                   <input type="number" min={0} step="any" value={l.inventory_qty ?? ""} onChange={(e) => setLine(i, { inventory_qty: e.target.value === "" ? null : Number(e.target.value) })}
                     placeholder={tr("Cantidad")} className={`${inline} w-28`} aria-label={tr("Cantidad que entra")} />
                   <span>{inventory.find((p) => p.id === l.inventory_id)?.unit ?? ""}</span>
+                  {wh.migrated && wh.warehouses.length > 1 && (
+                    <select
+                      value={l.inventory_warehouse_id ?? ""}
+                      onChange={(e) => setLine(i, { inventory_warehouse_id: e.target.value || null })}
+                      className={`${inline} w-full sm:w-56`}
+                      aria-label={tr("Bodega donde entra")}
+                    >
+                      {wh.warehouses.map((w) => (
+                        <option key={w.id} value={w.is_default ? "" : w.id}>
+                          {w.is_default ? tr("{name} (principal)", { name: w.name }) : w.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </>
               )}
             </div>

@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Coffee, LogOut, Menu, Settings, X } from "lucide-react";
+import Image from "next/image";
+import { LogOut, Menu, Settings, X } from "lucide-react";
 import AdminNav from "./AdminNav";
 import { LanguageSwitch, useTr } from "@/app/(admin)/AdminI18n";
 
@@ -35,7 +36,7 @@ export default function AdminMobileNav() {
         </button>
         <h1 className="font-serif text-lg">{tr("Amantti Admin")}</h1>
         <Link href="/" aria-label={tr("Ir a la tienda")}>
-          <Coffee className="w-7 h-7 text-[#C59F59]" />
+          <Image src="/images/logo-amantti.svg" alt="" width={82} height={29} unoptimized />
         </Link>
       </header>
 
@@ -44,7 +45,7 @@ export default function AdminMobileNav() {
           <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
           <aside className="relative w-[82%] max-w-xs h-full bg-white shadow-2xl flex flex-col overflow-y-auto">
             <div className="px-5 py-4 border-b border-foreground/5 flex items-center justify-between">
-              <Coffee className="w-8 h-8 text-[#C59F59]" />
+              <Image src="/images/logo-amantti.svg" alt="amantti" width={96} height={34} unoptimized />
               <button type="button" onClick={() => setOpen(false)} className="p-2 rounded-xl hover:bg-foreground/5" aria-label={tr("Cerrar menú")}>
                 <X className="w-5 h-5 text-foreground/50" />
               </button>

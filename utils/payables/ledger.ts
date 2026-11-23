@@ -16,6 +16,8 @@ export type BillLine = {
   inventory_id?: string | null;
   /** How much of it came in, in the product's unit (kg, units…). */
   inventory_qty?: number | null;
+  /** Bodega it comes into (after the warehouses migration); none = the main one. */
+  inventory_warehouse_id?: string | null;
   /** Fixed asset line (equipo, muebles…): useful life in months. */
   depreciation_months?: number | null;
   /** Fixed asset line: when it starts being used (empty = the payment date). */

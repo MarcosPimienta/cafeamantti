@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
-import { Coffee, LogOut, Settings } from "lucide-react";
+import Image from "next/image";
+import { LogOut, Settings } from "lucide-react";
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import AdminNav from "./AdminNav";
@@ -41,7 +42,7 @@ export default async function AdminLayout({
       <aside className="w-56 lg:w-64 shrink-0 bg-white border-r border-foreground/5 hidden md:flex flex-col sticky top-0 h-screen overflow-y-auto">
         <div className="p-6 lg:p-8 border-b border-foreground/5 flex items-center justify-center">
           <Link href="/">
-            <Coffee className="w-10 h-10 text-[#C59F59]" />
+            <Image src="/images/logo-amantti.svg" alt="amantti" width={124} height={44} unoptimized priority />
           </Link>
         </div>
 

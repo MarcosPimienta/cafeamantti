@@ -37,6 +37,8 @@ import {
 } from "@/utils/costing/costPerKg";
 import { cleanRecipe, type PackagingLine, type PackagingRecipes } from "@/utils/costing/packaging";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function checkIsAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -69,7 +71,7 @@ export async function getCurrentUserProfile() {
 
 export async function logAuditAction(
   actionType: "CREATE" | "UPDATE" | "DELETE",
-  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH" | "COLD_BREW_BATCH" | "REPACK_BATCH",
+  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH" | "COLD_BREW_BATCH" | "REPACK_BATCH" | "TRANSFER" | "WAREHOUSE",
   entityId: string,
   inventoryId?: string,
   details?: Record<string, any>
@@ -1320,7 +1322,9 @@ export async function adjustInventoryStock(
   inventoryId: string,
   type: 'entrada' | 'salida' | 'ajuste',
   quantity: number,
-  reason?: string
+  reason?: string,
+  /** Bodega counted; none = the main one. */
+  warehouseId?: string | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
@@ -1362,6 +1366,7 @@ export async function adjustInventoryStock(
       quantity: delta,
       reason: reason || null,
       created_by: user?.id || null,
+      ...(warehouseId ? { warehouse_id: warehouseId } : {}),
     });
 
   // The database moved the stock with the movement.
@@ -1528,6 +1533,8 @@ async function _insertMovement(
     /** What a manual salida was for, and who got it. */
     exit_kind?: ExitKind | null;
     exit_to?: string | null;
+    /** Bodega; none = the main one (the column default). Sent only when given: works before the warehouses migration. */
+    warehouse_id?: string | null;
   } = {}
 ) {
   const { data, error } = await supabase.from('inventory_movements').insert({
@@ -1547,6 +1554,7 @@ async function _insertMovement(
     // Only sent when there is one: works before the entry-cost migration.
     ...(opts.unit_cost !== undefined && opts.unit_cost !== null ? { unit_cost: opts.unit_cost } : {}),
     ...(opts.exit_kind ? { exit_kind: opts.exit_kind, exit_to: opts.exit_to ?? null } : {}),
+    ...(opts.warehouse_id ? { warehouse_id: opts.warehouse_id } : {}),
   }).select('id').single();
   if (error) throw new Error(error.message);
   return data.id;
@@ -1853,7 +1861,9 @@ export async function createEntrada(
   lote?: string,
   molienda?: string | null,
   /** What one unit cost before IVA ($/kg, $/unidad): required for materia prima and material. */
-  unitCost?: number | null
+  unitCost?: number | null,
+  /** Bodega it comes into; none = the main one. */
+  warehouseId?: string | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1874,11 +1884,12 @@ export async function createEntrada(
       lote,
       molienda: grind,
       unit_cost: unitCost ?? null,
+      warehouse_id: warehouseId ?? null,
     });
 
     const newStock = await _stockOf(supabase, inventoryId);
     if (unitCost !== undefined && unitCost !== null) await refreshStandardCost(supabase, inventoryId);
-    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote, molienda: grind, unitCost });
+    await logAuditAction("CREATE", "MOVEMENT", mId, inventoryId, { qty, entryType, responsable, lote, molienda: grind, unitCost, ...(warehouseId ? { warehouse_id: warehouseId } : {}) });
     revalidatePath('/admin/inventory');
     return { success: true, newStock };
   } catch (err: any) {
@@ -1905,7 +1916,9 @@ export async function createSalida(
   responsable?: string,
   molienda?: string | null,
   sale?: { amount: number } | null,
-  exit?: { kind: ExitKind; to?: string | null }
+  exit?: { kind: ExitKind; to?: string | null },
+  /** Bodega it leaves from; none = the main one. */
+  warehouseId?: string | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -1949,11 +1962,12 @@ export async function createSalida(
       income_id: incomeId,
       exit_kind: kind,
       exit_to: exit?.to?.trim() || null,
+      warehouse_id: warehouseId ?? null,
     });
     mId = movementId;
 
     const newStock = await _stockOf(supabase, inventoryId);
-    await logAuditAction("CREATE", "MOVEMENT", movementId, inventoryId, { qty: -qty, reason, responsable, molienda: grind, income_id: incomeId, sale_amount: sale?.amount, exit_kind: kind, exit_to: exit?.to ?? null });
+    await logAuditAction("CREATE", "MOVEMENT", movementId, inventoryId, { qty: -qty, reason, responsable, molienda: grind, income_id: incomeId, sale_amount: sale?.amount, exit_kind: kind, exit_to: exit?.to ?? null, ...(warehouseId ? { warehouse_id: warehouseId } : {}) });
     revalidatePath('/admin/inventory');
     if (incomeId) revalidatePath('/admin/cashflow');
     return { success: true, newStock };
@@ -2246,7 +2260,13 @@ export async function createColdBrewBatch(
   date: string,
   lote?: string,
   notes?: string,
-  thirdParty: string = "Café 11:11"
+  thirdParty: string = "Café 11:11",
+  /**
+   * Bodegas (after the warehouses migration): the coffee is consumed in the
+   * maquilador's bodega; with sendFromId it is first transferred there from
+   * that bodega, in the same registration.
+   */
+  warehouses?: { maquilaId: string; sendFromId?: string | null } | null
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
@@ -2268,6 +2288,19 @@ export async function createColdBrewBatch(
       );
     }
 
+    if (warehouses?.sendFromId) {
+      const { error: tErr } = await supabase.rpc('inventory_transfer', {
+        p_item: roastedCoffeeInventoryId,
+        p_from: warehouses.sendFromId,
+        p_to: warehouses.maquilaId,
+        p_qty: inputQtyKg,
+        p_date: date,
+        p_lote: lote || null,
+        p_note: `Para Cold Brew (${thirdParty})`,
+      });
+      if (tErr) throw new Error(tErr.message);
+    }
+
     const reasonBase = [
       `Maquila ${thirdParty}`,
       lote ? `Lote: ${lote}` : null,
@@ -2283,6 +2316,7 @@ export async function createColdBrewBatch(
         tab_source: 'cold_brew',
         lote: lote || undefined,
         entry_type: 'MP',
+        warehouse_id: warehouses?.maquilaId ?? null,
       });
     } catch {
       // Fallback if DB tab_source constraint hasn't been migrated yet
@@ -2292,6 +2326,7 @@ export async function createColdBrewBatch(
         tab_source: 'prod_consumo',
         lote: lote || undefined,
         entry_type: 'MP',
+        warehouse_id: warehouses?.maquilaId ?? null,
       });
     }
     const newCoffeeStock = await _stockOf(supabase, roastedCoffeeInventoryId);
@@ -3092,6 +3127,8 @@ export async function getKardex(
     to?: string | null;   // YYYY-MM-DD, inclusive
     molienda?: Molienda | null;
     era?: 'v1' | 'v2';
+    /** One bodega (after the warehouses migration); none = the whole company, without transfers. */
+    warehouseId?: string | null;
   } = {}
 ) {
   const isAdmin = await checkIsAdmin();
@@ -3141,9 +3178,13 @@ export async function getKardex(
       .order('created_at', { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (opts.molienda) q = q.eq('molienda', opts.molienda);
+    if (opts.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     for (const m of data ?? []) {
+      // A transfer moves stock between bodegas: in one bodega it is a real entry
+      // or exit; for the whole company its two halves cancel out, so it is left out.
+      if (!opts.warehouseId && m.tab_source === 'transferencia') continue;
       const inc = Array.isArray(m.income) ? m.income[0] : m.income;
       movements.push({ ...m, income: inc ?? null } as KardexMovement);
     }
@@ -3162,7 +3203,7 @@ export async function getKardex(
     item,
     rows,
     summary,
-    reconciliation: opts.molienda
+    reconciliation: opts.molienda || opts.warehouseId
       ? null
       : { ledgerTotal, systemStock, difference: systemStock - ledgerTotal },
   };
@@ -3181,12 +3222,15 @@ export async function getKardexGeneral(
     from?: string | null; // YYYY-MM-DD, inclusive
     to?: string | null;   // YYYY-MM-DD, inclusive
     era?: 'v1' | 'v2';
+    /** One bodega (after the warehouses migration); none = the whole company, without transfers. */
+    warehouseId?: string | null;
   } = {}
 ) {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error('Unauthorized');
 
   const era = opts.era ?? 'v2';
+  if (opts.warehouseId && !UUID_RE.test(opts.warehouseId)) throw new Error('Bodega inválida');
   const supabase = await createClient();
 
   const { data: items, error: itemsErr } = await supabase
@@ -3215,22 +3259,28 @@ export async function getKardexGeneral(
   const PAGE = 1000;
   const movements: GeneralMovement[] = [];
   for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await supabase
+    let q = supabase
       .from('inventory_movements')
       .select(`
         id, inventory_id, type, quantity, reason, lote, movement_date,
         responsable, tab_source, molienda, income_id, created_at,
         income:income_id ( gross_amount )
       `)
-      .eq('era', era)
+      .eq('era', era);
+    if (opts.warehouseId) q = q.eq('warehouse_id', opts.warehouseId);
+    const { data, error } = await q
       .order('movement_date', { ascending: true, nullsFirst: true })
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) throw new Error(error.message);
-    movements.push(...((data ?? []) as GeneralMovement[]));
+    // In one bodega a transfer is a real entry or exit; for the company its two halves cancel out.
+    movements.push(...((data ?? []) as GeneralMovement[]).filter((m) => opts.warehouseId || m.tab_source !== 'transferencia'));
     if (!data || data.length < PAGE) break;
   }
+  // One bodega has no stored stock of its own: its stock is its movements, so it always matches.
+  const bodegaStock = new Map<string, number>();
+  if (opts.warehouseId) for (const m of movements) bodegaStock.set(m.inventory_id, (bodegaStock.get(m.inventory_id) ?? 0) + (Number(m.quantity) || 0));
   return buildGeneralKardex(
     (items ?? []).map((it) => ({
       id: it.id,
@@ -3238,7 +3288,7 @@ export async function getKardexGeneral(
       product_name: it.product_name,
       category: it.category,
       unit: it.unit,
-      systemStock: Number(era === 'v1' ? it.legacy_stock ?? it.current_stock : it.current_stock),
+      systemStock: opts.warehouseId ? bodegaStock.get(it.id) ?? 0 : Number(era === 'v1' ? it.legacy_stock ?? it.current_stock : it.current_stock),
     })),
     movements,
     opts

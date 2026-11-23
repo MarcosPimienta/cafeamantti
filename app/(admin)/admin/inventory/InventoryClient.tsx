@@ -1,5 +1,9 @@
 "use client";
 
+// The inventory forms and ledgers. Each section of /admin/inventory
+// (Movimientos, Producción, Kardex, Análisis) mounts the ones it needs;
+// Existencias and Auditoría have their own components.
+
 import React, { useState, useTransition, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -14,24 +18,17 @@ import {
   X,
   History,
   TrendingUp,
-  TrendingDown,
-  SlidersHorizontal,
   Check,
   Loader2,
   FlaskConical,
   Factory,
   RefreshCw,
-  BarChart2,
   Pencil,
   Trash2,
-  Archive,
-  Sparkles,
   ScrollText,
   Download,
   Shuffle,
   Plus,
-  ShoppingBag,
-  Calculator,
 } from "lucide-react";
 import {
   BarChart,
@@ -50,14 +47,12 @@ import {
 } from "recharts";
 import {
   adjustInventoryStock,
-  getInventoryMovements,
   getMovementsByTab,
   getTrillaBatches,
   getTostionBatches,
   createEntrada,
   setEntryCost,
   createSalida,
-  createProdConsumo,
   createProdAlta,
   createTostionBatch,
   createTrillaBatch,
@@ -67,32 +62,27 @@ import {
   deleteMovement,
   updateMovement,
   deleteProductionBatch,
-  getAuditLogs,
-  getInventory,
-  getMoliendaBalances,
   getKardex,
   getKardexGeneral,
   createRepackBatch,
   getRepackBatches,
   deleteRepackBatch,
-  setInventorySellable,
   getPackagingRecipes,
   createInventoryProduct,
 } from "../../actions";
 import { packagingFor, type PackagingRecipes } from "@/utils/costing/packaging";
 import EditBatchModal from "./EditBatchModal";
-import { isSellable } from "@/utils/inventory/sellable";
+import WarehouseSelect from "./bodegas/WarehouseSelect";
+import { stockIn, type Warehouse, type WarehouseStock } from "@/utils/inventory/warehouses";
 import {
   INVENTORY_CATEGORIES,
   CATEGORY_LABELS,
   ENTRY_TYPE_LABELS,
   ENTRY_TYPE_BADGE,
-  categoryInfo,
   entryTypeFor,
   type EntryType,
   type InventoryCategory,
 } from "@/utils/inventory/categories";
-import CostosTab from "./CostosTab";
 import { COSTED_SINCE, needsCost } from "@/utils/inventory/entryCost";
 import QuantityInput from "./QuantityInput";
 import { EXIT_KINDS, EXIT_KIND_LABEL, EXIT_KIND_TO, SELECTABLE_EXIT_KINDS, guessExitKind, isExitKind, looksLikeSale, type ExitKind } from "@/utils/inventory/exitKind";
@@ -111,7 +101,7 @@ import { useTr } from "@/app/(admin)/AdminI18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface InventoryItem {
+export interface InventoryItem {
   id: string;
   product_code: string;
   product_name: string;
@@ -126,7 +116,7 @@ interface InventoryItem {
   updated_at: string;
 }
 
-interface MovementRecord {
+export interface MovementRecord {
   id: string;
   inventory_id: string;
   type: string;
@@ -172,36 +162,19 @@ interface TrillaBatch {
 // ─── Constants + Helpers ──────────────────────────────────────────────────────
 
 
-const TABS = [
-  { id: "inventario", label: "Inventario", Icon: Package },
-  { id: "entradas", label: "Entradas", Icon: PackagePlus },
-  { id: "trilla", label: "Trilla", Icon: FlaskConical },
-  { id: "tostion", label: "Proceso Tostión", Icon: Factory },
-  { id: "prod_altas", label: "Empaque/Altas", Icon: TrendingUp },
-  { id: "reempaque", label: "Reempaque", Icon: Shuffle },
-  { id: "cold_brew", label: "Cold Brew (11:11)", Icon: Sparkles },
-  { id: "salidas", label: "Salidas", Icon: PackageMinus },
-  { id: "kardex", label: "Kardex", Icon: ScrollText },
-  { id: "costos", label: "Costos", Icon: Calculator },
-  { id: "reportes", label: "Reportes", Icon: BarChart2 },
-  { id: "auditoria", label: "Auditoría", Icon: History },
-] as const;
-
-type TabId = (typeof TABS)[number]["id"];
-
 const inputCls =
   "w-full px-4 py-3 border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/30 bg-white transition-all";
 const labelCls =
-  "text-[10px] font-bold uppercase tracking-widest text-foreground/40 mb-1.5 block";
+  "text-[11px] font-bold uppercase tracking-widest text-foreground/70 mb-1.5 block";
 const thCls =
-  "px-5 py-3.5 text-[10px] font-bold uppercase tracking-widest text-foreground/50 text-left";
+  "px-5 py-3.5 text-[11px] font-bold uppercase tracking-widest text-foreground/70 text-left";
 const tdCls = "px-5 py-4 text-sm text-foreground/80";
 
 function today() {
   return new Date().toISOString().split("T")[0];
 }
 
-function fmtDate(iso: string | null | undefined) {
+export function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
     const [y, m, d] = iso.split("-").map(Number);
@@ -218,7 +191,7 @@ function fmtDate(iso: string | null | undefined) {
   });
 }
 
-function fmtCOP(n: number) {
+export function fmtCOP(n: number) {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency: "COP",
@@ -305,30 +278,6 @@ function usePackagingRecipes(): PackagingRecipes {
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
-
-function StockBadge({ stock, min }: { stock: number; min: number }) {
-  const tr = useTr();
-  if (stock === 0)
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-        {tr("Sin stock")}
-      </span>
-    );
-  if (stock <= min)
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700">
-        <AlertTriangle className="w-3 h-3" />
-        {tr("Bajo mín.")}
-      </span>
-    );
-  return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700">
-      <Check className="w-3 h-3" />
-      {tr("OK")}
-    </span>
-  );
-}
 
 function ProductSelect({
   id,
@@ -509,7 +458,7 @@ function HistoryLoadingOrEmpty({
 
 // ─── Adjust Modal ─────────────────────────────────────────────────────────────
 
-function AdjustModal({
+export function AdjustModal({
   item,
   onClose,
   onSuccess,
@@ -670,7 +619,7 @@ const NEW_PRODUCT_DEFAULTS: Record<string, { prefix: string; unit: string; sella
  * Creates an inventory item (coffee, packaging, accessory or equipment such
  * as an espresso machine lent in comodato). Opening stock becomes an entrada.
  */
-function NewProductModal({
+export function NewProductModal({
   existingCodes,
   onClose,
   onCreated,
@@ -850,118 +799,6 @@ function NewProductModal({
 
 // ─── History Drawer ───────────────────────────────────────────────────────────
 
-function HistoryDrawer({
-  item,
-  onClose,
-  era = 'v2',
-}: {
-  item: InventoryItem;
-  onClose: () => void;
-  era?: 'v1' | 'v2';
-}) {
-  const tr = useTr();
-  const [movements, setMovements] = useState<MovementRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getInventoryMovements(item.id, era)
-      .then((data) => setMovements(data as MovementRecord[]))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [item.id, era]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white w-full max-w-lg h-full overflow-y-auto shadow-2xl flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 bg-white px-8 pt-8 pb-6 border-b border-foreground/5 flex items-start justify-between gap-4">
-          <div>
-            <p className={labelCls}>{tr("Historial de movimientos")}</p>
-            <h3 className="text-xl font-serif">{item.product_name}</h3>
-            <p className="text-xs text-foreground/50 font-mono">
-              {item.product_code}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl hover:bg-foreground/5"
-          >
-            <X className="w-5 h-5 text-foreground/40" />
-          </button>
-        </div>
-
-        <div className="flex-1 p-8">
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <Loader2 className="w-8 h-8 text-[#C59F59] animate-spin" />
-            </div>
-          ) : movements.length === 0 ? (
-            <div className="text-center py-20">
-              <History className="w-12 h-12 text-foreground/20 mx-auto mb-4" />
-              <p className="font-serif text-foreground/50">{tr("Sin movimientos")}</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {movements.map((mov) => {
-                const isPositive = mov.quantity > 0;
-                return (
-                  <div
-                    key={mov.id}
-                    className="flex items-start gap-4 p-4 rounded-2xl border border-foreground/5 hover:bg-foreground/[0.02]"
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                        isPositive
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-red-50 text-red-700"
-                      }`}
-                    >
-                      {isPositive ? (
-                        <TrendingUp className="w-3.5 h-3.5" />
-                      ) : (
-                        <TrendingDown className="w-3.5 h-3.5" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm">
-                          {mov.quantity > 0 ? "+" : ""}
-                          {mov.quantity} {item.unit}
-                        </span>
-                        {mov.tab_source && (
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-foreground/5 text-foreground/50">
-                            {mov.tab_source}
-                          </span>
-                        )}
-                      </div>
-                      {mov.reason && (
-                        <p className="text-xs text-foreground/60 mt-0.5 truncate">
-                          {tr.msg(mov.reason)}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-foreground/40 mt-1">
-                        {mov.movement_date
-                          ? fmtDate(mov.movement_date)
-                          : fmtDate(mov.created_at)}
-                        {mov.responsable ? ` · ${mov.responsable}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SortingIcon({
   field,
   sortField,
@@ -1037,525 +874,6 @@ function sortRecordsList<T>(data: T[], sortField: string, sortAsc: boolean): T[]
     }
     return sortAsc ? cmp : -cmp;
   });
-}
-
-/**
- * Roasted coffee split by profile and grind.
- *
- * There is no per-grind stock column: the grind is stamped on the movement
- * that determined it (Entrada, Empaque/Alta, Salida, Tostión), so this is the
- * signed sum of those movements. Bulk and packaged are shown as two tables
- * because kg and unidades cannot be added together. "Sin definir" only
- * appears where rows predate the grind field.
- */
-type MoliendaTotals = { grano: number; molido: number; sin_definir: number; total: number };
-type MoliendaGroup = {
-  rows: ({ id: string; label: string } & MoliendaTotals)[];
-  totals: MoliendaTotals;
-};
-
-function MoliendaGroupTable({
-  group,
-  unit,
-}: {
-  group: MoliendaGroup;
-  unit: string;
-}) {
-  const tr = useTr();
-  const showUndefined = group.totals.sin_definir !== 0;
-  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
-
-  if (group.totals.total === 0 && group.rows.every((r) => r.total === 0)) {
-    return (
-      <p className="text-sm text-foreground/40 px-6 py-8">
-        {tr("Sin movimientos registrados.")}
-      </p>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <thead>
-          <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-            <th className={thCls}>{tr("Perfil")}</th>
-            <th className={`${thCls} text-right`}>{tr("Grano ({unit})", { unit: unit })}</th>
-            <th className={`${thCls} text-right`}>{tr("Molido ({unit})", { unit: unit })}</th>
-            {showUndefined && <th className={`${thCls} text-right`}>{tr("Sin definir")}</th>}
-            <th className={`${thCls} text-right`}>{tr("Total ({unit})", { unit: unit })}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-foreground/5">
-          {group.rows.map((r) => (
-            <tr key={r.id} className="hover:bg-[#fdfbf7]">
-              <td className={`${tdCls} font-bold`}>{tr(r.label)}</td>
-              <td className={`${tdCls} text-right`}>{fmt(r.grano)}</td>
-              <td className={`${tdCls} text-right`}>{fmt(r.molido)}</td>
-              {showUndefined && (
-                <td className={`${tdCls} text-right text-foreground/40`}>
-                  {fmt(r.sin_definir)}
-                </td>
-              )}
-              <td className={`${tdCls} text-right font-bold`}>{fmt(r.total)}</td>
-            </tr>
-          ))}
-          <tr className="bg-[#fdfbf7]">
-            <td className={`${tdCls} font-bold`}>{tr("Total")}</td>
-            <td className={`${tdCls} text-right font-bold`}>{fmt(group.totals.grano)}</td>
-            <td className={`${tdCls} text-right font-bold`}>{fmt(group.totals.molido)}</td>
-            {showUndefined && (
-              <td className={`${tdCls} text-right font-bold text-foreground/40`}>
-                {fmt(group.totals.sin_definir)}
-              </td>
-            )}
-            <td className={`${tdCls} text-right font-bold`}>{fmt(group.totals.total)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function MoliendaBreakdown({ era }: { era: "v1" | "v2" }) {
-  const tr = useTr();
-  type Balances = { packaged: MoliendaGroup; bulk: MoliendaGroup };
-  // Tag the result with the era it belongs to, so switching eras reads as
-  // loading without a synchronous setState in the effect body.
-  const [loaded, setLoaded] = useState<{ era: string; data: Balances | null } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getMoliendaBalances(era)
-      .then((d) => {
-        if (!cancelled) setLoaded({ era, data: d as Balances });
-      })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled) setLoaded({ era, data: null });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [era]);
-
-  const loading = loaded?.era !== era;
-  const data = loaded?.era === era ? loaded.data : null;
-
-  return (
-    <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
-      <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7]">
-        <h3 className="font-serif text-lg">{tr("Café tostado por perfil y molienda")}</h3>
-        <p className="text-sm text-foreground/50 mt-1">
-          {tr("La molienda se define al registrar la entrada, el alta de producción o la salida. El café a granel sale del tostador en grano.")}
-        </p>
-      </div>
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 text-[#C59F59] animate-spin" />
-        </div>
-      ) : !data ? (
-        <p className="text-sm text-foreground/40 text-center py-12">
-          {tr("No se pudo cargar el desglose por molienda.")}
-        </p>
-      ) : (
-        <>
-          <div className="px-6 pt-5 pb-1">
-            <p className={labelCls}>{tr("Empacado — unidades")}</p>
-          </div>
-          <MoliendaGroupTable group={data.packaged} unit="ud" />
-          <div className="px-6 pt-6 pb-1 border-t border-foreground/5">
-            <p className={labelCls}>{tr("A granel — kilogramos")}</p>
-          </div>
-          <MoliendaGroupTable group={data.bulk} unit="kg" />
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Inventario Tab ───────────────────────────────────────────────────────────
-
-function InventarioTab({
-  inventory,
-  onStockUpdate,
-  onItemCreated,
-  era,
-}: {
-  inventory: InventoryItem[];
-  onStockUpdate: (id: string, newStock: number) => void;
-  onItemCreated: (item: InventoryItem) => void;
-  era: 'v1' | 'v2';
-}) {
-  const tr = useTr();
-  const [creating, setCreating] = useState(false);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [sortField, setSortField] = useState<keyof InventoryItem>("product_name");
-  const [sortAsc, setSortAsc] = useState(true);
-  const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
-  const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null);
-  // Optimistic "Se vende" values until the server confirms.
-  const [sellableOverride, setSellableOverride] = useState<Record<string, boolean>>({});
-  const [sellableError, setSellableError] = useState("");
-  const [, startSellable] = useTransition();
-  const sellableOf = (item: InventoryItem) => sellableOverride[item.id] ?? isSellable(item);
-
-  function toggleSellable(item: InventoryItem) {
-    const next = !sellableOf(item);
-    setSellableOverride((m) => ({ ...m, [item.id]: next }));
-    setSellableError("");
-    startSellable(async () => {
-      try {
-        await setInventorySellable(item.id, next);
-      } catch (err: unknown) {
-        setSellableOverride((m) => ({ ...m, [item.id]: !next }));
-        setSellableError(err instanceof Error ? err.message : "No se pudo actualizar");
-      }
-    });
-  }
-
-  const totalSKUs = inventory.length;
-  const lowStockCount = inventory.filter((i) => i.current_stock <= i.min_stock).length;
-  const zeroStockCount = inventory.filter((i) => i.current_stock === 0).length;
-
-  const filtered = useMemo(() => {
-    let data = [...inventory];
-    if (search) {
-      const q = search.toLowerCase();
-      data = data.filter(
-        (i) =>
-          i.product_name.toLowerCase().includes(q) ||
-          i.product_code.toLowerCase().includes(q)
-      );
-    }
-    if (categoryFilter !== "all")
-      data = data.filter((i) => i.category === categoryFilter);
-    if (lowStockOnly)
-      data = data.filter((i) => i.current_stock <= i.min_stock);
-    data.sort((a, b) => {
-      const cmp = String(a[sortField] ?? "").localeCompare(
-        String(b[sortField] ?? ""),
-        "es"
-      );
-      return sortAsc ? cmp : -cmp;
-    });
-    return data;
-  }, [inventory, search, categoryFilter, lowStockOnly, sortField, sortAsc]);
-
-  function toggleSort(field: keyof InventoryItem) {
-    if (sortField === field) setSortAsc(!sortAsc);
-    else {
-      setSortField(field);
-      setSortAsc(true);
-    }
-  }
-
-  return (
-    <>
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 flex items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl bg-[#C59F59]/10 flex items-center justify-center shrink-0">
-            <Package className="w-7 h-7 text-[#C59F59]" />
-          </div>
-          <div>
-            <p className={labelCls}>{tr("Total SKUs")}</p>
-            <p className="text-3xl font-serif">{totalSKUs}</p>
-          </div>
-        </div>
-
-        <div
-          className={`rounded-3xl border shadow-sm p-6 flex items-center gap-5 ${
-            lowStockCount > 0
-              ? "bg-amber-50 border-amber-200"
-              : "bg-white border-foreground/5"
-          }`}
-        >
-          <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
-            <AlertTriangle
-              className={`w-7 h-7 ${
-                lowStockCount > 0 ? "text-amber-600" : "text-foreground/30"
-              }`}
-            />
-          </div>
-          <div>
-            <p className={labelCls}>{tr("Stock Bajo")}</p>
-            <p className="text-3xl font-serif">
-              {lowStockCount}
-              <span className="text-base font-sans text-foreground/40 ml-1">
-                / {totalSKUs}
-              </span>
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={`rounded-3xl border shadow-sm p-6 flex items-center gap-5 ${
-            zeroStockCount > 0
-              ? "bg-red-50 border-red-200"
-              : "bg-white border-foreground/5"
-          }`}
-        >
-          <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
-            <PackageMinus
-              className={`w-7 h-7 ${
-                zeroStockCount > 0 ? "text-red-600" : "text-foreground/30"
-              }`}
-            />
-          </div>
-          <div>
-            <p className={labelCls}>{tr("Sin Stock")}</p>
-            <p className="text-3xl font-serif">
-              {zeroStockCount}
-              <span className="text-base font-sans text-foreground/40 ml-1">
-                / {totalSKUs}
-              </span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Packaged coffee split by profile x grind */}
-      <MoliendaBreakdown era={era} />
-
-      {/* Table card */}
-      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
-        {/* Toolbar */}
-        <div className="p-5 border-b border-foreground/5 flex flex-col md:flex-row gap-4 items-center justify-between bg-[#f9f7f0]">
-          <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-foreground/40" />
-            <input
-              type="text"
-              placeholder={tr("Buscar por nombre o código...")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              suppressHydrationWarning={true}
-              className="w-full pl-11 pr-4 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20"
-            />
-          </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="relative">
-              <SlidersHorizontal className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-foreground/40 pointer-events-none" />
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                suppressHydrationWarning={true}
-                className="pl-9 pr-4 py-2.5 bg-white border border-foreground/10 rounded-xl text-sm focus:outline-none appearance-none cursor-pointer"
-              >
-                <option value="all">{tr("Todas las categorías")}</option>
-                {INVENTORY_CATEGORIES.map((c) => (
-                  <option key={c.id} value={c.id}>{tr(c.label)}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={() => setLowStockOnly(!lowStockOnly)}
-              suppressHydrationWarning={true}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all whitespace-nowrap ${
-                lowStockOnly
-                  ? "bg-amber-500 text-white border-amber-500"
-                  : "bg-white border-foreground/10 text-foreground/60 hover:bg-foreground/5"
-              }`}
-            >
-              <AlertTriangle className="w-4 h-4" />
-              {tr("Stock bajo")}
-            </button>
-            {era === "v2" && (
-              <button
-                onClick={() => setCreating(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest bg-foreground text-background hover:bg-[#C59F59] hover:text-white transition-all whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" />
-                {tr("Nuevo producto")}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {creating && (
-          <NewProductModal
-            existingCodes={inventory.map((i) => i.product_code)}
-            onClose={() => setCreating(false)}
-            onCreated={(item) => {
-              onItemCreated(item);
-              setCreating(false);
-            }}
-          />
-        )}
-
-        {sellableError && (
-          <p className="mx-5 mt-4 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{sellableError}</p>
-        )}
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                <SortableTh 
-                  label={tr("Código")} 
-                  field="product_code" 
-                  sortField={sortField} 
-                  sortAsc={sortAsc} 
-                  onSort={(f) => toggleSort(f as keyof InventoryItem)} 
-                />
-                <SortableTh 
-                  label={tr("Producto")} 
-                  field="product_name" 
-                  sortField={sortField} 
-                  sortAsc={sortAsc} 
-                  onSort={(f) => toggleSort(f as keyof InventoryItem)} 
-                />
-                <th className={thCls}>{tr("Categoría")}</th>
-                <th className={`${thCls} text-center`} title={tr("Se ofrece al crear órdenes de venta")}>{tr("Venta")}</th>
-                <SortableTh 
-                  label={tr("Stock")} 
-                  field="current_stock" 
-                  className="text-right"
-                  sortField={sortField} 
-                  sortAsc={sortAsc} 
-                  onSort={(f) => toggleSort(f as keyof InventoryItem)} 
-                />
-                <th className={`${thCls} text-right`}>{tr("Mín.")}</th>
-                <th className={`${thCls} text-center`}>{tr("Estado")}</th>
-                <th className={`${thCls} text-center`}>{tr("Acciones")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-foreground/5">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-16 text-center">
-                    <Package className="w-10 h-10 text-foreground/20 mx-auto mb-3" />
-                    <p className="font-serif text-foreground/60">
-                      {tr("No se encontraron productos")}
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-[#fdfbf7] transition-colors"
-                  >
-                    <td className={tdCls}>
-                      <span className="font-mono text-xs bg-foreground/5 px-2 py-1 rounded-lg text-foreground/70">
-                        {item.product_code}
-                      </span>
-                    </td>
-                    <td className={tdCls}>
-                      <p className="font-medium text-foreground">
-                        {item.product_name}
-                      </p>
-                      <p className="text-xs text-foreground/40">{item.unit}</p>
-                    </td>
-                    <td className={tdCls}>
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          categoryInfo(item.category)?.badge ?? "bg-foreground/5 text-foreground/60"
-                        }`}
-                      >
-                        {tr.msg(CATEGORY_LABELS[item.category] ?? item.category)}
-                      </span>
-                    </td>
-                    <td className={`${tdCls} text-center`}>
-                      {(() => {
-                        const on = sellableOf(item);
-                        return (
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={on}
-                            aria-label={`${item.product_name}: ${on ? "se vende" : "insumo, no se vende"}`}
-                            onClick={() => toggleSellable(item)}
-                            disabled={era !== "v2"}
-                            title={on ? tr("Se vende — aparece al crear órdenes") : tr("Insumo — no aparece en órdenes")}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all disabled:opacity-60 ${
-                              on
-                                ? "bg-[#C59F59] text-white border-[#C59F59]"
-                                : "bg-white text-foreground/40 border-foreground/10 hover:border-foreground/30"
-                            }`}
-                          >
-                            <ShoppingBag className="w-3 h-3" />
-                            {on ? tr("Se vende") : tr("Insumo")}
-                          </button>
-                        );
-                      })()}
-                    </td>
-                    <td className={`${tdCls} text-right`}>
-                      <span
-                        className={`text-lg font-bold ${
-                          item.current_stock === 0
-                            ? "text-red-600"
-                            : item.current_stock <= item.min_stock
-                            ? "text-amber-600"
-                            : "text-foreground"
-                        }`}
-                      >
-                        {fmtQty(Number(item.current_stock))}
-                      </span>
-                    </td>
-                    <td className={`${tdCls} text-right text-foreground/40 font-mono`}>
-                      {item.min_stock}
-                    </td>
-                    <td className={`${tdCls} text-center`}>
-                      <StockBadge
-                        stock={item.current_stock}
-                        min={item.min_stock}
-                      />
-                    </td>
-                    <td className={`${tdCls} text-center`}>
-                      <div className="flex items-center justify-center gap-2">
-                        {era === 'v2' && (
-                          <button
-                            id={`adjust-${item.product_code}`}
-                            onClick={() => setAdjustItem(item)}
-                            title={tr("Ajuste manual")}
-                            className="p-2 rounded-xl bg-[#C59F59]/10 text-[#C59F59] hover:bg-[#C59F59] hover:text-white transition-all"
-                          >
-                            <ArrowLeftRight className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          id={`history-${item.product_code}`}
-                          onClick={() => setHistoryItem(item)}
-                          title={tr("Ver historial")}
-                          className="p-2 rounded-xl bg-foreground/5 text-foreground/50 hover:bg-foreground/10 transition-all"
-                        >
-                          <History className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {filtered.length > 0 && (
-          <div className="px-5 py-3 bg-[#fdfbf7] border-t border-foreground/5 text-xs text-foreground/40">
-            {tr("{length} de {totalSKUs} productos", { length: filtered.length, totalSKUs: totalSKUs })}
-          </div>
-        )}
-      </div>
-
-      {adjustItem && (
-        <AdjustModal
-          item={adjustItem}
-          onClose={() => setAdjustItem(null)}
-          onSuccess={onStockUpdate}
-        />
-      )}
-      {historyItem && (
-        <HistoryDrawer
-          item={historyItem}
-          onClose={() => setHistoryItem(null)}
-          era={era}
-        />
-      )}
-    </>
-  );
 }
 
 // ─── Edit Movement Modal ──────────────────────────────────────────────────────
@@ -1742,17 +1060,21 @@ function AccionesCell({
 
 // ─── Entradas Tab ─────────────────────────────────────────────────────────────
 
-function EntradasTab({
+export function EntradasTab({
   inventory,
   onStockUpdate,
   era,
+  warehouses,
 }: {
   inventory: InventoryItem[];
   onStockUpdate: (id: string, newStock: number) => void;
   era: 'v1' | 'v2';
+  /** Active bodegas (after the warehouses migration); none = no bodega field. */
+  warehouses?: Warehouse[];
 }) {
   const tr = useTr();
   const initForm = {
+    warehouseId: "",
     inventoryId: "",
     qty: "",
     date: today(),
@@ -1880,7 +1202,8 @@ function EntradasTab({
           form.responsable || undefined,
           form.lote || undefined,
           form.molienda || undefined,
-          form.unitCost === "" ? null : Number(form.unitCost)
+          form.unitCost === "" ? null : Number(form.unitCost),
+          form.warehouseId || null
         );
         
         if (!res.success) {
@@ -2041,6 +1364,17 @@ function EntradasTab({
                 {tr("Después de registrar la entrada, da de alta cada máquina con su serial en")}{" "}
                 <Link href="/admin/comodatos" className="underline font-bold">{tr("Comodatos")}</Link>{" "}{tr("para saber qué cliente la tiene. Las máquinas que registres allí se cuentan contra este stock, sin duplicarlo.")}
               </p>
+            )}
+            {warehouses && warehouses.length > 0 && (
+              <WarehouseSelect
+                id="ent-wh"
+                label={tr("Bodega donde entra")}
+                labelClassName={labelCls}
+                className={inputCls}
+                warehouses={warehouses}
+                value={form.warehouseId}
+                onChange={(v) => setForm({ ...form, warehouseId: v })}
+              />
             )}
             <div>
               <label htmlFor="ent-resp" className={labelCls}>
@@ -2294,7 +1628,7 @@ function EntradaCostCell({ record, unit, onSaved }: { record: MovementRecord; un
 
 // ─── Trilla Tab ───────────────────────────────────────────────────────────────
 
-function TrillaTab({
+export function TrillaTab({
   inventory,
   onStocksUpdate,
   era,
@@ -2754,7 +2088,7 @@ function TrillaTab({
 
 // ─── Proceso de Tostión Tab ───────────────────────────────────────────────────
 
-function TostionTab({
+export function TostionTab({
   inventory,
   onStocksUpdate,
   era,
@@ -3105,7 +2439,7 @@ function TostionTab({
  */
 const isFinishedProduct = (code: string) => unitWeightKg(code) !== null || code === "CAFC-340ML";
 
-function ProdAltasTab({
+export function ProdAltasTab({
   inventory,
   onStocksUpdate,
   era,
@@ -3546,16 +2880,26 @@ function ProdAltasTab({
 
 // ─── Cold Brew (Café 11:11) Tab ───────────────────────────────────────────────
 
-function ColdBrewTab({
+export function ColdBrewTab({
   inventory,
   onStocksUpdate,
   era,
+  warehouses,
+  warehouseStock,
+  onWarehousesChanged,
 }: {
   inventory: InventoryItem[];
   onStocksUpdate: (updates: { id: string; newStock: number }[]) => void;
   era: 'v1' | 'v2';
+  /** Active bodegas (after the warehouses migration). With a maquila bodega the coffee is consumed there. */
+  warehouses?: Warehouse[];
+  warehouseStock?: Record<string, Record<string, WarehouseStock>>;
+  onWarehousesChanged?: () => void;
 }) {
   const tr = useTr();
+  const maquilaWh = warehouses?.find((w) => w.kind === "maquila") ?? null;
+  const mainWh = warehouses?.find((w) => w.is_default) ?? null;
+  const [sendFromMain, setSendFromMain] = useState(true);
   const defaultCoffee = inventory.find(i => i.product_code === "CAFT-001") || inventory.find(i => i.product_code.startsWith("CAFT-"));
   const defaultColdBrew = inventory.find(i => i.product_code === "CAFC-340ML") || inventory.find(i => i.product_name.toLowerCase().includes("cold brew"));
 
@@ -3638,7 +2982,8 @@ function ColdBrewTab({
           form.date,
           form.lote || undefined,
           form.notes || undefined,
-          form.thirdParty || "Café 11:11"
+          form.thirdParty || "Café 11:11",
+          maquilaWh ? { maquilaId: maquilaWh.id, sendFromId: sendFromMain && mainWh ? mainWh.id : null } : null
         );
 
         if (!res.success) {
@@ -3662,6 +3007,7 @@ function ColdBrewTab({
           coldBrewId: prev.coldBrewId,
         }));
         loadHistory();
+        onWarehousesChanged?.();
       } catch (err: unknown) {
         setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al registrar") });
       }
@@ -3680,6 +3026,7 @@ function ColdBrewTab({
         setDeletingId(null);
         setFeedback({ type: "success", msg: tr("✓ Lote eliminado e inventario revertido correctamente") });
         loadHistory();
+        onWarehousesChanged?.();
       } catch (err: unknown) {
         setFeedback({ type: "error", msg: err instanceof Error ? err.message : tr("Error al eliminar lote") });
       }
@@ -3747,10 +3094,24 @@ function ColdBrewTab({
                   }
                   placeholder={tr("Seleccionar café tostado...")}
                 />
-                {selectedCoffee && (
+                {selectedCoffee && !maquilaWh && (
                   <p className="text-xs text-foreground/50 mt-1">
                     {tr("Disponible:")}{" "}<span className="font-semibold text-foreground">{tr("{v} kg", { v: Number(selectedCoffee.current_stock).toFixed(2) })}</span>
                   </p>
+                )}
+                {selectedCoffee && maquilaWh && warehouseStock && (
+                  <div className="mt-2 space-y-2 text-xs text-foreground/70">
+                    <p>
+                      {mainWh && <>{mainWh.name}: <strong className="text-foreground">{tr("{v} kg", { v: stockIn(warehouseStock, selectedCoffee.id, mainWh.id).total.toFixed(2) })}</strong> · </>}
+                      {maquilaWh.name}: <strong className="text-foreground">{tr("{v} kg", { v: stockIn(warehouseStock, selectedCoffee.id, maquilaWh.id).total.toFixed(2) })}</strong>
+                    </p>
+                    {mainWh && (
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" checked={sendFromMain} onChange={(e) => setSendFromMain(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#7A5B22]" />
+                        <span>{tr("Enviar el café desde {from} a {to} en este registro", { from: mainWh.name, to: maquilaWh.name })}</span>
+                      </label>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -3989,17 +3350,21 @@ function ColdBrewTab({
 
 // ─── Salidas Tab ──────────────────────────────────────────────────────────────
 
-function SalidasTab({
+export function SalidasTab({
   inventory,
   onStockUpdate,
   era,
+  warehouses,
 }: {
   inventory: InventoryItem[];
   onStockUpdate: (id: string, newStock: number) => void;
   era: 'v1' | 'v2';
+  /** Active bodegas (after the warehouses migration); none = no bodega field. */
+  warehouses?: Warehouse[];
 }) {
   const tr = useTr();
   const initForm = {
+    warehouseId: "",
     inventoryId: "",
     qty: "",
     date: today(),
@@ -4109,7 +3474,8 @@ function SalidasTab({
           form.responsable || undefined,
           form.molienda || undefined,
           null,
-          { kind: form.exitKind as ExitKind, to: form.exitTo || null }
+          { kind: form.exitKind as ExitKind, to: form.exitTo || null },
+          form.warehouseId || null
         );
 
         if (!res.success) {
@@ -4267,6 +3633,17 @@ function SalidasTab({
                 className={inputCls}
               />
             </div>
+            {warehouses && warehouses.length > 0 && (
+              <WarehouseSelect
+                id="sal-wh"
+                label={tr("Bodega de donde sale")}
+                labelClassName={labelCls}
+                className={inputCls}
+                warehouses={warehouses}
+                value={form.warehouseId}
+                onChange={(v) => setForm({ ...form, warehouseId: v })}
+              />
+            )}
             <div>
               <label htmlFor="sal-resp" className={labelCls}>
                 {tr("Responsable (opcional)")}
@@ -4445,7 +3822,7 @@ const fmtKg = (n: number) => `${Number(n.toFixed(3)).toLocaleString("es-CO")} kg
  * samples, or combine small bags into a big one. Kilos are conserved; the
  * leftover goes back to bulk or is written off as merma.
  */
-function ReempaqueTab({
+export function ReempaqueTab({
   inventory,
   onStocksUpdate,
   era,
@@ -4944,7 +4321,7 @@ function ReempaqueTab({
 
 type KardexData = Awaited<ReturnType<typeof getKardex>>;
 
-const KARDEX_ORIGIN: Record<string, string> = {
+export const KARDEX_ORIGIN: Record<string, string> = {
   entrada: "Entrada",
   salida: "Salida",
   trilla: "Trilla",
@@ -4952,6 +4329,7 @@ const KARDEX_ORIGIN: Record<string, string> = {
   prod_alta: "Empaque / Alta",
   cold_brew: "Cold Brew",
   reempaque: "Reempaque",
+  transferencia: "Transferencia entre bodegas",
 };
 
 function kardexOrigin(row: { tab_source: string | null; type: string; income_id: string | null }) {
@@ -4960,7 +4338,7 @@ function kardexOrigin(row: { tab_source: string | null; type: string; income_id:
   return row.type === "ajuste" ? "Ajuste" : row.type.charAt(0).toUpperCase() + row.type.slice(1);
 }
 
-function fmtQty(n: number) {
+export function fmtQty(n: number) {
   return Number.isInteger(n) ? n.toLocaleString("es-CO") : n.toLocaleString("es-CO", { maximumFractionDigits: 3 });
 }
 
@@ -4976,9 +4354,11 @@ function KardexProducto({
   to,
   inventoryId,
   onInventoryChange,
+  warehouseId = null,
 }: {
   inventory: InventoryItem[];
   era: "v1" | "v2";
+  warehouseId?: string | null;
   from: string;
   to: string;
   inventoryId: string;
@@ -5007,6 +4387,7 @@ function KardexProducto({
           to: to || null,
           molienda: grindTracked && molienda ? molienda : null,
           era,
+          warehouseId,
         });
         if (!cancelled) {
           setData(res);
@@ -5019,7 +4400,7 @@ function KardexProducto({
     return () => {
       cancelled = true;
     };
-  }, [inventoryId, from, to, molienda, grindTracked, era]);
+  }, [inventoryId, from, to, molienda, grindTracked, era, warehouseId]);
 
   const unit = data?.item.unit ?? selectedItem?.unit ?? "";
 
@@ -5260,9 +4641,11 @@ function KardexGeneral({
   from,
   to,
   onOpenProduct,
+  warehouseId = null,
 }: {
   inventory: InventoryItem[];
   era: "v1" | "v2";
+  warehouseId?: string | null;
   from: string;
   to: string;
   onOpenProduct: (id: string) => void;
@@ -5282,7 +4665,7 @@ function KardexGeneral({
     let cancelled = false;
     startTransition(async () => {
       try {
-        const res = await getKardexGeneral({ from: from || null, to: to || null, era });
+        const res = await getKardexGeneral({ from: from || null, to: to || null, era, warehouseId });
         if (!cancelled) {
           setData(res);
           setError("");
@@ -5295,7 +4678,7 @@ function KardexGeneral({
     return () => {
       cancelled = true;
     };
-  }, [from, to, era]);
+  }, [from, to, era, warehouseId]);
 
   const itemsById = useMemo(() => new Map(inventory.map((i) => [i.id, i])), [inventory]);
 
@@ -5632,7 +5015,7 @@ function KardexGeneral({
   );
 }
 
-function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" | "v2" }) {
+export function KardexTab({ inventory, era, warehouseId = null }: { inventory: InventoryItem[]; era: "v1" | "v2"; warehouseId?: string | null }) {
   const tr = useTr();
   const [mode, setMode] = useState<"general" | "producto">("general");
   const [from, setFrom] = useState("");
@@ -5715,6 +5098,7 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
           era={era}
           from={from}
           to={to}
+          warehouseId={warehouseId}
           onOpenProduct={(id) => {
             setInventoryId(id);
             setMode("producto");
@@ -5728,6 +5112,7 @@ function KardexTab({ inventory, era }: { inventory: InventoryItem[]; era: "v1" |
           to={to}
           inventoryId={inventoryId}
           onInventoryChange={setInventoryId}
+          warehouseId={warehouseId}
         />
       )}
     </div>
@@ -5792,7 +5177,7 @@ function ChartCard({
   );
 }
 
-function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1' | 'v2' }) {
+export function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1' | 'v2' }) {
   const tr = useTr();
   const [reportData, setReportData] = useState<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -6299,343 +5684,6 @@ function ReportesTab({ inventory, era }: { inventory: InventoryItem[]; era: 'v1'
           </ResponsiveContainer>
         )}
       </ChartCard>
-    </div>
-  );
-}
-
-// ─── Auditoría Tab ─────────────────────────────────────────────────────────────
-
-function AuditoriaTab({ inventory }: { inventory: InventoryItem[] }) {
-  const tr = useTr();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [logs, setLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sortField, setSortField] = useState("date");
-  const [sortAsc, setSortAsc] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [userFilter, setUserFilter] = useState("all");
-  const [actionFilter, setActionFilter] = useState("all");
-  const [entityFilter, setEntityFilter] = useState("all");
-
-  useEffect(() => {
-    getAuditLogs()
-      .then(setLogs)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  const users = useMemo(() => {
-    if (!Array.isArray(logs)) return [];
-    const uMap = new Map();
-    logs.forEach(l => {
-      if (l && l.profiles) {
-        const fullName = `${l.profiles.first_name} ${l.profiles.last_name}`;
-        uMap.set(l.admin_id, fullName);
-      }
-    });
-    return Array.from(uMap.entries()).map(([id, name]) => ({ id, name }));
-  }, [logs]);
-
-  const filteredLogs = useMemo(() => {
-    if (!Array.isArray(logs)) return [];
-    let data = [...logs];
-
-    if (search) {
-      const q = search.toLowerCase();
-      data = data.filter(l => 
-        l.entity_id?.toLowerCase().includes(q) ||
-        JSON.stringify(l.details || {}).toLowerCase().includes(q)
-      );
-    }
-
-    if (userFilter !== "all") {
-      data = data.filter(l => l.admin_id === userFilter);
-    }
-
-    if (actionFilter !== "all") {
-      data = data.filter(l => l.action_type === actionFilter);
-    }
-
-    if (entityFilter !== "all") {
-      data = data.filter(l => l.entity_type === entityFilter);
-    }
-
-    return sortRecordsList(data, sortField, sortAsc);
-  }, [logs, search, userFilter, actionFilter, entityFilter, sortField, sortAsc]);
-
-  const paginatedLogs = filteredLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-  function handleSort(field: string) {
-    if (sortField === field) setSortAsc(!sortAsc);
-    else {
-      setSortField(field);
-      setSortAsc(true);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
-        <div className="px-6 py-5 border-b border-foreground/5 bg-[#fdfbf7] flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h3 className="font-serif text-lg">{tr("Historial de Auditoría")}</h3>
-            <p className="text-sm text-foreground/50">{tr("Registro completo de creaciones, modificaciones y eliminaciones")}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-black text-[#C59F59] mr-2">{tr("FILTROS:")}</span>
-            <div className="relative min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
-              <input 
-                type="text"
-                placeholder={tr("Buscar en detalles...")}
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
-              />
-            </div>
-            <select
-              value={userFilter}
-              onChange={(e) => { setUserFilter(e.target.value); setCurrentPage(1); }}
-              className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
-            >
-              <option value="all">{tr("Todos los Usuarios")}</option>
-              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-            <select
-              value={actionFilter}
-              onChange={(e) => { setActionFilter(e.target.value); setCurrentPage(1); }}
-              className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
-            >
-              <option value="all">{tr("Todas las Acciones")}</option>
-              <option value="CREATE">{tr("CREATE")}</option>
-              <option value="UPDATE">{tr("UPDATE")}</option>
-              <option value="DELETE">{tr("DELETE")}</option>
-            </select>
-            <select
-              value={entityFilter}
-              onChange={(e) => { setEntityFilter(e.target.value); setCurrentPage(1); }}
-              className="px-3 py-2 bg-white border border-foreground/10 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#C59F59]/20 transition-all"
-            >
-              <option value="all">{tr("Todas las Entidades")}</option>
-              <option value="MOVEMENT">{tr("MOVEMENT")}</option>
-              <option value="TRILLA_BATCH">{tr("TRILLA_BATCH")}</option>
-            </select>
-          </div>
-        </div>
-        {loading ? (
-          <div className="py-20 text-center text-foreground/40 text-sm font-bold tracking-widest flex items-center justify-center gap-2">
-             <Loader2 className="w-4 h-4 animate-spin" />{" "}{tr("CARGANDO AUDITORÍA...")}
-          </div>
-        ) : logs.length === 0 ? (
-          <div className="py-20 text-center text-foreground/40 text-sm font-bold tracking-widest">
-            {tr("NO HAY REGISTROS DE AUDITORÍA")}
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-              <thead>
-                <tr className="bg-[#fdfbf7] border-b border-foreground/5">
-                  <SortableTh label={tr("Fecha")} field="date" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label={tr("Usuario (Admin)")} field="profiles.first_name" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label={tr("Acción")} field="action_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <SortableTh label={tr("Entidad / Ref")} field="entity_type" sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
-                  <th className={thCls}>{tr("Detalle Base")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-foreground/5">
-                {paginatedLogs.map((log) => {
-                  const inv = inventory.find((i) => i.id === log.inventory_id);
-                  const isDel = log.action_type === "DELETE";
-                  const isUpd = log.action_type === "UPDATE";
-                  
-                  return (
-                    <tr key={log.id} className="hover:bg-[#fdfbf7]">
-                      <td className={`${tdCls} whitespace-nowrap`}>
-                        {new Date(log.created_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
-                      </td>
-                      <td className={tdCls}>
-                        <div className="font-bold">{log.profiles?.first_name} {log.profiles?.last_name}</div>
-                        <div className="text-[10px] text-foreground/50 truncate max-w-[120px]">{log.profiles?.email}</div>
-                      </td>
-                      <td className={tdCls}>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${isDel ? "bg-red-50 text-red-600" : isUpd ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"}`}>
-                          {log.action_type}
-                        </span>
-                      </td>
-                      <td className={tdCls}>
-                        <div className="font-bold">{log.entity_type}</div>
-                        {inv && <div className="text-[10px] font-mono text-foreground/50">{inv.product_code}</div>}
-                      </td>
-                      <td className={`${tdCls} text-foreground/60`}>
-                        <pre className="text-[10px] bg-foreground/5 p-2 rounded-lg whitespace-pre-wrap max-w-xs overflow-hidden">
-                          {JSON.stringify(log.details, null, 2)}
-                        </pre>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <PaginationControls
-            currentPage={currentPage}
-            totalItems={filteredLogs.length}
-            onPageChange={setCurrentPage}
-          />
-        </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Client Component ────────────────────────────────────────────────────
-
-export default function InventoryClient({
-  inventory: initialInventory,
-}: {
-  inventory: InventoryItem[];
-}) {
-  const tr = useTr();
-  const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
-  const [activeTab, setActiveTab] = useState<TabId>("inventario");
-  const [era, setEra] = useState<'v1' | 'v2'>('v2');
-
-  const isLegacy = era === 'v1';
-
-  const displayedInventory = useMemo(() => {
-    if (isLegacy) {
-      return inventory.map((item) => ({
-        ...item,
-        current_stock: Number(item.legacy_stock ?? item.current_stock),
-      }));
-    }
-    return inventory;
-  }, [inventory, isLegacy]);
-
-  useEffect(() => {
-    getInventory()
-      .then((data) => {
-        if (data && data.length > 0) {
-          setInventory(data as InventoryItem[]);
-        }
-      })
-      .catch(console.error);
-  }, [era]);
-
-  function updateStock(id: string, newStock: number) {
-    setInventory((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, current_stock: newStock } : item
-      )
-    );
-  }
-
-  function updateStocks(updates: { id: string; newStock: number }[]) {
-    setInventory((prev) =>
-      prev.map((item) => {
-        const u = updates.find((x) => x.id === item.id);
-        return u ? { ...item, current_stock: u.newStock } : item;
-      })
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-serif text-foreground mb-1">{tr("Inventario")}</h1>
-          <p className="text-foreground/60">
-            {tr("Control de stock y flujo de producción de Café Amantti.")}
-          </p>
-        </div>
-        <button
-          id="toggle-legacy-era"
-          onClick={() => setEra(prev => prev === 'v2' ? 'v1' : 'v2')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all border ${
-            isLegacy
-              ? 'bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
-              : 'bg-white text-foreground/50 border-foreground/10 hover:bg-foreground/5'
-          }`}
-        >
-          <Archive className="w-3.5 h-3.5" />
-          {isLegacy ? tr("Viendo: Archivo (pre-Sept 2026)") : tr("Ver datos anteriores")}
-        </button>
-      </div>
-
-      {/* Legacy mode banner */}
-      {isLegacy && (
-        <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-          <Archive className="w-5 h-5 flex-shrink-0" />
-          <div>
-            <span className="font-bold">{tr("Modo archivo")}</span>{" "}{tr("— Estás viendo datos anteriores a septiembre 2026. Estos datos son de solo lectura.")}
-          </div>
-          <button
-            onClick={() => setEra('v2')}
-            className="ml-auto px-3 py-1.5 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-xs font-bold uppercase tracking-widest transition-colors"
-          >
-            {tr("Volver a datos actuales")}
-          </button>
-        </div>
-      )}
-
-      {/* Tab bar */}
-      <div className="flex overflow-x-auto gap-1 bg-white rounded-2xl p-1.5 border border-foreground/5 shadow-sm">
-        {TABS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            id={`tab-${id}`}
-            onClick={() => setActiveTab(id)}
-            suppressHydrationWarning={true}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all ${
-              activeTab === id
-                ? "bg-[#C59F59] text-white shadow-sm"
-                : "text-foreground/60 hover:bg-foreground/5 hover:text-foreground"
-            }`}
-          >
-            <Icon className="w-3.5 h-3.5" />
-            {tr(label)}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {activeTab === "inventario" && (
-        <InventarioTab
-          inventory={displayedInventory}
-          onStockUpdate={updateStock}
-          onItemCreated={(item) => setInventory((prev) => [...prev, item])}
-          era={era}
-        />
-      )}
-      {activeTab === "entradas" && (
-        <EntradasTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
-      )}
-      {activeTab === "trilla" && (
-        <TrillaTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
-      )}
-      {activeTab === "tostion" && (
-        <TostionTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
-      )}
-      {activeTab === "reempaque" && (
-        <ReempaqueTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
-      )}
-      {activeTab === "prod_altas" && (
-        <ProdAltasTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
-      )}
-      {activeTab === "cold_brew" && (
-        <ColdBrewTab inventory={displayedInventory} onStocksUpdate={updateStocks} era={era} />
-      )}
-      {activeTab === "salidas" && (
-        <SalidasTab inventory={displayedInventory} onStockUpdate={updateStock} era={era} />
-      )}
-      {activeTab === "kardex" && <KardexTab inventory={displayedInventory} era={era} />}
-      {activeTab === "costos" && <CostosTab />}
-      {activeTab === "reportes" && <ReportesTab inventory={displayedInventory} era={era} />}
-      {activeTab === "auditoria" && <AuditoriaTab inventory={displayedInventory} />}
     </div>
   );
 }
