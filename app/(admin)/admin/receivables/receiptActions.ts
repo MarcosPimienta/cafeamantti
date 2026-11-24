@@ -19,6 +19,7 @@ import { errorText, loadSiigoSettings, siigoLog, todayBogota, type Supabase } fr
 import {
   appliedValue,
   collectionProblems,
+  fitToBalance,
   invoiceAmounts,
   itemsOfVoucher,
   normalizeRetentions,
@@ -37,6 +38,8 @@ import {
   type SiigoInvoiceLine,
   type SiigoVoucher,
 } from '@/utils/invoices/collections';
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const MIGRATION_HINT = 'Falta aplicar la migración 20261105000000_customer_receipts.sql';
 
@@ -198,8 +201,18 @@ async function applyToAppInvoices(supabase: Supabase, userId: string | null, r: 
 async function sendReceipt(supabase: Supabase, userId: string | null, id: string): Promise<{ sent: boolean; name: string | null; error: string | null; warning?: string | null }> {
   const { data, error } = await supabase.from('customer_receipts').select('*').eq('id', id).single();
   if (error || !data) throw error ?? new Error('Cobro no encontrado.');
-  const r = data as Receipt;
+  let r = data as Receipt;
   try {
+    // Against the balances Siigo has now: a whole-peso value a few cents over one is the balance.
+    const linked = r.items.filter((i) => i.siigo_invoice_id).map((i) => i.siigo_invoice_id as string);
+    if (linked.length) {
+      const balances = new Map((await openInvoices(linked)).map((i) => [i.id, round2(i.balance)]));
+      const items = r.items.map((i) => (i.siigo_invoice_id ? fitToBalance(i, balances.get(i.siigo_invoice_id)) : i));
+      if (items.some((i, k) => i.value !== r.items[k].value)) {
+        r = { ...r, items, amount: round2(items.reduce((s, i) => s + i.value, 0)) };
+        await supabase.from('customer_receipts').update({ items: r.items, amount: r.amount }).eq('id', r.id);
+      }
+    }
     const { payload, problems } = buildCollectionVoucherPayload(r, await loadSiigoSettings(supabase));
     if (problems.length) throw new Error(problems.join(' · '));
     // With withholdings, the invoices' balances before, to check Siigo took them off.

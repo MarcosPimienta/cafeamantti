@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { collectionProblems, computeRetention, invoiceAmounts, itemsOfVoucher, normalizeRetentions, receiptConcept, receiptsByBranch, vouchersToImport, type OpenInvoice, type RetentionOption } from "../collections";
+import { collectionProblems, fitToBalance, computeRetention, invoiceAmounts, itemsOfVoucher, normalizeRetentions, receiptConcept, receiptsByBranch, vouchersToImport, type OpenInvoice, type RetentionOption } from "../collections";
 import { buildCollectionVoucherPayload, type SiigoSettings } from "@/utils/siigo/mapping";
 
 const inv = (o: Partial<OpenInvoice>): OpenInvoice => ({ id: "a", name: "FV-2-524", due_date: "2026-03-13", balance: 479587.5, branch_office: 0, customer_identification: "901656887", ...o });
@@ -116,5 +116,27 @@ describe("cobros (customer deposits)", () => {
       expect(normalizeRetentions(sent, [RETE], nonna)).toEqual([{ ...RETE, base: 842400, value: 21060 }]);
       expect(() => normalizeRetentions([{ ...computeRetention(RETE, nonna), id: 1 }], [RETE], nonna)).toThrow("no existe en Siigo");
     });
+  });
+});
+
+describe("fitToBalance", () => {
+  it("a whole-peso value up to $0,50 over a balance with cents pays the exact balance", () => {
+    expect(fitToBalance({ value: 479588 }, 479587.5).value).toBe(479587.5);
+  });
+  it("counts the withholdings in what the item takes off", () => {
+    expect(fitToBalance({ value: 470000.4, retentions: [{ value: 9587.5 }] }, 479587.5).value).toBe(470000);
+  });
+  it("leaves values within the balance, bigger differences and unknown balances alone", () => {
+    expect(fitToBalance({ value: 400000 }, 479587.5).value).toBe(400000);
+    expect(fitToBalance({ value: 480000 }, 479587.5).value).toBe(480000);
+    expect(fitToBalance({ value: 479588 }, undefined).value).toBe(479588);
+  });
+});
+
+describe("receiptsByBranch with a rounded deposit", () => {
+  it("sends the exact balance to Siigo", () => {
+    const inv = { id: "fv760", name: "FV-2-760", due_date: "2026-11-18", balance: 479587.5, branch_office: 0, customer_identification: "901895703" };
+    const [[, items]] = [...receiptsByBranch([{ invoiceId: "fv760", value: 479588 }], [inv as never])];
+    expect(items[0].value).toBe(479587.5);
   });
 });

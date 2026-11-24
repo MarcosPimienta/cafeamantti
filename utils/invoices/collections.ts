@@ -140,6 +140,20 @@ export function collectionProblems(
   return p;
 }
 
+/**
+ * Siigo rejects an item that pays more than the invoice's balance, even by
+ * cents ("The value amount is invalid"). A deposit typed in whole pesos can
+ * go up to $0,50 over a balance with cents (479.588 for 479.587,50): that
+ * item pays the exact balance instead. Bigger differences are left for
+ * collectionProblems to report.
+ */
+export function fitToBalance<T extends { value: number; retentions?: { value: number }[] | null }>(item: T, balance: number | undefined): T {
+  if (balance === undefined) return item;
+  const room = round2(balance - retentionTotal(item));
+  const over = round2(num(item.value) - room);
+  return over > 0 && over <= 0.5 && room >= 0 ? { ...item, value: room } : item;
+}
+
 /** One recibo de caja per Siigo branch: a deposit for several sedes becomes several RCs. */
 export function receiptsByBranch(assigned: Assignment[], invoices: OpenInvoice[]): Map<number, CollectionItem[]> {
   const byId = new Map(invoices.map((i) => [i.id, i]));
@@ -149,7 +163,7 @@ export function receiptsByBranch(assigned: Assignment[], invoices: OpenInvoice[]
     if (!inv || !(appliedValue(a) > 0)) continue;
     const list = out.get(inv.branch_office) ?? [];
     const retentions = (a.retentions ?? []).filter((r) => num(r.value) > 0).map((r) => ({ ...r, base: round2(num(r.base)), value: round2(num(r.value)) }));
-    list.push({ siigo_invoice_id: inv.id, name: inv.name, due_date: inv.due_date, value: round2(num(a.value)), ...(retentions.length ? { retentions } : {}) });
+    list.push(fitToBalance({ siigo_invoice_id: inv.id, name: inv.name, due_date: inv.due_date, value: round2(num(a.value)), ...(retentions.length ? { retentions } : {}) }, round2(inv.balance)));
     out.set(inv.branch_office, list);
   }
   return out;
