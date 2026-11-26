@@ -12,13 +12,20 @@ import { bogotaToday } from "@/utils/orders/pendingDeliveries";
 import { errorText } from "@/utils/siigo/server";
 import {
   ADJUSTMENT_REASON_LABELS,
+  SIGNATURE_ROLE_LABELS,
   adjustmentLabel,
   isAdjustmentReason,
+  isSignatureRole,
+  signatureProblem,
   type AdjustmentReason,
+  type SignatureRole,
+  type SignatureType,
 } from "@/utils/inventory/adjustments";
 
 const MIGRATION_HINT = "Falta aplicar la migración 20261126000000_inventory_adjustments.sql para hacer comprobantes de ajuste.";
 const isMissingMigration = (m: string) => /inventory_adjustment|adjustment_id/.test(m) && /exist|relation|schema|function|column/i.test(m);
+const SIGNATURES_HINT = "Falta aplicar la migración 20261127000000_inventory_adjustment_signatures.sql para firmar comprobantes.";
+const isMissingSignatures = (m: string) => /inventory_adjustment_signatures/.test(m) && /exist|relation|schema/i.test(m);
 const message = (err: unknown) => {
   const m = errorText(err);
   return isMissingMigration(m) ? MIGRATION_HINT : m;
@@ -141,6 +148,17 @@ export type Adjustment = {
   created_at: string;
   created_by_name: string | null;
   lines: AdjustmentLine[];
+  /** Digital signatures by role (null before their migration). */
+  signatures: AdjustmentSignature[] | null;
+};
+
+export type AdjustmentSignature = {
+  role: SignatureRole;
+  signer_id: string;
+  signer_name: string;
+  signature_type: SignatureType;
+  signature_data: string;
+  signed_at: string;
 };
 
 const HEADER = "id, number, adjustment_date, reason_kind, notes, responsable, status, annulled_date, annul_reason, created_at, created_by, warehouse:warehouse_id ( id, name )";
@@ -149,7 +167,7 @@ const LINES = "id, adjustment_id, inventory_id, quantity, molienda, unit_cost, m
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null);
 
-function toAdjustment(h: any, lines: any[], names: Map<string, string>): Adjustment {
+function toAdjustment(h: any, lines: any[], names: Map<string, string>, signatures: AdjustmentSignature[] | null = null): Adjustment {
   return {
     id: h.id,
     number: h.number,
@@ -180,6 +198,7 @@ function toAdjustment(h: any, lines: any[], names: Map<string, string>): Adjustm
           reversal: String(l.reason ?? "").startsWith("Anulación del comprobante"),
         };
       }),
+    signatures,
   };
 }
 
@@ -201,12 +220,17 @@ export async function getAdjustments(limit = 30): Promise<Adjustment[] | null> {
   }
   const list = headers ?? [];
   if (!list.length) return [];
-  const [{ data: lines, error: lErr }, names] = await Promise.all([
+  const [{ data: lines, error: lErr }, names, sigRes] = await Promise.all([
     supabase.from("inventory_movements").select(LINES).in("adjustment_id", list.map((h) => h.id)).order("created_at", { ascending: true }),
     creatorNames(supabase, list),
+    // Only which roles are signed: the list does not draw the signatures.
+    supabase.from("inventory_adjustment_signatures").select("adjustment_id, role, signer_id, signer_name, signature_type, signed_at").in("adjustment_id", list.map((h) => h.id)),
   ]);
   if (lErr) throw new Error(lErr.message);
-  return list.map((h) => toAdjustment(h, lines ?? [], names));
+  const sigs = sigRes.error ? null : ((sigRes.data ?? []) as (Omit<AdjustmentSignature, "signature_data"> & { adjustment_id: string })[]);
+  return list.map((h) =>
+    toAdjustment(h, lines ?? [], names, sigs ? sigs.filter((x) => x.adjustment_id === h.id).map((x) => ({ ...x, signature_data: "" })) : null)
+  );
 }
 
 export async function getAdjustment(id: string): Promise<Adjustment | null> {
@@ -217,10 +241,62 @@ export async function getAdjustment(id: string): Promise<Adjustment | null> {
     throw new Error(error.message);
   }
   if (!h) return null;
-  const [{ data: lines, error: lErr }, names] = await Promise.all([
+  const [{ data: lines, error: lErr }, names, sigRes] = await Promise.all([
     supabase.from("inventory_movements").select(LINES).eq("adjustment_id", id).order("created_at", { ascending: true }),
     creatorNames(supabase, [h]),
+    supabase.from("inventory_adjustment_signatures").select("role, signer_id, signer_name, signature_type, signature_data, signed_at").eq("adjustment_id", id),
   ]);
   if (lErr) throw new Error(lErr.message);
-  return toAdjustment(h, lines ?? [], names);
+  let signatures: AdjustmentSignature[] | null = null;
+  if (!sigRes.error) signatures = (sigRes.data ?? []) as AdjustmentSignature[];
+  else if (!isMissingSignatures(sigRes.error.message)) throw new Error(sigRes.error.message);
+  return toAdjustment(h, lines ?? [], names, signatures);
+}
+
+/**
+ * An admin signs one role of a voucher (elaboró, revisó or aprobó), drawn or
+ * typed, as themself. A signature is never changed; an annulled voucher
+ * takes no more. The database checks the same (row level security).
+ */
+export async function signAdjustment(
+  id: string,
+  role: string,
+  type: string,
+  data: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = await requireAdmin();
+  try {
+    if (!isSignatureRole(role)) throw new Error("Firma no reconocida.");
+    const problem = signatureProblem(type, data);
+    if (problem) throw new Error(problem);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { data: head, error: hErr } = await supabase.from("inventory_adjustments").select("number, status").eq("id", id).maybeSingle();
+    if (hErr) throw hErr;
+    if (!head) throw new Error("Comprobante no encontrado.");
+    if (head.status === "anulado") throw new Error("Un comprobante anulado no se firma.");
+
+    const { data: profile } = await supabase.from("profiles").select("first_name, last_name").eq("id", user.id).maybeSingle();
+    const signerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || user.email || "Administrador";
+
+    const { error } = await supabase.from("inventory_adjustment_signatures").insert({
+      adjustment_id: id,
+      role,
+      signer_id: user.id,
+      signer_name: signerName,
+      signature_type: type,
+      signature_data: type === "typed" ? data.trim() : data,
+    });
+    if (error) {
+      if (error.code === "23505") throw new Error(`«${SIGNATURE_ROLE_LABELS[role]}» ya está firmado en este comprobante.`);
+      if (isMissingSignatures(error.message)) throw new Error(SIGNATURES_HINT);
+      throw error;
+    }
+    await logAuditAction("UPDATE", "ADJUSTMENT", id, undefined, { number: adjustmentLabel(head.number), signed: SIGNATURE_ROLE_LABELS[role], signer: signerName });
+    revalidatePath(`/admin/inventory/ajustes/${id}`);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: message(err) };
+  }
 }

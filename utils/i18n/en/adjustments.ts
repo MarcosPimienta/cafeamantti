@@ -85,4 +85,33 @@ export const adjustments: Record<string, string> = {
   // Audit log
   "Hizo el comprobante de ajuste {n}": "Made adjustment voucher {n}",
   "Anuló el comprobante de ajuste {n}": "Annulled adjustment voucher {n}",
+
+  // Digital signatures
+  "Firma": "Signature",
+  "Firmas": "Signatures",
+  "Firmar": "Sign",
+  "Firma de {name}": "Signature of {name}",
+  "firmado digitalmente el {date}": "digitally signed on {date}",
+  "Firmar «{role}» en {label}": "Sign «{role}» on {label}",
+  "Dibujar": "Draw",
+  "Digitar": "Type",
+  "Recuadro para dibujar la firma": "Box to draw the signature",
+  "Usa el mouse o el dedo para trazar tu firma dentro del recuadro.": "Use the mouse or your finger to draw your signature inside the box.",
+  "Escribe tu nombre para firmar": "Type your name to sign",
+  "Vista previa de la firma": "Signature preview",
+  "Revisé las cantidades y el motivo de este comprobante. Firmo con mi usuario de administrador; la firma queda registrada con mi nombre, la fecha y la hora, y no se puede cambiar.":
+    "I reviewed the quantities and the reason of this voucher. I sign with my administrator user; the signature is recorded with my name, the date and the time, and cannot be changed.",
+  "Confirma que revisaste el comprobante antes de firmar.": "Confirm you reviewed the voucher before signing.",
+  "Guardar firma": "Save signature",
+  "Firmó el comprobante de ajuste {n}": "Signed adjustment voucher {n}",
+  "Falta aplicar la migración 20261127000000_inventory_adjustment_signatures.sql para firmar comprobantes.":
+    "The migration 20261127000000_inventory_adjustment_signatures.sql has to be applied to sign vouchers.",
+  "Escribe tu nombre para firmar.": "Type your name to sign.",
+  "El nombre de la firma es demasiado largo.": "The signature name is too long.",
+  "Dibuja tu firma en el recuadro.": "Draw your signature in the box.",
+  "La firma es demasiado grande. Límpiala y fírmala de nuevo.": "The signature is too large. Clear it and sign again.",
+  "Elige cómo firmar: dibujada o digitada.": "Choose how to sign: drawn or typed.",
+  "Un comprobante anulado no se firma.": "An annulled voucher cannot be signed.",
+  "Firma no reconocida.": "Unknown signature.",
+  "«{role}» ya está firmado en este comprobante.": "«{role}» is already signed on this voucher.",
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { adjustmentCostItems, adjustmentLabel, adjustmentProblems, adjustmentValue, lineDelta, type DraftLine } from "../adjustments";
+import { adjustmentCostItems, adjustmentLabel, adjustmentProblems, adjustmentValue, isSignatureRole, lineDelta, MAX_SIGNATURE_LENGTH, signatureProblem, type DraftLine } from "../adjustments";
 
 const line = (over: Partial<DraftLine> = {}): DraftLine => ({
   inventoryId: "p1",
@@ -83,5 +83,25 @@ describe("value and income statement", () => {
     expect(r.items.map((i) => i.amount)).toEqual([20000, -38000]);
     expect(r.items[0]).toMatchObject({ category: "Ajustes de inventario", concept: "AJ-0001 · −0,5 kg Café" });
     expect(r.missing).toEqual([{ name: "Bolsa", quantity: 4 }]);
+  });
+});
+
+describe("signatures", () => {
+  it("knows the three roles", () => {
+    expect(isSignatureRole("aprobo")).toBe(true);
+    expect(isSignatureRole("auditor")).toBe(false);
+  });
+
+  it("accepts a typed name and a drawn PNG", () => {
+    expect(signatureProblem("typed", "  Laura Gómez ")).toBeNull();
+    expect(signatureProblem("scribble", "data:image/png;base64,iVBORw0KGgo=")).toBeNull();
+  });
+
+  it("refuses empty, foreign or oversized signatures", () => {
+    expect(signatureProblem("typed", " L ")).toBe("Escribe tu nombre para firmar.");
+    expect(signatureProblem("scribble", "data:image/svg+xml;base64,PHN2Zz4=")).toBe("Dibuja tu firma en el recuadro.");
+    expect(signatureProblem("scribble", "javascript:alert(1)")).toBe("Dibuja tu firma en el recuadro.");
+    expect(signatureProblem("scribble", "data:image/png;base64," + "A".repeat(MAX_SIGNATURE_LENGTH))).toMatch(/demasiado grande/);
+    expect(signatureProblem("stamp", "x")).toBe("Elige cómo firmar: dibujada o digitada.");
   });
 });

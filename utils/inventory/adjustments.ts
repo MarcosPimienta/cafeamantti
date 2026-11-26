@@ -131,3 +131,41 @@ export function adjustmentCostItems(
   }
   return { items, missing };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Signatures
+// ─────────────────────────────────────────────────────────────
+
+export const SIGNATURE_ROLES = ["elaboro", "reviso", "aprobo"] as const;
+export type SignatureRole = (typeof SIGNATURE_ROLES)[number];
+
+export const SIGNATURE_ROLE_LABELS: Record<SignatureRole, string> = {
+  elaboro: "Elaboró",
+  reviso: "Revisó",
+  aprobo: "Aprobó",
+};
+
+export type SignatureType = "scribble" | "typed";
+
+export function isSignatureRole(v: unknown): v is SignatureRole {
+  return typeof v === "string" && (SIGNATURE_ROLES as readonly string[]).includes(v);
+}
+
+/** Largest drawn signature accepted (a PNG data URL of the pad). */
+export const MAX_SIGNATURE_LENGTH = 300_000;
+
+/** What is wrong with a signature before it is saved (null = fine). */
+export function signatureProblem(type: string, data: string): string | null {
+  if (type === "typed") {
+    const name = data.trim();
+    if (name.length < 2) return "Escribe tu nombre para firmar.";
+    if (name.length > 80) return "El nombre de la firma es demasiado largo.";
+    return null;
+  }
+  if (type === "scribble") {
+    if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(data)) return "Dibuja tu firma en el recuadro.";
+    if (data.length > MAX_SIGNATURE_LENGTH) return "La firma es demasiado grande. Límpiala y fírmala de nuevo.";
+    return null;
+  }
+  return "Elige cómo firmar: dibujada o digitada.";
+}

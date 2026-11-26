@@ -17,6 +17,7 @@ import { bogotaToday } from "@/utils/orders/pendingDeliveries";
 import {
   ADJUSTMENT_REASONS,
   ADJUSTMENT_REASON_LABELS,
+  SIGNATURE_ROLE_LABELS,
   adjustmentLabel,
   adjustmentProblems,
   lineDelta,
@@ -292,6 +293,7 @@ export default function AjustesPanel({ wh, initialProductId }: { wh: WarehousesS
                   <th className="px-3 py-3">{tr("Motivo")}</th>
                   <th className="px-3 py-3">{tr("Productos")}</th>
                   <th className="px-3 py-3">{tr("Estado")}</th>
+                  <th className="px-3 py-3">{tr("Firmas")}</th>
                   <th className="px-6 py-3" />
                 </tr>
               </thead>
@@ -310,6 +312,13 @@ export default function AjustesPanel({ wh, initialProductId }: { wh: WarehousesS
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${a.status === "anulado" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>
                           {a.status === "anulado" ? tr("Anulado") : tr("Vigente")}
                         </span>
+                      </td>
+                      <td className="px-3 py-3 tabular-nums">
+                        {a.signatures === null ? "—" : (
+                          <span className={a.signatures.length === 3 ? "font-semibold text-emerald-800" : "text-foreground/70"} title={a.signatures.map((x) => `${tr(SIGNATURE_ROLE_LABELS[x.role])}: ${x.signer_name}`).join(" · ")}>
+                            {a.signatures.length}/3
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-3 text-right">
                         <Link href={`/admin/inventory/ajustes/${a.id}`} className="inline-flex items-center gap-1.5 font-semibold text-[#7A5B22] hover:underline">

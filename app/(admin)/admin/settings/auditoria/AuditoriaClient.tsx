@@ -108,6 +108,7 @@ function describe(l: AuditLog, products: Products, tr: Translator, warehouses: R
     const n = typeof d.number === "string" ? d.number : "";
     if (d.reason) diffs.push({ field: tr("Motivo"), from: null, to: fmt(d.reason) });
     if (l.action_type === "DELETE") return { text: tr("Anuló el comprobante de ajuste {n}", { n }), diffs };
+    if (typeof d.signed === "string") return { text: tr("Firmó el comprobante de ajuste {n}", { n }), diffs: [{ field: tr("Firma"), from: null, to: fmt(d.signed) }] };
     return { text: tr("Hizo el comprobante de ajuste {n}", { n }), diffs };
   }
 

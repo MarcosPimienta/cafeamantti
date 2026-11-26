@@ -6,6 +6,7 @@ import { MOLIENDA_LABELS, isMolienda } from "@/app/(admin)/coffeeProfiles";
 import { ADJUSTMENT_REASON_LABELS, adjustmentLabel, adjustmentValue } from "@/utils/inventory/adjustments";
 import { getAdjustment, type AdjustmentLine } from "../actions";
 import AdjustmentActions from "./AdjustmentActions";
+import AdjustmentSignatures from "./AdjustmentSignatures";
 
 export const metadata = { title: "Comprobante de ajuste — Inventario — Amantti Admin" };
 
@@ -121,11 +122,7 @@ export default async function AdjustmentPage({ params }: { params: Promise<{ id:
           </section>
         )}
 
-        <footer className="grid gap-8 pt-12 sm:grid-cols-3 text-sm">
-          {[tr("Elaboró"), tr("Revisó"), tr("Aprobó")].map((s) => (
-            <div key={s} className="border-t border-foreground/40 pt-2 text-center text-foreground/60">{s}</div>
-          ))}
-        </footer>
+        <AdjustmentSignatures id={adj.id} label={label} signatures={adj.signatures} annulled={adj.status === "anulado"} />
       </article>
     </div>
   );
