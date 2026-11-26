@@ -3,6 +3,18 @@
 // from Siigo (it holds every invoice and payment, also those made there).
 // Pure functions, shared by the Cuentas por cobrar screen and its Excel.
 
+/**
+ * Invoices issued from this day on are the platform's own records; older ones
+ * were loaded before the data was reliable. Screens show them apart
+ * («Ver datos anteriores»).
+ */
+export const RECORDS_RELIABLE_FROM = "2026-09-01";
+
+/** Issued before the records were reliable (the archive). */
+export function isArchivedInvoice(issueDate: string | null | undefined): boolean {
+  return (issueDate ?? "") < RECORDS_RELIABLE_FROM;
+}
+
 export type ReceivableInvoice = {
   /** Siigo's invoice id. */
   id: string;

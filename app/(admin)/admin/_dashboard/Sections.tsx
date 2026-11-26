@@ -113,7 +113,7 @@ export async function AlertsStrip({ legacy = false }: { legacy?: boolean }) {
     alerts.push({
       tone: legacy ? "amber" : "red",
       Icon: HandCoins,
-      href: "/admin/receivables",
+      href: legacy ? "/admin/receivables?datos=anteriores" : "/admin/receivables",
       title: tr("Facturas vencidas: {n}", { n: overdue.overdueCount }),
       detail: legacy
         ? tr("{amount} · antes de sep 2026 · la más antigua lleva {days} días", { amount: copShort(overdue.overdue), days: overdue.oldestOverdueDays })
@@ -226,7 +226,7 @@ export async function FinanceKpis({ legacy = false }: { legacy?: boolean }) {
               ? tr("{amount} vencido", { amount: copShort((legacy ? aging.beforeStart : aging.sinceStart).overdue) })
               : tr("Nada vencido")
           }
-          href="/admin/receivables"
+          href={legacy ? "/admin/receivables?datos=anteriores" : "/admin/receivables"}
         />
       ) : (
         <Unavailable what={tr("cartera")} />
@@ -284,7 +284,7 @@ export async function AgingCard({ legacy = false }: { legacy?: boolean }) {
     <div className={`${card} p-6`}>
       <div className="flex items-baseline justify-between gap-3 mb-1">
         <h3 className="font-serif text-lg">{tr("Cartera por antigüedad")}</h3>
-        <Link href="/admin/receivables" className="text-[11px] font-bold uppercase tracking-widest text-[#A98C5D] hover:text-foreground">{tr("Ver ↗")}</Link>
+        <Link href={legacy ? "/admin/receivables?datos=anteriores" : "/admin/receivables"} className="text-[11px] font-bold uppercase tracking-widest text-[#A98C5D] hover:text-foreground">{tr("Ver ↗")}</Link>
       </div>
       <p className="text-xs text-foreground/50 mb-4">
         {legacy ? tr("Facturas emitidas antes de sep 2026 · total {amount}", { amount: copShort(aging.total) }) : tr("Facturas emitidas desde sep 2026 · total {amount}", { amount: copShort(aging.total) })}

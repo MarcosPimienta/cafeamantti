@@ -19,6 +19,8 @@ export const dashboard: Record<string, string> = {
   "Facturas emitidas antes de sep 2026 · total {amount}": "Invoices issued before Sep 2026 · total {amount}",
   "Cartera de facturas emitidas antes de sep 2026: la alerta de vencidas, Por cobrar y Cartera por antigüedad. Lo demás del resumen es del mes en curso.": "Receivables of invoices issued before Sep 2026: the overdue alert, Receivable and Receivables by age. The rest of the overview is the current month.",
   "Volver a los datos actuales": "Back to current data",
+  "Estás viendo las facturas emitidas antes de sep 2026, cargadas antes de que los registros fueran confiables. Sirve para depurarlas: cobrarlas, cruzarlas o anularlas en Siigo.": "You are viewing invoices issued before Sep 2026, loaded before the records were reliable. Use it to clean them up: collect, offset or void them in Siigo.",
+  "Facturas emitidas desde sep 2026. Las anteriores están en «Ver datos anteriores».": "Invoices issued since Sep 2026. Older ones are under «View older data».",
   "Sin saldo por cobrar.": "Nothing receivable.",
   "Café verde para {w} semanas": "Green coffee for {w} weeks",
   "{kg} disponibles al ritmo de tostión actual": "{kg} available at the current roasting pace",

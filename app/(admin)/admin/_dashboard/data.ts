@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/server";
 import { checkIsAdmin, getRecentOrders } from "../../actions";
 import { getIncomeStatement, getMissingCashflowDays } from "../cashflow/actions";
 import { getReceivables } from "../receivables/actions";
+import { RECORDS_RELIABLE_FROM } from "@/utils/invoices/receivables";
 import { getLiabilities } from "../liabilities/actions";
 import { getComodatosData } from "../comodatos/actions";
 import { getPendingDeliveries, bogotaToday } from "@/utils/orders/pendingDeliveries";
@@ -46,7 +47,7 @@ export const loadStatement = cache(async () => {
 });
 
 /** The overdue-invoices alerts split at this issue date: from here on the platform's records are reliable. */
-export const OVERDUE_ALERT_SINCE = "2026-09-01";
+export const OVERDUE_ALERT_SINCE = RECORDS_RELIABLE_FROM;
 
 export const loadReceivables = cache(async () => {
   const t = await today();
