@@ -45,12 +45,21 @@ export const loadStatement = cache(async () => {
   return safe("estado de resultados", () => getIncomeStatement(m, y));
 });
 
+/** The overdue-invoices alerts split at this issue date: from here on the platform's records are reliable. */
+export const OVERDUE_ALERT_SINCE = "2026-09-01";
+
 export const loadReceivables = cache(async () => {
   const t = await today();
   return safe("cartera", async () => {
     const r = await getReceivables();
     if (r.error) throw new Error(r.error);
-    return receivablesAging(r.invoices.map((i) => ({ ...i, due_date: i.due_date ?? i.issue_date })), t);
+    const invoices = r.invoices.map((i) => ({ ...i, due_date: i.due_date ?? i.issue_date }));
+    return {
+      ...receivablesAging(invoices, t),
+      sinceStart: receivablesAging(invoices.filter((i) => (i.issue_date ?? "") >= OVERDUE_ALERT_SINCE), t),
+      // Issued before the platform started: loaded history still to clean up.
+      beforeStart: receivablesAging(invoices.filter((i) => (i.issue_date ?? "") < OVERDUE_ALERT_SINCE), t),
+    };
   });
 });
 
