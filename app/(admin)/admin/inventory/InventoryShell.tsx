@@ -33,12 +33,12 @@ export default function InventoryShell({ children }: { children: React.ReactNode
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="print:hidden">
         <h1 className="text-3xl font-serif text-foreground mb-1">{tr("Inventario")}</h1>
         <p className="text-foreground/70">{tr(current.desc)}</p>
       </div>
 
-      <nav aria-label={tr("Secciones de inventario")} className="flex overflow-x-auto gap-1 border-b border-foreground/10">
+      <nav aria-label={tr("Secciones de inventario")} className="flex overflow-x-auto gap-1 border-b border-foreground/10 print:hidden">
         {INVENTORY_SECTIONS.map((s) => {
           const active = s.href === current.href;
           return (

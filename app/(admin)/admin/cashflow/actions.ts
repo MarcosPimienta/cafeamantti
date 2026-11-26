@@ -1,5 +1,6 @@
 'use server';
 
+import { adjustmentCostItems, adjustmentLabel, type AdjustmentMovement } from '@/utils/inventory/adjustments';
 import { orderIsSold, PAID_ORDER_STATUSES } from '@/utils/orders/stock';
 
 import { createClient } from '@/utils/supabase/server';
@@ -875,6 +876,15 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
     supabase.from('loan_movements').select('loan_id, move_date, kind, amount'),
     getCostingData().catch(() => null),
   ]);
+  // Comprobantes de ajuste (none before their migration).
+  const adjRes = await supabase
+    .from('inventory_movements')
+    .select('inventory_id, quantity, unit_cost, movement_date, reason, adjustment:adjustment_id ( number )')
+    .eq('era', 'v2')
+    .eq('tab_source', 'ajuste')
+    .not('adjustment_id', 'is', null)
+    .gte('movement_date', windowStart)
+    .lt('movement_date', windowEnd);
   const dateOf = (r: { cashflow?: { date?: string } | { date?: string }[] | null }) => {
     const c = Array.isArray(r.cashflow) ? r.cashflow[0] : r.cashflow;
     return c?.date ?? '';
@@ -972,6 +982,20 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
     return out;
   };
 
+  const adjustments: AdjustmentMovement[] = adjRes.error
+    ? []
+    : rows(adjRes).map((r) => {
+        const adj = Array.isArray(r.adjustment) ? r.adjustment[0] : r.adjustment;
+        const label = adj?.number ? adjustmentLabel(adj.number) : 'Ajuste';
+        return {
+          date: day(r.movement_date),
+          inventory_id: r.inventory_id,
+          quantity: n(r.quantity),
+          unit_cost: r.unit_cost === null || r.unit_cost === undefined ? null : n(r.unit_cost),
+          label: String(r.reason ?? '').startsWith('Anulación') ? `Anulación ${label}` : label,
+        };
+      });
+
   const expenses = rows(expRes).map((r) => ({ date: dateOf(r), concept: r.concept ?? '', category: r.category ?? '', amount: n(r.net_amount) }));
   const capex = rows(capexRes).map(({ cashflow, ...a }) => ({ ...a, purchase_date: (Array.isArray(cashflow) ? cashflow[0] : cashflow)?.date ?? null }));
   /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -985,14 +1009,15 @@ export async function getIncomeStatement(month: number, year: number): Promise<I
     const { period_start, period_end } = monthBounds(mo, y);
     const dep = summarizeMonthlyPL({ period_start, period_end, manualIncomes: [], webOrders: [], cogsExpenses: [], inventoryConsumptions: [], opexExpenses: [], capexItems: capex, paidExpenses: [] }).depreciation_by_use;
     const cost = costByKind(salidas.filter((x) => inMonth(x.date, m)));
+    const adjusted = adjustmentCostItems(adjustments.filter((x) => inMonth(x.date, m)), unitCosts);
     const monthSales = sales.filter((x) => inMonth(x.date, m));
-    if (m === ym) missingCost = cost.missing;
+    if (m === ym) missingCost = [...cost.missing, ...adjusted.missing];
     return {
       month: m,
       statement: buildStatement({
         sales: monthSales,
         deductions: deductions.filter((x) => inMonth(x.date, m)),
-        cost: cost.cost,
+        cost: [...cost.cost, ...adjusted.items],
         opex: [...expenses.filter((e) => inMonth(e.date, m)), ...cost.selling, ...cost.admin],
         accruedInterest: loans
           .map((l) => ({ date: `${m}-01`, concept: `${l.creditor_name} (interés que se suma al préstamo)`, category: 'Intereses causados', amount: Math.round(accruedInterestInMonth(l, moves, m) * 100) / 100 }))

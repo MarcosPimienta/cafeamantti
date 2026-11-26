@@ -5,31 +5,29 @@
 // Sales are orders and production has its own section; both show up in the
 // combined history.
 
-import React, { useEffect, useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, RefreshCw } from "lucide-react";
-import { adjustInventoryStock, getInventoryMovements } from "../../../actions";
+import { getInventoryMovements } from "../../../actions";
+import AjustesPanel from "./AjustesPanel";
 import { useTr } from "@/app/(admin)/AdminI18n";
-import { tracksStock, CATEGORY_LABELS } from "@/utils/inventory/categories";
 import { EntradasTab, KARDEX_ORIGIN, SalidasTab, fmtDate, fmtQty, type MovementRecord } from "../InventoryClient";
 import { useInventory } from "../InventoryContext";
-import { useWarehouses, type WarehousesState } from "../bodegas/useWarehouses";
+import { useWarehouses } from "../bodegas/useWarehouses";
 import TransfersPanel from "../bodegas/TransfersPanel";
-import WarehouseSelect from "../bodegas/WarehouseSelect";
 import { MigrationNotice } from "../bodegas/BodegasClient";
-import { stockIn } from "@/utils/inventory/warehouses";
 
 export type MovementView = "entrada" | "salida" | "ajuste" | "transferencia" | "historial";
 
 const VIEWS: { id: MovementView; label: string; hint: string; disabled?: boolean }[] = [
   { id: "entrada", label: "Entrada", hint: "Sin factura de proveedor" },
   { id: "salida", label: "Salida", hint: "Muestras, regalos, daños" },
-  { id: "ajuste", label: "Ajuste de conteo", hint: "Diferencia del conteo físico" },
+  { id: "ajuste", label: "Comprobante de ajuste", hint: "Conteo, daños o errores" },
   { id: "transferencia", label: "Transferencia entre bodegas", hint: "De una bodega a otra" },
   { id: "historial", label: "Todos los movimientos", hint: "Los últimos 100, juntos" },
 ];
 
-export default function MovimientosClient({ initialView }: { initialView: MovementView }) {
+export default function MovimientosClient({ initialView, initialProductId }: { initialView: MovementView; initialProductId?: string | null }) {
   const tr = useTr();
   const { inventory, updateStock } = useInventory();
   const [view, setView] = useState<MovementView>(initialView);
@@ -78,190 +76,9 @@ export default function MovimientosClient({ initialView }: { initialView: Moveme
         </>
       )}
       {view === "salida" && <SalidasTab inventory={inventory} onStockUpdate={updateStock} era="v2" warehouses={whList} />}
-      {view === "ajuste" && <AjusteConteo wh={wh} />}
+      {view === "ajuste" && <AjustesPanel wh={wh} initialProductId={initialProductId} />}
       {view === "transferencia" && (wh.status === "loading" ? null : wh.migrated ? <TransfersPanel wh={wh} /> : <MigrationNotice />)}
       {view === "historial" && <HistorialCompleto />}
-    </div>
-  );
-}
-
-// ─── Count adjustment ─────────────────────────────────────────────────────────
-
-function AjusteConteo({ wh }: { wh: WarehousesState }) {
-  const tr = useTr();
-  const [warehouseId, setWarehouseId] = useState("");
-  const { inventory, updateStock } = useInventory();
-  const stocked = useMemo(
-    () =>
-      inventory
-        .filter((i) => tracksStock(i.category, i.product_code))
-        .sort((a, b) => a.category.localeCompare(b.category) || a.product_name.localeCompare(b.product_name, "es")),
-    [inventory]
-  );
-  const [itemId, setItemId] = useState("");
-  const [counted, setCounted] = useState("");
-  const [reason, setReason] = useState("");
-  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
-  const [pending, startTransition] = useTransition();
-  const [recent, setRecent] = useState<MovementRecord[] | null>(null);
-  const [reload, setReload] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    getInventoryMovements(undefined, "v2")
-      .then((d) => {
-        if (!cancelled) setRecent((d as MovementRecord[]).filter((m) => m.type === "ajuste").slice(0, 10));
-      })
-      .catch(() => {
-        if (!cancelled) setRecent([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reload]);
-
-  const item = stocked.find((i) => i.id === itemId) ?? null;
-  const countedWh = wh.migrated ? (warehouseId || wh.main?.id || "") : "";
-  const system = item ? (countedWh ? stockIn(wh.stock, item.id, countedWh).total : Number(item.current_stock) || 0) : 0;
-  const countedNum = counted.trim() === "" ? null : Number(counted.replace(",", "."));
-  const diff = countedNum !== null && Number.isFinite(countedNum) ? countedNum - system : null;
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setFeedback(null);
-    if (!item || diff === null) {
-      setFeedback({ ok: false, text: tr("Elige el producto y escribe lo que contaste.") });
-      return;
-    }
-    if (Math.abs(diff) < 1e-9) {
-      setFeedback({ ok: true, text: tr("✓ El conteo coincide con el sistema; no hay nada que ajustar.") });
-      return;
-    }
-    if (!reason.trim()) {
-      setFeedback({ ok: false, text: tr("Escribe el motivo del ajuste.") });
-      return;
-    }
-    startTransition(async () => {
-      try {
-        const res = await adjustInventoryStock(item.id, "ajuste", diff, `Conteo físico: ${reason.trim()}`, countedWh || null);
-        wh.reload();
-        updateStock(item.id, res.newStock);
-        setFeedback({ ok: true, text: tr("✓ Ajuste guardado: {name} queda en {n}", { name: item.product_name, n: fmtQty(res.newStock) }) });
-        setCounted("");
-        setReason("");
-        setReload((n) => n + 1);
-      } catch (err) {
-        setFeedback({ ok: false, text: err instanceof Error ? err.message : tr("Error al ajustar el inventario") });
-      }
-    });
-  }
-
-  const inputCls =
-    "w-full min-h-11 px-4 border border-foreground/15 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C59F59]/30 bg-white";
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] items-start">
-      <form onSubmit={submit} className="bg-white rounded-3xl border border-foreground/5 shadow-sm p-6 space-y-5">
-        <div>
-          <h2 className="font-serif text-xl">{tr("Ajuste de conteo")}</h2>
-          <p className="text-sm text-foreground/70 mt-1">
-            {tr("Para diferencias del conteo físico. Escribe lo que contaste y el sistema calcula la diferencia.")}
-          </p>
-        </div>
-        {wh.migrated && (
-          <WarehouseSelect
-            id="adj-wh"
-            label={tr("Bodega que contaste")}
-            className={inputCls}
-            warehouses={wh.warehouses}
-            value={warehouseId}
-            onChange={setWarehouseId}
-          />
-        )}
-        <div className="space-y-1.5">
-          <label htmlFor="adj-item" className="block text-sm font-medium">{tr("Producto")}</label>
-          <select id="adj-item" value={itemId} onChange={(e) => setItemId(e.target.value)} className={inputCls}>
-            <option value="">{tr("Seleccionar producto...")}</option>
-            {stocked.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.product_name} · {i.product_code} ({tr.msg(CATEGORY_LABELS[i.category] ?? i.category)})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-[#f9f7f0] px-3 py-2">
-            <p className="text-xs text-foreground/70">{tr("En sistema")}</p>
-            <p className="text-lg font-semibold tabular-nums">{item ? fmtQty(system) : "—"}</p>
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="adj-count" className="block text-xs text-foreground/70">{tr("Contado")}</label>
-            <input
-              id="adj-count"
-              inputMode="decimal"
-              value={counted}
-              onChange={(e) => setCounted(e.target.value)}
-              className="w-full min-h-11 rounded-xl border-[1.5px] border-foreground px-3 font-semibold tabular-nums focus:outline-none"
-            />
-          </div>
-          <div className={`rounded-xl px-3 py-2 ${diff === null || diff === 0 ? "bg-[#f9f7f0]" : diff < 0 ? "bg-red-50" : "bg-emerald-50"}`}>
-            <p className="text-xs text-foreground/70">{tr("Diferencia")}</p>
-            <p className={`text-lg font-semibold tabular-nums ${diff !== null && diff < 0 ? "text-red-700" : diff ? "text-emerald-800" : ""}`}>
-              {diff === null ? "—" : `${diff > 0 ? "+" : diff < 0 ? "−" : ""}${fmtQty(Math.abs(diff))}`}
-            </p>
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="adj-reason" className="block text-sm font-medium">{tr("Motivo")}</label>
-          <input
-            id="adj-reason"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder={tr("ej. Conteo mensual de noviembre")}
-            className={inputCls}
-          />
-        </div>
-        <p className="text-xs text-foreground/70">
-          {tr("Va al costo de ventas, en una línea aparte del café vendido.")}
-        </p>
-        {feedback && (
-          <p role="status" className={`rounded-xl px-4 py-3 text-sm font-medium ${feedback.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>
-            {feedback.text}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={pending}
-          className="w-full min-h-11 rounded-xl bg-foreground text-sm font-semibold text-white hover:bg-[#7A5B22] disabled:opacity-60 inline-flex items-center justify-center gap-2"
-        >
-          {pending && <Loader2 className="w-4 h-4 animate-spin" />}
-          {tr("Guardar ajuste")}
-        </button>
-      </form>
-
-      <section aria-label={tr("Ajustes recientes")} className="bg-white rounded-3xl border border-foreground/5 shadow-sm overflow-hidden">
-        <h3 className="px-6 py-4 border-b border-foreground/5 font-semibold">{tr("Ajustes recientes")}</h3>
-        {recent === null ? (
-          <p className="flex items-center gap-2 px-6 py-6 text-sm text-foreground/60"><Loader2 className="w-4 h-4 animate-spin" /> {tr("Cargando…")}</p>
-        ) : recent.length === 0 ? (
-          <p className="px-6 py-6 text-sm text-foreground/60">{tr("Sin ajustes recientes.")}</p>
-        ) : (
-          <ul>
-            {recent.map((m) => {
-              const qty = Number(m.quantity);
-              return (
-                <li key={m.id} className="grid grid-cols-[1fr_auto] gap-x-4 border-b border-foreground/5 px-6 py-3 text-sm">
-                  <span className="font-medium">{m.inventory?.product_name ?? "—"}</span>
-                  <span className={`font-semibold tabular-nums ${qty < 0 ? "text-red-700" : "text-emerald-800"}`}>
-                    {qty > 0 ? "+" : "−"}{fmtQty(Math.abs(qty))}
-                  </span>
-                  <span className="text-xs text-foreground/60">{fmtDate(m.movement_date ?? m.created_at)}{m.reason ? ` · ${m.reason}` : ""}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

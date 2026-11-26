@@ -71,7 +71,7 @@ export async function getCurrentUserProfile() {
 
 export async function logAuditAction(
   actionType: "CREATE" | "UPDATE" | "DELETE",
-  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH" | "COLD_BREW_BATCH" | "REPACK_BATCH" | "TRANSFER" | "WAREHOUSE",
+  entityType: "MOVEMENT" | "TRILLA_BATCH" | "TOSTION_BATCH" | "COLD_BREW_BATCH" | "REPACK_BATCH" | "TRANSFER" | "WAREHOUSE" | "ADJUSTMENT",
   entityId: string,
   inventoryId?: string,
   details?: Record<string, any>
@@ -1297,65 +1297,6 @@ export async function getInventoryMovements(inventoryId?: string, era: 'v1' | 'v
   }
 
   return data;
-}
-
-export async function adjustInventoryStock(
-  inventoryId: string,
-  type: 'entrada' | 'salida' | 'ajuste',
-  quantity: number,
-  reason?: string,
-  /** Bodega counted; none = the main one. */
-  warehouseId?: string | null
-) {
-  const isAdmin = await checkIsAdmin();
-  if (!isAdmin) throw new Error("Unauthorized");
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  // Fetch current stock
-  const { data: item, error: fetchError } = await supabase
-    .from('inventory')
-    .select('current_stock')
-    .eq('id', inventoryId)
-    .single();
-
-  if (fetchError || !item) throw new Error('Producto no encontrado');
-
-  // Compute new stock
-  let delta = quantity;
-  if (type === 'salida') delta = -Math.abs(quantity);
-  else if (type === 'entrada') delta = Math.abs(quantity);
-  // 'ajuste' uses raw signed quantity
-
-  const currentStock = Number(item.current_stock);
-  const newStock = currentStock + delta;
-  
-  // Only block if we are making it MORE negative than it already was, 
-  // or if it's a new negative and current was >= 0.
-  // Exception: if the adjustment is intended to reach a specific positive value, we allow it.
-  if (newStock < 0 && newStock < currentStock) {
-    throw new Error('El stock resultante no puede ser menor al actual si es negativo.');
-  }
-
-  // Insert movement record
-  const { error: movError } = await supabase
-    .from('inventory_movements')
-    .insert({
-      inventory_id: inventoryId,
-      type,
-      quantity: delta,
-      reason: reason || null,
-      created_by: user?.id || null,
-      ...(warehouseId ? { warehouse_id: warehouseId } : {}),
-    });
-
-  // The database moved the stock with the movement.
-  if (movError) throw new Error(movError.message);
-
-  revalidatePath('/admin/inventory');
-
-  return { success: true, newStock };
 }
 
 export async function updateInventoryItem(

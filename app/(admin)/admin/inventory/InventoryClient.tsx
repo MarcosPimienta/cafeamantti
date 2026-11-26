@@ -7,10 +7,8 @@
 import React, { useState, useTransition, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
-  Package,
   PackagePlus,
   PackageMinus,
-  ArrowLeftRight,
   Search,
   AlertTriangle,
   ChevronDown,
@@ -46,7 +44,6 @@ import {
   Line,
 } from "recharts";
 import {
-  adjustInventoryStock,
   getMovementsByTab,
   getTrillaBatches,
   getTostionBatches,
@@ -456,159 +453,6 @@ function HistoryLoadingOrEmpty({
   return null;
 }
 
-// ─── Adjust Modal ─────────────────────────────────────────────────────────────
-
-export function AdjustModal({
-  item,
-  onClose,
-  onSuccess,
-}: {
-  item: InventoryItem;
-  onClose: () => void;
-  onSuccess: (id: string, newStock: number) => void;
-}) {
-  const tr = useTr();
-  const [type, setType] = useState<"entrada" | "salida" | "ajuste">("ajuste");
-  const [quantity, setQuantity] = useState("");
-  const [reason, setReason] = useState("");
-  const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    const qty = parseFloat(quantity);
-    if (isNaN(qty) || (type !== "ajuste" && qty <= 0)) {
-      setError(tr("Ingresa una cantidad válida"));
-      return;
-    }
-    startTransition(async () => {
-      try {
-        const res = await adjustInventoryStock(
-          item.id,
-          type,
-          qty,
-          reason || undefined
-        );
-        onSuccess(item.id, res.newStock);
-        onClose();
-      } catch (err: unknown) {
-        setError(
-          err instanceof Error ? err.message : tr("Error al ajustar el inventario")
-        );
-      }
-    });
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-8 pt-8 pb-6 border-b border-foreground/5 flex items-start justify-between gap-4">
-          <div>
-            <p className={labelCls}>{item.product_code}</p>
-            <h3 className="text-xl font-serif">{item.product_name}</h3>
-            <p className="text-sm text-foreground/50 mt-1">
-              {tr("Stock:")}{" "}
-              <span className="font-bold text-foreground">
-                {fmtQty(Number(item.current_stock))} {item.unit}
-              </span>
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl hover:bg-foreground/5"
-          >
-            <X className="w-5 h-5 text-foreground/40" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-8 space-y-5">
-          <div>
-            <label className={labelCls}>{tr("Tipo de ajuste")}</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["entrada", "salida", "ajuste"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setType(t)}
-                  className={`flex flex-col items-center gap-2 px-3 py-3 rounded-xl border-2 text-xs font-bold uppercase tracking-wider transition-all ${
-                    type === t
-                      ? "border-[#C59F59] bg-[#C59F59]/10 text-[#C59F59]"
-                      : "border-foreground/10 text-foreground/50 hover:border-foreground/20"
-                  }`}
-                >
-                  {t === "entrada" ? (
-                    <PackagePlus className="w-4 h-4" />
-                  ) : t === "salida" ? (
-                    <PackageMinus className="w-4 h-4" />
-                  ) : (
-                    <ArrowLeftRight className="w-4 h-4" />
-                  )}
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="adj-qty" className={labelCls}>
-              {tr("Cantidad ({unit})", { unit: item.unit })}
-            </label>
-            <QuantityInput
-              id="adj-qty"
-              value={quantity}
-              onChange={setQuantity}
-              baseUnit={item.unit}
-              allowNegative={type === "ajuste"}
-              placeholder={type === "ajuste" ? tr("ej. -5 o +10") : tr("ej. 20")}
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="adj-reason" className={labelCls}>
-              {tr("Motivo (opcional)")}
-            </label>
-            <input
-              id="adj-reason"
-              type="text"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={tr("ej. Conteo físico, Corrección...")}
-              className={inputCls}
-            />
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">
-              {tr.msg(error)}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={isPending}
-            className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#C59F59] hover:bg-[#b08d4f] text-white font-bold uppercase tracking-widest text-sm rounded-2xl transition-all disabled:opacity-60"
-          >
-            {isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Package className="w-4 h-4" />
-            )}
-            {isPending ? tr("Guardando...") : tr("Confirmar ajuste")}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 // ─── New product ─────────────────────────────────────────────────────────────
 
 const NEW_PRODUCT_DEFAULTS: Record<string, { prefix: string; unit: string; sellable: boolean }> = Object.fromEntries(
@@ -944,7 +788,7 @@ function EditMovementModal({
           {isManualSalida && (
             <div>
               <p id={`edit-${record.id}-kind-label`} className={labelCls}>{tr("¿Para qué salió?")}</p>
-              <ExitKindPicker idPrefix={`edit-${record.id}`} value={exitKind} onChange={setExitKind} only={initialSale !== null ? ["venta"] : exitKindOf(record).kind === "venta" ? ["venta", ...SELECTABLE_EXIT_KINDS] : undefined} />
+              <ExitKindPicker idPrefix={`edit-${record.id}`} value={exitKind} onChange={setExitKind} only={initialSale !== null ? ["venta"] : exitKindOf(record).kind === "venta" ? ["venta", ...SELECTABLE_EXIT_KINDS] : exitKindOf(record).kind === "ajuste" ? [...SELECTABLE_EXIT_KINDS, "ajuste"] : undefined} />
               {!isExitKind(record.exit_kind) && exitKindOf(record).kind && (
                 <p className="text-[11px] text-foreground/40 mt-1">{tr("Sugerido según el motivo. Guarda para confirmarlo.")}</p>
               )}
@@ -3542,9 +3386,14 @@ export function SalidasTab({
                 {(form.exitKind === "muestra" || form.exitKind === "regalo") && tr("Va a gastos de ventas, al costo del café.")}
                 {form.exitKind === "consumo_interno" && tr("Va a gastos de administración, al costo del café.")}
                 {form.exitKind === "perdida" && tr("Bolsa rota, vencida o extraviada. La merma de trilla y tostión no va aquí: ya queda en cada lote de producción.")}
-                {form.exitKind === "ajuste" && tr("Diferencias del conteo físico. Va al costo de ventas, en una línea aparte del café vendido.")}
               </p>
             )}
+            <p className="text-[11px] text-foreground/50 mt-2">
+              {tr("¿Es una diferencia de conteo o un error de registro? No es una salida:")}{" "}
+              <Link href="/admin/inventory/movimientos?tipo=ajuste" className="font-semibold text-[#7A5B22] underline">
+                {tr("haz un comprobante de ajuste")}
+              </Link>
+            </p>
             {looksLikeSale(`${form.motivo} ${form.exitTo}`) && (
               <p className="mt-2 text-xs font-bold text-red-600">
                 {tr("Esto parece una venta. Las ventas se registran como pedido, no como salida.")}{" "}
@@ -4330,6 +4179,7 @@ export const KARDEX_ORIGIN: Record<string, string> = {
   cold_brew: "Cold Brew",
   reempaque: "Reempaque",
   transferencia: "Transferencia entre bodegas",
+  ajuste: "Comprobante de ajuste",
 };
 
 function kardexOrigin(row: { tab_source: string | null; type: string; income_id: string | null }) {
@@ -4414,8 +4264,8 @@ function KardexProducto({
       ["Unidad", unit],
       ...(grindTracked && molienda ? [["Molienda", MOLIENDA_LABELS[molienda]]] : []),
       [],
-      ["Fecha", "Origen", "Motivo / Documento", "Lote", "Molienda", "Entrada", "Salida", "Saldo", "Valor cobrado (COP)", "Responsable"],
-      [from || "", "Saldo inicial", "", "", "", null, null, data.summary.opening, null, ""],
+      ["Fecha", "Origen", "Motivo / Documento", "Lote", "Molienda", "Entrada", "Salida", "Ajuste", "Saldo", "Valor cobrado (COP)", "Responsable"],
+      [from || "", "Saldo inicial", "", "", "", null, null, null, data.summary.opening, null, ""],
       ...data.rows.map((r) => [
         r.date,
         kardexOrigin(r),
@@ -4424,15 +4274,16 @@ function KardexProducto({
         isMolienda(r.molienda) ? MOLIENDA_LABELS[r.molienda] : "",
         r.entrada || null,
         r.salida || null,
+        r.ajuste || null,
         r.saldo,
         r.sale_amount,
         r.responsable ?? "",
       ]),
-      [to || "", "Saldo final", "", "", "", data.summary.entradas, data.summary.salidas, data.summary.closing, data.summary.ventasCobradas || null, ""],
+      [to || "", "Saldo final", "", "", "", data.summary.entradas, data.summary.salidas, data.summary.ajustes || null, data.summary.closing, data.summary.ventasCobradas || null, ""],
     ];
     // Labels, origins and stored reasons in the admin's language.
     const ws = XLSX.utils.aoa_to_sheet(aoa.map((row) => row.map((c) => (typeof c === "string" ? tr.msg(c) : c))));
-    ws["!cols"] = [12, 18, 40, 12, 10, 10, 10, 10, 18, 18].map((wch) => ({ wch }));
+    ws["!cols"] = [12, 18, 40, 12, 10, 10, 10, 10, 10, 18, 18].map((wch) => ({ wch }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, tr("Kardex"));
     const suffix = [from, to].filter(Boolean).join("_a_") || "completo";
@@ -4497,10 +4348,11 @@ function KardexProducto({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             <KpiCard label={tr("Saldo inicial")} value={fmtQty(data.summary.opening)} sub={unit} />
             <KpiCard label={tr("Entradas")} value={`+${fmtQty(data.summary.entradas)}`} sub={unit} color="text-emerald-700" />
             <KpiCard label={tr("Salidas")} value={`−${fmtQty(data.summary.salidas)}`} sub={unit} color="text-red-600" />
+            <KpiCard label={tr("Por ajuste")} value={data.summary.ajustes ? `${data.summary.ajustes > 0 ? "+" : "−"}${fmtQty(Math.abs(data.summary.ajustes))}` : "0"} sub={unit} color="text-amber-700" />
             <KpiCard label={tr("Saldo final")} value={fmtQty(data.summary.closing)} sub={unit} color="text-[#C59F59]" />
             <KpiCard label={tr("Ventas cobradas")} value={fmtCOP(data.summary.ventasCobradas)} sub="Flujo de Caja" />
           </div>
@@ -4547,6 +4399,7 @@ function KardexProducto({
                     {grindTracked && <th className={thCls}>{tr("Molienda")}</th>}
                     <th className={`${thCls} text-right`}>{tr("Entrada")}</th>
                     <th className={`${thCls} text-right`}>{tr("Salida")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Ajuste")}</th>
                     <th className={`${thCls} text-right`}>{tr("Saldo")}</th>
                     <th className={`${thCls} text-right`}>{tr("Valor cobrado")}</th>
                     <th className={thCls}>{tr("Responsable")}</th>
@@ -4555,7 +4408,7 @@ function KardexProducto({
                 <tbody className="divide-y divide-foreground/5">
                   <tr className="bg-[#fdfbf7]">
                     <td className={`${tdCls} text-foreground/50`}>{from ? fmtDate(from) : "—"}</td>
-                    <td className={`${tdCls} font-bold`} colSpan={grindTracked ? 6 : 5}>
+                    <td className={`${tdCls} font-bold`} colSpan={grindTracked ? 7 : 6}>
                       {tr("Saldo inicial")}
                     </td>
                     <td className={`${tdCls} text-right font-bold`}>{fmtQty(data.summary.opening)}</td>
@@ -4563,7 +4416,7 @@ function KardexProducto({
                   </tr>
                   {data.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={grindTracked ? 9 : 8} className="text-center py-10 text-sm text-foreground/40">
+                      <td colSpan={grindTracked ? 10 : 9} className="text-center py-10 text-sm text-foreground/40">
                         {tr("Sin movimientos en el periodo seleccionado.")}
                       </td>
                     </tr>
@@ -4576,6 +4429,8 @@ function KardexProducto({
                             className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap ${
                               r.income_id
                                 ? "bg-green-100 text-green-700"
+                                : r.ajuste
+                                ? "bg-amber-50 text-amber-800"
                                 : r.entrada > 0
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-red-50 text-red-700"
@@ -4597,6 +4452,7 @@ function KardexProducto({
                         )}
                         <td className={`${tdCls} text-right text-emerald-700`}>{r.entrada ? `+${fmtQty(r.entrada)}` : ""}</td>
                         <td className={`${tdCls} text-right text-red-600`}>{r.salida ? `−${fmtQty(r.salida)}` : ""}</td>
+                        <td className={`${tdCls} text-right text-amber-700`}>{r.ajuste ? `${r.ajuste > 0 ? "+" : "−"}${fmtQty(Math.abs(r.ajuste))}` : ""}</td>
                         <td className={`${tdCls} text-right font-bold ${r.saldo < 0 ? "text-red-600" : ""}`}>{fmtQty(r.saldo)}</td>
                         <td className={`${tdCls} text-right font-mono text-xs`}>{r.sale_amount !== null ? fmtCOP(r.sale_amount) : ""}</td>
                         <td className={`${tdCls} text-foreground/50`}>{r.responsable ?? "—"}</td>
@@ -4610,6 +4466,7 @@ function KardexProducto({
                     </td>
                     <td className={`${tdCls} text-right font-bold text-emerald-700`}>+{fmtQty(data.summary.entradas)}</td>
                     <td className={`${tdCls} text-right font-bold text-red-600`}>−{fmtQty(data.summary.salidas)}</td>
+                    <td className={`${tdCls} text-right font-bold text-amber-700`}>{data.summary.ajustes ? `${data.summary.ajustes > 0 ? "+" : "−"}${fmtQty(Math.abs(data.summary.ajustes))}` : ""}</td>
                     <td className={`${tdCls} text-right font-bold text-[#C59F59]`}>{fmtQty(data.summary.closing)}</td>
                     <td className={`${tdCls} text-right font-mono text-xs font-bold`}>
                       {data.summary.ventasCobradas ? fmtCOP(data.summary.ventasCobradas) : ""}
@@ -4714,7 +4571,7 @@ function KardexGeneral({
       ["Kardex general", period],
       ...(category ? [["Categoría", CATEGORY_LABELS[category] ?? category]] : []),
       [],
-      ["Código", "Producto", "Categoría", "Unidad", "Inventario inicial", "Entradas", "Salidas", "Inventario final", "Movimientos", "Ventas cobradas (COP)"],
+      ["Código", "Producto", "Categoría", "Unidad", "Inventario inicial", "Entradas", "Salidas", "Por ajuste", "Inventario final", "Movimientos", "Ventas cobradas (COP)"],
       ...products.map((p) => [
         p.product_code,
         p.product_name,
@@ -4723,13 +4580,14 @@ function KardexGeneral({
         p.opening,
         p.entradas,
         p.salidas,
+        p.ajustes,
         p.closing,
         p.movimientos,
         p.ventasCobradas || null,
       ]),
     ];
     const movs: (string | number | null)[][] = [
-      ["Fecha", "Código", "Producto", "Unidad", "Origen", "Motivo / Documento", "Lote", "Molienda", "Entrada", "Salida", "Saldo producto", "Valor cobrado (COP)", "Responsable"],
+      ["Fecha", "Código", "Producto", "Unidad", "Origen", "Motivo / Documento", "Lote", "Molienda", "Entrada", "Salida", "Ajuste", "Saldo producto", "Valor cobrado (COP)", "Responsable"],
       ...(data.history ?? [])
         .filter((h) => productIds.has(h.inventory_id))
         .map((h) => {
@@ -4745,6 +4603,7 @@ function KardexGeneral({
             isMolienda(h.molienda) ? MOLIENDA_LABELS[h.molienda] : "",
             h.entrada || null,
             h.salida || null,
+            h.ajuste || null,
             h.saldo,
             h.sale_amount,
             h.responsable ?? "",
@@ -4754,9 +4613,9 @@ function KardexGeneral({
 
     const loc = (rows: (string | number | null)[][]) => rows.map((row) => row.map((c) => (typeof c === "string" ? tr.msg(c) : c)));
     const wsResumen = XLSX.utils.aoa_to_sheet(loc(resumen));
-    wsResumen["!cols"] = [14, 36, 12, 10, 16, 12, 12, 16, 12, 20].map((wch) => ({ wch }));
+    wsResumen["!cols"] = [14, 36, 12, 10, 16, 12, 12, 12, 16, 12, 20].map((wch) => ({ wch }));
     const wsMovs = XLSX.utils.aoa_to_sheet(loc(movs));
-    wsMovs["!cols"] = [12, 14, 32, 10, 18, 40, 12, 10, 10, 10, 14, 18, 18].map((wch) => ({ wch }));
+    wsMovs["!cols"] = [12, 14, 32, 10, 18, 40, 12, 10, 10, 10, 10, 14, 18, 18].map((wch) => ({ wch }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, wsResumen, tr("Resumen"));
     XLSX.utils.book_append_sheet(wb, wsMovs, tr("Movimientos"));
@@ -4799,7 +4658,7 @@ function KardexGeneral({
           <div>
             <h3 className="font-serif text-lg">{tr("Resumen por producto")}</h3>
             <p className="text-xs text-foreground/50 mt-0.5">
-              {tr("Inventario final = inicial + entradas − salidas. Haz clic en un producto para ver su kardex.")}
+              {tr("Inventario final = inicial + entradas − salidas ± ajustes. Haz clic en un producto para ver su kardex.")}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -4857,6 +4716,7 @@ function KardexGeneral({
                   <th className={`${thCls} text-right`}>{tr("Inv. inicial")}</th>
                   <th className={`${thCls} text-right`}>{tr("Entradas")}</th>
                   <th className={`${thCls} text-right`}>{tr("Salidas")}</th>
+                  <th className={`${thCls} text-right`}>{tr("Por ajuste")}</th>
                   <th className={`${thCls} text-right`}>{tr("Inv. final")}</th>
                   <th className={`${thCls} text-right`}>{tr("Mov.")}</th>
                   <th className={`${thCls} text-right`}>{tr("Ventas cobradas")}</th>
@@ -4889,6 +4749,7 @@ function KardexGeneral({
                       <td className={`${tdCls} text-right`}>{fmtQty(p.opening)}</td>
                       <td className={`${tdCls} text-right text-emerald-700`}>{p.entradas ? `+${fmtQty(p.entradas)}` : "0"}</td>
                       <td className={`${tdCls} text-right text-red-600`}>{p.salidas ? `−${fmtQty(p.salidas)}` : "0"}</td>
+                      <td className={`${tdCls} text-right text-amber-700`}>{p.ajustes ? `${p.ajustes > 0 ? "+" : "−"}${fmtQty(Math.abs(p.ajustes))}` : "0"}</td>
                       <td className={`${tdCls} text-right font-bold ${p.closing < 0 ? "text-red-600" : "text-[#C59F59]"}`}>{fmtQty(p.closing)}</td>
                       <td className={`${tdCls} text-right text-foreground/50`}>{p.movimientos}</td>
                       <td className={`${tdCls} text-right font-mono text-xs`}>{p.ventasCobradas ? fmtCOP(p.ventasCobradas) : ""}</td>
@@ -4931,6 +4792,7 @@ function KardexGeneral({
                     <th className={thCls}>{tr("Molienda")}</th>
                     <th className={`${thCls} text-right`}>{tr("Entrada")}</th>
                     <th className={`${thCls} text-right`}>{tr("Salida")}</th>
+                    <th className={`${thCls} text-right`}>{tr("Ajuste")}</th>
                     <th className={`${thCls} text-right`}>{tr("Saldo producto")}</th>
                     <th className={`${thCls} text-right`}>{tr("Valor cobrado")}</th>
                     <th className={thCls}>{tr("Responsable")}</th>
@@ -4957,6 +4819,8 @@ function KardexGeneral({
                             className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap ${
                               h.income_id
                                 ? "bg-green-100 text-green-700"
+                                : h.ajuste
+                                ? "bg-amber-50 text-amber-800"
                                 : h.entrada > 0
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-red-50 text-red-700"
@@ -4974,6 +4838,7 @@ function KardexGeneral({
                         </td>
                         <td className={`${tdCls} text-right text-emerald-700`}>{h.entrada ? `+${fmtQty(h.entrada)}` : ""}</td>
                         <td className={`${tdCls} text-right text-red-600`}>{h.salida ? `−${fmtQty(h.salida)}` : ""}</td>
+                        <td className={`${tdCls} text-right text-amber-700`}>{h.ajuste ? `${h.ajuste > 0 ? "+" : "−"}${fmtQty(Math.abs(h.ajuste))}` : ""}</td>
                         <td className={`${tdCls} text-right font-bold ${h.saldo < 0 ? "text-red-600" : ""}`}>
                           {fmtQty(h.saldo)} <span className="text-[10px] font-normal text-foreground/40">{it?.unit}</span>
                         </td>

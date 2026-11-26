@@ -42,7 +42,7 @@ describe("buildProductKardex", () => {
   it("without a period lists everything with a running balance", () => {
     const k = buildProductKardex(movements);
     expect(k.rows.map((r) => r.saldo)).toEqual([100, 80, 130, 125, 95]);
-    expect(k.summary).toEqual({ opening: 0, entradas: 150, salidas: 55, closing: 95, ventasCobradas: 375000, count: 5 });
+    expect(k.summary).toEqual({ opening: 0, entradas: 150, salidas: 55, ajustes: 0, closing: 95, ventasCobradas: 375000, count: 5 });
     expect(k.ledgerTotal).toBe(95);
   });
 
@@ -54,6 +54,18 @@ describe("buildProductKardex", () => {
     expect(k.summary.closing).toBe(k.summary.opening + k.summary.entradas - k.summary.salidas);
     // the ledger for reconciliation ignores the period
     expect(k.ledgerTotal).toBe(95);
+  });
+
+  it("totals comprobantes de ajuste apart from entradas and salidas", () => {
+    const k = buildProductKardex([
+      mv(+100, "2026-11-01"),
+      mv(-3, "2026-11-05", undefined, { type: "ajuste" }),
+      mv(+1, "2026-11-06", undefined, { type: "ajuste" }),
+      mv(-10, "2026-11-07", undefined, { type: "salida" }),
+    ]);
+    expect(k.summary).toMatchObject({ entradas: 100, salidas: 10, ajustes: -2, closing: 88 });
+    expect(k.rows[1]).toMatchObject({ entrada: 0, salida: 0, ajuste: -3, saldo: 97 });
+    expect(k.rows[3]).toMatchObject({ salida: 10, ajuste: 0 });
   });
 
   it("is order-independent (sorts internally) and does not mutate its input", () => {
@@ -106,6 +118,13 @@ describe("buildGeneralKardex", () => {
     expect(byId.kg).toMatchObject({ opening: 10, entradas: 0, salidas: 2.5, closing: 7.5, movimientos: 1 });
     expect(byId.u250).toMatchObject({ opening: 12, salidas: 3, closing: 9, ventasCobradas: 90000 });
     expect(byId.bag).toMatchObject({ opening: 0, closing: 0, movimientos: 0 }); // listed even without movements
+  });
+
+  it("totals ajustes apart, and the final inventory includes them", () => {
+    const r = buildGeneralKardex(items, [...movements, g("kg", -0.5, "2026-09-20", { type: "ajuste", tab_source: "ajuste" })], { from: "2026-09-10", to: "2026-09-30" });
+    const kg = r.products.find((p) => p.id === "kg")!;
+    expect(kg).toMatchObject({ entradas: 0, salidas: 2.5, ajustes: -0.5, closing: 7 });
+    expect(r.history.find((h) => h.type === "ajuste")).toMatchObject({ entrada: 0, salida: 0, ajuste: -0.5, saldo: 7 });
   });
 
   it("the history carries each product's own running balance, never mixed units", () => {

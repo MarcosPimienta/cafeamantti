@@ -36,10 +36,10 @@ export default async function AdminLayout({
 
   return (
     <AdminI18nProvider locale={locale}>
-    <div className="min-h-screen bg-[#f9f7f0] flex font-sans">
+    <div className="min-h-screen bg-[#f9f7f0] flex font-sans print:bg-white">
       {/* Sidebar */}
       {/* Sticky so the menu stays in reach while long pages scroll. */}
-      <aside className="w-56 lg:w-64 shrink-0 bg-white border-r border-foreground/5 hidden md:flex flex-col sticky top-0 h-screen overflow-y-auto">
+      <aside className="w-56 lg:w-64 shrink-0 bg-white border-r border-foreground/5 hidden md:flex flex-col sticky top-0 h-screen overflow-y-auto print:!hidden">
         <div className="p-6 lg:p-8 border-b border-foreground/5 flex items-center justify-center">
           <Link href="/">
             <Image src="/images/logo-amantti.svg" alt="amantti" width={124} height={44} unoptimized priority />
@@ -68,9 +68,11 @@ export default async function AdminLayout({
           the orders board scroll inside their own box instead of pushing the
           whole page sideways. */}
       <main className="flex-1 min-w-0 flex flex-col min-h-screen">
-        <AdminMobileNav />
+        <div className="print:hidden">
+          <AdminMobileNav />
+        </div>
 
-        <div className="flex-1 min-w-0 px-4 py-5 sm:p-6 lg:p-10 xl:p-12">
+        <div className="flex-1 min-w-0 px-4 py-5 sm:p-6 lg:p-10 xl:p-12 print:p-0">
           {children}
         </div>
       </main>

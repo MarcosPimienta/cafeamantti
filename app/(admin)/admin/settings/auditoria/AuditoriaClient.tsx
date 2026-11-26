@@ -33,6 +33,7 @@ const AREA: Record<string, string> = {
   REPACK_BATCH: "Reempaque",
   TRANSFER: "Transferencias",
   WAREHOUSE: "Bodegas",
+  ADJUSTMENT: "Comprobantes de ajuste",
 };
 
 const VERB: Record<string, { label: string; chip: string }> = {
@@ -101,6 +102,13 @@ function describe(l: AuditLog, products: Products, tr: Translator, warehouses: R
     if (d.lote) diffs.push({ field: tr("Lote"), from: null, to: fmt(d.lote) });
     if (d.note) diffs.push({ field: tr("Nota"), from: null, to: fmt(d.note) });
     return { text: tr("Transfirió {qty} de {product}: {from} → {to}", { qty: q(d.qty), product, from: whName(d.from_warehouse), to: whName(d.to_warehouse) }), diffs };
+  }
+
+  if (l.entity_type === "ADJUSTMENT") {
+    const n = typeof d.number === "string" ? d.number : "";
+    if (d.reason) diffs.push({ field: tr("Motivo"), from: null, to: fmt(d.reason) });
+    if (l.action_type === "DELETE") return { text: tr("Anuló el comprobante de ajuste {n}", { n }), diffs };
+    return { text: tr("Hizo el comprobante de ajuste {n}", { n }), diffs };
   }
 
   if (l.entity_type === "WAREHOUSE") {

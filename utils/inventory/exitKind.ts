@@ -7,8 +7,12 @@
 export const EXIT_KINDS = ["venta", "muestra", "regalo", "consumo_interno", "perdida", "ajuste"] as const;
 export type ExitKind = (typeof EXIT_KINDS)[number];
 
-/** What the salida form lets you pick: everything but a sale. */
-export const SELECTABLE_EXIT_KINDS: ExitKind[] = ["muestra", "regalo", "consumo_interno", "perdida", "ajuste"];
+/**
+ * What the salida form lets you pick: everything but a sale, and not an
+ * adjustment (that is a comprobante de ajuste, not a salida). Old salidas of
+ * kind 'ajuste' keep it.
+ */
+export const SELECTABLE_EXIT_KINDS: ExitKind[] = ["muestra", "regalo", "consumo_interno", "perdida"];
 
 export const EXIT_KIND_LABEL: Record<ExitKind, string> = {
   venta: "Venta",

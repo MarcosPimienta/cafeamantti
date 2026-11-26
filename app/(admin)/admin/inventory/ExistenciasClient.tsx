@@ -21,7 +21,6 @@ import { isSellable } from "@/utils/inventory/sellable";
 import { RECONCILE_EPS } from "@/utils/inventory/kardex";
 import { isGrindTracked } from "../../coffeeProfiles";
 import {
-  AdjustModal,
   KARDEX_ORIGIN,
   NewProductModal,
   fmtDate,
@@ -71,7 +70,7 @@ function ymd(d: Date) {
 
 export default function ExistenciasClient() {
   const tr = useTr();
-  const { inventory, updateStock, addItem, patchItem } = useInventory();
+  const { inventory, addItem, patchItem } = useInventory();
   const [kind, setKind] = useState<Kind>("cafe");
   const [alertsOnly, setAlertsOnly] = useState(false);
   const [search, setSearch] = useState("");
@@ -331,7 +330,6 @@ export default function ExistenciasClient() {
               mismatch={kardex.state === "ready" ? kardex.data.mismatches[selected.item.id] ?? null : null}
               wh={wh}
               onClose={() => setSelectedId(null)}
-              onStock={updateStock}
               onPatch={patchItem}
             />
           ) : (
@@ -531,7 +529,6 @@ function ProductDetail({
   row,
   mismatch,
   onClose,
-  onStock,
   onPatch,
   wh,
 }: {
@@ -539,13 +536,11 @@ function ProductDetail({
   mismatch: number | null;
   wh: WarehousesState;
   onClose: () => void;
-  onStock: (id: string, n: number) => void;
   onPatch: (id: string, patch: Partial<InventoryItem>) => void;
 }) {
   const tr = useTr();
   const { item, stock, stats, cover, value, unitCost } = row;
   const [moves, setMoves] = useState<MovementRecord[] | null>(null);
-  const [adjusting, setAdjusting] = useState(false);
   const [minDraft, setMinDraft] = useState(String(item.min_stock ?? 0));
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -710,13 +705,12 @@ function ProductDetail({
         >
           {tr("Registrar salida")}
         </Link>
-        <button
-          type="button"
-          onClick={() => setAdjusting(true)}
-          className="min-h-11 flex-1 rounded-xl border border-foreground/15 px-4 text-sm font-medium hover:border-foreground/40"
+        <Link
+          href={`/admin/inventory/movimientos?tipo=ajuste&producto=${item.id}`}
+          className="min-h-11 flex-1 inline-flex items-center justify-center rounded-xl border border-foreground/15 px-4 text-sm font-medium hover:border-foreground/40"
         >
-          {tr("Ajustar conteo")}
-        </button>
+          {tr("Hacer comprobante de ajuste")}
+        </Link>
       </div>
 
       <div className="border-t border-foreground/5 px-5 py-4 space-y-4">
@@ -766,16 +760,6 @@ function ProductDetail({
         </Link>
       </div>
 
-      {adjusting && (
-        <AdjustModal
-          item={item}
-          onClose={() => setAdjusting(false)}
-          onSuccess={(id, n) => {
-            onStock(id, n);
-            setAdjusting(false);
-          }}
-        />
-      )}
     </section>
   );
 }

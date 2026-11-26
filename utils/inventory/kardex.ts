@@ -6,6 +6,8 @@
 
 export type KardexMovementBase = {
   id: string;
+  /** 'ajuste' movements are totalled apart from entradas and salidas. */
+  type?: string;
   quantity: number | string;
   movement_date: string | null;
   created_at: string;
@@ -54,11 +56,14 @@ export function buildProductKardex<M extends KardexMovementBase & WithIncome>(mo
   let balance = 0;
   let entradas = 0;
   let salidas = 0;
+  let ajustes = 0;
   let ventasCobradas = 0;
   const rows: (Omit<M, "income"> & {
     date: string;
     entrada: number;
     salida: number;
+    /** Signed quantity of a comprobante de ajuste (0 for any other movement). */
+    ajuste: number;
     saldo: number;
     sale_amount: number | null;
     sale_concept: string | null;
@@ -75,7 +80,8 @@ export function buildProductKardex<M extends KardexMovementBase & WithIncome>(mo
     if (period.to && day > period.to) break;
 
     balance += qty;
-    if (qty >= 0) entradas += qty;
+    if (m.type === "ajuste") ajustes += qty;
+    else if (qty >= 0) entradas += qty;
     else salidas += -qty;
     const sale = saleOf(m);
     if (sale.amount !== null) ventasCobradas += sale.amount;
@@ -85,8 +91,9 @@ export function buildProductKardex<M extends KardexMovementBase & WithIncome>(mo
     rows.push({
       ...rest,
       date: day,
-      entrada: qty >= 0 ? qty : 0,
-      salida: qty < 0 ? -qty : 0,
+      entrada: m.type !== "ajuste" && qty >= 0 ? qty : 0,
+      salida: m.type !== "ajuste" && qty < 0 ? -qty : 0,
+      ajuste: m.type === "ajuste" ? qty : 0,
       saldo: balance,
       sale_amount: sale.amount,
       sale_concept: sale.concept,
@@ -97,7 +104,7 @@ export function buildProductKardex<M extends KardexMovementBase & WithIncome>(mo
 
   return {
     rows,
-    summary: { opening, entradas, salidas, closing: balance, ventasCobradas, count: rows.length },
+    summary: { opening, entradas, salidas, ajustes, closing: balance, ventasCobradas, count: rows.length },
     ledgerTotal,
   };
 }
@@ -128,14 +135,14 @@ export type GeneralKardexItem = {
 export const RECONCILE_EPS = 0.0005;
 
 /**
- * Every product's inventario inicial, entradas, salidas and inventario final
+ * Every product's inventario inicial, entradas, salidas, ajustes and inventario final
  * for the period, plus the movement history with each product's running
  * balance. Quantities are never summed across products (different units).
  */
 export function buildGeneralKardex(items: GeneralKardexItem[], movements: GeneralKardexMovement[], period: KardexPeriod = {}) {
   const sorted = [...movements].sort(compareMovements);
 
-  const blank = () => ({ opening: 0, entradas: 0, salidas: 0, ventasCobradas: 0, movimientos: 0, ledgerTotal: 0 });
+  const blank = () => ({ opening: 0, entradas: 0, salidas: 0, ajustes: 0, ventasCobradas: 0, movimientos: 0, ledgerTotal: 0 });
   const byProduct = new Map<string, ReturnType<typeof blank>>();
   const running = new Map<string, number>();
   const history: {
@@ -151,6 +158,7 @@ export function buildGeneralKardex(items: GeneralKardexItem[], movements: Genera
     income_id: string | null;
     entrada: number;
     salida: number;
+    ajuste: number;
     saldo: number;
     sale_amount: number | null;
   }[] = [];
@@ -171,7 +179,8 @@ export function buildGeneralKardex(items: GeneralKardexItem[], movements: Genera
       continue;
     }
 
-    if (qty >= 0) p.entradas += qty;
+    if (m.type === "ajuste") p.ajustes += qty;
+    else if (qty >= 0) p.entradas += qty;
     else p.salidas += -qty;
     p.movimientos += 1;
     const sale = saleOf(m);
@@ -188,8 +197,9 @@ export function buildGeneralKardex(items: GeneralKardexItem[], movements: Genera
       molienda: m.molienda,
       responsable: m.responsable,
       income_id: m.income_id,
-      entrada: qty >= 0 ? qty : 0,
-      salida: qty < 0 ? -qty : 0,
+      entrada: m.type !== "ajuste" && qty >= 0 ? qty : 0,
+      salida: m.type !== "ajuste" && qty < 0 ? -qty : 0,
+      ajuste: m.type === "ajuste" ? qty : 0,
       saldo,
       sale_amount: sale.amount,
     });
@@ -206,7 +216,8 @@ export function buildGeneralKardex(items: GeneralKardexItem[], movements: Genera
       opening: p.opening,
       entradas: p.entradas,
       salidas: p.salidas,
-      closing: p.opening + p.entradas - p.salidas,
+      ajustes: p.ajustes,
+      closing: p.opening + p.entradas - p.salidas + p.ajustes,
       movimientos: p.movimientos,
       ventasCobradas: p.ventasCobradas,
       difference: it.systemStock - p.ledgerTotal,

@@ -49,6 +49,8 @@ describe("where each kind's cost goes", () => {
 
   it("a sale is never picked in the salida form", () => {
     expect(SELECTABLE_EXIT_KINDS).not.toContain("venta");
+    // Adjustments are comprobantes de ajuste, not salidas.
+    expect(SELECTABLE_EXIT_KINDS).not.toContain("ajuste");
     expect(looksLikeSale("Venta Juan Isaza")).toBe(true);
     expect(looksLikeSale("Le vendimos 2 bolsas")).toBe(true);
     expect(looksLikeSale("Muestra Alcaldía")).toBe(false);

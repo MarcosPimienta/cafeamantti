@@ -1,0 +1,88 @@
+// Comprobantes de ajuste de inventario.
+export const adjustments: Record<string, string> = {
+  "Comprobante de ajuste": "Adjustment voucher",
+  "Comprobante de ajuste de inventario": "Inventory adjustment voucher",
+  "Comprobantes de ajuste": "Adjustment vouchers",
+  "← Comprobantes de ajuste": "← Adjustment vouchers",
+  "Conteo, daños o errores": "Counts, damage or errors",
+  "Hacer comprobante de ajuste": "Make an adjustment voucher",
+  "Para cambiar el stock por un conteo, un daño o un error de registro. Queda con número, motivo y responsable, y en el kardex aparece como ajuste, no como entrada ni salida.":
+    "To change stock because of a count, damage or a recording error. It gets a number, a reason and who did it, and the stock ledger shows it as an adjustment, not as an entry or an exit.",
+  "¿Es una diferencia de conteo o un error de registro? No es una salida:": "Is it a count difference or a recording error? It is not an exit:",
+  "haz un comprobante de ajuste": "make an adjustment voucher",
+
+  // Reasons
+  "Diferencia en conteo físico": "Physical count difference",
+  "Producto dañado": "Damaged product",
+  "Producto vencido": "Expired product",
+  "Corrección de un error de registro": "Correction of a recording error",
+  "Seleccionar motivo...": "Select reason...",
+
+  // Form
+  "Disminuye": "Decrease",
+  "Aumenta": "Increase",
+  "Conteo físico": "Physical count",
+  "Ajuste": "Adjustment",
+  "Por ajuste": "By adjustment",
+  "Molienda...": "Grind...",
+  "Queda en": "Ends at",
+  "Quién hizo el conteo": "Who did the count",
+  "Observaciones": "Notes",
+  "ej. Conteo mensual de noviembre; 2 bolsas rotas en el estante": "e.g. November monthly count; 2 torn bags on the shelf",
+  "Lo que disminuye se suma al costo de ventas y lo que aumenta lo resta, al costo de hoy de cada producto.":
+    "What decreases adds to the cost of sales and what increases takes from it, at each product's cost today.",
+  "Guardar comprobante": "Save voucher",
+  "✓ Comprobante {n} guardado.": "✓ Voucher {n} saved.",
+  "Ver e imprimir": "View and print",
+  "Falta aplicar la migración 20261126000000_inventory_adjustments.sql para hacer comprobantes de ajuste.":
+    "The migration 20261126000000_inventory_adjustments.sql has to be applied to make adjustment vouchers.",
+  "Todavía no hay comprobantes de ajuste.": "No adjustment vouchers yet.",
+  "Número": "Number",
+  "Ver": "View",
+  "Vigente": "Valid",
+  "Anulado": "Annulled",
+
+  // Validation (also sent by the server)
+  "Escribe la fecha del ajuste.": "Enter the adjustment date.",
+  "Elige el motivo del ajuste.": "Choose the adjustment reason.",
+  "Con «Otro motivo», explica el ajuste en las observaciones.": "With «Other reason», explain the adjustment in the notes.",
+  "Agrega al menos un producto.": "Add at least one product.",
+  "Hay una línea sin producto.": "A line has no product.",
+  "{name} está dos veces: déjalo en una sola línea.": "{name} is there twice: keep it on a single line.",
+  "Selecciona la molienda (Grano o Molido) de {name}.": "Select the grind (Whole bean or Ground) of {name}.",
+  "Escribe lo que contaste de {name}.": "Enter what you counted of {name}.",
+  "Escribe una cantidad mayor que cero para {name}.": "Enter a quantity greater than zero for {name}.",
+  "{name}: el conteo coincide con el sistema, no hay nada que ajustar. Quita la línea.": "{name}: the count matches the system, there is nothing to adjust. Remove the line.",
+  "{name}: no puede salir más de lo que hay ({n}).": "{name}: you cannot take out more than there is ({n}).",
+  "Cada línea debe mover una cantidad distinta de cero.": "Each line must move a quantity other than zero.",
+  "El comprobante necesita al menos un producto.": "The voucher needs at least one product.",
+
+  // Voucher page
+  "Fecha del ajuste": "Adjustment date",
+  "Registrado por": "Recorded by",
+  "Registrado el": "Recorded on",
+  "Sin costo": "No cost",
+  "Aumentos": "Increases",
+  "Disminuciones": "Decreases",
+  "Efecto neto en inventario": "Net effect on inventory",
+  "{n} productos sin costo no están en el valor.": "{n} products without cost are not in the value.",
+  "ANULADO": "ANNULLED",
+  "Anulado el {date}": "Annulled on {date}",
+  "Motivo de la anulación: {reason}": "Reason for annulment: {reason}",
+  "Movimientos que devolvieron el inventario a como estaba:": "Movements that put the inventory back as it was:",
+  "Elaboró": "Prepared by",
+  "Revisó": "Reviewed by",
+  "Aprobó": "Approved by",
+  "Imprimir": "Print",
+  "Anular comprobante": "Annul voucher",
+  "Anular {label} devuelve el inventario a como estaba con movimientos contrarios de hoy. El comprobante queda, marcado como anulado.":
+    "Annulling {label} puts the inventory back as it was with opposite movements dated today. The voucher stays, marked as annulled.",
+  "Motivo de la anulación": "Reason for annulment",
+  "Escribe por qué se anula el comprobante.": "Write why the voucher is annulled.",
+  "Este comprobante ya está anulado.": "This voucher is already annulled.",
+  "Comprobante no encontrado.": "Voucher not found.",
+
+  // Audit log
+  "Hizo el comprobante de ajuste {n}": "Made adjustment voucher {n}",
+  "Anuló el comprobante de ajuste {n}": "Annulled adjustment voucher {n}",
+};

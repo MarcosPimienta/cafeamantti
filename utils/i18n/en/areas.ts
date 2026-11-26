@@ -17,3 +17,4 @@ export { purchases } from "./purchases";
 export { bank } from "./bank";
 export { logistics } from "./logistics";
 export { dashboard } from "./dashboard";
+export { adjustments } from "./adjustments";
