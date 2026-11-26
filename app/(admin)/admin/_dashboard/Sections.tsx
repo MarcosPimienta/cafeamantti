@@ -94,7 +94,7 @@ const ALERT_TONE = {
   blue: "bg-blue-50 border-blue-300 text-blue-900 [&_.ic]:bg-blue-500",
 };
 
-export async function AlertsStrip() {
+export async function AlertsStrip({ legacy = false }: { legacy?: boolean }) {
   const tr = await getTr();
   const [missing, aging, op, pending, bank, comodatos] = await Promise.all([
     loadMissingDays(),
@@ -107,12 +107,18 @@ export async function AlertsStrip() {
   const alerts: Alert[] = [];
   if (missing?.length)
     alerts.push({ tone: "amber", Icon: AlertTriangle, href: "/admin/cashflow", title: tr("Días sin registrar: {n}", { n: missing.length }), detail: tr("Flujo de Caja · último pendiente {date}", { date: missing[missing.length - 1] }) });
-  const overdue = aging?.sinceStart;
+  // Overdue invoices of the period on screen: from Sep 2026, or the archive before it.
+  const overdue = legacy ? aging?.beforeStart : aging?.sinceStart;
   if (overdue?.overdueCount)
-    alerts.push({ tone: "red", Icon: HandCoins, href: "/admin/receivables", title: tr("Facturas vencidas: {n}", { n: overdue.overdueCount }), detail: tr("{amount} · desde sep 2026 · la más antigua lleva {days} días", { amount: copShort(overdue.overdue), days: overdue.oldestOverdueDays }) });
-  const history = aging?.beforeStart;
-  if (history?.overdueCount)
-    alerts.push({ tone: "amber", Icon: HandCoins, href: "/admin/receivables", title: tr("Vencidas antes de sep 2026: {n}", { n: history.overdueCount }), detail: tr("{amount} · histórico por depurar", { amount: copShort(history.overdue) }) });
+    alerts.push({
+      tone: legacy ? "amber" : "red",
+      Icon: HandCoins,
+      href: "/admin/receivables",
+      title: tr("Facturas vencidas: {n}", { n: overdue.overdueCount }),
+      detail: legacy
+        ? tr("{amount} · antes de sep 2026 · la más antigua lleva {days} días", { amount: copShort(overdue.overdue), days: overdue.oldestOverdueDays })
+        : tr("{amount} · desde sep 2026 · la más antigua lleva {days} días", { amount: copShort(overdue.overdue), days: overdue.oldestOverdueDays }),
+    });
   if (op && op.green.weeksLeft !== null && op.green.weeksLeft < 4)
     alerts.push({ tone: "amber", Icon: Coffee, href: "/admin/inventory", title: tr("Café verde para {w} semanas", { w: op.green.weeksLeft.toLocaleString("es-CO", { maximumFractionDigits: 1 }) }), detail: tr("{kg} disponibles al ritmo de tostión actual", { kg: kg(op.green.usableKg) }) });
   if (pending?.late)
@@ -152,7 +158,7 @@ export async function AlertsStrip() {
 // Finanzas
 // ─────────────────────────────────────────────────────────────
 
-export async function FinanceKpis() {
+export async function FinanceKpis({ legacy = false }: { legacy?: boolean }) {
   const tr = await getTr();
   const [t, statement, aging, bank, debts] = await Promise.all([today(), loadStatement(), loadReceivables(), loadBank(), loadDebts()]);
   const cur = statement?.months.at(-1)?.statement;
@@ -212,16 +218,13 @@ export async function FinanceKpis() {
       {bankKpi}
       {aging ? (
         <Kpi
-          label={tr("Por cobrar desde sep 2026")}
-          value={copShort(aging.sinceStart.total)}
-          tone={aging.sinceStart.overdue > 0 ? "down" : "up"}
+          label={legacy ? tr("Por cobrar antes de sep 2026") : tr("Por cobrar desde sep 2026")}
+          value={copShort((legacy ? aging.beforeStart : aging.sinceStart).total)}
+          tone={(legacy ? aging.beforeStart : aging.sinceStart).overdue > 0 ? "down" : "up"}
           hint={
-            <>
-              {aging.sinceStart.overdue > 0 ? tr("{amount} vencido", { amount: copShort(aging.sinceStart.overdue) }) : tr("Nada vencido")}
-              {aging.beforeStart.total > 0 && (
-                <span className="block mt-0.5 font-semibold text-foreground/50">{tr("Antes de sep 2026: {amount}", { amount: copShort(aging.beforeStart.total) })}</span>
-              )}
-            </>
+            (legacy ? aging.beforeStart : aging.sinceStart).overdue > 0
+              ? tr("{amount} vencido", { amount: copShort((legacy ? aging.beforeStart : aging.sinceStart).overdue) })
+              : tr("Nada vencido")
           }
           href="/admin/receivables"
         />
@@ -270,25 +273,27 @@ export async function SalesChartCard() {
   );
 }
 
-export async function AgingCard() {
+export async function AgingCard({ legacy = false }: { legacy?: boolean }) {
   const tr = await getTr();
-  const aging = await loadReceivables();
-  if (!aging) return <Unavailable what={tr("cartera")} />;
-  // One scale for both blocks, so their bars compare.
-  const max = Math.max(...aging.sinceStart.buckets.map((b) => b.amount), ...aging.beforeStart.buckets.map((b) => b.amount), 1);
+  const data = await loadReceivables();
+  if (!data) return <Unavailable what={tr("cartera")} />;
+  const aging = legacy ? data.beforeStart : data.sinceStart;
+  const max = Math.max(...aging.buckets.map((b) => b.amount), 1);
   const color: Record<string, string> = { por_vencer: "bg-green-500", d1_30: "bg-yellow-500", d31_60: "bg-orange-500", d61_90: "bg-red-500", d90: "bg-red-700" };
-
-  const block = (title: string, hint: string, a: typeof aging.sinceStart, muted: boolean) => (
-    <section className={muted ? "opacity-70" : ""}>
-      <div className="flex items-baseline justify-between gap-3 mb-3">
-        <h4 className="text-[11px] font-bold uppercase tracking-[0.14em] text-foreground/50">{title}</h4>
-        <b className="text-sm tabular-nums">{copShort(a.total)}</b>
+  return (
+    <div className={`${card} p-6`}>
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <h3 className="font-serif text-lg">{tr("Cartera por antigüedad")}</h3>
+        <Link href="/admin/receivables" className="text-[11px] font-bold uppercase tracking-widest text-[#A98C5D] hover:text-foreground">{tr("Ver ↗")}</Link>
       </div>
-      {a.total === 0 ? (
+      <p className="text-xs text-foreground/50 mb-4">
+        {legacy ? tr("Facturas emitidas antes de sep 2026 · total {amount}", { amount: copShort(aging.total) }) : tr("Facturas emitidas desde sep 2026 · total {amount}", { amount: copShort(aging.total) })}
+      </p>
+      {aging.total === 0 ? (
         <p className="text-sm text-foreground/40">{tr("Sin saldo por cobrar.")}</p>
       ) : (
-        <div className="space-y-3">
-          {a.buckets.filter((b) => b.count > 0).map((b) => (
+        <div className="space-y-3.5">
+          {aging.buckets.map((b) => (
             <div key={b.key}>
               <div className="flex justify-between text-sm">
                 <span>{tr(AGING_LABELS[b.key])} <span className="text-foreground/40 text-xs">· {b.count}</span></span>
@@ -301,27 +306,9 @@ export async function AgingCard() {
           ))}
         </div>
       )}
-      {a.topDebtor && (
-        <p className="text-xs text-foreground/50 mt-3">{tr("Debe más vencido: {name} · {amount}", { name: a.topDebtor.name, amount: copShort(a.topDebtor.amount) })}</p>
+      {aging.topDebtor && (
+        <p className="text-xs text-foreground/50 mt-4">{tr("Debe más vencido: {name} · {amount}", { name: aging.topDebtor.name, amount: copShort(aging.topDebtor.amount) })}</p>
       )}
-      {hint && <p className="text-[11px] text-foreground/45 mt-1">{hint}</p>}
-    </section>
-  );
-
-  return (
-    <div className={`${card} p-6`}>
-      <div className="flex items-baseline justify-between mb-4">
-        <h3 className="font-serif text-lg">{tr("Cartera por antigüedad")}</h3>
-        <Link href="/admin/receivables" className="text-[11px] font-bold uppercase tracking-widest text-[#A98C5D] hover:text-foreground">{tr("Ver ↗")}</Link>
-      </div>
-      <div className="space-y-6">
-        {block(tr("Desde sep 2026"), "", aging.sinceStart, false)}
-        {aging.beforeStart.total > 0 && (
-          <div className="border-t border-foreground/10 pt-5">
-            {block(tr("Antes de sep 2026"), tr("Histórico cargado antes de que los registros fueran confiables: por depurar."), aging.beforeStart, true)}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
