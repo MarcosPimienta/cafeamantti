@@ -90,27 +90,6 @@ export async function logAuditAction(
   });
 }
 
-export async function getDashboardMetrics() {
-  const isAdmin = await checkIsAdmin();
-  if (!isAdmin) throw new Error("Unauthorized");
-
-  const supabase = await createClient();
-  
-  const [ordersRes, subsRes] = await Promise.all([
-    supabase.from('orders').select('id, total_amount, status', { count: 'exact' }),
-    supabase.from('subscriptions').select('id, status', { count: 'exact' })
-  ]);
-
-  const totalRevenue = (ordersRes.data || []).reduce((acc, order) => acc + Number(order.total_amount), 0);
-  const activeSubs = (subsRes.data || []).filter(s => s.status === 'active').length;
-
-  return {
-    totalRevenue,
-    totalOrders: ordersRes.count || 0,
-    activeSubscriptions: activeSubs
-  };
-}
-
 export async function getRecentOrders() {
   const isAdmin = await checkIsAdmin();
   if (!isAdmin) throw new Error("Unauthorized");
@@ -125,6 +104,8 @@ export async function getRecentOrders() {
       total_amount,
       contact_email,
       created_at,
+      shipping_info,
+      client:client_id ( name ),
       profiles (
         first_name,
         last_name

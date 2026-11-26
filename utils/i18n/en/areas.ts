@@ -16,3 +16,4 @@ export { creditNotes } from "./creditNotes";
 export { purchases } from "./purchases";
 export { bank } from "./bank";
 export { logistics } from "./logistics";
+export { dashboard } from "./dashboard";

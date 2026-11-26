@@ -25,12 +25,6 @@ export const common: Record<string, string> = {
 
   // Dashboard
   "Resumen General": "Overview",
-  "Bienvenido al panel de control de Amantti.": "Welcome to the Amantti control panel.",
-  "en Flujo de Caja": "in Cash flow",
-  "Faltan registros desde el 1 mayo 2026 — último pendiente:": "Missing records since May 1, 2026 — latest pending:",
-  "Ir a Flujo de Caja →": "Go to Cash flow →",
-  "Ingresos Totales": "Total revenue",
-  "Suscripciones Activas": "Active subscriptions",
   "Órdenes Recientes": "Recent orders",
   "Ver todas": "View all",
   "ID Orden": "Order ID",
